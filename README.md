@@ -36,6 +36,14 @@ With an empty `.env` the app still runs: it renders a setup notice instead of th
 gate (the nullable-client pattern in `src/services/supabase.ts`). Tests and CI rely on
 this; they never touch the network.
 
+## Demo mode (no Supabase)
+
+`npm run demo` runs the app against an in-memory sample data set for all three companies
+(the same mocks the page tests use) at http://localhost:4173. Pick who you are with the URL:
+`/?persona=admin&company=klasik`, `/?persona=employee&company=kingdom`,
+`/?persona=rococo`, or `/?signedout=1` for the sign-in screen. Nothing is written anywhere;
+a reload resets the data.
+
 ## Supabase setup
 
 1. **Create a Supabase project** (one project for all companies).
@@ -119,6 +127,7 @@ Adobe Fonts need the deployment domain allowlisted in that Typekit project.
 - `src/services/`: the data layer, one module per table group; plain async functions.
 - `src/lib/`: pure logic (scoring, cycle periods, CSV, formatting, theme registry).
 - `src/test/`: fixtures and the mocked services the page tests render against.
+- `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
 
 ## Deploy

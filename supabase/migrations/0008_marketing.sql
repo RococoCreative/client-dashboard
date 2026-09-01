@@ -40,3 +40,6 @@ create policy "Admins manage marketing campaigns" on public.marketing_campaigns 
   to authenticated
   using (public.can_manage_company(company_id))
   with check (public.can_manage_company(company_id));
+
+-- Anon never reads these tables directly; RLS already denies it, and this removes the grant too.
+revoke all on all tables in schema public from anon;

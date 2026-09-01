@@ -215,3 +215,6 @@ create policy "Members read resources" on public.resources for select
 drop policy if exists "Admins manage resources" on public.resources;
 create policy "Admins manage resources" on public.resources for all
   to authenticated using (public.can_manage_company(company_id)) with check (public.can_manage_company(company_id));
+
+-- Anon never reads these tables directly; RLS already denies it, and this removes the grant too.
+revoke all on all tables in schema public from anon;

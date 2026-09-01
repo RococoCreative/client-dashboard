@@ -388,3 +388,6 @@ create policy "Employees and admins update goals" on public.goals for update
 drop policy if exists "Employees and admins delete goals" on public.goals;
 create policy "Employees and admins delete goals" on public.goals for delete
   to authenticated using (employee_id = auth.uid() or public.can_manage_company(company_id));
+
+-- Anon never reads these tables directly; RLS already denies it, and this removes the grant too.
+revoke all on all tables in schema public from anon;
