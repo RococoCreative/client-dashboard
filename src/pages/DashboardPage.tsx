@@ -28,9 +28,12 @@ import {
 import { listCompanyProfiles } from "../services/profiles.ts";
 import { listRecentSops, listSops } from "../services/sops.ts";
 import { listResources } from "../services/resources.ts";
+import { listSnapshots } from "../services/financials.ts";
+import { listCampaigns } from "../services/marketing.ts";
+import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
 import { currentCycle } from "../lib/gsr/cycles.ts";
-import { displayName, formatDate, formatPeriod, pluralize } from "../lib/format.ts";
+import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import {
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -70,7 +73,7 @@ function AdminDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources] = await Promise.all([
+    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns] = await Promise.all([
       listCompanyProfiles(companyId),
       listCycles(companyId),
       listPillars(companyId),
@@ -78,6 +81,8 @@ function AdminDashboard() {
       listRecentSops(companyId, 5),
       listSops(companyId),
       listResources(companyId),
+      listSnapshots(companyId),
+      listCampaigns(companyId),
     ]);
     const cycle = currentCycle(cycles);
     let reviews: Review[] = [];
@@ -86,7 +91,7 @@ function AdminDashboard() {
       reviews = await listCycleReviews(cycle.id);
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
-    return { people, cycles, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources };
+    return { people, cycles, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns };
   }, [companyId, year]);
 
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
@@ -101,7 +106,7 @@ function AdminDashboard() {
     );
   }
 
-  const { people, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources } = state.data;
+  const { people, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns } = state.data;
   const activePeople = people.filter((p) => p.is_active);
   const employees = activePeople;
   const scored = reviews.map((r) => {
@@ -112,6 +117,11 @@ function AdminDashboard() {
   const teamAverage = averageScore(scored.map((s) => s.score));
   const published = allSops.filter((s) => s.status === "published").length;
   const goalsHit = companyGoals.filter((g) => g.is_hit).length;
+  const latestMonth = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start))[0] ?? snapshots[0] ?? null;
+  const latestDerived = latestMonth ? deriveSnapshot(latestMonth) : null;
+  const liveCampaigns = campaigns.filter((c) => c.status === "active" || c.status === "paused");
+  const liveBudget = liveCampaigns.reduce((sum, c) => sum + (c.budget ?? 0), 0);
+  const liveSpend = liveCampaigns.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
 
   return (
     <>
@@ -210,6 +220,66 @@ function AdminDashboard() {
         </div>
 
         <div className="space-y-6">
+          <Section
+            eyebrow="Financials"
+            title={latestMonth ? periodLabel(latestMonth.period_type, latestMonth.period_start) : "No snapshots yet"}
+            actions={
+              <Link to="/financials">
+                <Button variant="ghost" size="sm">Open</Button>
+              </Link>
+            }
+          >
+            {latestMonth && latestDerived ? (
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Revenue</dt>
+                  <dd className="tnum mt-0.5 text-lg font-medium text-heading">{formatMoney(latestMonth.revenue)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net profit</dt>
+                  <dd className={`tnum mt-0.5 text-lg font-medium ${latestDerived.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(latestDerived.net)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Gross margin</dt>
+                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.grossMargin, 1)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net margin</dt>
+                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.netMargin, 1)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-ink-2">Enter a period or import a CSV to see revenue, margins, and net here.</p>
+            )}
+          </Section>
+          <Section
+            eyebrow="Marketing"
+            title={pluralize(liveCampaigns.length, "live campaign")}
+            actions={
+              <Link to="/marketing">
+                <Button variant="ghost" size="sm">Board</Button>
+              </Link>
+            }
+          >
+            {campaigns.length === 0 ? (
+              <p className="text-sm text-ink-2">Nothing on the board yet.</p>
+            ) : (
+              <>
+                <p className="tnum text-sm text-ink">
+                  {formatMoney(liveSpend)} spent of {formatMoney(liveBudget)}
+                  {liveBudget > 0 ? ` (${formatPercent(liveSpend / liveBudget)})` : ""}
+                </p>
+                <ul className="mt-3 space-y-1.5">
+                  {liveCampaigns.slice(0, 4).map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-3 text-[13px]">
+                      <span className="truncate text-ink">{c.name}</span>
+                      <Badge tone={c.status === "active" ? "success" : "warning"}>{c.status === "active" ? "Active" : "Paused"}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Section>
           <Section
             eyebrow="SOP library"
             title="Recently updated"

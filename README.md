@@ -16,9 +16,11 @@ walled off from each other by row-level security.
 | People | Invite, roles, deactivate | (not visible) |
 | SOP library | Create, edit (versioned), publish, attach files | Read published documents |
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
+| Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
+| Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
 | Rococo section | Rococo admins only: companies, themes, sign-in domains, every user | |
 
-Financial snapshots and the marketing campaign tracker are the next phase.
+QuickBooks sync, automated data pulls, and email notifications are the next phase.
 
 ## Quick start
 
@@ -38,7 +40,7 @@ this; they never touch the network.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0006`). Every file is
+   `supabase/migrations/` in numeric order (`0001` through `0008`). Every file is
    idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting
@@ -86,6 +88,16 @@ Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts a
 an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
 is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
 Character & Values 25) is seeded as-is.
+
+## Financial CSV import
+
+The Financials page accepts a spreadsheet export with one row per period. Header names
+are flexible; these all work: `period` (or `period_start`, `month`, `date`), `revenue`,
+`cogs` (or `cost_of_goods_sold`, `direct_costs`, `job_costs`), `opex` (or
+`operating_expenses`, `overhead`), and optionally `period_type`, `net_profit`,
+`cash_on_hand`, `notes`. Periods read as `2026-09`, `Sep 2026`, `9/2026`, `Q3 2026`, or
+`2026`. Money may carry `$` and commas; parentheses mean negative. Re-importing the same
+period overwrites it.
 
 ## Branding
 

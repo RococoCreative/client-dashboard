@@ -7,6 +7,8 @@ import type {
   Company,
   CompanyDomain,
   CompanyGoal,
+  FinancialSnapshot,
+  MarketingCampaign,
   Goal,
   GsrCriterion,
   GsrPillar,
@@ -157,12 +159,18 @@ export interface CompanyBundle {
   attachments: SopAttachment[];
   resources: Resource[];
   invitations: Invitation[];
+  snapshots: FinancialSnapshot[];
+  campaigns: MarketingCampaign[];
 }
 
 // Small deterministic generator so every run produces the same numbers.
 function rand(seed: number): number {
   const x = Math.sin(seed * 12.9898) * 43758.5453;
   return x - Math.floor(x);
+}
+
+function toDateOnlyLocal(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function slugName(name: string): string {
@@ -475,7 +483,46 @@ function build(company: Company): CompanyBundle {
     { id: p("invite-2"), company_id: company.id, email: profiles[1]?.email ?? `someone@${spec.domain}`, role: "employee", title: null, invited_by: profiles[0].id, created_at: EARLIER, accepted_at: EARLIER },
   ];
 
-  return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, sops, versions, attachments, resources, invitations };
+  // Eight months of 2026 with a gentle upward trend, plus two quarters and last year.
+  const base = 300000 + company.id.length * 15000;
+  const snapshots: FinancialSnapshot[] = Array.from({ length: 8 }, (_, i) => {
+    const month = i + 1;
+    const revenue = Math.round(base * (1 + i * 0.045 + rand(seed + i) * 0.05));
+    const cogs = Math.round(revenue * (0.62 + rand(seed + 20 + i) * 0.04));
+    const opex = Math.round(revenue * 0.21);
+    const start = `2026-${String(month).padStart(2, "0")}-01`;
+    return {
+      id: p(`snapshot-2026-${month}`),
+      company_id: company.id,
+      period_type: "month",
+      period_start: start,
+      period_end: toDateOnlyLocal(new Date(2026, month, 0)),
+      revenue,
+      cogs,
+      opex,
+      net_profit: null,
+      cash_on_hand: Math.round(base * 0.4 + i * 9000),
+      notes: i === 7 ? "August close; two draws landed early September." : null,
+      source: i < 6 ? "csv" : "manual",
+      created_by: profiles[0].id,
+      created_at: EARLIER,
+      updated_at: NOW,
+    };
+  });
+  snapshots.push(
+    { id: p("snapshot-2026-q1"), company_id: company.id, period_type: "quarter", period_start: "2026-01-01", period_end: "2026-03-31", revenue: Math.round(base * 3.1), cogs: Math.round(base * 3.1 * 0.64), opex: Math.round(base * 3.1 * 0.21), net_profit: null, cash_on_hand: null, notes: null, source: "manual", created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+    { id: p("snapshot-2026-q2"), company_id: company.id, period_type: "quarter", period_start: "2026-04-01", period_end: "2026-06-30", revenue: Math.round(base * 3.4), cogs: Math.round(base * 3.4 * 0.63), opex: Math.round(base * 3.4 * 0.21), net_profit: null, cash_on_hand: null, notes: null, source: "manual", created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+    { id: p("snapshot-2025"), company_id: company.id, period_type: "year", period_start: "2025-01-01", period_end: "2025-12-31", revenue: Math.round(base * 11.5), cogs: Math.round(base * 11.5 * 0.65), opex: Math.round(base * 11.5 * 0.22), net_profit: Math.round(base * 11.5 * 0.12), cash_on_hand: null, notes: "From the year-end books.", source: "manual", created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+  );
+
+  const campaigns: MarketingCampaign[] = [
+    { id: p("campaign-1"), company_id: company.id, name: "Spring remodel showcase", channel: "Google Ads", status: "active", start_date: "2026-08-01", end_date: "2026-10-31", budget: 12000, actual_spend: 7400, goal: "40 qualified leads", key_metric_label: "Qualified leads", key_metric_value: 27, results: "Cost per lead trending down since the landing page swap.", notes: null, sort_order: 1, created_by: profiles[0].id, created_at: EARLIER, updated_at: NOW },
+    { id: p("campaign-2"), company_id: company.id, name: "Referral thank-you program", channel: "Referral program", status: "active", start_date: "2026-06-01", end_date: null, budget: 5000, actual_spend: 2100, goal: "12 referred projects", key_metric_label: "Referred projects", key_metric_value: 6, results: null, notes: "Gift cards go out with the final invoice.", sort_order: 2, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+    { id: p("campaign-3"), company_id: company.id, name: "Fall home show booth", channel: "Events", status: "planned", start_date: "2026-10-16", end_date: "2026-10-18", budget: 8500, actual_spend: 0, goal: "150 conversations, 20 consults booked", key_metric_label: "Consults booked", key_metric_value: null, results: null, notes: null, sort_order: 3, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+    { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+  ];
+
+  return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 export const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

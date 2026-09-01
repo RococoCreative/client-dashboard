@@ -14,6 +14,8 @@ vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
+vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
+vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, makeHub } from "../test/fixtures.ts";
@@ -33,6 +35,8 @@ import SopEditPage from "./sops/SopEditPage.tsx";
 import ResourcesPage from "./ResourcesPage.tsx";
 import CompanySettingsPage from "./CompanySettingsPage.tsx";
 import RococoPage from "./RococoPage.tsx";
+import FinancialsPage from "./FinancialsPage.tsx";
+import MarketingPage from "./MarketingPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -49,6 +53,8 @@ describe("dashboard", () => {
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
     expect(screen.getByText("Sam Ortega")).toBeInTheDocument();
+    expect(await screen.findByText("Aug 2026")).toBeInTheDocument();
+    expect(await screen.findByText("2 live campaigns")).toBeInTheDocument();
   });
 
   it("shows an employee their own score and goals only", async () => {
@@ -189,5 +195,29 @@ describe("admin", () => {
     }
     expect(await screen.findByText("Austin Rococo (you)")).toBeInTheDocument();
     expect(screen.getByText(/users$/)).toBeInTheDocument();
+  });
+});
+
+describe("phase 2 modules", () => {
+  it("shows financial periods with derived margins and a CSV preview", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<FinancialsPage />, admin);
+    expect(await screen.findByRole("heading", { name: "Financials" })).toBeInTheDocument();
+    expect(await screen.findByText("Aug 2026")).toBeInTheDocument();
+    expect(screen.getAllByText("Gross margin").length).toBeGreaterThan(1);
+    await user.click(screen.getByRole("button", { name: "Quarterly (2)" }));
+    expect(await screen.findByText("Q2 2026")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Import CSV/ }));
+    await user.click(screen.getByRole("button", { name: "Load a sample" }));
+    expect(await screen.findByRole("button", { name: "Import 2 periods" })).toBeEnabled();
+  });
+
+  it("lays campaigns out by status with budget against spend", async () => {
+    renderWithHub(<MarketingPage />, admin);
+    expect(await screen.findByRole("heading", { name: "Marketing" })).toBeInTheDocument();
+    expect(await screen.findByText("Spring remodel showcase")).toBeInTheDocument();
+    expect(screen.getByText("Fall home show booth")).toBeInTheDocument();
+    expect(screen.getByText(/\$7,400 of \$12,000/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Planned" })).toBeInTheDocument();
   });
 });

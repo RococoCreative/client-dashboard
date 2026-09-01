@@ -5,10 +5,12 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   BookOpen,
+  CircleDollarSign,
   ClipboardCheck,
   FolderOpen,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Settings,
   Shield,
   Target,
@@ -37,6 +39,8 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/people", label: "People", icon: Users },
   { to: "/sops", label: "SOPs", icon: BookOpen },
   { to: "/resources", label: "Resources", icon: FolderOpen },
+  { to: "/financials", label: "Financials", icon: CircleDollarSign },
+  { to: "/marketing", label: "Marketing", icon: Megaphone },
   { to: "/my", label: "My GSR", icon: UserRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

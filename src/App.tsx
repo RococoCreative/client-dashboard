@@ -35,6 +35,8 @@ import SopListPage from "./pages/sops/SopListPage.tsx";
 import SopPage from "./pages/sops/SopPage.tsx";
 import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/ResourcesPage.tsx";
+import FinancialsPage from "./pages/FinancialsPage.tsx";
+import MarketingPage from "./pages/MarketingPage.tsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
 import RococoPage from "./pages/RococoPage.tsx";
 import type { Company, Profile } from "./types/database.ts";
@@ -300,6 +302,8 @@ export default function App() {
             <Route path="sops/:sopId" element={<SopPage />} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="resources" element={<ResourcesPage />} />
+            <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
+            <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
             <Route path="rococo" element={<RococoOnly><RococoPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />

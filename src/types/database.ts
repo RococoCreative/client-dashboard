@@ -304,3 +304,76 @@ export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
 export function keysOf<K extends string>(labels: Record<K, string>): K[] {
   return Object.keys(labels) as K[];
 }
+
+// Financials and marketing (Phase 2) --------------------------------------------------------
+
+export type PeriodType = "month" | "quarter" | "year";
+export type SnapshotSource = "manual" | "csv" | "quickbooks";
+
+export interface FinancialSnapshot {
+  id: string;
+  company_id: string;
+  period_type: PeriodType;
+  period_start: string;
+  period_end: string;
+  revenue: number;
+  cogs: number;
+  opex: number;
+  net_profit: number | null;
+  cash_on_hand: number | null;
+  notes: string | null;
+  source: SnapshotSource;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CampaignStatus = "planned" | "active" | "paused" | "complete";
+
+export interface MarketingCampaign {
+  id: string;
+  company_id: string;
+  name: string;
+  channel: string | null;
+  status: CampaignStatus;
+  start_date: string | null;
+  end_date: string | null;
+  budget: number | null;
+  actual_spend: number | null;
+  goal: string | null;
+  key_metric_label: string | null;
+  key_metric_value: number | null;
+  results: string | null;
+  notes: string | null;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const PERIOD_TYPE_LABELS: Record<PeriodType, string> = {
+  month: "Monthly",
+  quarter: "Quarterly",
+  year: "Annual",
+};
+
+export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
+  planned: "Planned",
+  active: "Active",
+  paused: "Paused",
+  complete: "Complete",
+};
+
+// Suggestions for the channel field; it stays free text so a company can name its own.
+export const CAMPAIGN_CHANNELS = [
+  "Google Ads",
+  "Meta Ads",
+  "SEO",
+  "Email",
+  "Referral program",
+  "Events",
+  "Print",
+  "Signage",
+  "Social (organic)",
+  "Direct mail",
+];
