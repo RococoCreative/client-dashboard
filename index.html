@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="rococo">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Internal operational hub for Rococo Creative's construction clients; keep out of search. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#39443C" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Tenant type stacks. Each company's theme picks its own family from this set:
+         Inter (Klasik, and the shared body face), Josefin Sans + Zilla Slab numerals (Kingdom),
+         Cormorant Garamond + Instrument Sans as the open fallbacks for the licensed Goldenbook and
+         Halcom faces (Rococo), Fragment Mono for eyebrows and badges everywhere. RBA's Proxima Nova
+         and Helvetica Neue LT Pro come from Adobe Fonts and need the deployment domain allowlisted
+         in that Typekit project; see src/lib/theme.ts. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Josefin+Sans:wght@400;500;600;700&family=Zilla+Slab:wght@500;600&family=Cormorant+Garamond:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&family=Fragment+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <title>Company Hub</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

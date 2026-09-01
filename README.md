@@ -1,0 +1,117 @@
+# Company Hub
+
+One web application that serves as the operational hub for Rococo Creative's construction
+clients. One app, three companies (Klasik, RBA, Kingdom), each with their own branding,
+their own people, and their own way of doing things, all in a single Supabase project and
+walled off from each other by row-level security.
+
+> Working on this repo with Claude? Start with `CLAUDE.md` (the standing guardrails).
+
+## What is inside
+
+| Module | Admins | Employees |
+| --- | --- | --- |
+| Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
+| Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores | Own reviews, scores, feedback, goals with action steps |
+| People | Invite, roles, deactivate | (not visible) |
+| SOP library | Create, edit (versioned), publish, attach files | Read published documents |
+| Resource library | Add links, files, templates, videos with tags | Browse and open |
+| Rococo section | Rococo admins only: companies, themes, sign-in domains, every user | |
+
+Financial snapshots and the marketing campaign tracker are the next phase.
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env    # fill in the Supabase URL and anon key (see below)
+npm run dev             # http://localhost:5173
+npx vitest run          # unit and page tests, no network
+npm run build           # type-check plus production build
+```
+
+With an empty `.env` the app still runs: it renders a setup notice instead of the login
+gate (the nullable-client pattern in `src/services/supabase.ts`). Tests and CI rely on
+this; they never touch the network.
+
+## Supabase setup
+
+1. **Create a Supabase project** (one project for all companies).
+2. **Apply the migrations.** Open the SQL editor and run each file in
+   `supabase/migrations/` in numeric order (`0001` through `0006`). Every file is
+   idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
+   (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
+   GSR configuration for each. Check the domains in the Rococo section before inviting
+   anyone; a domain decides who can self-serve a sign-in.
+3. **Wire the signup gate.** Authentication, Hooks, "Before User Created": enable it and
+   select `public.restrict_signups`. This is the real door; the function is inert until
+   selected here.
+4. **Turn sign-ups on.** Authentication, Sign In / Providers, Email: make sure Email is
+   enabled and turn on "Allow new users to sign up". Do step 3 before step 4: while
+   sign-ups are on and the hook is off, anyone on the internet can create an account.
+   Quick check: try a throwaway @gmail.com address on the login screen and confirm it is
+   rejected.
+5. **Redirect URLs.** Authentication, URL Configuration: set Site URL to the production
+   domain and add `http://localhost:5173/**` plus the Vercel preview wildcard.
+6. **Keys.** Project Settings, API: copy the Project URL and the anon (publishable) key
+   into `.env` locally and into Vercel's environment variables. Never put the service_role
+   key or database password in `.env`, in Vercel, or in any `VITE_` variable.
+7. **Sign in.** Any `@rocococreative.io` address is a Rococo admin on first sign-in and
+   lands in the Rococo section, where companies, themes, and domains are managed.
+
+## How people get in
+
+- **Company email:** the login screen recognizes the domain, switches to that company's
+  theme, and sends a one-time link. The signup gate admits the address and the profile is
+  placed in the company automatically.
+- **Personal email:** an admin creates an invitation on the People page and sends the
+  sign-in link it produces. The gate admits the invited address; on first sign-in the
+  profile inherits the invitation's company, role, and title.
+- **First sign-in:** the person gives their name and is in. Roles are `admin` (the whole
+  hub for their company) or `employee` (own GSR data plus the libraries).
+- **Deactivating** a person on the People page removes all access immediately; their
+  account can be reactivated later.
+
+## GSR scoring
+
+Ported from the Klasik Executive Dashboard and made configurable per company. A company
+defines pillars, each with a weight and a scoring type:
+
+- **Rated criteria:** the reviewer rates each criterion 1 to N; pillar score is the average
+  divided by N.
+- **Target vs actual:** the reviewer enters deliverable line items; pillar score is the
+  average achievement with each item capped at 100%.
+
+Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
+an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
+is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
+Character & Values 25) is seeded as-is.
+
+## Branding
+
+Each company has a `theme_key` (`klasik`, `kingdom`, `rba`, or the default `rococo`). The
+CSS for each lives in `src/index.css`; Tailwind utilities resolve to the active theme's
+tokens, so the whole app restyles from one attribute on `<html>`. The login screen applies
+a company's theme the moment its domain is recognized. Logos are a URL per company, set in
+Settings or the Rococo section.
+
+The licensed Rococo faces (Goldenbook, Halcom) are not committed to this public
+repository; see `public/fonts/README.md` to ship them on a private deployment. RBA's
+Adobe Fonts need the deployment domain allowlisted in that Typekit project.
+
+## Layout
+
+- `src/App.tsx`: auth gate and router.
+- `src/components/`: login, onboarding, app shell, and the `ui/` primitives.
+- `src/pages/`: one folder per module.
+- `src/services/`: the data layer, one module per table group; plain async functions.
+- `src/lib/`: pure logic (scoring, cycle periods, CSV, formatting, theme registry).
+- `src/test/`: fixtures and the mocked services the page tests render against.
+- `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
+
+## Deploy
+
+Vercel with framework preset Vite. `vercel.json` carries the SPA rewrite and security
+headers. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for Production, Preview, and
+Development. CI (`.github/workflows/ci.yml`) runs the tests and the type-checked build on
+every push and pull request.
