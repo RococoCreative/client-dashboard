@@ -132,6 +132,11 @@ Adobe Fonts need the deployment domain allowlisted in that Typekit project.
 
 ## Deploy
 
+Live: Vercel project `company-hub` in the Rococo Creative team, production branch `main`,
+at https://company-hub-rocococreative.vercel.app. The Supabase project is "Rococo - Company
+Hub" (`https://jjdcejevdqpwuastsmpq.supabase.co`); its keys live in Vercel's environment
+variables and are never committed.
+
 Vercel with framework preset Vite. `vercel.json` carries the SPA rewrite and security
 headers. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for Production, Preview, and
 Development. CI (`.github/workflows/ci.yml`) runs the tests and the type-checked build on
