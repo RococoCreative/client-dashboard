@@ -576,15 +576,16 @@ export function personaProfile(persona: Persona, bundle: CompanyBundle): Profile
   return persona === "admin" ? bundle.profiles[0] : bundle.profiles[1];
 }
 
-export function makeHub(persona: Persona, company: Company = KLASIK.company): HubValue {
-  const bundle = bundleFor(company.id) ?? KLASIK;
+// A Rococo admin with company null is on the portfolio.
+export function makeHub(persona: Persona, company: Company | null = KLASIK.company): HubValue {
+  const bundle = (company ? bundleFor(company.id) : undefined) ?? KLASIK;
   const profile = personaProfile(persona, bundle);
   const isRococo = persona === "rococo";
   return {
     session: fakeSession(profile),
     profile,
     company,
-    companies: isRococo ? COMPANIES : [company],
+    companies: isRococo ? COMPANIES : company ? [company] : [],
     isRococo,
     isAdmin: isRococo || persona === "admin",
     setActiveCompanyId: () => undefined,
@@ -598,9 +599,29 @@ export function makeHub(persona: Persona, company: Company = KLASIK.company): Hu
 export function personaFromLocation(): { profile: Profile; company: Company } {
   const search = typeof window !== "undefined" ? window.location.search : "";
   const params = new URLSearchParams(search);
-  const slug = params.get("company") ?? "klasik";
-  const persona = (params.get("persona") ?? "admin") as Persona;
+  const remembered = readRemembered();
+  const slug = params.get("company") ?? remembered.company ?? "klasik";
+  const persona = (params.get("persona") ?? remembered.persona ?? "admin") as Persona;
+  remember(persona, slug);
   const company = COMPANIES.find((c) => c.slug === slug) ?? KLASIK.company;
   const bundle = bundleFor(company.id) ?? KLASIK;
   return { profile: personaProfile(persona, bundle), company };
+}
+
+// The demo's in-app redirects drop the query string, so the last persona is kept for the tab.
+function readRemembered(): { persona: string | null; company: string | null } {
+  try {
+    return { persona: sessionStorage.getItem("demo.persona"), company: sessionStorage.getItem("demo.company") };
+  } catch {
+    return { persona: null, company: null };
+  }
+}
+
+function remember(persona: string, company: string): void {
+  try {
+    sessionStorage.setItem("demo.persona", persona);
+    sessionStorage.setItem("demo.company", company);
+  } catch {
+    // Storage blocked: the URL still works.
+  }
 }

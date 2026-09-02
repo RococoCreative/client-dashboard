@@ -409,22 +409,8 @@ function EmployeeDashboard() {
 }
 
 export default function DashboardPage() {
-  const { company, isAdmin, isRococo } = useHub();
-  if (!company) {
-    return (
-      <EmptyState
-        eyebrow="Rococo"
-        title="No companies yet"
-        body="Create the first company in the Rococo section to begin."
-        action={
-          isRococo ? (
-            <Link to="/rococo">
-              <Button>Open Rococo admin</Button>
-            </Link>
-          ) : undefined
-        }
-      />
-    );
-  }
+  const { company, isAdmin } = useHub();
+  // A Rococo admin with no company active is on the portfolio; the router never lands here.
+  if (!company) return null;
   return isAdmin ? <AdminDashboard /> : <EmployeeDashboard />;
 }

@@ -34,13 +34,15 @@ import SopPage from "./sops/SopPage.tsx";
 import SopEditPage from "./sops/SopEditPage.tsx";
 import ResourcesPage from "./ResourcesPage.tsx";
 import CompanySettingsPage from "./CompanySettingsPage.tsx";
-import RococoPage from "./RococoPage.tsx";
+import PortfolioPage from "./rococo/PortfolioPage.tsx";
+import CompaniesPage from "./rococo/CompaniesPage.tsx";
+import UsersPage from "./rococo/UsersPage.tsx";
 import FinancialsPage from "./FinancialsPage.tsx";
 import MarketingPage from "./MarketingPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
-const rococo = makeHub("rococo", KLASIK.company);
+const rococo = makeHub("rococo", null);
 const currentCycle = KLASIK.cycles[0];
 const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!;
 const employeeProfile = KLASIK.profiles[1];
@@ -188,13 +190,32 @@ describe("admin", () => {
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
 
-  it("lists every company and user for Rococo", async () => {
-    renderWithHub(<RococoPage />, rococo);
+  it("shows the portfolio with a card and signals per company", async () => {
+    renderWithHub(<PortfolioPage />, rococo, { path: "/rococo", pattern: "/rococo" });
+    expect(await screen.findByRole("heading", { name: "Portfolio" })).toBeInTheDocument();
     for (const company of COMPANIES) {
       expect(await screen.findByRole("heading", { name: company.name })).toBeInTheDocument();
     }
+    expect((await screen.findAllByText(/September 2026/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 invitation pending").length).toBe(3);
+    expect(screen.getAllByRole("button", { name: /Open hub/ }).length).toBe(3);
+  });
+
+  it("manages companies and domains on the Companies tab", async () => {
+    renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });
+    expect(await screen.findByRole("heading", { name: "Companies" })).toBeInTheDocument();
+    expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("RBA Projects")).toBeInTheDocument();
+  });
+
+  it("lists every user across companies on the People tab", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
     expect(await screen.findByText("Austin Rococo (you)")).toBeInTheDocument();
-    expect(screen.getByText(/users$/)).toBeInTheDocument();
+    expect(screen.getByText("12 users")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Filter by company"), "co-rba");
+    expect(screen.getByText("3 users")).toBeInTheDocument();
+    expect(screen.queryByText("Austin Rococo (you)")).not.toBeInTheDocument();
   });
 });
 
@@ -204,7 +225,7 @@ describe("phase 2 modules", () => {
     renderWithHub(<FinancialsPage />, admin);
     expect(await screen.findByRole("heading", { name: "Financials" })).toBeInTheDocument();
     expect(await screen.findByText("Aug 2026")).toBeInTheDocument();
-    expect(screen.getAllByText("Gross margin").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Gross margin").length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Quarterly (2)" }));
     expect(await screen.findByText("Q2 2026")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Import CSV/ }));

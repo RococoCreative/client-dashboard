@@ -18,7 +18,7 @@ walled off from each other by row-level security.
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
-| Rococo section | Rococo admins only: companies, themes, sign-in domains, every user | |
+| Rococo portfolio | Rococo admins only: every company with its health signals, plus companies, themes, sign-in domains, and every user | |
 
 QuickBooks sync, automated data pulls, and email notifications are the next phase.
 
@@ -41,7 +41,7 @@ this; they never touch the network.
 `npm run demo` runs the app against an in-memory sample data set for all three companies
 (the same mocks the page tests use) at http://localhost:4173. Pick who you are with the URL:
 `/?persona=admin&company=klasik`, `/?persona=employee&company=kingdom`,
-`/?persona=rococo`, or `/?signedout=1` for the sign-in screen. Nothing is written anywhere;
+`/?persona=rococo` for the portfolio, or `/?signedout=1` for the sign-in screen. Nothing is written anywhere;
 a reload resets the data.
 
 ## Supabase setup
@@ -67,7 +67,9 @@ a reload resets the data.
    into `.env` locally and into Vercel's environment variables. Never put the service_role
    key or database password in `.env`, in Vercel, or in any `VITE_` variable.
 7. **Sign in.** Any `@rocococreative.io` address is a Rococo admin on first sign-in and
-   lands in the Rococo section, where companies, themes, and domains are managed.
+   lands on the portfolio: every company with its signals, and the tabs where companies,
+   themes, domains, and users are managed. Opening a company switches the hub to that
+   company's branding and nav, for that session only.
 
 ## How people get in
 

@@ -10,8 +10,9 @@ own branding, people, and review process, walled off from each other at the data
 level. Admins (owners and managers) get the whole hub for their company: Goal Setting and
 Review (GSR), People, the SOP library, the resource library, financial snapshots, the
 marketing tracker. Employees get their own GSR data plus the two libraries. Rococo admins
-(austin@rocococreative.io and other @rocococreative.io accounts) see every company from
-the Rococo section. Vite + React 19 + TypeScript, Tailwind v4, Supabase (auth, db,
+(austin@rocococreative.io and other @rocococreative.io accounts) sign in to the portfolio,
+Rococo-branded, with no company active, and step into a company for the session; nothing
+about the chosen company is persisted. Vite + React 19 + TypeScript, Tailwind v4, Supabase (auth, db,
 storage), deployed on Vercel.
 
 Read order for context: this file, then README.md, then supabase/migrations/ (the schema

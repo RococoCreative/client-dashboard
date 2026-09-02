@@ -4,15 +4,16 @@
 //   2. Session loading, then the sign-in screen.
 //   3. The profile decides the world: deactivated accounts stop here; a first-time person
 //      gives their name; someone nobody has placed yet gets a calm holding screen; then the
-//      company (own, or the Rococo admin's chosen one) sets the theme and the pages mount.
+//      company sets the theme and the pages mount. Rococo admins start with no company on
+//      the portfolio (Rococo theme) and step into a company for this session only.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { isSupabaseConfigured } from "./services/supabase.ts";
 import { getMyProfile } from "./services/profiles.ts";
 import { getCompany, listCompanies } from "./services/companies.ts";
 import { signOut } from "./services/auth.ts";
 import { useSession } from "./hooks/useSession.ts";
-import { HubProvider, readActiveCompanyId, useHub, type HubValue } from "./context/HubContext.tsx";
+import { HubProvider, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import Login from "./components/Login.tsx";
@@ -38,7 +39,9 @@ import ResourcesPage from "./pages/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
-import RococoPage from "./pages/RococoPage.tsx";
+import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
+import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
+import UsersPage from "./pages/rococo/UsersPage.tsx";
 import type { Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
@@ -76,8 +79,21 @@ function HoldingScreen({ eyebrow, title, body }: { eyebrow: string; title: strin
   );
 }
 
+// Redirect that keeps the query string (the demo harness carries its persona there).
+function RedirectTo({ path }: { path: string }) {
+  const location = useLocation();
+  return <Navigate to={{ pathname: path, search: location.search }} replace />;
+}
+
+// Company pages need an active company. A Rococo admin without one belongs on the portfolio.
+function WithCompany({ children }: { children: ReactNode }) {
+  const { company } = useHub();
+  return company ? <>{children}</> : <RedirectTo path="/rococo" />;
+}
+
 function AdminOnly({ children }: { children: ReactNode }) {
-  const { isAdmin } = useHub();
+  const { company, isAdmin } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
   return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
 }
 
@@ -95,7 +111,8 @@ export default function App() {
   const [profileError, setProfileError] = useState(false);
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [companiesError, setCompaniesError] = useState(false);
-  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(() => readActiveCompanyId());
+  // Session-only: a Rococo admin always signs in to the portfolio, never to a remembered company.
+  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
@@ -104,6 +121,7 @@ export default function App() {
       setProfileLoaded(false);
       setProfileError(false);
       setCompanies(null);
+      setActiveCompanyId(null);
       return;
     }
     let active = true;
@@ -152,25 +170,20 @@ export default function App() {
 
   const company = useMemo<Company | null>(() => {
     if (!companies) return null;
-    if (profileIsRococo) {
-      return (
-        companies.find((c) => c.id === activeCompanyId) ??
-        companies.find((c) => c.id === profileCompanyId) ??
-        companies[0] ??
-        null
-      );
-    }
+    if (profileIsRococo) return companies.find((c) => c.id === activeCompanyId) ?? null;
     return companies[0] ?? null;
-  }, [companies, activeCompanyId, profileIsRococo, profileCompanyId]);
+  }, [companies, activeCompanyId, profileIsRococo]);
 
-  // Signed in: wear the active company's theme. Signed out: back to the default, and the
-  // login screen takes over from there.
+  // Theme before the shell mounts: signed out is Rococo (the login screen takes over from
+  // there); onboarding wears the company's theme when there is one. Once AppLayout mounts it
+  // owns the theme, because the portfolio is Rococo-branded regardless of the active company.
   useEffect(() => {
     if (!session) {
       if (!loading) applyTheme("rococo");
       return;
     }
-    if (profile) applyTheme(company?.theme_key ?? "rococo");
+    if (profile && profile.full_name) return;
+    applyTheme(company?.theme_key ?? "rococo");
   }, [session, loading, profile, company?.theme_key]);
 
   const refreshProfile = useCallback(async () => {
@@ -287,25 +300,27 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="gsr" element={isAdmin ? <GsrCyclesPage /> : <Navigate to="/my" replace />} />
+            <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
+            <Route path="gsr" element={<WithCompany>{isAdmin ? <GsrCyclesPage /> : <Navigate to="/my" replace />}</WithCompany>} />
             <Route path="gsr/settings" element={<AdminOnly><GsrSettingsPage /></AdminOnly>} />
             <Route path="gsr/company-goals" element={<AdminOnly><CompanyGoalsPage /></AdminOnly>} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
-            <Route path="gsr/reviews/:reviewId" element={<ReviewPage />} />
-            <Route path="my" element={<MyGsrPage />} />
-            <Route path="my/goals" element={<MyGoalsPage />} />
+            <Route path="gsr/reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
+            <Route path="my" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGsrPage /></WithCompany>} />
+            <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<AdminOnly><PeoplePage /></AdminOnly>} />
             <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
-            <Route path="sops" element={<SopListPage />} />
+            <Route path="sops" element={<WithCompany><SopListPage /></WithCompany>} />
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="sops/:sopId" element={<SopPage />} />
+            <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="resources" element={<ResourcesPage />} />
+            <Route path="resources" element={<WithCompany><ResourcesPage /></WithCompany>} />
             <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
-            <Route path="rococo" element={<RococoOnly><RococoPage /></RococoOnly>} />
+            <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
+            <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
+            <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
