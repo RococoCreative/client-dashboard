@@ -31,8 +31,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
 3. **Services throw, callers message.** Modules in `src/services/` are plain async
    functions that throw on error; pages catch and render a friendly line (`lib/errors.ts`).
    No data libraries (react-query, SWR) and no global stores beyond `HubContext`.
-4. **The company wall is RLS, never UI.** Every policy resolves through
-   `auth_company_id()`, `is_company_member(cid)`, and `can_manage_company(cid)`; child rows
+4. **The company wall is RLS, never UI.** Every policy resolves through the helpers in the
+   `private` schema (`auth_company_id()`, `is_company_member(cid)`, `can_manage_company(cid)`),
+   which PostgREST never exposes; the only public functions are the two login lookups. Child rows
    inherit `company_id` from their parent by trigger; guard triggers stop self-elevation.
    Pages always pass `company_id` explicitly (a Rococo admin acts on a chosen company).
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
