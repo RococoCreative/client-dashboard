@@ -12,17 +12,13 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* Licensed Rococo faces (Goldenbook display, Halcom UI) are not committed to this public
- * repository. Drop the woff2 files into public/fonts and uncomment to ship them; the
- * Rococo theme already names these families first and falls back to Cormorant Garamond
- * and Instrument Sans from Google Fonts (see public/fonts/README.md).
- *
- * @font-face { font-family: "Goldenbook"; font-weight: 300; font-display: swap; src: url("/fonts/Goldenbook-Light.woff2") format("woff2"); }
- * @font-face { font-family: "Goldenbook"; font-weight: 400; font-display: swap; src: url("/fonts/Goldenbook-Regular.woff2") format("woff2"); }
- * @font-face { font-family: "Halcom"; font-weight: 400; font-display: swap; src: url("/fonts/Halcom-Regular.woff2") format("woff2"); }
- * @font-face { font-family: "Halcom"; font-weight: 500; font-display: swap; src: url("/fonts/Halcom-Medium.woff2") format("woff2"); }
- * @font-face { font-family: "Halcom"; font-weight: 700; font-display: swap; src: url("/fonts/Halcom-Bold.woff2") format("woff2"); }
- */
+/* Rococo's brand faces, Goldenbook (display) and Halcom (UI), are licensed through Adobe
+ * Fonts and served by the web project stylesheet linked in index.html, never as files in
+ * this repository. Adobe declares the families as "goldenbook" and "halcom", so the Rococo
+ * theme names them exactly that way and falls back to Cormorant Garamond and Instrument
+ * Sans (the design system's approved substitutes, from Google Fonts) if that stylesheet
+ * does not load. Klasik, Kingdom, and the mono face come from Google Fonts; RBA's faces are
+ * Adobe families too and render once they are added to the same web project. */
 
 @theme inline {
   /* Surfaces: page, app chrome (sidebar/header), cards, wells. */
@@ -93,9 +89,9 @@
   --t-warning: #8f6a20;
   --t-danger: #b84a4a;
   --t-info: #3f5f6b;
-  --t-font-display: "Goldenbook", "Cormorant Garamond", Georgia, serif;
-  --t-font-sans: "Halcom", "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --t-font-numeric: "Halcom", "Instrument Sans", system-ui, sans-serif;
+  --t-font-display: "goldenbook", "Cormorant Garamond", Georgia, serif;
+  --t-font-sans: "halcom", "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --t-font-numeric: "halcom", "Instrument Sans", system-ui, sans-serif;
   --t-font-mono: "Fragment Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --t-display-weight: 300;
   --t-shadow-xs: 0 1px 2px rgba(31, 31, 31, 0.04);
@@ -172,8 +168,9 @@
 
 /* ---------------------------------------------------------------------------------------
  * RBA: brand blue on deep charcoal, warm white type (the RBA calculator palette, from the
- * Webflow site variables). Proxima Nova and Helvetica Neue LT Pro load from Adobe Fonts
- * only on an allowlisted domain; the stacks fall back to Helvetica Neue and Arial.
+ * Webflow site variables). Proxima Nova and Helvetica Neue LT Pro render once those Adobe
+ * Fonts families are in the web project linked from index.html; until then the stacks fall
+ * back to Helvetica Neue and Arial.
  * ------------------------------------------------------------------------------------- */
 [data-theme="rba"] {
   color-scheme: dark;

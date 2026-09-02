@@ -7,12 +7,17 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#39443C" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Tenant type stacks. Each company's theme picks its own family from this set:
-         Inter (Klasik, and the shared body face), Josefin Sans + Zilla Slab numerals (Kingdom),
-         Cormorant Garamond + Instrument Sans as the open fallbacks for the licensed Goldenbook and
-         Halcom faces (Rococo), Fragment Mono for eyebrows and badges everywhere. RBA's Proxima Nova
-         and Helvetica Neue LT Pro come from Adobe Fonts and need the deployment domain allowlisted
-         in that Typekit project; see src/lib/theme.ts. -->
+    <!-- Tenant type stacks. Each company's theme picks its own family from this set.
+         Rococo's Goldenbook (display) and Halcom (UI) are served by the Rococo Creative Adobe
+         Fonts web project below; Adobe declares them as "goldenbook" and "halcom" and serves
+         them on any domain. Google Fonts carries Inter (Klasik, and the shared body face),
+         Josefin Sans + Zilla Slab numerals (Kingdom), Fragment Mono for eyebrows and badges
+         everywhere, and Cormorant Garamond + Instrument Sans, the design system's approved
+         fallbacks if the Adobe stylesheet does not load. RBA's Proxima Nova and Helvetica Neue
+         LT Pro are Adobe Fonts families too: add them to the same web project and the RBA theme
+         picks them up with no code change; until then it falls back to Helvetica Neue and Arial. -->
+    <link rel="preconnect" href="https://use.typekit.net" crossorigin />
+    <link rel="stylesheet" href="https://use.typekit.net/zvo4bpa.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

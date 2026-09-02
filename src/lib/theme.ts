@@ -4,10 +4,10 @@
 // screen applies a company's theme the moment its domain is recognized, so the app feels
 // like that company's tool before the magic link is even sent.
 //
-// RBA's licensed faces (Proxima Nova, Helvetica Neue LT Pro) come from Adobe Fonts. To
-// render them, add the Typekit project stylesheet to index.html and allowlist the
-// deployment domain in that Adobe Fonts project; without it the stacks fall back to
-// Helvetica Neue and Arial by design.
+// Brand faces load from Adobe Fonts through the web project stylesheet in index.html
+// (Rococo's Goldenbook and Halcom today). RBA's Proxima Nova and Helvetica Neue LT Pro are
+// Adobe families too: add them to that web project and the RBA theme renders them with no
+// code change; until then its stacks fall back to Helvetica Neue and Arial by design.
 import type { ThemeKey } from "../types/database.ts";
 
 export interface ThemePreset {

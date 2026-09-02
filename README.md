@@ -117,9 +117,13 @@ tokens, so the whole app restyles from one attribute on `<html>`. The login scre
 a company's theme the moment its domain is recognized. Logos are a URL per company, set in
 Settings or the Rococo section.
 
-The licensed Rococo faces (Goldenbook, Halcom) are not committed to this public
-repository; see `public/fonts/README.md` to ship them on a private deployment. RBA's
-Adobe Fonts need the deployment domain allowlisted in that Typekit project.
+Brand type comes from Adobe Fonts. The Rococo Creative web project stylesheet linked in
+`index.html` serves Goldenbook and Halcom on any domain (Adobe no longer keeps a domain
+list for web projects), so no font files live in this repository. The Rococo theme names the
+families the way Adobe declares them, `goldenbook` and `halcom`, with Cormorant Garamond and
+Instrument Sans from Google Fonts as the design system's approved fallbacks. RBA's Proxima
+Nova and Helvetica Neue LT Pro are Adobe families as well: add them to the same web project
+and the RBA theme picks them up without a code change.
 
 ## Layout
 
