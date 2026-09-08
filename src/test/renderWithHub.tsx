@@ -2,17 +2,17 @@
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { HubProvider, type HubValue } from "../context/HubContext.tsx";
+import { HubContext, type HubValue } from "../context/HubContext.tsx";
 
 export function renderWithHub(ui: ReactElement, hub: HubValue, { path = "/", pattern = "/" }: { path?: string; pattern?: string } = {}) {
   return render(
-    <HubProvider value={hub}>
+    <HubContext value={hub}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path={pattern} element={ui} />
           <Route path="*" element={<div>elsewhere</div>} />
         </Routes>
       </MemoryRouter>
-    </HubProvider>,
+    </HubContext>,
   );
 }

@@ -1,5 +1,5 @@
 // Loading placeholders that hold the page's real shape instead of a centered spinner.
-export function Skeleton({ className = "" }: { className?: string }) {
+function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-surface-2 ${className}`} aria-hidden />;
 }
 

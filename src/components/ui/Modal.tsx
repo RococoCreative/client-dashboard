@@ -20,7 +20,9 @@ export default function Modal({
   // Callers pass inline onClose closures, so the mount effect must NOT key on it: re-running
   // per parent render would steal focus back to the panel mid-typing.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const id = Symbol("modal");

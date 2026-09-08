@@ -113,7 +113,7 @@ export default function ResourcesPage() {
   const [error, setError] = useState("");
   const state = useAsync(() => listResources(companyId), [companyId]);
 
-  const resources = state.data ?? [];
+  const resources = useMemo(() => state.data ?? [], [state.data]);
   const allTags = useMemo(() => [...new Set(resources.flatMap((r) => r.tags))].sort(), [resources]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

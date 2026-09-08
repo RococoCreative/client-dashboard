@@ -8,10 +8,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 
-const REPO = path.resolve(__dirname, "..");
+const REPO = path.resolve(import.meta.dirname, "..");
 
 export default defineConfig({
-  root: __dirname,
+  root: import.meta.dirname,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [

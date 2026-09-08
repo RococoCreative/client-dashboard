@@ -525,9 +525,9 @@ function build(company: Company): CompanyBundle {
   return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
-export const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
+const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
 
-export const ROCOCO: Profile = {
+const ROCOCO: Profile = {
   id: "rococo-user-1",
   email: "austin@rocococreative.io",
   full_name: "Austin Rococo",
@@ -542,7 +542,7 @@ export const ROCOCO: Profile = {
 
 export const ALL_PROFILES: Profile[] = [...BUNDLES.flatMap((b) => b.profiles), ROCOCO];
 
-export function bundleFor(companyId: string): CompanyBundle | undefined {
+function bundleFor(companyId: string): CompanyBundle | undefined {
   return BUNDLES.find((b) => b.company.id === companyId);
 }
 
@@ -571,7 +571,7 @@ export function fakeSession(profile: Profile): Session {
 
 export type Persona = "admin" | "employee" | "rococo";
 
-export function personaProfile(persona: Persona, bundle: CompanyBundle): Profile {
+function personaProfile(persona: Persona, bundle: CompanyBundle): Profile {
   if (persona === "rococo") return ROCOCO;
   return persona === "admin" ? bundle.profiles[0] : bundle.profiles[1];
 }

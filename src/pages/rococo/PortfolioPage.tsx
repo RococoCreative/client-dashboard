@@ -29,12 +29,7 @@ import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
 import type { Company, CompanyDomain, FinancialSnapshot, ReviewCycle } from "../../types/database.ts";
-
-export const PORTFOLIO_TABS = [
-  { to: "/rococo", label: "Portfolio", end: true },
-  { to: "/rococo/companies", label: "Companies" },
-  { to: "/rococo/people", label: "People" },
-];
+import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
 interface CompanySummary {
   company: Company;

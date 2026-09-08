@@ -1,7 +1,7 @@
 // Email helpers shared by the login screen and the People page. The domain is what maps
 // an address to a company at sign-in (via company_domains); everything here is plain
 // string work with no network so it is fully unit tested.
-export const ROCOCO_DOMAIN = "rocococreative.io";
+const ROCOCO_DOMAIN = "rocococreative.io";
 
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();

@@ -66,8 +66,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
 
 ## Verification gates
 
-Every substantive change: `npx vitest run` and `npm run build` (type-checked) must pass
-before commit. CI runs the same two gates with no network. Page tests render against the
+Every substantive change: `npm run lint`, `npx vitest run`, and `npm run build`
+(type-checked) must pass before commit. CI runs the same three gates with no network. Page tests render against the
 mocked data layer in `src/test/mocks/` (one module per service, same exports); when a
 service gains a function, the mock gains it too. `npm run demo` runs the app on the same
 mocks for a visual check of any screen without a Supabase project.

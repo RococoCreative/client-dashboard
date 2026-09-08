@@ -6,7 +6,7 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles } from "../../services/gsr.ts";
-import { MY_TABS } from "./MyGsrPage.tsx";
+import { MY_TABS } from "./myTabs.ts";
 
 export default function MyGoalsPage() {
   const { company, profile } = useHub();

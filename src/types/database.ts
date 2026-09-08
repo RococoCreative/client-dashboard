@@ -3,6 +3,8 @@
 // arrive as JSON numbers. Label maps for every enum live here so pages, badges, and
 // selects all agree on one vocabulary.
 
+import type { ScoringType } from "../lib/gsr/scoring.ts";
+
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
 export type Role = "admin" | "employee";
 
@@ -59,7 +61,8 @@ export interface Invitation {
 
 // GSR ---------------------------------------------------------------------------------------
 
-export type ScoringType = "rating" | "deliverables";
+// The scoring engine owns this union; re-exported so row types and pages share one name.
+export type { ScoringType };
 
 export interface GsrPillar {
   id: string;

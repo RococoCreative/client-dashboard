@@ -249,7 +249,7 @@ export default function FinancialsPage() {
   const [error, setError] = useState("");
   const state = useAsync(() => listSnapshots(companyId), [companyId]);
 
-  const all = state.data ?? [];
+  const all = useMemo(() => state.data ?? [], [state.data]);
   const rows = useMemo(() => all.filter((s) => s.period_type === type).sort((a, b) => b.period_start.localeCompare(a.period_start)), [all, type]);
   const latest = rows[0] ?? null;
   const latestDerived = latest ? deriveSnapshot(latest) : null;

@@ -23,8 +23,8 @@ type Phase = "idle" | "sending" | "sent" | "error";
 export default function Login() {
   const params = new URLSearchParams(window.location.search);
   const [email, setEmail] = useState(params.get("email") ?? "");
-  const [company, setCompany] = useState<PublicCompany | null>(null);
-  const [needsPick, setNeedsPick] = useState(false);
+  // The last domain lookup that landed, tagged with the domain it answered for.
+  const [lookup, setLookup] = useState<{ domain: string; company: PublicCompany | null } | null>(null);
   const [companies, setCompanies] = useState<PublicCompany[] | null>(null);
   const [picked, setPicked] = useState(params.get("company") ?? "");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -32,28 +32,26 @@ export default function Login() {
   const lookupTick = useRef(0);
 
   const rococo = isRococoEmail(email);
+  const domain = emailDomain(email);
+  // The lookup only counts while it still matches what is typed; a Rococo address or an
+  // address without a domain has no company to recognize.
+  const current = domain && !rococo && lookup?.domain === domain ? lookup : null;
+  const company = current?.company ?? null;
+  const needsPick = current !== null && current.company === null;
 
   // Recognize the company from the domain as the person types, debounced so a lookup never
   // fires per keystroke. A stale response is dropped by the tick check.
   useEffect(() => {
-    const domain = emailDomain(email);
-    if (!domain || rococo) {
-      setCompany(null);
-      setNeedsPick(false);
-      return;
-    }
+    const target = emailDomain(email);
+    if (!target || rococo) return;
     const tick = ++lookupTick.current;
     const timer = setTimeout(() => {
       lookupCompanyForEmail(email)
         .then((found) => {
-          if (tick !== lookupTick.current) return;
-          setCompany(found);
-          setNeedsPick(!found);
+          if (tick === lookupTick.current) setLookup({ domain: target, company: found });
         })
         .catch(() => {
-          if (tick !== lookupTick.current) return;
-          setCompany(null);
-          setNeedsPick(true);
+          if (tick === lookupTick.current) setLookup({ domain: target, company: null });
         });
     }, 350);
     return () => clearTimeout(timer);

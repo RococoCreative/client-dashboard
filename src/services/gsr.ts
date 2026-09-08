@@ -202,11 +202,6 @@ export async function updateReview(id: string, patch: ReviewPatch): Promise<Revi
   return data as Review;
 }
 
-export async function deleteReview(id: string): Promise<void> {
-  const { error } = await db().from("reviews").delete().eq("id", id);
-  if (error) throw error;
-}
-
 export async function listReviewScores(reviewId: string): Promise<ReviewScore[]> {
   const { data, error } = await db()
     .from("review_scores")

@@ -17,7 +17,7 @@ import Stat from "../../components/ui/Stat.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
 import { inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
-import { bandClass } from "../../components/ui/ScoreRing.tsx";
+import { bandClass } from "../../components/ui/bandClass.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import {

@@ -13,39 +13,57 @@ export interface AsyncState<T> {
   setData: (next: T | ((prev: T | null) => T | null)) => void;
 }
 
+interface Settled<T> {
+  data: T | null;
+  error: string;
+  // The request number this result belongs to; -1 until the first one lands.
+  request: number;
+}
+
+function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
 export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]): AsyncState<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
-  // The loader closure changes every render; the effect keys on deps + tick instead so a
-  // parent re-render never refetches.
+  // Every deps change and every reload() is a new numbered request. Loading is "the latest
+  // request has not settled yet", derived here rather than flipped inside the effect, and
+  // the deps comparison happens during render (the adjust-state-on-change pattern), so the
+  // effect keys on one number and no state is written before the fetch resolves.
+  const [request, setRequest] = useState(0);
+  const [seenDeps, setSeenDeps] = useState(deps);
+  if (!sameDeps(seenDeps, deps)) {
+    setSeenDeps(deps);
+    setRequest((n) => n + 1);
+  }
+  const [settled, setSettled] = useState<Settled<T>>({ data: null, error: "", request: -1 });
+
+  // The loader closure changes every render; the effect reads the latest one through a ref
+  // so a parent re-render never refetches. Synced in an effect, never during render.
   const loaderRef = useRef(loader);
-  loaderRef.current = loader;
+  useEffect(() => {
+    loaderRef.current = loader;
+  });
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
     loaderRef
       .current()
       .then((next) => {
-        if (!active) return;
-        setData(next);
-        setLoading(false);
+        if (active) setSettled({ data: next, error: "", request });
       })
       .catch((err: unknown) => {
-        if (!active) return;
-        setError(errorMessage(err));
-        setLoading(false);
+        if (active) setSettled((prev) => ({ data: prev.data, error: errorMessage(err), request }));
       });
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+  }, [request]);
 
-  const reload = useCallback(() => setTick((t) => t + 1), []);
+  const loading = settled.request !== request;
+  const reload = useCallback(() => setRequest((n) => n + 1), []);
+  const setData = useCallback((next: T | ((prev: T | null) => T | null)) => {
+    setSettled((prev) => ({ ...prev, data: typeof next === "function" ? (next as (p: T | null) => T | null)(prev.data) : next }));
+  }, []);
 
-  return { data, error, loading, reload, setData };
+  return { data: settled.data, error: loading ? "" : settled.error, loading, reload, setData };
 }

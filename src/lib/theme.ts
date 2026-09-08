@@ -50,7 +50,7 @@ export const THEMES: Record<ThemeKey, ThemePreset> = {
 };
 
 export const THEME_KEYS = Object.keys(THEMES) as ThemeKey[];
-export const DEFAULT_THEME: ThemeKey = "rococo";
+const DEFAULT_THEME: ThemeKey = "rococo";
 
 export function isThemeKey(value: unknown): value is ThemeKey {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(THEMES, value);

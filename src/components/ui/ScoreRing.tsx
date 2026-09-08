@@ -1,17 +1,6 @@
 // The overall score as a ring, banded on the original impact-ring thresholds (80/60/40)
 // through the theme's semantic colors. Null renders an empty ring with a hyphen.
-import { scoreBand, type ScoreBand } from "../../lib/gsr/scoring.ts";
-
-const BAND_CLASS: Record<ScoreBand, string> = {
-  strong: "text-success",
-  solid: "text-accent",
-  developing: "text-warning",
-  needs_attention: "text-danger",
-};
-
-export function bandClass(score: number | null): string {
-  return score === null ? "text-ink-3" : BAND_CLASS[scoreBand(score)];
-}
+import { bandClass } from "./bandClass.ts";
 
 export default function ScoreRing({
   score,

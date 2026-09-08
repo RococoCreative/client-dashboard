@@ -22,9 +22,8 @@ export interface HubValue {
   refreshCompanies: () => Promise<void>;
 }
 
-const HubContext = createContext<HubValue | null>(null);
-
-export const HubProvider = HubContext.Provider;
+// Rendered directly as the provider: <HubContext value={...}>.
+export const HubContext = createContext<HubValue | null>(null);
 
 export function useHub(): HubValue {
   const value = useContext(HubContext);

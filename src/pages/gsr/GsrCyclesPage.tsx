@@ -1,7 +1,7 @@
 // GSR home for admins: every review cycle the company has run, newest first, with progress
 // and the team score, plus the door to settings and company goals. New cycles are created
 // here; the period math (cadence -> dates -> name) lives in lib/gsr/cycles.ts.
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Settings2, Target } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
@@ -34,18 +34,15 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  // Cadence or start changes recompute the end and, until the admin edits it, the name.
-  useEffect(() => {
-    const computedEnd = periodEnd(cadence, start);
-    if (computedEnd) setEnd(computedEnd);
-    if (!nameTouched) setName(defaultCycleName(cadence, start, computedEnd ?? end));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cadence, start]);
-
-  useEffect(() => {
-    if (cadence === "custom" && !nameTouched) setName(defaultCycleName("custom", start, end));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [end]);
+  // Cadence, start, and end move together: fixed rhythms compute their own end, and the
+  // name follows the period until the admin edits it by hand.
+  function applyPeriod(nextCadence: Cadence, nextStart: string, nextEnd: string) {
+    const computedEnd = periodEnd(nextCadence, nextStart) ?? nextEnd;
+    setCadence(nextCadence);
+    setStart(nextStart);
+    setEnd(computedEnd);
+    if (!nameTouched) setName(defaultCycleName(nextCadence, nextStart, computedEnd));
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -89,8 +86,7 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
               value={cadence}
               onChange={(e) => {
                 const next = e.target.value as Cadence;
-                setCadence(next);
-                if (next !== "custom") setStart(periodStart(next, parseDate(start) ?? new Date()));
+                applyPeriod(next, next === "custom" ? start : periodStart(next, parseDate(start) ?? new Date()), end);
               }}
               className={selectClass}
             >
@@ -105,7 +101,7 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
                 id="cycle-start"
                 type="date"
                 value={start}
-                onChange={(e) => setStart(cadence === "custom" ? e.target.value : periodStart(cadence, parseDate(e.target.value) ?? new Date()))}
+                onChange={(e) => applyPeriod(cadence, cadence === "custom" ? e.target.value : periodStart(cadence, parseDate(e.target.value) ?? new Date()), end)}
                 className={inputClass}
               />
             </Field>
@@ -116,7 +112,7 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
                 value={end}
                 min={start}
                 disabled={cadence !== "custom"}
-                onChange={(e) => setEnd(e.target.value)}
+                onChange={(e) => applyPeriod(cadence, start, e.target.value)}
                 className={inputClass}
               />
             </Field>

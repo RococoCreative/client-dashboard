@@ -9,7 +9,20 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  build: { chunkSizeWarningLimit: 900 },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Dependencies change on a bump, app code on every deploy. Kept apart, a deploy
+        // invalidates the small app chunk while the browser keeps the vendor chunks cached.
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/ },
+            { name: "vendor", test: /node_modules[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

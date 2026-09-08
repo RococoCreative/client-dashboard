@@ -24,7 +24,7 @@ import { normalizeDomain } from "../../lib/email.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
 import type { Company, ThemeKey } from "../../types/database.ts";
-import { PORTFOLIO_TABS } from "./PortfolioPage.tsx";
+import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
 export default function CompaniesPage() {
   const { refreshCompanies } = useHub();

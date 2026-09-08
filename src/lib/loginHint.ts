@@ -18,11 +18,3 @@ export function readLoginHint(): string | null {
     return null;
   }
 }
-
-export function clearLoginHint(): void {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    // ignore
-  }
-}

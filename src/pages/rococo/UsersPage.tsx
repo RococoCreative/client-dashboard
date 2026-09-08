@@ -15,7 +15,7 @@ import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import { ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
-import { PORTFOLIO_TABS } from "./PortfolioPage.tsx";
+import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
 export default function UsersPage() {
   const { profile: me, companies } = useHub();
@@ -24,7 +24,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const state = useAsync(() => listAllProfiles(), []);
 
-  const profiles = state.data ?? [];
+  const profiles = useMemo(() => state.data ?? [], [state.data]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return profiles.filter((p) => {

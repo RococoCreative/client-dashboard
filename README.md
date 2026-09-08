@@ -28,6 +28,7 @@ QuickBooks sync, automated data pulls, and email notifications are the next phas
 npm install
 cp .env.example .env    # fill in the Supabase URL and anon key (see below)
 npm run dev             # http://localhost:5173
+npm run lint            # ESLint: TypeScript, React hooks, Fast Refresh rules
 npx vitest run          # unit and page tests, no network
 npm run build           # type-check plus production build
 ```
@@ -48,7 +49,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0009`). Every file is
+   `supabase/migrations/` in numeric order (`0001` through `0010`). Every file is
    idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting

@@ -1,4 +1,4 @@
-# Merge gates: unit tests plus a type-checked production build. Everything runs with no
+# Merge gates: lint, unit tests, and a type-checked production build. Everything runs with no
 # network access to Supabase (the nullable-client pattern in src/services/supabase.ts is
 # what makes the suite hermetic).
 name: CI
@@ -24,5 +24,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npx vitest run
+      # Placeholder values so the bundle is the real one. Without them the unconfigured
+      # branch constant-folds and the bundler shakes most of the app out of the build.
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_placeholder

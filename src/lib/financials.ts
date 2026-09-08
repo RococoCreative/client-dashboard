@@ -89,7 +89,7 @@ export function parsePeriod(raw: string, typeHint: PeriodType | null = null): { 
   return null;
 }
 
-export interface CsvImportRow {
+interface CsvImportRow {
   period_type: PeriodType;
   period_start: string;
   period_end: string;

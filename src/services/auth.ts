@@ -29,5 +29,3 @@ export async function sendMagicLink(email: string): Promise<void> {
 export async function signOut(): Promise<void> {
   await db().auth.signOut();
 }
-
-export { friendlyAuthError } from "../lib/authErrors.ts";

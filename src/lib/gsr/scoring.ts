@@ -29,7 +29,7 @@ export interface ScoreInput {
   actual?: number | null;
 }
 
-export interface PillarResult {
+interface PillarResult {
   pillarId: string;
   name: string;
   weight: number;
@@ -60,7 +60,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-export function activePillars<T extends PillarConfig>(pillars: T[]): T[] {
+function activePillars<T extends PillarConfig>(pillars: T[]): T[] {
   return pillars.filter((p) => p.is_active !== false);
 }
 
@@ -137,10 +137,3 @@ export function scoreBand(score: number): ScoreBand {
   if (score >= 40) return "developing";
   return "needs_attention";
 }
-
-export const BAND_LABELS: Record<ScoreBand, string> = {
-  strong: "Strong",
-  solid: "Solid",
-  developing: "Developing",
-  needs_attention: "Needs attention",
-};

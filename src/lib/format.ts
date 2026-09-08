@@ -2,7 +2,7 @@
 // em dashes anywhere in output; an empty value renders as a plain hyphen.
 import type { Profile } from "../types/database.ts";
 
-export const EMPTY = "-";
+const EMPTY = "-";
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",

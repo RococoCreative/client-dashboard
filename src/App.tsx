@@ -8,12 +8,13 @@
 //      the portfolio (Rococo theme) and step into a company for this session only.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "./services/supabase.ts";
 import { getMyProfile } from "./services/profiles.ts";
 import { getCompany, listCompanies } from "./services/companies.ts";
 import { signOut } from "./services/auth.ts";
 import { useSession } from "./hooks/useSession.ts";
-import { HubProvider, useHub, type HubValue } from "./context/HubContext.tsx";
+import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import Login from "./components/Login.tsx";
@@ -102,8 +103,9 @@ function RococoOnly({ children }: { children: ReactNode }) {
   return isRococo ? <>{children}</> : <Navigate to="/" replace />;
 }
 
-export default function App() {
-  const { session, loading } = useSession();
+// Everything past the sign-in: profile, companies, the active company, and the router. App
+// keys this on the user, so signing out (or in as someone else) starts from empty state.
+function SignedIn({ session }: { session: Session }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   // A transient profile-fetch failure (flaky site wifi, token refresh mid-flight) must NOT
@@ -116,14 +118,6 @@ export default function App() {
   const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
-    if (!session) {
-      setProfile(null);
-      setProfileLoaded(false);
-      setProfileError(false);
-      setCompanies(null);
-      setActiveCompanyId(null);
-      return;
-    }
     let active = true;
     getMyProfile()
       .then((p) => {
@@ -174,17 +168,13 @@ export default function App() {
     return companies[0] ?? null;
   }, [companies, activeCompanyId, profileIsRococo]);
 
-  // Theme before the shell mounts: signed out is Rococo (the login screen takes over from
-  // there); onboarding wears the company's theme when there is one. Once AppLayout mounts it
-  // owns the theme, because the portfolio is Rococo-branded regardless of the active company.
+  // Theme before the shell mounts: onboarding wears the company's theme when there is one.
+  // Once AppLayout mounts it owns the theme, because the portfolio is Rococo-branded
+  // regardless of the active company.
   useEffect(() => {
-    if (!session) {
-      if (!loading) applyTheme("rococo");
-      return;
-    }
     if (profile && profile.full_name) return;
     applyTheme(company?.theme_key ?? "rococo");
-  }, [session, loading, profile, company?.theme_key]);
+  }, [profile, company?.theme_key]);
 
   const refreshProfile = useCallback(async () => {
     const next = await getMyProfile();
@@ -201,9 +191,6 @@ export default function App() {
     setCompanies(list);
   }, [profile]);
 
-  if (!isSupabaseConfigured) return <SetupNotice />;
-  if (loading) return <FullScreenLoading label="Signing you in" />;
-  if (!session) return <Login />;
   if (!profileLoaded) return <FullScreenLoading label="Loading your workspace" />;
 
   if (!profile) {
@@ -296,7 +283,7 @@ export default function App() {
   };
 
   return (
-    <HubProvider value={value}>
+    <HubContext value={value}>
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
@@ -325,6 +312,20 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-    </HubProvider>
+    </HubContext>
   );
+}
+
+export default function App() {
+  const { session, loading } = useSession();
+
+  // Signed out is Rococo-branded; the login screen takes over from there.
+  useEffect(() => {
+    if (!loading && !session) applyTheme("rococo");
+  }, [loading, session]);
+
+  if (!isSupabaseConfigured) return <SetupNotice />;
+  if (loading) return <FullScreenLoading label="Signing you in" />;
+  if (!session) return <Login />;
+  return <SignedIn key={session.user.id} session={session} />;
 }

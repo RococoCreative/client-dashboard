@@ -6,7 +6,8 @@ import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import ScoreBar from "../../components/ui/ScoreBar.tsx";
-import ScoreRing, { bandClass } from "../../components/ui/ScoreRing.tsx";
+import ScoreRing from "../../components/ui/ScoreRing.tsx";
+import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
@@ -18,11 +19,7 @@ import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } fr
 import { computeReviewScore } from "../../lib/gsr/scoring.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
-
-export const MY_TABS = [
-  { to: "/my", label: "Reviews", end: true },
-  { to: "/my/goals", label: "Goals" },
-];
+import { MY_TABS } from "./myTabs.ts";
 
 export default function MyGsrPage() {
   const { company, profile } = useHub();

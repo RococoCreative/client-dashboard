@@ -2,8 +2,6 @@ import type { PublicCompany } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
 import { db } from "./supabase.ts";
 
-export { friendlyAuthError } from "../../lib/authErrors.ts";
-
 export async function lookupCompanyForEmail(email: string): Promise<PublicCompany | null> {
   const domain = email.trim().toLowerCase().split("@")[1] ?? "";
   const match = DOMAINS.find((d) => d.domain === domain);

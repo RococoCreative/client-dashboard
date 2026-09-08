@@ -1,7 +1,4 @@
-export const BUCKET = "hub-files";
-export const MAX_FILE_BYTES = 50 * 1024 * 1024;
-
-export function safeFileName(name: string): string {
+function safeFileName(name: string): string {
   const trimmed = name.trim().replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-");
   return trimmed.length > 0 ? trimmed.slice(0, 120) : "file";
 }

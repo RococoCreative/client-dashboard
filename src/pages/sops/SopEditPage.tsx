@@ -1,6 +1,6 @@
 // Write or revise an SOP. Markdown body, a change note, and the document details. Saving an
 // existing document appends a new version; the old text stays in history.
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
 import Field from "../../components/ui/Field.tsx";
@@ -31,38 +31,25 @@ Why this procedure exists and when it applies.
 - Who signs off
 `;
 
-export default function SopEditPage() {
-  const { sopId } = useParams();
+type ExistingSop = { sop: Awaited<ReturnType<typeof getSop>>; version: Awaited<ReturnType<typeof getCurrentSopVersion>> };
+
+// The form owns its fields from the moment it mounts, seeded from the loaded document (or
+// the template for a new one), so there is no hydration step to keep in sync.
+function SopForm({ existing }: { existing: ExistingSop | null }) {
   const { company } = useHub();
   const navigate = useNavigate();
   const companyId = company!.id;
-  const isNew = !sopId;
+  const isNew = existing === null;
+  const sopId = existing?.sop.id;
 
-  const existing = useAsync(async () => {
-    if (!sopId) return null;
-    const [sop, version] = await Promise.all([getSop(sopId), getCurrentSopVersion(sopId)]);
-    return { sop, version };
-  }, [sopId]);
-
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<SopCategory>("process");
-  const [summary, setSummary] = useState("");
-  const [status, setStatus] = useState<SopStatus>("draft");
-  const [body, setBody] = useState(TEMPLATE);
+  const [title, setTitle] = useState(existing?.sop.title ?? "");
+  const [category, setCategory] = useState<SopCategory>(existing?.sop.category ?? "process");
+  const [summary, setSummary] = useState(existing?.sop.summary ?? "");
+  const [status, setStatus] = useState<SopStatus>(existing?.sop.status ?? "draft");
+  const [body, setBody] = useState(existing ? (existing.version?.body_md ?? "") : TEMPLATE);
   const [changeNote, setChangeNote] = useState("");
-  const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!existing.data || hydrated) return;
-    setTitle(existing.data.sop.title);
-    setCategory(existing.data.sop.category);
-    setSummary(existing.data.sop.summary ?? "");
-    setStatus(existing.data.sop.status);
-    setBody(existing.data.version?.body_md ?? "");
-    setHydrated(true);
-  }, [existing.data, hydrated]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -71,14 +58,14 @@ export default function SopEditPage() {
     setBusy(true);
     setError("");
     try {
-      if (isNew) {
+      if (!existing) {
         const sop = await createSop({ company_id: companyId, title: title.trim(), category, summary: summary.trim() || null, status, body_md: body, change_note: changeNote.trim() || "First version" });
         navigate(`/sops/${sop.id}`);
         return;
       }
-      const sop = existing.data!.sop;
+      const sop = existing.sop;
       await updateSop(sop.id, { title: title.trim(), category, summary: summary.trim() || null, status });
-      const previous = existing.data!.version?.body_md ?? "";
+      const previous = existing.version?.body_md ?? "";
       if (body !== previous || changeNote.trim()) {
         await addSopVersion(sop.id, sop.company_id, body, changeNote.trim() || "Updated");
       }
@@ -89,16 +76,13 @@ export default function SopEditPage() {
     }
   }
 
-  if (!isNew && existing.error) return <Notice tone="error">{existing.error}</Notice>;
-  if (!isNew && !existing.data) return <SkeletonRows rows={8} />;
-
   return (
     <form onSubmit={handleSubmit}>
       <PageHeader
         backTo={isNew ? "/sops" : `/sops/${sopId}`}
         backLabel={isNew ? "SOP library" : "Back to SOP"}
         eyebrow="SOP library"
-        title={isNew ? "New SOP" : `Edit: ${existing.data?.sop.title ?? ""}`}
+        title={isNew ? "New SOP" : `Edit: ${existing?.sop.title ?? ""}`}
         description={isNew ? "Write it in Markdown. Publish when it is ready for the team." : "Saving adds a new version; the current text stays in history."}
         actions={
           <>
@@ -148,4 +132,17 @@ export default function SopEditPage() {
       </div>
     </form>
   );
+}
+
+export default function SopEditPage() {
+  const { sopId } = useParams();
+  const existing = useAsync(async (): Promise<ExistingSop | null> => {
+    if (!sopId) return null;
+    const [sop, version] = await Promise.all([getSop(sopId), getCurrentSopVersion(sopId)]);
+    return { sop, version };
+  }, [sopId]);
+
+  if (sopId && existing.error) return <Notice tone="error">{existing.error}</Notice>;
+  if (sopId && !existing.data) return <SkeletonRows rows={8} />;
+  return <SopForm key={sopId ?? "new"} existing={existing.data} />;
 }

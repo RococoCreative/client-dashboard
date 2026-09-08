@@ -113,9 +113,6 @@ export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "m
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   return patchIn(reviews, id, { ...patch, updated_at: now() });
 }
-export async function deleteReview(id: string): Promise<void> {
-  removeFrom(reviews, id);
-}
 
 export async function listReviewScores(reviewId: string): Promise<ReviewScore[]> {
   return scores.filter((s) => s.review_id === reviewId);

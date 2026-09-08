@@ -4,11 +4,11 @@
 // deletes are admin-only by policy.
 import { db } from "./supabase.ts";
 
-export const BUCKET = "hub-files";
-export const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const BUCKET = "hub-files";
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 // Keep the original name readable but safe for a URL path.
-export function safeFileName(name: string): string {
+function safeFileName(name: string): string {
   const trimmed = name.trim().replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-");
   return trimmed.length > 0 ? trimmed.slice(0, 120) : "file";
 }
