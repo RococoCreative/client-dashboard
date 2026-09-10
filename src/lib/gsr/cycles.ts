@@ -7,7 +7,6 @@ import type { Cadence } from "../../types/database.ts";
 export const CADENCE_LABELS: Record<Cadence, string> = {
   monthly: "Monthly",
   quarterly: "Quarterly",
-  semiannual: "Twice a year",
   annual: "Annual",
   custom: "Custom dates",
 };
@@ -21,7 +20,6 @@ function monthsFor(cadence: Cadence): number | null {
   switch (cadence) {
     case "monthly": return 1;
     case "quarterly": return 3;
-    case "semiannual": return 6;
     case "annual": return 12;
     default: return null;
   }
@@ -55,8 +53,6 @@ export function defaultCycleName(cadence: Cadence, start: string, end?: string |
       return `${MONTHS[date.getMonth()]} ${year}`;
     case "quarterly":
       return `Q${Math.floor(date.getMonth() / 3) + 1} ${year}`;
-    case "semiannual":
-      return `H${date.getMonth() < 6 ? 1 : 2} ${year}`;
     case "annual":
       return `${year}`;
     default: {
@@ -79,4 +75,23 @@ export function currentCycle<T extends { period_start: string; period_end: strin
   if (containing) return containing;
   const sorted = [...open].sort((a, b) => (a.period_start < b.period_start ? 1 : -1));
   return sorted[0] ?? null;
+}
+
+// The cycle before `current` with the same cadence: the latest one that started earlier.
+export function previousCycle<T extends { id: string; cadence: string; period_start: string }>(cycles: T[], current: T): T | null {
+  return (
+    cycles
+      .filter((c) => c.id !== current.id && c.cadence === current.cadence && c.period_start < current.period_start)
+      .sort((a, b) => (a.period_start < b.period_start ? 1 : -1))[0] ?? null
+  );
+}
+
+// The calendar year a cycle belongs to, from its start date.
+export function cycleYear(cycle: { period_start: string }): number {
+  return parseDate(cycle.period_start)?.getFullYear() ?? new Date().getFullYear();
+}
+
+// A cycle is settled once it is closed or its period is over: its goals read as hit or miss.
+export function cycleSettled(cycle: { status: string; period_end: string }, today = new Date()): boolean {
+  return cycle.status === "closed" || cycle.period_end < toDateOnly(today);
 }

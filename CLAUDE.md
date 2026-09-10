@@ -16,7 +16,8 @@ about the chosen company is persisted. Vite + React 19 + TypeScript, Tailwind v4
 storage), deployed on Vercel.
 
 Read order for context: this file, then README.md, then supabase/migrations/ (the schema
-is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine).
+is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine) and src/lib/gsr/goals.ts
+(the Goal Setting Review rules: progress, hit or miss, carry forward).
 
 ## Hard rules
 

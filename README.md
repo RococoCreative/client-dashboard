@@ -12,7 +12,7 @@ walled off from each other by row-level security.
 | Module | Admins | Employees |
 | --- | --- | --- |
 | Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
-| Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores | Own reviews, scores, feedback, goals with action steps |
+| Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback, goals with action steps and progress |
 | People | Invite, roles, deactivate | (not visible) |
 | SOP library | Create, edit (versioned), publish, attach files | Read published documents |
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
@@ -49,7 +49,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0010`). Every file is
+   `supabase/migrations/` in numeric order (`0001` through `0011`). Every file is
    idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting
@@ -84,6 +84,18 @@ a reload resets the data.
   hub for their company) or `employee` (own GSR data plus the libraries).
 - **Deactivating** a person on the People page removes all access immediately; their
   account can be reactivated later.
+
+## Monthly Goal Setting Reviews
+
+A monthly cycle's review leads with goals, not scores. In the meeting the manager sets the
+month's goals with the person, each with action steps and a progress slider from 0 to 100;
+100 marks a goal complete. Last month's goals read back at the top as hit or miss with the
+steps that were taken, and a missed goal carries into this month in one click (only the
+steps not yet taken come along, linked to the goal it came from). The person's yearly goals
+sit alongside with the same slider, and the review names the month's focus topics. Closing
+a cycle freezes its goals (a database trigger, not just the UI), so what a month recorded
+stays as recorded. Quarterly, annual, and custom cycles keep the scoring-first layout for
+now. The rules are in `src/lib/gsr/goals.ts`.
 
 ## GSR scoring
 

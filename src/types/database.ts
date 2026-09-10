@@ -90,7 +90,7 @@ export interface GsrCriterion {
   updated_at: string;
 }
 
-export type Cadence = "monthly" | "quarterly" | "semiannual" | "annual" | "custom";
+export type Cadence = "monthly" | "quarterly" | "annual" | "custom";
 export type CycleStatus = "open" | "closed";
 
 export interface ReviewCycle {
@@ -124,6 +124,8 @@ export interface Review {
   employee_reflection: string | null;
   reviewer_id: string | null;
   completed_at: string | null;
+  // The month's focus topics, named in a Goal Setting Review.
+  focus_topics: string[];
   created_at: string;
   updated_at: string;
 }
@@ -146,6 +148,8 @@ export interface ReviewScore {
 
 export type GoalKind = "professional" | "personal" | "role";
 export type GoalStatus = "not_started" | "in_progress" | "on_track" | "achieved" | "missed";
+// A goal belongs to a review cycle (the month's goals) or to a year (a yearly goal).
+export type GoalScope = "cycle" | "year";
 
 export interface ActionStep {
   text: string;
@@ -163,6 +167,12 @@ export interface Goal {
   status: GoalStatus;
   action_steps: ActionStep[];
   progress_notes: string | null;
+  // 0..100; 100 is complete, and a settled period reads anything less as a miss.
+  progress: number;
+  scope: GoalScope;
+  year: number | null;
+  // The goal this one was carried forward from, when a missed goal was restated.
+  carried_from_goal_id: string | null;
   sort_order: number;
   created_by: string | null;
   created_at: string;

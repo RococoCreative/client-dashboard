@@ -9,6 +9,7 @@ import type {
   CompanyGoal,
   Goal,
   GoalKind,
+  GoalScope,
   GoalStatus,
   GsrCriterion,
   GsrPillar,
@@ -23,11 +24,11 @@ const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_or
 const CYCLE_COLUMNS =
   "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
-  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, created_at, updated_at";
+  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, focus_topics, created_at, updated_at";
 const SCORE_COLUMNS =
   "id, review_id, company_id, pillar_id, criterion_id, label, rating, target, actual, notes, sort_order, created_at, updated_at";
 const GOAL_COLUMNS =
-  "id, company_id, employee_id, cycle_id, kind, title, description, status, action_steps, progress_notes, sort_order, created_by, created_at, updated_at";
+  "id, company_id, employee_id, cycle_id, kind, title, description, status, action_steps, progress_notes, progress, scope, year, carried_from_goal_id, sort_order, created_by, created_at, updated_at";
 const COMPANY_GOAL_COLUMNS =
   "id, company_id, year, name, target_display, current_display, target_numeric, current_numeric, is_hit, sort_order, created_at, updated_at";
 
@@ -193,6 +194,7 @@ export type ReviewPatch = Partial<
     | "employee_reflection"
     | "reviewer_id"
     | "completed_at"
+    | "focus_topics"
   >
 >;
 
@@ -268,6 +270,10 @@ function normalizeGoal(goal: Goal): Goal {
   const steps = Array.isArray(goal.action_steps) ? goal.action_steps : [];
   return {
     ...goal,
+    progress: Math.min(100, Math.max(0, Number(goal.progress ?? 0))),
+    scope: goal.scope === "year" ? "year" : "cycle",
+    year: goal.year ?? null,
+    carried_from_goal_id: goal.carried_from_goal_id ?? null,
     action_steps: steps
       .filter((s): s is ActionStep => typeof s === "object" && s !== null && "text" in s)
       .map((s) => ({ text: String(s.text ?? ""), done: Boolean(s.done) })),
@@ -284,6 +290,10 @@ export type GoalInput = {
   status?: GoalStatus;
   action_steps?: ActionStep[];
   progress_notes?: string | null;
+  progress?: number;
+  scope?: GoalScope;
+  year?: number | null;
+  carried_from_goal_id?: string | null;
   sort_order?: number;
 };
 

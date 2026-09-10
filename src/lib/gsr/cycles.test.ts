@@ -6,7 +6,6 @@ describe("cycle periods", () => {
     const sep17 = new Date(2026, 8, 17);
     expect(periodStart("monthly", sep17)).toBe("2026-09-01");
     expect(periodStart("quarterly", sep17)).toBe("2026-07-01");
-    expect(periodStart("semiannual", sep17)).toBe("2026-07-01");
     expect(periodStart("annual", sep17)).toBe("2026-01-01");
     expect(periodStart("custom", sep17)).toBe("2026-09-17");
   });
@@ -15,7 +14,6 @@ describe("cycle periods", () => {
     expect(periodEnd("monthly", "2026-02-01")).toBe("2026-02-28");
     expect(periodEnd("monthly", "2028-02-01")).toBe("2028-02-29");
     expect(periodEnd("quarterly", "2026-10-01")).toBe("2026-12-31");
-    expect(periodEnd("semiannual", "2026-07-01")).toBe("2026-12-31");
     expect(periodEnd("annual", "2026-01-01")).toBe("2026-12-31");
     expect(periodEnd("custom", "2026-01-01")).toBeNull();
   });
@@ -23,7 +21,6 @@ describe("cycle periods", () => {
   it("names cycles the way people say them", () => {
     expect(defaultCycleName("monthly", "2026-09-01")).toBe("September 2026");
     expect(defaultCycleName("quarterly", "2026-07-01")).toBe("Q3 2026");
-    expect(defaultCycleName("semiannual", "2026-01-01")).toBe("H1 2026");
     expect(defaultCycleName("annual", "2026-01-01")).toBe("2026");
     expect(defaultCycleName("custom", "2026-09-01", "2026-10-15")).toBe("Sep 1 to Oct 15, 2026");
   });

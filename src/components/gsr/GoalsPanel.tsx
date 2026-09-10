@@ -1,8 +1,10 @@
-// Goals for one person, grouped by kind, with action steps you can tick off. Employees own
+// Goals for one person, grouped by kind: yearly goals and the ones tied to a review cycle,
+// each with action steps to tick and a progress slider where 100 is complete. Employees own
 // their goals (this panel is their My Goals page); admins see and edit the same panel on a
-// person's page. Action steps save as they are ticked; text saves on blur.
+// person's page. Steps and progress save as they change; text saves on blur.
 import { useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import ActionSteps from "./ActionSteps.tsx";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
@@ -12,23 +14,33 @@ import Field from "../ui/Field.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Modal from "../ui/Modal.tsx";
 import Notice from "../ui/Notice.tsx";
+import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
-import { checkboxClass, inputClass, selectClass, textareaClass } from "../ui/forms.ts";
-import { GOAL_STATUS_TONE } from "../status.ts";
+import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
+import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createGoal, deleteGoal, listGoals, updateGoal } from "../../services/gsr.ts";
+import { goalOutcome, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
+import { cycleSettled } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import {
-  GOAL_KIND_LABELS,
-  GOAL_STATUS_LABELS,
-  keysOf,
-  type ActionStep,
-  type Goal,
-  type GoalKind,
-  type GoalStatus,
-  type ReviewCycle,
-} from "../../types/database.ts";
+import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type ReviewCycle } from "../../types/database.ts";
+
+// The period a goal belongs to, as one select value: "year:2026" or "cycle:<id>".
+type Period = { scope: "year"; year: number } | { scope: "cycle"; cycle_id: string | null };
+
+function periodKey(period: Period): string {
+  return period.scope === "year" ? `year:${period.year}` : `cycle:${period.cycle_id ?? ""}`;
+}
+
+function parsePeriod(key: string): Period {
+  if (key.startsWith("year:")) return { scope: "year", year: Number(key.slice(5)) };
+  return { scope: "cycle", cycle_id: key.slice(6) || null };
+}
+
+function goalPeriod(goal: Goal): Period {
+  return goal.scope === "year" ? { scope: "year", year: goal.year ?? new Date().getFullYear() } : { scope: "cycle", cycle_id: goal.cycle_id };
+}
 
 function GoalDialog({
   companyId,
@@ -45,13 +57,14 @@ function GoalDialog({
   onClose: () => void;
   onSaved: (goal: Goal) => void;
 }) {
+  const thisYear = new Date().getFullYear();
   const [title, setTitle] = useState(goal?.title ?? "");
   const [kind, setKind] = useState<GoalKind>(goal?.kind ?? "professional");
-  const [status, setStatus] = useState<GoalStatus>(goal?.status ?? "not_started");
   const [description, setDescription] = useState(goal?.description ?? "");
-  const [cycleId, setCycleId] = useState(goal?.cycle_id ?? "");
+  const [period, setPeriod] = useState<string>(goal ? periodKey(goalPeriod(goal)) : `year:${thisYear}`);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const legacyOngoing = goal !== null && goal.scope === "cycle" && goal.cycle_id === null;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -60,12 +73,14 @@ function GoalDialog({
     setBusy(true);
     setError("");
     try {
+      const where = parsePeriod(period);
       const payload = {
         title: title.trim(),
         kind,
-        status,
         description: description.trim() || null,
-        cycle_id: cycleId || null,
+        scope: where.scope,
+        year: where.scope === "year" ? where.year : null,
+        cycle_id: where.scope === "cycle" ? where.cycle_id : null,
       };
       const saved = goal
         ? await updateGoal(goal.id, payload)
@@ -93,24 +108,17 @@ function GoalDialog({
                 ))}
               </select>
             </Field>
-            <Field label="Status" htmlFor="goal-status">
-              <select id="goal-status" value={status} onChange={(e) => setStatus(e.target.value as GoalStatus)} className={selectClass}>
-                {keysOf(GOAL_STATUS_LABELS).map((k) => (
-                  <option key={k} value={k}>{GOAL_STATUS_LABELS[k]}</option>
+            <Field label="Period" htmlFor="goal-period" hint="A yearly goal, or one tied to a review cycle so it shows up in that review.">
+              <select id="goal-period" value={period} onChange={(e) => setPeriod(e.target.value)} className={selectClass}>
+                <option value={`year:${thisYear}`}>Yearly goal, {thisYear}</option>
+                <option value={`year:${thisYear + 1}`}>Yearly goal, {thisYear + 1}</option>
+                {cycles.map((c) => (
+                  <option key={c.id} value={`cycle:${c.id}`}>{c.name}</option>
                 ))}
+                {legacyOngoing ? <option value="cycle:">Ongoing</option> : null}
               </select>
             </Field>
           </div>
-          {cycles.length > 0 ? (
-            <Field label="Review cycle (optional)" htmlFor="goal-cycle" hint="Tie the goal to a period so it shows up alongside that review.">
-              <select id="goal-cycle" value={cycleId} onChange={(e) => setCycleId(e.target.value)} className={selectClass}>
-                <option value="">Ongoing</option>
-                {cycles.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </Field>
-          ) : null}
           <Field label="Description (optional)" htmlFor="goal-description">
             <textarea id="goal-description" value={description} onChange={(e) => setDescription(e.target.value)} className={textareaClass} rows={3} />
           </Field>
@@ -128,7 +136,8 @@ function GoalDialog({
 function GoalCard({
   goal,
   canEdit,
-  cycleName,
+  periodLabel,
+  settled,
   onChange,
   onEdit,
   onDelete,
@@ -136,39 +145,22 @@ function GoalCard({
 }: {
   goal: Goal;
   canEdit: boolean;
-  cycleName: string | null;
+  periodLabel: string;
+  settled: boolean;
   onChange: (goal: Goal) => void;
   onEdit: () => void;
   onDelete: () => void;
   onError: (message: string) => void;
 }) {
-  const [newStep, setNewStep] = useState("");
-
-  async function saveSteps(steps: ActionStep[]) {
+  async function save(patch: Parameters<typeof updateGoal>[1]) {
     try {
-      onChange(await updateGoal(goal.id, { action_steps: steps }));
+      onChange(await updateGoal(goal.id, patch));
     } catch (err) {
       onError(errorMessage(err));
     }
   }
-
-  async function saveStatus(status: GoalStatus) {
-    try {
-      onChange(await updateGoal(goal.id, { status }));
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  }
-
-  async function saveNotes(progress_notes: string) {
-    try {
-      onChange(await updateGoal(goal.id, { progress_notes: progress_notes.trim() || null }));
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  }
-
-  const done = goal.action_steps.filter((s) => s.done).length;
+  const outcome = goalOutcome(goal, settled);
+  const { done, total } = stepsTaken(goal);
 
   return (
     <li className="rounded-lg border border-line bg-surface p-4">
@@ -176,20 +168,16 @@ function GoalCard({
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           <p className="mt-0.5 text-[12px] text-ink-3">
-            {cycleName ?? "Ongoing"}
-            {goal.action_steps.length > 0 ? ` · ${done}/${goal.action_steps.length} steps done` : ""}
+            {periodLabel}
+            {total > 0 ? ` · ${done}/${total} steps done` : ""}
           </p>
           {goal.description ? <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{goal.description}</p> : null}
         </div>
         <div className="flex items-center gap-1.5">
-          {canEdit ? (
-            <select value={goal.status} onChange={(e) => void saveStatus(e.target.value as GoalStatus)} aria-label={`Status for ${goal.title}`} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-              {keysOf(GOAL_STATUS_LABELS).map((k) => (
-                <option key={k} value={k}>{GOAL_STATUS_LABELS[k]}</option>
-              ))}
-            </select>
+          {outcome === "open" && goal.progress === 0 ? (
+            <Badge>Not started</Badge>
           ) : (
-            <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
+            <Badge tone={GOAL_OUTCOME_TONE[outcome]}>{outcome === "hit" ? "Achieved" : outcome === "miss" ? `Missed at ${goal.progress}%` : "In progress"}</Badge>
           )}
           {canEdit ? (
             <>
@@ -200,54 +188,18 @@ function GoalCard({
         </div>
       </div>
 
+      <ProgressSlider className="mt-3" label={`Progress for ${goal.title}`} value={goal.progress} disabled={!canEdit} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+
       <div className="mt-3">
         <p className="text-[11px] font-medium uppercase tracking-label text-ink-3">Action steps</p>
-        {goal.action_steps.length === 0 ? (
-          <p className="mt-1 text-[12.5px] text-ink-3">No steps yet.</p>
-        ) : (
-          <ul className="mt-1.5 space-y-1.5">
-            {goal.action_steps.map((step, index) => (
-              <li key={index} className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={step.done}
-                  disabled={!canEdit}
-                  aria-label={step.text}
-                  onChange={(e) => void saveSteps(goal.action_steps.map((s, i) => (i === index ? { ...s, done: e.target.checked } : s)))}
-                  className={`${checkboxClass} mt-1`}
-                />
-                <span className={`flex-1 text-[13px] ${step.done ? "text-ink-3 line-through" : "text-ink"}`}>{step.text}</span>
-                {canEdit ? (
-                  <button type="button" aria-label="Remove step" onClick={() => void saveSteps(goal.action_steps.filter((_, i) => i !== index))} className="text-ink-3 hover:text-danger">
-                    <X size={13} aria-hidden />
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-        {canEdit ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const text = newStep.trim();
-              if (!text) return;
-              setNewStep("");
-              void saveSteps([...goal.action_steps, { text, done: false }]);
-            }}
-            className="mt-2 flex gap-2"
-          >
-            <input type="text" value={newStep} onChange={(e) => setNewStep(e.target.value)} placeholder="Add a step" aria-label="New action step" className={`${inputClass} mt-0 flex-1 py-1.5 text-[13px]`} />
-            <Button type="submit" variant="secondary" size="sm" disabled={!newStep.trim()}><Plus size={13} aria-hidden /> Add</Button>
-          </form>
-        ) : null}
+        <ActionSteps steps={goal.action_steps} canTick={canEdit} canEdit={canEdit} onChange={(steps) => void save({ action_steps: steps })} />
       </div>
 
       {canEdit || goal.progress_notes ? (
         <div className="mt-3">
           <p className="text-[11px] font-medium uppercase tracking-label text-ink-3">Progress notes</p>
           {canEdit ? (
-            <BlurInput multiline rows={2} value={goal.progress_notes ?? ""} placeholder="Where things stand" ariaLabel={`Progress notes for ${goal.title}`} onSave={(next) => void saveNotes(next)} className={`${textareaClass} mt-1.5 min-h-[56px] text-[13px]`} />
+            <BlurInput multiline rows={2} value={goal.progress_notes ?? ""} placeholder="Where things stand" ariaLabel={`Progress notes for ${goal.title}`} onSave={(next) => void save({ progress_notes: next.trim() || null })} className={`${textareaClass} mt-1.5 min-h-[56px] text-[13px]`} />
           ) : (
             <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-2">{goal.progress_notes}</p>
           )}
@@ -296,7 +248,17 @@ export default function GoalsPanel({
   }
 
   const goals = state.data ?? [];
-  const cycleName = (id: string | null) => (id ? (cycles.find((c) => c.id === id)?.name ?? null) : null);
+  const thisYear = new Date().getFullYear();
+  const periodLabel = (goal: Goal): string => {
+    if (goal.scope === "year") return `${goal.year} goal`;
+    return goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id)?.name ?? "Review cycle") : "Ongoing";
+  };
+  // A goal reads as hit or miss once its period is over: a closed or past cycle, or a past year.
+  const settled = (goal: Goal): boolean => {
+    if (goal.scope === "year") return (goal.year ?? thisYear) < thisYear;
+    const cycle = goal.cycle_id ? cycles.find((c) => c.id === goal.cycle_id) : undefined;
+    return cycle ? cycleSettled(cycle) : false;
+  };
 
   return (
     <div className="space-y-6">
@@ -329,7 +291,8 @@ export default function GoalsPanel({
                       key={goal.id}
                       goal={goal}
                       canEdit={canEdit}
-                      cycleName={cycleName(goal.cycle_id)}
+                      periodLabel={periodLabel(goal)}
+                      settled={settled(goal)}
                       onChange={upsert}
                       onEdit={() => setDialog({ goal })}
                       onDelete={() => setDeleting(goal)}
@@ -359,7 +322,7 @@ export default function GoalsPanel({
       {deleting ? (
         <ConfirmDialog
           title={`Delete "${deleting.title}"?`}
-          body="The goal and its action steps are removed. Mark it achieved or missed instead to keep the history."
+          body="The goal and its action steps are removed. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
           onConfirm={() => void handleDelete()}

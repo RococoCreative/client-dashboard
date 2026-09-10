@@ -1,11 +1,14 @@
-// One person's review for one cycle. Admins score here: ratings per criterion for rating
-// pillars, target-vs-actual line items for deliverable pillars, then feedback and a
+// One person's review for one cycle. A monthly cycle is a Goal Setting Review: goals set
+// live with action steps and progress, last month read back as hit or miss, yearly goals
+// and focus topics alongside, then the scores. Admins score here: ratings per criterion for
+// rating pillars, target-vs-actual line items for deliverable pillars, then feedback and a
 // status. Employees open the same page read-only for their own review (RLS makes sure it
-// is theirs) with one writable field, their reflection. Every change saves on its own, so
-// there is no save button to forget.
+// is theirs) with their reflection and their own goals' steps and progress writable. Every
+// change saves on its own, so there is no save button to forget.
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -27,6 +30,8 @@ import {
   getCycle,
   getReview,
   listCriteria,
+  listCycles,
+  listGoals,
   listPillars,
   listReviewScores,
   updateReview,
@@ -35,6 +40,7 @@ import {
 } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { previousCycle } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod } from "../../lib/format.ts";
 import {
@@ -59,23 +65,28 @@ export default function ReviewPage() {
 
   const state = useAsync(async () => {
     const review = await getReview(reviewId);
-    const [cycle, pillars, criteria, scores, people] = await Promise.all([
+    const [cycle, cycles, pillars, criteria, scores, people, goals] = await Promise.all([
       getCycle(review.cycle_id),
+      listCycles(review.company_id),
       listPillars(review.company_id),
       listCriteria(review.company_id),
       listReviewScores(review.id),
       listCompanyProfiles(review.company_id),
+      listGoals(review.company_id, review.employee_id),
     ]);
-    return { review, cycle, pillars, criteria, scores, people };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals };
   }, [reviewId, companyId]);
 
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, pillars, criteria, scores, people } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   const isOwn = review.employee_id === profile.id;
   const canScore = isAdmin && cycle.status === "open";
+  // Monthly cycles are Goal Setting Reviews: goals lead, scores follow.
+  const monthly = cycle.cadence === "monthly";
+  const lastMonth = monthly ? previousCycle(cycles, cycle) : null;
   const criteriaCount = Object.fromEntries(pillars.map((p) => [p.id, criteria.filter((c) => c.pillar_id === p.id).length]));
   const result = computeReviewScore(pillars, scores, criteriaCount);
 
@@ -169,7 +180,7 @@ export default function ReviewPage() {
       <PageHeader
         backTo={isAdmin ? `/gsr/cycles/${cycle.id}` : "/my"}
         backLabel={isAdmin ? cycle.name : "My GSR"}
-        eyebrow={`${cycle.name} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
+        eyebrow={`${monthly ? "Goal Setting Review · " : ""}${cycle.name} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
         title={employee ? displayName(employee) : "Review"}
         description={
           <span className="flex flex-wrap items-center gap-2">
@@ -199,6 +210,23 @@ export default function ReviewPage() {
         <Notice tone="info" className="mb-6">
           <b>Theme for this cycle: {cycle.theme}.</b> {cycle.theme_description ?? ""}
         </Notice>
+      ) : null}
+
+      {monthly ? (
+        <div className="mb-6">
+          <GoalSettingPanel
+            review={review}
+            cycle={cycle}
+            previousCycle={lastMonth}
+            goals={goals}
+            isAdmin={isAdmin}
+            isOwn={isOwn}
+            onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
+            onReview={(next) => state.setData((prev) => (prev ? { ...prev, review: next } : prev))}
+            onError={setError}
+            onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
+          />
+        </div>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -338,6 +366,7 @@ export default function ReviewPage() {
 
           <Section eyebrow="Feedback" title="Manager notes and feedback">
             <div className="space-y-4">
+              {monthly ? null : (
               <div>
                 <label htmlFor="previous-status" className={labelClass}>Previous period goals</label>
                 {isAdmin ? (
@@ -353,6 +382,7 @@ export default function ReviewPage() {
                   </div>
                 )}
               </div>
+              )}
               {(
                 [
                   ["manager_feedback", "Management feedback"],

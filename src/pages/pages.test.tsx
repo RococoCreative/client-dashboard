@@ -1,7 +1,7 @@
 // Every page renders real content against the mocked data layer, for an admin and, where it
 // differs, an employee. The mocks mirror the services module for module, so a page calling a
 // service that does not exist fails here rather than in someone's browser.
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -240,5 +240,48 @@ describe("phase 2 modules", () => {
     expect(screen.getByText("Fall home show booth")).toBeInTheDocument();
     expect(screen.getByText(/\$7,400 of \$12,000/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Planned" })).toBeInTheDocument();
+  });
+});
+
+describe("monthly goal setting review", () => {
+  const at = { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" };
+
+  it("reads last month back as hit or miss, with the year's goals and focus topics alongside", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 3 goals hit")).toBeInTheDocument();
+    expect(screen.getByText("Close out the punch list within five days")).toBeInTheDocument();
+    expect(screen.getByText("Missed at 30%")).toBeInTheDocument();
+    expect(screen.getByText("Carried into this month")).toBeInTheDocument();
+    expect(screen.getByText("Client communication")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Title for Get the OSHA 30 certification")).toBeInTheDocument();
+  });
+
+  it("carries a missed goal into this month with only the steps not taken", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, admin, at);
+    await user.click(await screen.findByRole("button", { name: "Carry Finish OSHA modules 1 to 10 into this month" }));
+    expect(await screen.findByLabelText("Title for Finish OSHA modules 1 to 10")).toBeInTheDocument();
+    expect(screen.getAllByText(/Carried from August 2026/).length).toBe(2);
+    expect(screen.getByLabelText("Modules 6 to 10")).not.toBeChecked();
+    expect(screen.queryByLabelText("Modules 1 to 5")).not.toBeInTheDocument();
+  });
+
+  it("marks a goal complete when its progress reaches 100", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    const slider = await screen.findByLabelText("Progress for Run the weekly client update without prompting");
+    expect(slider).toHaveValue("65");
+    fireEvent.change(slider, { target: { value: "100" } });
+    fireEvent.blur(slider);
+    expect(await screen.findByText("Complete")).toBeInTheDocument();
+  });
+
+  it("lets the person move their own progress but not set goals", async () => {
+    renderWithHub(<ReviewPage />, employee, at);
+    expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
+    expect(screen.getByLabelText("Progress for Get the OSHA 30 certification")).not.toBeDisabled();
+    expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /into this month/ })).not.toBeInTheDocument();
   });
 });
