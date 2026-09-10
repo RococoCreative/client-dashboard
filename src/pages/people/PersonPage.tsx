@@ -1,5 +1,6 @@
-// One person, for an admin: profile details, every review with its score, and their goals
-// (editable, so a manager can set goals with someone in a one-on-one).
+// One person, for an admin: the profile the review opens with (position, hire date,
+// department, who they report to), their compensation table, this year's KPIs, every review
+// with its score, and their goals (editable, so a manager can set goals in a one-on-one).
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -12,38 +13,45 @@ import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
+import CompensationTable from "../../components/people/CompensationTable.tsx";
+import KpiList from "../../components/people/KpiList.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
-import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
+import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
 import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatPeriod, pluralize } from "../../lib/format.ts";
+import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
+import { formatTenure, totalAnnual } from "../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
 
 export default function PersonPage() {
   const { profileId = "" } = useParams();
   const { company, profile: me } = useHub();
   const companyId = company!.id;
+  const year = new Date().getFullYear();
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [people, reviews, cycles, pillars] = await Promise.all([
+    const [people, reviews, cycles, pillars, kpis, compensation] = await Promise.all([
       listCompanyProfiles(companyId),
       listEmployeeReviews(profileId),
       listCycles(companyId),
       listPillars(companyId),
+      listEmployeeKpis(companyId, profileId, year),
+      listCompensation(companyId, profileId),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, scores };
-  }, [companyId, profileId]);
+    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, scores, kpis, compensation };
+  }, [companyId, profileId, year]);
 
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
-  const { person, reviews, cycles, pillars, scores } = state.data;
+  const { people, person, reviews, cycles, pillars, scores, kpis, compensation } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
 
   const rows = reviews
@@ -56,12 +64,14 @@ export default function PersonPage() {
   const latest = rows[0] ?? null;
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
+  const tenure = formatTenure(person.hire_date);
+  const manager = person.reports_to ? people.find((p) => p.id === person.reports_to) ?? null : null;
 
   async function patch(patchValue: Parameters<typeof updateProfile>[1]) {
     setError("");
     try {
       const next: Profile = await updateProfile(person!.id, patchValue);
-      state.setData((prev) => (prev ? { ...prev, person: next } : prev));
+      state.setData((prev) => (prev ? { ...prev, person: next, people: prev.people.map((p) => (p.id === next.id ? next : p)) } : prev));
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -74,7 +84,14 @@ export default function PersonPage() {
         backLabel="People"
         eyebrow={person.title ?? ROLE_LABELS[person.role]}
         title={displayName(person)}
-        description={<span className="flex items-center gap-2">{person.email} <Badge tone={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge></span>}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            {person.email}
+            <Badge tone={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge>
+            {person.hire_date ? <span className="text-ink-3">Hired {formatDate(person.hire_date)}{tenure ? ` · ${tenure}` : ""}</span> : null}
+            {manager ? <span className="text-ink-3">Reports to {displayName(manager)}</span> : null}
+          </span>
+        }
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 
@@ -98,6 +115,28 @@ export default function PersonPage() {
                 <BlurInput id="person-title" value={person.title ?? ""} placeholder="Project Manager" onSave={(next) => void patch({ title: next.trim() || null })} />
               </div>
               <div>
+                <label htmlFor="person-department" className={labelClass}>Department</label>
+                <BlurInput id="person-department" value={person.department ?? ""} placeholder="Production" onSave={(next) => void patch({ department: next.trim() || null })} />
+              </div>
+              <div>
+                <label htmlFor="person-hire-date" className={labelClass}>Hire date</label>
+                <input id="person-hire-date" type="date" value={person.hire_date ?? ""} onChange={(e) => void patch({ hire_date: e.target.value || null })} className={inputClass} />
+                {tenure ? <p className="mt-1 text-[12px] text-ink-3">{tenure}</p> : null}
+              </div>
+              <div>
+                <label htmlFor="person-reports-to" className={labelClass}>Reports to</label>
+                <select id="person-reports-to" value={person.reports_to ?? ""} onChange={(e) => void patch({ reports_to: e.target.value || null })} className={selectClass}>
+                  <option value="">Nobody</option>
+                  {people.filter((p) => p.id !== person.id && p.is_active).map((p) => (
+                    <option key={p.id} value={p.id}>{displayName(p)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="person-phone" className={labelClass}>Phone</label>
+                <BlurInput id="person-phone" value={person.phone ?? ""} placeholder="(555) 010-0000" onSave={(next) => void patch({ phone: next.trim() || null })} />
+              </div>
+              <div>
                 <label htmlFor="person-role" className={labelClass}>Role</label>
                 <select id="person-role" value={person.role} disabled={self} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
                   {keysOf(ROLE_LABELS).map((r) => (
@@ -108,12 +147,21 @@ export default function PersonPage() {
             </div>
           </Section>
           <div className="grid gap-4">
+            <Stat label="Annual compensation" value={formatMoney(totalAnnual(compensation))} hint={compensation.length > 0 ? `${formatMoney(totalAnnual(compensation) / 12)} a month` : "Not recorded"} />
             <Stat label="Latest score" value={<span className={bandClass(latest?.result?.overall ?? null)}>{latest?.result?.overall ?? "-"}</span>} hint={latest?.cycle?.name} />
             <Stat label="Average" value={average ?? "-"} hint={pluralize(rows.length, "review")} />
           </div>
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Visible to this person and company admins only." padded={false}>
+            <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
+          </Section>
+
+          <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
+            <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
+          </Section>
+
           <Section eyebrow="Reviews" title="Review history" padded={false}>
             {rows.length === 0 ? (
               <p className="p-5 text-sm text-ink-2">No reviews yet. Open a cycle and start one from the team table.</p>

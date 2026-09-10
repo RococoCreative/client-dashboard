@@ -8,7 +8,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   return profiles.find((p) => p.id === profile.id) ?? profile;
 }
 
-export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null }): Promise<Profile> {
+export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null; phone?: string | null }): Promise<Profile> {
   const me = (await getMyProfile())!;
   return updateProfile(me.id, patch);
 }
@@ -21,7 +21,7 @@ export async function listAllProfiles(): Promise<Profile[]> {
   return [...profiles];
 }
 
-export type ProfilePatch = Partial<Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin">>;
+export type ProfilePatch = Partial<Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to">>;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);

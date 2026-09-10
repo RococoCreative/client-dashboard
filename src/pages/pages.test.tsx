@@ -16,6 +16,7 @@ vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
 vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
+vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, makeHub } from "../test/fixtures.ts";
@@ -249,13 +250,16 @@ describe("monthly goal setting review", () => {
   it("reads last month back as hit or miss, with the year's goals and focus topics alongside", async () => {
     renderWithHub(<ReviewPage />, admin, at);
     expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
-    expect(await screen.findByText("1 of 3 goals hit")).toBeInTheDocument();
+    expect(await screen.findByText("2 of 4 goals hit")).toBeInTheDocument();
     expect(screen.getByText("Close out the punch list within five days")).toBeInTheDocument();
     expect(screen.getByText("Missed at 30%")).toBeInTheDocument();
     expect(screen.getByText("Carried into this month")).toBeInTheDocument();
-    expect(screen.getByText("Client communication")).toBeInTheDocument();
+    expect(screen.getByLabelText("Why for Send the Friday client update every week")).toHaveValue("Two Fridays slipped to Monday when closings ran late.");
     expect(screen.getByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
     expect(screen.getByLabelText("Title for Get the OSHA 30 certification")).toBeInTheDocument();
+    // The month's focus topic is a goal seeded from the cycle theme, listed first.
+    expect(screen.getByLabelText("Title for Core value: Integrity")).toBeInTheDocument();
+    expect(screen.getAllByText("Focus topic").length).toBeGreaterThan(0);
   });
 
   it("carries a missed goal into this month with only the steps not taken", async () => {
@@ -283,5 +287,39 @@ describe("monthly goal setting review", () => {
     expect(screen.getByLabelText("Progress for Get the OSHA 30 certification")).not.toBeDisabled();
     expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /into this month/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Why for/)).not.toBeInTheDocument();
+    expect(screen.getByText("Every crew logged daily. Two misses in week one, none after.")).toBeInTheDocument();
+  });
+
+  it("opens with the employee snapshot: tenure, KPIs, and company goals", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    expect(await screen.findByText("$2M in newly closed sales")).toBeInTheDocument();
+    expect(screen.getByText("Personal KPIs 2026")).toBeInTheDocument();
+    expect(screen.getByText("Company goals 2026")).toBeInTheDocument();
+    expect(screen.getAllByText("Gross margin").length).toBeGreaterThan(0);
+    expect(screen.getByText(/May 26, 2026/)).toBeInTheDocument();
+    expect(screen.getByText("Jordan Vale")).toBeInTheDocument();
+    expect(screen.queryByText("Total compensation")).not.toBeInTheDocument();
+  });
+});
+
+describe("employee profile", () => {
+  it("shows compensation with its total, KPIs, and employment details on the person page", async () => {
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+    expect(await screen.findByText("Total compensation")).toBeInTheDocument();
+    expect(screen.getAllByText("$77,760").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Annual for Base salary")).toHaveValue("75000");
+    expect(screen.getByLabelText("KPI 35 new sales journey leads")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hire date")).toHaveValue("2026-05-26");
+    expect(screen.getByLabelText("Reports to")).toHaveValue(KLASIK.profiles[0].id);
+    expect(screen.getByLabelText("Department")).toHaveValue("Production");
+  });
+
+  it("lists department and tenure in the people table", async () => {
+    renderWithHub(<PeoplePage />, admin);
+    expect(await screen.findByText("Jordan Vale (you)")).toBeInTheDocument();
+    expect(screen.getAllByText("Production").length).toBeGreaterThan(0);
+    expect(screen.getByText("May 26, 2026")).toBeInTheDocument();
   });
 });

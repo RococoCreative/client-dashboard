@@ -22,6 +22,7 @@ function goal(over: Partial<Goal>): Goal {
     scope: "cycle",
     year: null,
     carried_from_goal_id: null,
+    outcome_note: null,
     sort_order: 2,
     created_by: null,
     created_at: "2026-08-01T00:00:00Z",

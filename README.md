@@ -13,7 +13,7 @@ walled off from each other by row-level security.
 | --- | --- | --- |
 | Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
 | Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback, goals with action steps and progress |
-| People | Invite, roles, deactivate | (not visible) |
+| People | Invite, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
 | SOP library | Create, edit (versioned), publish, attach files | Read published documents |
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
@@ -49,7 +49,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0011`). Every file is
+   `supabase/migrations/` in numeric order (`0001` through `0012`). Every file is
    idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting
@@ -87,15 +87,19 @@ a reload resets the data.
 
 ## Monthly Goal Setting Reviews
 
-A monthly cycle's review leads with goals, not scores. In the meeting the manager sets the
-month's goals with the person, each with action steps and a progress slider from 0 to 100;
-100 marks a goal complete. Last month's goals read back at the top as hit or miss with the
-steps that were taken, and a missed goal carries into this month in one click (only the
-steps not yet taken come along, linked to the goal it came from). The person's yearly goals
-sit alongside with the same slider, and the review names the month's focus topics. Closing
-a cycle freezes its goals (a database trigger, not just the UI), so what a month recorded
-stays as recorded. Quarterly, annual, and custom cycles keep the scoring-first layout for
-now. The rules are in `src/lib/gsr/goals.ts`.
+Every review opens with the employee snapshot: position, hire date and tenure, department,
+who they report to, this year's personal KPIs (current against target, hit or not, editable
+by admins in the meeting), and the company goals. A monthly cycle's review then leads with
+goals, not scores. The month's focus topic is a goal seeded from the cycle theme, with its
+own action steps; the manager sets the rest of the month's goals with the person, each with
+action steps and a progress slider from 0 to 100, where 100 marks a goal complete. Last
+month's goals read back as hit or miss with the steps that were taken and a "why" the
+manager writes now, and a missed goal carries into this month in one click (only the steps
+not yet taken come along, linked to the goal it came from). The person's yearly goals sit
+alongside with the same slider. Closing a cycle freezes its goals (a database trigger, not
+just the UI; only the why stays writable), so what a month recorded stays as recorded.
+Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
+`src/lib/gsr/goals.ts`.
 
 ## GSR scoring
 

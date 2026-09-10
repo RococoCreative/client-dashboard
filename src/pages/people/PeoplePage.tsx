@@ -24,6 +24,7 @@ import { createInvitation, deleteInvitation, inviteLink, listInvitations } from 
 import { errorMessage } from "../../lib/errors.ts";
 import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
+import { formatTenure } from "../../lib/people.ts";
 import { ROLE_LABELS, keysOf, type Invitation, type Profile, type Role } from "../../types/database.ts";
 
 function InviteDialog({ companyId, onClose, onCreated }: { companyId: string; onClose: () => void; onCreated: (inv: Invitation) => void }) {
@@ -159,6 +160,8 @@ export default function PeoplePage() {
                     <tr>
                       <th className={thClass}>Person</th>
                       <th className={thClass}>Title</th>
+                      <th className={thClass}>Department</th>
+                      <th className={thClass}>Hired</th>
                       <th className={thClass}>Role</th>
                       <th className={thClass}>Status</th>
                       <th className={thClass}></th>
@@ -179,6 +182,17 @@ export default function PeoplePage() {
                             </Link>
                           </td>
                           <td className={`${tdClass} text-ink-2`}>{person.title ?? "-"}</td>
+                          <td className={`${tdClass} text-ink-2`}>{person.department ?? "-"}</td>
+                          <td className={`${tdClass} text-ink-2`}>
+                            {person.hire_date ? (
+                              <span className="block">
+                                <span className="block">{formatDate(person.hire_date)}</span>
+                                <span className="block text-[12px] text-ink-3">{formatTenure(person.hire_date)}</span>
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td className={tdClass}>
                             <select value={person.role} disabled={self} aria-label={`Role for ${displayName(person)}`} onChange={(e) => void patchPerson(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
                               {keysOf(ROLE_LABELS).map((r) => (

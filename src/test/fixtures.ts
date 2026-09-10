@@ -7,8 +7,10 @@ import type {
   Company,
   CompanyDomain,
   CompanyGoal,
+  CompensationItem,
   FinancialSnapshot,
   MarketingCampaign,
+  EmployeeKpi,
   Goal,
   GsrCriterion,
   GsrPillar,
@@ -154,6 +156,8 @@ export interface CompanyBundle {
   scores: ReviewScore[];
   goals: Goal[];
   companyGoals: CompanyGoal[];
+  kpis: EmployeeKpi[];
+  compensation: CompensationItem[];
   sops: Sop[];
   versions: SopVersion[];
   attachments: SopAttachment[];
@@ -206,6 +210,10 @@ function build(company: Company): CompanyBundle {
     role: person.role,
     is_rococo_admin: false,
     is_active: true,
+    hire_date: i === 0 ? "2018-03-12" : i === 1 ? "2026-05-26" : "2024-09-02",
+    phone: i === 1 ? "(555) 010-2201" : null,
+    department: person.role === "admin" ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
+    reports_to: i === 0 ? null : p("user-1"),
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -336,7 +344,6 @@ function build(company: Company): CompanyBundle {
       employee_reflection: i === 0 ? "Communication with the trades improved once we moved the huddle to 6:45." : null,
       reviewer_id: profiles[0].id,
       completed_at: i === 1 ? NOW : null,
-      focus_topics: i === 0 ? ["Client communication", "Schedule discipline"] : [],
       created_at: NOW,
       updated_at: NOW,
     };
@@ -354,7 +361,6 @@ function build(company: Company): CompanyBundle {
       client_feedback: null,
       employee_reflection: null,
       completed_at: EARLIER,
-      focus_topics: ["Safety documentation"],
       created_at: EARLIER,
       updated_at: EARLIER,
     };
@@ -385,6 +391,7 @@ function build(company: Company): CompanyBundle {
           scope: "cycle",
           year: null,
           carried_from_goal_id: p("goal-5"),
+          outcome_note: null,
           sort_order: 1,
           created_by: employees[0].id,
           created_at: EARLIER,
@@ -408,6 +415,7 @@ function build(company: Company): CompanyBundle {
           scope: "year",
           year: 2026,
           carried_from_goal_id: null,
+          outcome_note: null,
           sort_order: 2,
           created_by: employees[0].id,
           created_at: EARLIER,
@@ -428,6 +436,7 @@ function build(company: Company): CompanyBundle {
           scope: "year",
           year: 2026,
           carried_from_goal_id: null,
+          outcome_note: null,
           sort_order: 1,
           created_by: employees[0].id,
           created_at: EARLIER,
@@ -451,6 +460,7 @@ function build(company: Company): CompanyBundle {
           scope: "cycle",
           year: null,
           carried_from_goal_id: null,
+          outcome_note: null,
           sort_order: 1,
           created_by: profiles[0].id,
           created_at: EARLIER,
@@ -474,6 +484,7 @@ function build(company: Company): CompanyBundle {
           scope: "cycle",
           year: null,
           carried_from_goal_id: null,
+          outcome_note: "Two Fridays slipped to Monday when closings ran late.",
           sort_order: 2,
           created_by: profiles[0].id,
           created_at: EARLIER,
@@ -498,12 +509,103 @@ function build(company: Company): CompanyBundle {
           scope: "cycle",
           year: null,
           carried_from_goal_id: null,
+          outcome_note: null,
           sort_order: 3,
           created_by: profiles[0].id,
           created_at: EARLIER,
           updated_at: EARLIER,
         },
+        {
+          id: p("goal-7"),
+          company_id: company.id,
+          employee_id: employees[0].id,
+          cycle_id: cycles[0].id,
+          kind: "focus",
+          title: "Core value: Integrity",
+          description: "Say what you will do, do what you said, and speak up early when something slips.",
+          status: "in_progress",
+          action_steps: [
+            { text: "Own one slipped date out loud in the Monday huddle", done: false },
+            { text: "Send the revised schedule the same day", done: false },
+          ],
+          progress_notes: null,
+          progress: 20,
+          scope: "cycle",
+          year: null,
+          carried_from_goal_id: null,
+          outcome_note: null,
+          sort_order: 0,
+          created_by: profiles[0].id,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+        {
+          id: p("goal-8"),
+          company_id: company.id,
+          employee_id: employees[0].id,
+          cycle_id: cycles[1].id,
+          kind: "focus",
+          title: "Safety documentation",
+          description: "Every crew logs the daily walk with photos.",
+          status: "achieved",
+          action_steps: [
+            { text: "Walk the checklist with each lead", done: true },
+            { text: "Spot check two logs a week", done: true },
+          ],
+          progress_notes: null,
+          progress: 100,
+          scope: "cycle",
+          year: null,
+          carried_from_goal_id: null,
+          outcome_note: "Every crew logged daily. Two misses in week one, none after.",
+          sort_order: 0,
+          created_by: profiles[0].id,
+          created_at: EARLIER,
+          updated_at: EARLIER,
+        },
       ]
+    : [];
+  // The first employee's yearly KPIs and compensation table (the sheet's header block).
+  const kpis: EmployeeKpi[] = employees.length
+    ? [
+        { name: "$2M in newly closed sales", target: "$2M", current: "$0", hit: false },
+        { name: "35 new sales journey leads", target: "35", current: "10", hit: false },
+        { name: "80% customer satisfaction", target: "80%", current: "0%", hit: false },
+      ].map((kpi, i) => ({
+        id: p(`kpi-${i + 1}`),
+        company_id: company.id,
+        employee_id: employees[0].id,
+        year: 2026,
+        name: kpi.name,
+        target_display: kpi.target,
+        current_display: kpi.current,
+        target_numeric: null,
+        current_numeric: null,
+        is_hit: kpi.hit,
+        sort_order: i + 1,
+        created_at: EARLIER,
+        updated_at: EARLIER,
+      }))
+    : [];
+
+  const compensation: CompensationItem[] = employees.length
+    ? [
+        { name: "Base salary", annual: 75000, note: null },
+        { name: "Vehicle stipend", annual: 2400, note: "$200 a month" },
+        { name: "Tech stipend", annual: 360, note: "$30 a month" },
+        { name: "401(k) match", annual: 0, note: null },
+        { name: "Performance pay", annual: 0, note: "2% of newly closed sales" },
+      ].map((item, i) => ({
+        id: p(`comp-${i + 1}`),
+        company_id: company.id,
+        employee_id: employees[0].id,
+        name: item.name,
+        annual_amount: item.annual,
+        note: item.note,
+        sort_order: i + 1,
+        created_at: EARLIER,
+        updated_at: EARLIER,
+      }))
     : [];
 
   const companyGoals: CompanyGoal[] = spec.companyGoals.map((goal, i) => ({
@@ -608,7 +710,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -622,6 +724,10 @@ const ROCOCO: Profile = {
   role: "employee",
   is_rococo_admin: true,
   is_active: true,
+  hire_date: null,
+  phone: null,
+  department: null,
+  reports_to: null,
   created_at: EARLIER,
   updated_at: EARLIER,
 };

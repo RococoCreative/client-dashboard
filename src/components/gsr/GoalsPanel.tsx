@@ -284,7 +284,7 @@ export default function GoalsPanel({
             const group = goals.filter((g) => g.kind === kind);
             if (group.length === 0) return null;
             return (
-              <Section key={kind} eyebrow={GOAL_KIND_LABELS[kind]} title={`${GOAL_KIND_LABELS[kind]} goals`} padded={false}>
+              <Section key={kind} eyebrow={GOAL_KIND_LABELS[kind]} title={kind === "focus" ? "Focus topics" : `${GOAL_KIND_LABELS[kind]} goals`} padded={false}>
                 <ul className="space-y-3 p-4">
                   {group.map((goal) => (
                     <GoalCard

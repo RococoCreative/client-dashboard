@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
@@ -29,6 +30,7 @@ import {
   deleteScore,
   getCycle,
   getReview,
+  listCompanyGoals,
   listCriteria,
   listCycles,
   listGoals,
@@ -39,8 +41,9 @@ import {
   type ReviewPatch,
 } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
+import { listEmployeeKpis } from "../../services/employees.ts";
 import { computeReviewScore } from "../../lib/gsr/scoring.ts";
-import { previousCycle } from "../../lib/gsr/cycles.ts";
+import { cycleYear, previousCycle } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod } from "../../lib/format.ts";
 import {
@@ -74,13 +77,18 @@ export default function ReviewPage() {
       listCompanyProfiles(review.company_id),
       listGoals(review.company_id, review.employee_id),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals };
+    const year = cycleYear(cycle);
+    const [kpis, companyGoals] = await Promise.all([
+      listEmployeeKpis(review.company_id, review.employee_id, year),
+      listCompanyGoals(review.company_id, year),
+    ]);
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year };
   }, [reviewId, companyId]);
 
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   const isOwn = review.employee_id === profile.id;
   const canScore = isAdmin && cycle.status === "open";
@@ -212,6 +220,21 @@ export default function ReviewPage() {
         </Notice>
       ) : null}
 
+      {employee ? (
+        <div className="mb-6">
+          <EmployeeSnapshot
+            employee={employee}
+            people={people}
+            year={year}
+            kpis={kpis}
+            companyGoals={companyGoals}
+            isAdmin={isAdmin}
+            onKpis={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))}
+            onError={setError}
+          />
+        </div>
+      ) : null}
+
       {monthly ? (
         <div className="mb-6">
           <GoalSettingPanel
@@ -222,7 +245,6 @@ export default function ReviewPage() {
             isAdmin={isAdmin}
             isOwn={isOwn}
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
-            onReview={(next) => state.setData((prev) => (prev ? { ...prev, review: next } : prev))}
             onError={setError}
             onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
           />

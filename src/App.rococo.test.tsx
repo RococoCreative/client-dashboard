@@ -16,6 +16,7 @@ vi.mock("./services/resources.ts", () => import("./test/mocks/resources.ts"));
 vi.mock("./services/storage.ts", () => import("./test/mocks/storage.ts"));
 vi.mock("./services/financials.ts", () => import("./test/mocks/financials.ts"));
 vi.mock("./services/marketing.ts", () => import("./test/mocks/marketing.ts"));
+vi.mock("./services/employees.ts", () => import("./test/mocks/employees.ts"));
 
 import App from "./App.tsx";
 

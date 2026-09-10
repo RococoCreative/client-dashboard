@@ -5,7 +5,8 @@
 import { db } from "./supabase.ts";
 import type { Profile } from "../types/database.ts";
 
-const COLUMNS = "id, email, full_name, title, company_id, role, is_rococo_admin, is_active, created_at, updated_at";
+const COLUMNS =
+  "id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
@@ -17,7 +18,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
-export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null }): Promise<Profile> {
+export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null; phone?: string | null }): Promise<Profile> {
   const { data: userData, error: userError } = await db().auth.getUser();
   if (userError) throw userError;
   const userId = userData.user?.id;
@@ -50,7 +51,7 @@ export async function listAllProfiles(): Promise<Profile[]> {
 }
 
 export type ProfilePatch = Partial<
-  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin">
+  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to">
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {

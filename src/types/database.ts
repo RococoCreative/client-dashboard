@@ -44,6 +44,42 @@ export interface Profile {
   role: Role;
   is_rococo_admin: boolean;
   is_active: boolean;
+  // Employment details, set by admins. A person may edit their own phone.
+  hire_date: string | null;
+  phone: string | null;
+  department: string | null;
+  reports_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// A personal KPI for the year: the target as people say it, where it stands, hit or not.
+export interface EmployeeKpi {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  year: number;
+  name: string;
+  target_display: string | null;
+  current_display: string | null;
+  target_numeric: number | null;
+  current_numeric: number | null;
+  is_hit: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// One line of a person's compensation: base, a stipend, a match, performance pay. Annual
+// amounts; the monthly figure is derived. Readable by the person and their admins only.
+export interface CompensationItem {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  name: string;
+  annual_amount: number;
+  note: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -124,8 +160,6 @@ export interface Review {
   employee_reflection: string | null;
   reviewer_id: string | null;
   completed_at: string | null;
-  // The month's focus topics, named in a Goal Setting Review.
-  focus_topics: string[];
   created_at: string;
   updated_at: string;
 }
@@ -146,7 +180,8 @@ export interface ReviewScore {
   updated_at: string;
 }
 
-export type GoalKind = "professional" | "personal" | "role";
+// "focus" is the month's focus topic, seeded from the cycle theme.
+export type GoalKind = "professional" | "personal" | "role" | "focus";
 export type GoalStatus = "not_started" | "in_progress" | "on_track" | "achieved" | "missed";
 // A goal belongs to a review cycle (the month's goals) or to a year (a yearly goal).
 export type GoalScope = "cycle" | "year";
@@ -171,6 +206,8 @@ export interface Goal {
   progress: number;
   scope: GoalScope;
   year: number | null;
+  // How it landed, written in the following review ("Why?").
+  outcome_note: string | null;
   // The goal this one was carried forward from, when a missed goal was restated.
   carried_from_goal_id: string | null;
   sort_order: number;
@@ -282,6 +319,7 @@ export const GOAL_KIND_LABELS: Record<GoalKind, string> = {
   professional: "Professional",
   personal: "Personal",
   role: "Role",
+  focus: "Focus topic",
 };
 
 export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {

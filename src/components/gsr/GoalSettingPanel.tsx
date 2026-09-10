@@ -1,10 +1,11 @@
 // The Goal Setting Review for a monthly cycle. The manager and the person set this month's
 // goals together, live: each with action steps and a progress slider where 100 is complete.
-// Last month's goals read back as hit or miss with a one-click carry forward, the person's
-// yearly goals sit alongside, and the review names the month's focus topics. Every change
-// saves on its own; a closed cycle is read-only.
+// The month's focus topic is a goal too, seeded from the cycle theme. Last month's goals
+// read back as hit or miss with a "why" and a one-click carry forward, and the person's
+// yearly goals sit alongside. Every change saves on its own; a closed cycle is read-only
+// except for the why, which is written the month after.
 import { useState, type FormEvent } from "react";
-import { ArrowRight, Check, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -15,8 +16,8 @@ import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
-import { createGoal, deleteGoal, updateGoal, updateReview } from "../../services/gsr.ts";
-import { carryForward, goalOutcome, hitCount, parseTopics, progressPatch, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
+import { carryForward, goalOutcome, hitCount, progressPatch, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
 import { cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
@@ -67,11 +68,15 @@ function GoalEditor({
             <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-            {canEdit ? (
+            {goal.kind === "focus" ? (
+              <Badge tone="accent">Focus topic</Badge>
+            ) : canEdit ? (
               <select value={goal.kind} aria-label={`Kind for ${goal.title}`} onChange={(e) => void save({ kind: e.target.value as GoalKind })} className={`${selectClass} mt-0 w-auto py-0.5 text-[12px]`}>
-                {keysOf(GOAL_KIND_LABELS).map((k) => (
-                  <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
-                ))}
+                {keysOf(GOAL_KIND_LABELS)
+                  .filter((k) => k !== "focus")
+                  .map((k) => (
+                    <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
+                  ))}
               </select>
             ) : (
               <span>{GOAL_KIND_LABELS[goal.kind]}</span>
@@ -120,7 +125,23 @@ function GoalEditor({
 }
 
 // Last month's goal, read-only: how it landed and which steps were taken.
-function LastMonthGoal({ goal, settled, carriedTitle, canCarry, onCarry }: { goal: Goal; settled: boolean; carriedTitle: string | null; canCarry: boolean; onCarry: () => void }) {
+function LastMonthGoal({
+  goal,
+  settled,
+  carriedTitle,
+  canCarry,
+  canNote,
+  onCarry,
+  onNote,
+}: {
+  goal: Goal;
+  settled: boolean;
+  carriedTitle: string | null;
+  canCarry: boolean;
+  canNote: boolean;
+  onCarry: () => void;
+  onNote: (note: string | null) => void;
+}) {
   const outcome = goalOutcome(goal, settled);
   const { done, total } = stepsTaken(goal);
   return (
@@ -149,6 +170,17 @@ function LastMonthGoal({ goal, settled, carriedTitle, canCarry, onCarry }: { goa
         </ul>
       ) : null}
       {goal.progress_notes ? <p className="mt-2 text-[12.5px] text-ink-2">{goal.progress_notes}</p> : null}
+      {canNote ? (
+        <div className="mt-2">
+          <p className={eyebrowClass}>Why</p>
+          <BlurInput multiline rows={1} value={goal.outcome_note ?? ""} placeholder={outcome === "hit" ? "What made it land" : "What got in the way"} ariaLabel={`Why for ${goal.title}`} onSave={(next) => onNote(next.trim() || null)} className={`${textareaClass} mt-1 min-h-[36px] text-[13px]`} />
+        </div>
+      ) : goal.outcome_note ? (
+        <div className="mt-2">
+          <p className={eyebrowClass}>Why</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-2">{goal.outcome_note}</p>
+        </div>
+      ) : null}
       {outcome !== "hit" ? (
         <div className="mt-2">
           {carriedTitle ? (
@@ -193,7 +225,6 @@ export default function GoalSettingPanel({
   isAdmin,
   isOwn,
   onGoals,
-  onReview,
   onError,
   onTouched,
 }: {
@@ -204,7 +235,6 @@ export default function GoalSettingPanel({
   isAdmin: boolean;
   isOwn: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
-  onReview: (review: Review) => void;
   onError: (message: string) => void;
   onTouched: () => void;
 }) {
@@ -218,18 +248,21 @@ export default function GoalSettingPanel({
   const summary = hitCount(lastCycle, lastSettled);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
-  const [topic, setTopic] = useState("");
+  // The focus topic leads the month's list; everything else keeps its order.
+  const ordered = [...thisCycle].sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0));
+  const focusGoal = thisCycle.find((g) => g.kind === "focus") ?? null;
 
   const upsert = (goal: Goal) => onGoals((list) => (list.some((g) => g.id === goal.id) ? list.map((g) => (g.id === goal.id ? goal : g)) : [...list, goal]));
   const carriedTitle = (source: Goal) => thisCycle.find((g) => g.carried_from_goal_id === source.id)?.title ?? null;
 
-  async function add(scope: "cycle" | "year", title: string) {
+  async function add(scope: "cycle" | "year", title: string, kind: GoalKind = "professional", description: string | null = null) {
     try {
       const created = await createGoal({
         company_id: review.company_id,
         employee_id: review.employee_id,
         title,
-        kind: "professional",
+        kind,
+        description,
         scope,
         cycle_id: scope === "cycle" ? cycle.id : null,
         year: scope === "year" ? year : null,
@@ -266,20 +299,12 @@ export default function GoalSettingPanel({
     }
   }
 
-  async function saveTopics(next: string[]) {
+  async function saveNote(goal: Goal, note: string | null) {
     try {
-      onReview(await updateReview(review.id, { focus_topics: next }));
-      onTouched();
+      upsert(await updateGoal(goal.id, { outcome_note: note }));
     } catch (err) {
       onError(errorMessage(err));
     }
-  }
-
-  function addTopics(event: FormEvent) {
-    event.preventDefault();
-    const next = parseTopics(topic, review.focus_topics);
-    setTopic("");
-    if (next.length !== review.focus_topics.length) void saveTopics(next);
   }
 
   return (
@@ -297,7 +322,7 @@ export default function GoalSettingPanel({
           ) : (
             <ul className="divide-y divide-line">
               {lastCycle.map((goal) => (
-                <LastMonthGoal key={goal.id} goal={goal} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} onCarry={() => void carry(goal)} />
+                <LastMonthGoal key={goal.id} goal={goal} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} />
               ))}
             </ul>
           )}
@@ -319,40 +344,28 @@ export default function GoalSettingPanel({
       </div>
 
       <div className="space-y-6 lg:col-span-2">
-        <Section eyebrow="This month" title="Focus topics" description="What this month is about for this person.">
-          <div className="flex flex-wrap items-center gap-2">
-            {review.focus_topics.length === 0 && !canEdit ? <span className="text-sm text-ink-3">None named.</span> : null}
-            {review.focus_topics.map((t) => (
-              <Badge key={t} tone="accent" className={canEdit ? "pr-1" : ""}>
-                {t}
-                {canEdit ? (
-                  <button type="button" aria-label={`Remove topic ${t}`} onClick={() => void saveTopics(review.focus_topics.filter((x) => x !== t))} className="ml-0.5 rounded-full p-0.5 hover:bg-accent/20">
-                    <X size={11} aria-hidden />
-                  </button>
-                ) : null}
-              </Badge>
-            ))}
-          </div>
-          {canEdit ? (
-            <form onSubmit={addTopics} className="mt-3 flex gap-2">
-              <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Add a focus topic" aria-label="Add a focus topic" className={`${inputClass} mt-0 flex-1`} />
-              <Button type="submit" variant="secondary" disabled={!topic.trim()}>
-                <Plus size={14} aria-hidden /> Add
-              </Button>
-            </form>
-          ) : null}
-        </Section>
-
         <Section
           eyebrow={cycle.name}
           title="Goals for this month"
-          description="Set together in the review. Progress is live; 100 marks a goal complete, and next month reads it back as a hit."
+          description="Set together in the review. The focus topic comes from the cycle theme. Progress is live; 100 marks a goal complete, and next month reads it back as a hit."
         >
+          {canEdit && !focusGoal ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line-strong px-4 py-3">
+              <div className="min-w-0">
+                <p className={eyebrowClass}>Focus topic</p>
+                <p className="mt-0.5 text-sm text-ink">{cycle.theme ?? "No theme on this cycle yet. Set one in the cycle details, or name the topic here."}</p>
+                {cycle.theme_description ? <p className="mt-0.5 text-[12.5px] text-ink-2">{cycle.theme_description}</p> : null}
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => void add("cycle", cycle.theme ?? "Focus topic", "focus", cycle.theme_description)}>
+                <Plus size={13} aria-hidden /> Set as this month's focus topic
+              </Button>
+            </div>
+          ) : null}
           {thisCycle.length === 0 ? (
             <p className="text-sm text-ink-2">{canEdit ? "No goals yet. Add the first one below, or carry one forward from last month." : "No goals set for this month yet."}</p>
           ) : null}
           <ul className="space-y-3">
-            {thisCycle.map((goal) => (
+            {ordered.map((goal) => (
               <GoalEditor
                 key={goal.id}
                 goal={goal}
