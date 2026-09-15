@@ -1,10 +1,17 @@
-// One person's review for one cycle. A monthly cycle is a Goal Setting Review: goals set
-// live with action steps and progress, last month read back as hit or miss, yearly goals
-// and focus topics alongside, then the scores. Admins score here: ratings per criterion for
-// rating pillars, target-vs-actual line items for deliverable pillars, then feedback and a
-// status. Employees open the same page read-only for their own review (RLS makes sure it
-// is theirs) with their reflection and their own goals' steps and progress writable. Every
-// change saves on its own, so there is no save button to forget.
+// One person's review for one cycle, in one of two shapes.
+//
+// A monthly cycle is a Goal Setting Review and only that: the employee snapshot, then goals
+// set live with action steps, progress and notes, last month read back as hit or miss, and
+// the yearly goals alongside. No pillar scoring and no written feedback, because the meeting
+// is the goals and the notes on them.
+//
+// Quarterly, annual and custom cycles are the scoring review: ratings per criterion for rating
+// pillars, target-vs-actual line items for deliverable pillars, the overall score, and the
+// management, peer and client feedback with the employee's reflection.
+//
+// Employees open the same page read-only for their own review (RLS makes sure it is theirs)
+// with their reflection and their own goals' steps and progress writable. Every change saves
+// on its own, so there is no save button to forget.
 import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -284,188 +291,194 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Section eyebrow="Overall" title={result.complete ? "Score" : "Score so far"} className="lg:col-span-1">
-          <div className="flex items-center gap-5">
-            <ScoreRing score={scores.length > 0 ? result.overall : null} size={104} />
-            <div className="min-w-0 flex-1 space-y-3">
-              {result.pillars.map((p) => (
-                <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
-              ))}
-              {pillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
+      {/* A monthly cycle is a Goal Setting Review and nothing else: the goals above are the
+          whole meeting. Scoring and written feedback belong to the quarterly, annual and custom
+          cycles, which render this block unchanged. Scores already recorded against a monthly
+          review stay in the database; they are simply not what a monthly review is for. */}
+      {monthly ? null : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Section eyebrow="Overall" title={result.complete ? "Score" : "Score so far"} className="lg:col-span-1">
+            <div className="flex items-center gap-5">
+              <ScoreRing score={scores.length > 0 ? result.overall : null} size={104} />
+              <div className="min-w-0 flex-1 space-y-3">
+                {result.pillars.map((p) => (
+                  <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
+                ))}
+                {pillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
+              </div>
             </div>
-          </div>
-          {result.weightTotal !== 100 && pillars.length > 0 ? (
-            <p className="mt-3 text-[12px] text-warning">Pillar weights total {formatNumber(result.weightTotal)}%, not 100%. Scores are normalized; fix this in GSR settings.</p>
-          ) : null}
-        </Section>
+            {result.weightTotal !== 100 && pillars.length > 0 ? (
+              <p className="mt-3 text-[12px] text-warning">Pillar weights total {formatNumber(result.weightTotal)}%, not 100%. Scores are normalized; fix this in GSR settings.</p>
+            ) : null}
+          </Section>
 
-        <div className="space-y-6 lg:col-span-2">
-          {pillars.map((pillar) => {
-            const pillarCriteria = criteria.filter((c) => c.pillar_id === pillar.id);
-            const lineItems = scores
-              .filter((s) => s.pillar_id === pillar.id && !s.criterion_id)
-              .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
-            const summary = result.pillars.find((p) => p.pillarId === pillar.id);
-            return (
-              <Section
-                key={pillar.id}
-                eyebrow={`${formatNumber(pillar.weight)}% of overall`}
-                title={pillar.name}
-                description={pillar.description ?? undefined}
-                actions={
-                  <span className={`tnum text-lg font-medium ${summary?.score === null || summary?.score === undefined ? "text-ink-3" : "text-heading"}`}>
-                    {summary?.score === null || summary?.score === undefined ? "-" : Math.round(summary.score)}
-                  </span>
-                }
-              >
-                {pillar.scoring_type === "rating" ? (
-                  pillarCriteria.length === 0 ? (
-                    <p className="text-sm text-ink-2">No criteria defined for this pillar yet. Add them in GSR settings.</p>
-                  ) : (
-                    <ul className="divide-y divide-line">
-                      {pillarCriteria.map((criterion) => {
-                        const score = scores.find((s) => s.criterion_id === criterion.id);
-                        return (
-                          <li key={criterion.id} className="py-4 first:pt-0 last:pb-0">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0 max-w-xl">
-                                <p className="text-sm font-medium text-ink">{criterion.name}</p>
-                                {criterion.description ? <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-2">{criterion.description}</p> : null}
-                              </div>
-                              <RatingInput
-                                label={`${criterion.name} rating`}
-                                value={score?.rating ?? null}
-                                max={pillar.rating_scale_max}
-                                onChange={canScore ? (next) => void saveRating(pillar, criterion, { rating: next }) : undefined}
-                              />
-                            </div>
-                            {canScore || score?.notes ? (
-                              <div className="mt-2">
-                                <BlurInput
-                                  value={score?.notes ?? ""}
-                                  disabled={!canScore}
-                                  placeholder="Review notes for this criterion"
-                                  onSave={(next) => void saveRating(pillar, criterion, { notes: next.trim() || null })}
-                                  className={`${inputClass} mt-0 text-[13px]`}
+          <div className="space-y-6 lg:col-span-2">
+            {pillars.map((pillar) => {
+              const pillarCriteria = criteria.filter((c) => c.pillar_id === pillar.id);
+              const lineItems = scores
+                .filter((s) => s.pillar_id === pillar.id && !s.criterion_id)
+                .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+              const summary = result.pillars.find((p) => p.pillarId === pillar.id);
+              return (
+                <Section
+                  key={pillar.id}
+                  eyebrow={`${formatNumber(pillar.weight)}% of overall`}
+                  title={pillar.name}
+                  description={pillar.description ?? undefined}
+                  actions={
+                    <span className={`tnum text-lg font-medium ${summary?.score === null || summary?.score === undefined ? "text-ink-3" : "text-heading"}`}>
+                      {summary?.score === null || summary?.score === undefined ? "-" : Math.round(summary.score)}
+                    </span>
+                  }
+                >
+                  {pillar.scoring_type === "rating" ? (
+                    pillarCriteria.length === 0 ? (
+                      <p className="text-sm text-ink-2">No criteria defined for this pillar yet. Add them in GSR settings.</p>
+                    ) : (
+                      <ul className="divide-y divide-line">
+                        {pillarCriteria.map((criterion) => {
+                          const score = scores.find((s) => s.criterion_id === criterion.id);
+                          return (
+                            <li key={criterion.id} className="py-4 first:pt-0 last:pb-0">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0 max-w-xl">
+                                  <p className="text-sm font-medium text-ink">{criterion.name}</p>
+                                  {criterion.description ? <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-2">{criterion.description}</p> : null}
+                                </div>
+                                <RatingInput
+                                  label={`${criterion.name} rating`}
+                                  value={score?.rating ?? null}
+                                  max={pillar.rating_scale_max}
+                                  onChange={canScore ? (next) => void saveRating(pillar, criterion, { rating: next }) : undefined}
                                 />
                               </div>
-                            ) : null}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )
-                ) : (
-                  <div>
-                    {lineItems.length === 0 ? (
-                      <p className="text-sm text-ink-2">
-                        {canScore ? "Add the deliverables agreed for this period with a target and the actual result." : "No deliverables recorded."}
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-left">
-                              <th className={miniThClass}>Deliverable</th>
-                              <th className={`${miniThClass} text-right`}>Target</th>
-                              <th className={`${miniThClass} text-right`}>Actual</th>
-                              <th className={`${miniThClass} text-right`}>Achieved</th>
-                              <th className="pb-2"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {lineItems.map((item) => {
-                              const achieved = item.target && item.target > 0 && item.actual !== null ? Math.min(item.actual / item.target, 1) : null;
-                              return (
-                                <tr key={item.id} className="border-t border-line">
-                                  <td className="py-2 pr-3">
-                                    <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => void saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
-                                    {canScore || item.notes ? (
-                                      <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => void saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
-                                    ) : null}
-                                  </td>
-                                  <td className="w-28 py-2 pr-2 align-top">
-                                    <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { target: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
-                                  </td>
-                                  <td className="w-28 py-2 pr-2 align-top">
-                                    <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { actual: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
-                                  </td>
-                                  <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
-                                    {achieved === null ? "-" : `${Math.round(achieved * 100)}%`}
-                                  </td>
-                                  <td className="w-10 py-2 text-right align-top">
-                                    {canScore ? (
-                                      <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
-                                        <Trash2 size={14} aria-hidden />
-                                      </IconButton>
-                                    ) : null}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    {canScore ? (
-                      <Button variant="secondary" size="sm" className="mt-3" onClick={() => void addLineItem(pillar)}>
-                        <Plus size={14} aria-hidden /> Add deliverable
-                      </Button>
-                    ) : null}
-                  </div>
-                )}
-              </Section>
-            );
-          })}
-
-          <Section eyebrow="Feedback" title="Manager notes and feedback">
-            <div className="space-y-4">
-              {monthly ? null : (
-              <div>
-                <label htmlFor="previous-status" className={labelClass}>Previous period goals</label>
-                {isAdmin ? (
-                  <select id="previous-status" value={review.previous_status ?? ""} disabled={!canScore} onChange={(e) => void patchReview({ previous_status: (e.target.value || null) as PreviousStatus | null })} className={`${selectClass} max-w-xs`}>
-                    <option value="">Not assessed</option>
-                    {keysOf(PREVIOUS_STATUS_LABELS).map((key) => (
-                      <option key={key} value={key}>{PREVIOUS_STATUS_LABELS[key]}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="mt-1.5">
-                    {review.previous_status ? <Badge tone={PREVIOUS_STATUS_TONE[review.previous_status]}>{PREVIOUS_STATUS_LABELS[review.previous_status]}</Badge> : <span className="text-sm text-ink-3">Not assessed</span>}
-                  </div>
-                )}
-              </div>
-              )}
-              {(
-                [
-                  ["manager_feedback", "Management feedback"],
-                  ["peer_feedback", "Peer feedback"],
-                  ["client_feedback", "Client feedback"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key}>
-                  <label htmlFor={key} className={labelClass}>{label}</label>
-                  {isAdmin ? (
-                    <BlurInput id={key} multiline value={review[key] ?? ""} disabled={!canScore} placeholder={`${label}...`} onSave={(next) => void patchReview(feedbackPatch(key, next))} />
+                              {canScore || score?.notes ? (
+                                <div className="mt-2">
+                                  <BlurInput
+                                    value={score?.notes ?? ""}
+                                    disabled={!canScore}
+                                    placeholder="Review notes for this criterion"
+                                    onSave={(next) => void saveRating(pillar, criterion, { notes: next.trim() || null })}
+                                    className={`${inputClass} mt-0 text-[13px]`}
+                                  />
+                                </div>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )
                   ) : (
-                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review[key] || <span className="text-ink-3">Nothing yet.</span>}</p>
+                    <div>
+                      {lineItems.length === 0 ? (
+                        <p className="text-sm text-ink-2">
+                          {canScore ? "Add the deliverables agreed for this period with a target and the actual result." : "No deliverables recorded."}
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left">
+                                <th className={miniThClass}>Deliverable</th>
+                                <th className={`${miniThClass} text-right`}>Target</th>
+                                <th className={`${miniThClass} text-right`}>Actual</th>
+                                <th className={`${miniThClass} text-right`}>Achieved</th>
+                                <th className="pb-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lineItems.map((item) => {
+                                const achieved = item.target && item.target > 0 && item.actual !== null ? Math.min(item.actual / item.target, 1) : null;
+                                return (
+                                  <tr key={item.id} className="border-t border-line">
+                                    <td className="py-2 pr-3">
+                                      <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => void saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
+                                      {canScore || item.notes ? (
+                                        <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => void saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
+                                      ) : null}
+                                    </td>
+                                    <td className="w-28 py-2 pr-2 align-top">
+                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { target: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                    </td>
+                                    <td className="w-28 py-2 pr-2 align-top">
+                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { actual: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                    </td>
+                                    <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
+                                      {achieved === null ? "-" : `${Math.round(achieved * 100)}%`}
+                                    </td>
+                                    <td className="w-10 py-2 text-right align-top">
+                                      {canScore ? (
+                                        <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
+                                          <Trash2 size={14} aria-hidden />
+                                        </IconButton>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {canScore ? (
+                        <Button variant="secondary" size="sm" className="mt-3" onClick={() => void addLineItem(pillar)}>
+                          <Plus size={14} aria-hidden /> Add deliverable
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
+                </Section>
+              );
+            })}
+
+            <Section eyebrow="Feedback" title="Manager notes and feedback">
+              <div className="space-y-4">
+                {monthly ? null : (
+                <div>
+                  <label htmlFor="previous-status" className={labelClass}>Previous period goals</label>
+                  {isAdmin ? (
+                    <select id="previous-status" value={review.previous_status ?? ""} disabled={!canScore} onChange={(e) => void patchReview({ previous_status: (e.target.value || null) as PreviousStatus | null })} className={`${selectClass} max-w-xs`}>
+                      <option value="">Not assessed</option>
+                      {keysOf(PREVIOUS_STATUS_LABELS).map((key) => (
+                        <option key={key} value={key}>{PREVIOUS_STATUS_LABELS[key]}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="mt-1.5">
+                      {review.previous_status ? <Badge tone={PREVIOUS_STATUS_TONE[review.previous_status]}>{PREVIOUS_STATUS_LABELS[review.previous_status]}</Badge> : <span className="text-sm text-ink-3">Not assessed</span>}
+                    </div>
                   )}
                 </div>
-              ))}
-              <div>
-                <label htmlFor="employee_reflection" className={labelClass}>{isOwn ? "Your reflection" : "Employee reflection"}</label>
-                {isOwn ? (
-                  <BlurInput id="employee_reflection" multiline value={review.employee_reflection ?? ""} placeholder="How did the period go from your side? What do you want to focus on next?" onSave={(next) => void patchReview({ employee_reflection: next.trim() || null })} />
-                ) : (
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review.employee_reflection || <span className="text-ink-3">Nothing yet.</span>}</p>
                 )}
+                {(
+                  [
+                    ["manager_feedback", "Management feedback"],
+                    ["peer_feedback", "Peer feedback"],
+                    ["client_feedback", "Client feedback"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label htmlFor={key} className={labelClass}>{label}</label>
+                    {isAdmin ? (
+                      <BlurInput id={key} multiline value={review[key] ?? ""} disabled={!canScore} placeholder={`${label}...`} onSave={(next) => void patchReview(feedbackPatch(key, next))} />
+                    ) : (
+                      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review[key] || <span className="text-ink-3">Nothing yet.</span>}</p>
+                    )}
+                  </div>
+                ))}
+                <div>
+                  <label htmlFor="employee_reflection" className={labelClass}>{isOwn ? "Your reflection" : "Employee reflection"}</label>
+                  {isOwn ? (
+                    <BlurInput id="employee_reflection" multiline value={review.employee_reflection ?? ""} placeholder="How did the period go from your side? What do you want to focus on next?" onSave={(next) => void patchReview({ employee_reflection: next.trim() || null })} />
+                  ) : (
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review.employee_reflection || <span className="text-ink-3">Nothing yet.</span>}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          </Section>
+            </Section>
+          </div>
         </div>
-      </div>
+      )}
 
       {removing ? (
         <ConfirmDialog

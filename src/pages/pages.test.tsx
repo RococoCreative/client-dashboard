@@ -19,7 +19,7 @@ vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { COMPANIES, KLASIK, makeHub } from "../test/fixtures.ts";
+import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import GsrCyclesPage from "./gsr/GsrCyclesPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
@@ -46,6 +46,11 @@ const employee = makeHub("employee");
 const rococo = makeHub("rococo", null);
 const currentCycle = KLASIK.cycles[0];
 const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!;
+// Klasik runs monthly, so its reviews are Goal Setting Reviews with no scoring. RBA runs
+// quarterly, which is where the scoring shape of a review still lives.
+const rbaAdmin = makeHub("admin", RBA.company);
+const rbaEmployee = makeHub("employee", RBA.company);
+const rbaReview = RBA.reviews.find((r) => r.status === "in_progress")!;
 const employeeProfile = KLASIK.profiles[1];
 
 describe("dashboard", () => {
@@ -88,23 +93,41 @@ describe("GSR", () => {
     expect(within(table).getAllByText("Start review").length).toBeGreaterThan(0);
   });
 
-  it("lets an admin rate a criterion and the overall score updates", async () => {
+  it("lets an admin rate a criterion on a scoring cycle and the overall score updates", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
-    expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByRole("heading", { name: /^Score/ })).toBeInTheDocument();
-    const group = await screen.findByRole("radiogroup", { name: "Culture Vision rating" });
+    const group = await screen.findByRole("radiogroup", { name: "Communication rating" });
     await user.click(within(group).getByRole("radio", { name: "5 of 5" }));
     expect(await within(group).findByText("5/5")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
   });
 
-  it("renders the same review read-only for the employee it belongs to", async () => {
-    renderWithHub(<ReviewPage />, employee, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
-    expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+  it("renders a scoring review read-only for the employee it belongs to", async () => {
+    renderWithHub(<ReviewPage />, rbaEmployee, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: /^Score/ })).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mark complete/ })).not.toBeInTheDocument();
     expect(await screen.findByLabelText("Your reflection")).toBeInTheDocument();
+  });
+
+  it("makes a monthly review a Goal Setting Review with no scoring and no feedback", async () => {
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+    // The meeting is the goals and the notes on them.
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
+    // The notes box on each goal is the record of the conversation, so it stays.
+    expect(screen.getAllByLabelText(/^Notes for /).length).toBeGreaterThan(0);
+    // None of the scoring or written-feedback modules belong here.
+    expect(screen.queryByRole("heading", { name: /^Score/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Deliverables" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Brand Impact" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Manager notes and feedback" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Management feedback")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    // Signing the review off is still the admin's call.
+    expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
   });
 
   it("shows pillars, weights, and criteria in settings", async () => {

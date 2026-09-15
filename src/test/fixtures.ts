@@ -787,6 +787,9 @@ export function fromAll<T>(pick: (bundle: CompanyBundle) => T[]): T[] {
 }
 
 export const KLASIK: CompanyBundle = bundleFor("co-klasik")!;
+// RBA runs quarterly cycles, so it is where the scoring shape of a review is exercised:
+// Klasik's cycles are monthly, and a monthly review is goals only.
+export const RBA: CompanyBundle = bundleFor("co-rba")!;
 
 export function fakeSession(profile: Profile): Session {
   return {
