@@ -202,7 +202,7 @@ export default function PeoplePage() {
       <PageHeader
         eyebrow={company!.name}
         title="People"
-        description="Everyone on the team, what they can see, and who is still waiting on an invitation."
+        description="Everyone on the team. Set someone up in full before you invite them; the invitation is the last step, not the first."
         actions={<Button size="sm" onClick={() => setAdding(true)}><UserPlus size={14} aria-hidden /> Add staff</Button>}
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
@@ -214,7 +214,7 @@ export default function PeoplePage() {
         <Section
           eyebrow="Team"
           title={pluralize(people.length, "person", "people")}
-          description={waiting.length > 0 ? `${pluralize(waiting.length, "person", "people")} set up and not signed in yet.` : undefined}
+          description={waiting.length > 0 ? `${pluralize(waiting.length, "person", "people")} set up and not signed in yet. They can be reviewed and given goals like anyone else.` : undefined}
           padded={false}
         >
           {people.length === 0 ? (
@@ -314,9 +314,11 @@ export default function PeoplePage() {
             </div>
           )}
           <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
-            Sending an invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not
-            send email. Anyone whose address is on one of this company's sign-in domains can also sign in without an
-            invitation, and either way they take over the profile set up here rather than starting a second one.
+            Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
+            set their goals, KPIs and compensation, and it is all waiting on their profile when they arrive. Sending an
+            invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.
+            Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
+            either way they take over the profile set up here rather than starting a second one.
           </p>
         </Section>
       )}

@@ -106,8 +106,14 @@ a sign-in link to the clipboard; the hub sends no email.
 Signing in claims the profile that is already there rather than creating a second one, whether
 the person arrives through an invitation or through a company sign-in domain. Policies find the
 signed-in person with `private.auth_profile_id()`, so "this row is mine" keeps working now that
-a person and an account are two different things. Review cycles cover only people who have
-signed in, since nobody else can open a review.
+a person and an account are two different things.
+
+Having an account is never a precondition for being set up. A review cycle covers the whole
+active roster, and anyone on it can be given goals, KPIs and compensation, whether or not they
+have ever signed in. That is the state every new company is in on its first day, so the hub
+works that way by default; the cycle's team table simply marks who cannot open theirs yet.
+Because all of it hangs off a profile id that survives the sign-in claim, nothing has to be
+redone when they finally arrive.
 
 ## Monthly Goal Setting Reviews
 

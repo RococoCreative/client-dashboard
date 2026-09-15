@@ -44,11 +44,15 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    without navigating, so a stale id otherwise keeps another tenant's record on screen, live.
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
 5. **A profile is a person, not an account.** `profiles.id` is the person and is stable
-   forever; `profiles.user_id` is null until they first sign in. Admins add staff and fill in
-   everything about them before inviting anyone, so never assume a profile has an account: use
-   `hasAccount()` where it matters, and find the signed-in person with
-   `private.auth_profile_id()`, never by comparing a person to `auth.uid()`. Only
-   `handle_new_user` ever sets `user_id`, and signing in claims the existing profile.
+   forever; `profiles.user_id` is null until they first sign in. Never assume a profile has an
+   account, and find the signed-in person with `private.auth_profile_id()`, never by comparing
+   a person to `auth.uid()`. Only `handle_new_user` ever sets `user_id`, and signing in claims
+   the existing profile.
+   **An account is never a precondition for being set up.** A company builds its whole roster,
+   its review cycles, goals, KPIs and compensation before a single person has signed in, which
+   is precisely the state every new company starts in. So no feature filters people by whether
+   they have an account: `hasAccount()` marks a row ("not signed in yet"), it never removes one.
+   Everything attaches to `profiles.id`, so it is all waiting for them the moment they arrive.
 6. **Sign-in is magic link, gated server-side.** The login screen may create users
    (`shouldCreateUser: true`) only because the "Before User Created" hook in
    `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and

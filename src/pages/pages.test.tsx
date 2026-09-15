@@ -85,7 +85,7 @@ describe("GSR", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("Brand Impact")).toBeInTheDocument();
     expect(within(table).getByText("Sam Ortega")).toBeInTheDocument();
-    expect(within(table).getByText("Start review")).toBeInTheDocument();
+    expect(within(table).getAllByText("Start review").length).toBeGreaterThan(0);
   });
 
   it("lets an admin rate a criterion and the overall score updates", async () => {
@@ -355,11 +355,18 @@ describe("employee profile", () => {
     expect(screen.getByText("May 26, 2026")).toBeInTheDocument();
   });
 
-  it("keeps people who have never signed in out of a review cycle", async () => {
+  it("puts people who have never signed in into the review cycle, marked as not signed in", async () => {
     renderWithHub(<CyclePage />, admin, { path: `/gsr/cycles/${currentCycle.id}`, pattern: "/gsr/cycles/:cycleId" });
     const table = await screen.findByRole("table");
+    // A company sets its reviews up before anyone has an account, so the whole active roster
+    // is here: someone invited but not yet signed in, and someone never invited at all.
     expect(within(table).getByText("Sam Ortega")).toBeInTheDocument();
-    expect(within(table).queryByText("Avery Cole")).not.toBeInTheDocument();
-    expect(within(table).queryByText("Taylor Reed")).not.toBeInTheDocument();
+    expect(within(table).getByText("Avery Cole")).toBeInTheDocument();
+    expect(within(table).getByText("Taylor Reed")).toBeInTheDocument();
+    // Each row says whether that person can open theirs yet, so the admin is never misled.
+    const rowFor = (name: string) => within(table).getByText(name).closest("tr")!;
+    expect(rowFor("Avery Cole")).toHaveTextContent("not signed in yet");
+    expect(rowFor("Taylor Reed")).toHaveTextContent("not signed in yet");
+    expect(rowFor("Sam Ortega")).not.toHaveTextContent("not signed in yet");
   });
 });

@@ -17,8 +17,12 @@ export function formatTenure(hireDate: string | null | undefined, today = new Da
   return [y, m].filter(Boolean).join(", ");
 }
 
-// Someone on the roster who has signed in at least once. Staff an admin has set up but not
-// invited yet have no account, so they are not reviewed and cannot see anything.
+// Someone on the roster who has signed in at least once.
+//
+// This marks a row, it does not gate one. Staff an admin has set up but not invited yet are
+// part of the company in every way that matters: they get reviews, goals, KPIs and
+// compensation, all keyed to a profile id that survives their first sign-in. The only thing
+// they cannot do is open any of it themselves, so screens use this to say so.
 export function hasAccount(person: { user_id: string | null }): boolean {
   return person.user_id !== null;
 }

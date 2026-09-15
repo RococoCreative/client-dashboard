@@ -28,7 +28,6 @@ import { currentCycle } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
-import { hasAccount } from "../../lib/people.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Company, CompanyDomain, FinancialSnapshot, ReviewCycle } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
@@ -65,10 +64,9 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     listInvitations(company.id),
   ]);
   const active = people.filter((p) => p.is_active);
-  // A cycle only opens reviews for people who have signed in, so the fraction here counts
-  // those, the way the cycle page does. Counting the whole roster made a finished cycle read
-  // as permanently unfinished as soon as an admin added staff they had not invited yet.
-  const reviewable = active.filter(hasAccount);
+  // A cycle covers the whole active roster, signed in or not, so the fraction counts the same
+  // people the cycle page does.
+  const reviewable = active;
   const admins = active.filter((p) => p.role === "admin");
   const cycle = currentCycle(cycles);
   const cycleReviews = cycle ? reviews.filter((r) => r.cycle_id === cycle.id) : [];

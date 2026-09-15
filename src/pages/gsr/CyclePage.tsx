@@ -130,9 +130,10 @@ export default function CyclePage() {
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { cycle, reviews, pillars, people, scores } = state.data;
-  // Staff who have been set up but not invited yet are on the roster and cannot open a
-  // review, so a cycle does not create one for them.
-  const team = people.filter((p) => p.is_active && hasAccount(p));
+  // Everyone active on the roster, whether or not they have signed in yet. A company sets its
+  // reviews up before anyone has an account, which is exactly the state it is in on the day it
+  // starts, so a cycle covers the whole team. The row says who cannot see theirs yet.
+  const team = people.filter((p) => p.is_active);
   const rows = team.map((person) => {
     const review = reviews.find((r) => r.employee_id === person.id) ?? null;
     const own = review ? scores.filter((s) => s.review_id === review.id) : [];
@@ -264,7 +265,10 @@ export default function CyclePage() {
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">
                           <p className="truncate text-sm text-ink">{displayName(person)}</p>
-                          <p className="truncate text-[12px] text-ink-3">{person.title ?? person.email}</p>
+                          <p className="truncate text-[12px] text-ink-3">
+                            {person.title ?? person.email}
+                            {hasAccount(person) ? "" : " · not signed in yet"}
+                          </p>
                         </div>
                       </div>
                     </td>
