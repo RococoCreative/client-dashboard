@@ -34,7 +34,10 @@ export interface CompanyDomain {
 }
 
 export interface Profile {
+  // The person, stable whether or not they have signed in.
   id: string;
+  // The account, once they have one. Null for staff an admin set up but has not invited yet.
+  user_id: string | null;
   email: string;
   full_name: string | null;
   title: string | null;
@@ -90,6 +93,9 @@ export interface Invitation {
   email: string;
   role: Role;
   title: string | null;
+  // The roster row this invitation is for. Signing in claims that profile instead of making
+  // a second one.
+  profile_id: string | null;
   invited_by: string | null;
   created_at: string;
   accepted_at: string | null;

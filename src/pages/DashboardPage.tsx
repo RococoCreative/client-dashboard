@@ -34,6 +34,7 @@ import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
 import { currentCycle } from "../lib/gsr/cycles.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
+import { hasAccount } from "../lib/people.ts";
 import {
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -108,7 +109,9 @@ function AdminDashboard() {
 
   const { people, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns } = state.data;
   const activePeople = people.filter((p) => p.is_active);
-  const employees = activePeople;
+  // The stat counts everyone on the roster; the review list only covers people who can open one.
+  const employees = activePeople.filter(hasAccount);
+  const notInvited = activePeople.length - employees.length;
   const scored = reviews.map((r) => {
     const own = scores.filter((s) => s.review_id === r.id);
     return { review: r, score: own.length > 0 ? computeReviewScore(pillars, own).overall : null };
@@ -132,7 +135,7 @@ function AdminDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="People" value={employees.length} hint={pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
+        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not invited yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
         <Stat
           label="Current cycle"
           value={cycle ? `${complete}/${reviews.length}` : "-"}
@@ -165,7 +168,7 @@ function AdminDashboard() {
                 No review cycle is open. Start one to create a review for every person and track the team's scores.
               </p>
             ) : employees.length === 0 ? (
-              <p className="text-sm text-ink-2">Invite people to the company to begin reviews.</p>
+              <p className="text-sm text-ink-2">Nobody has signed in yet. Invite the team to begin reviews.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {employees.map((person) => {

@@ -17,7 +17,7 @@ that orders itself by importance and location. The full specification is in
 | --- | --- | --- |
 | Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
 | Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback, goals with action steps and progress |
-| People | Invite, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
+| People | Add staff before inviting them, invite when ready, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
 | SOP library | Create, edit (versioned), publish, attach files | Read published documents |
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0012`). Every file is
+   `supabase/migrations/` in numeric order (`0001` through `0013`). Every file is
    idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting
@@ -88,6 +88,21 @@ a reload resets the data.
   hub for their company) or `employee` (own GSR data plus the libraries).
 - **Deactivating** a person on the People page removes all access immediately; their
   account can be reactivated later.
+
+## The roster and accounts
+
+A person on a company's roster is not the same thing as an account. An admin adds someone in
+People and fills in their whole profile (title, department, hire date, who they report to,
+compensation, KPIs) before anybody sends them anything. `profiles.user_id` is null until they
+first sign in, and every row shows which of three states it is in: Not invited, Invited, or
+Active. Sending an invitation creates the invitation row, points it at that profile, and copies
+a sign-in link to the clipboard; the hub sends no email.
+
+Signing in claims the profile that is already there rather than creating a second one, whether
+the person arrives through an invitation or through a company sign-in domain. Policies find the
+signed-in person with `private.auth_profile_id()`, so "this row is mine" keeps working now that
+a person and an account are two different things. Review cycles cover only people who have
+signed in, since nobody else can open a review.
 
 ## Monthly Goal Setting Reviews
 

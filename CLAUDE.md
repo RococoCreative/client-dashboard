@@ -39,29 +39,35 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    inherit `company_id` from their parent by trigger; guard triggers stop self-elevation.
    Pages always pass `company_id` explicitly (a Rococo admin acts on a chosen company).
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
-5. **Sign-in is magic link, gated server-side.** The login screen may create users
+5. **A profile is a person, not an account.** `profiles.id` is the person and is stable
+   forever; `profiles.user_id` is null until they first sign in. Admins add staff and fill in
+   everything about them before inviting anyone, so never assume a profile has an account: use
+   `hasAccount()` where it matters, and find the signed-in person with
+   `private.auth_profile_id()`, never by comparing a person to `auth.uid()`. Only
+   `handle_new_user` ever sets `user_id`, and signing in claims the existing profile.
+6. **Sign-in is magic link, gated server-side.** The login screen may create users
    (`shouldCreateUser: true`) only because the "Before User Created" hook in
    `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and
    rejects everyone else. The app-side domain lookup is UX, not security. No service-role
    key anywhere in the app or in Vercel; invitations are rows plus a link, not emails.
-6. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
+7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation: pillar weights, rating and deliverable scoring, the unscored-is-zero
    rule. Never duplicate it in SQL or in a component.
-7. **Migrations are append-only once applied.** Numbered idempotent SQL in
+8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
-8. **SOP history is immutable.** Saving an edit appends a `sop_versions` row; versions are
+9. **SOP history is immutable.** Saving an edit appends a `sop_versions` row; versions are
    never edited or renumbered. Files live in the private `hub-files` bucket under
    `{company_id}/...` and are read through signed URLs only.
-9. **Copy voice.** Calm, plain, confident. No em dashes anywhere in copy. No AI model
+10. **Copy voice.** Calm, plain, confident. No em dashes anywhere in copy. No AI model
    identifiers in code, comments, or client-facing text (standard tooling attribution
    trailers in commit messages are fine). Client-facing copy is industry neutral unless a
    company's own configuration says otherwise.
-10. **File style.** Every file opens with a comment saying why it exists. Components are
+11. **File style.** Every file opens with a comment saying why it exists. Components are
     PascalCase files with `export default function Name()`; private sub-components sit
     above the default export; no barrel files. Shared primitives (`components/ui/*`) are the
     only way to style controls; `BlurInput` is the pattern for save-on-blur fields.
-11. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
+12. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
     motion, the tenant's accent as punctuation. It should feel like a command center, not a
     marketing site.
 

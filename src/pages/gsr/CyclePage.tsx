@@ -34,6 +34,7 @@ import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
 import { CADENCE_LABELS } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatPeriod } from "../../lib/format.ts";
+import { hasAccount } from "../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, type ReviewCycle } from "../../types/database.ts";
 
 function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onClose: () => void; onSaved: (c: ReviewCycle) => void }) {
@@ -125,7 +126,9 @@ export default function CyclePage() {
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { cycle, reviews, pillars, people, scores } = state.data;
-  const team = people.filter((p) => p.is_active);
+  // Staff who have been set up but not invited yet are on the roster and cannot open a
+  // review, so a cycle does not create one for them.
+  const team = people.filter((p) => p.is_active && hasAccount(p));
   const rows = team.map((person) => {
     const review = reviews.find((r) => r.employee_id === person.id) ?? null;
     const own = review ? scores.filter((s) => s.review_id === review.id) : [];
@@ -230,7 +233,7 @@ export default function CyclePage() {
       >
         {team.length === 0 ? (
           <p className="p-5 text-sm text-ink-2">
-            No active people in this company yet. <Link to="/people" className="text-accent hover:underline">Invite the team</Link> first.
+            Nobody here has signed in yet. <Link to="/people" className="text-accent hover:underline">Invite the team</Link> first.
           </p>
         ) : (
           <div className="overflow-x-auto">

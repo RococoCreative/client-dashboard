@@ -17,6 +17,12 @@ export function formatTenure(hireDate: string | null | undefined, today = new Da
   return [y, m].filter(Boolean).join(", ");
 }
 
+// Someone on the roster who has signed in at least once. Staff an admin has set up but not
+// invited yet have no account, so they are not reviewed and cannot see anything.
+export function hasAccount(person: { user_id: string | null }): boolean {
+  return person.user_id !== null;
+}
+
 export function totalAnnual(items: Array<{ annual_amount: number }>): number {
   return items.reduce((sum, item) => sum + (Number.isFinite(item.annual_amount) ? item.annual_amount : 0), 0);
 }

@@ -136,11 +136,38 @@ describe("GSR", () => {
 });
 
 describe("people", () => {
-  it("lists people and pending invitations", async () => {
+  it("shows the roster in its three states", async () => {
     renderWithHub(<PeoplePage />, admin);
     expect(await screen.findByText("Jordan Vale (you)")).toBeInTheDocument();
-    expect(await screen.findByText("new.hire@beklasik.com")).toBeInTheDocument();
-    expect(screen.getByText("1 pending")).toBeInTheDocument();
+    // Signed in, invited and waiting, and set up but never invited.
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getByText("Invited")).toBeInTheDocument();
+    expect(screen.getByText("Not invited")).toBeInTheDocument();
+    expect(screen.getByText("Avery Cole")).toBeInTheDocument();
+    expect(screen.getByText("Taylor Reed")).toBeInTheDocument();
+    expect(screen.getByText(/set up and not signed in yet/)).toBeInTheDocument();
+  });
+
+  it("adds staff without inviting them", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin);
+    await user.click(await screen.findByRole("button", { name: /Add staff/ }));
+    await user.type(screen.getByLabelText("Name"), "Morgan Reyes");
+    await user.type(screen.getByLabelText("Email"), "morgan.reyes@beklasik.com");
+    await user.type(screen.getByLabelText("Title (optional)"), "Foreman");
+    await user.click(screen.getByRole("button", { name: "Add to team" }));
+    expect(await screen.findByText("Morgan Reyes")).toBeInTheDocument();
+    // On the roster, with no way in until somebody invites them.
+    expect(screen.getByRole("button", { name: "Send the invitation to Morgan Reyes" })).toBeInTheDocument();
+  });
+
+  it("sends the invitation when the company is ready", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin);
+    const send = await screen.findByRole("button", { name: "Send the invitation to Taylor Reed" });
+    await user.click(send);
+    expect(await screen.findByRole("button", { name: "Copy sign-in link for Taylor Reed" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send the invitation to Taylor Reed" })).not.toBeInTheDocument();
   });
 
   it("shows one person's history and goals", async () => {
@@ -198,7 +225,7 @@ describe("admin", () => {
       expect(await screen.findByRole("heading", { name: company.name })).toBeInTheDocument();
     }
     expect((await screen.findAllByText(/September 2026/)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 invitation pending").length).toBe(3);
+    expect(screen.getAllByText(/invitations? pending/).length).toBe(3);
     expect(screen.getAllByRole("button", { name: /Open hub/ }).length).toBe(3);
   });
 
@@ -213,9 +240,12 @@ describe("admin", () => {
     const user = userEvent.setup();
     renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
     expect(await screen.findByText("Austin Rococo (you)")).toBeInTheDocument();
-    expect(screen.getByText("12 users")).toBeInTheDocument();
+    expect(screen.getByText("Jordan Vale")).toBeInTheDocument();
+    expect(screen.getByText("Marcus Lee")).toBeInTheDocument();
+    expect(screen.getByText("Alex Morgan")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filter by company"), "co-rba");
-    expect(screen.getByText("3 users")).toBeInTheDocument();
+    // RBA is the one company these tests never add anyone to, so its count is stable.
+    expect(screen.getByText("4 users")).toBeInTheDocument();
     expect(screen.queryByText("Austin Rococo (you)")).not.toBeInTheDocument();
   });
 });
@@ -321,5 +351,13 @@ describe("employee profile", () => {
     expect(await screen.findByText("Jordan Vale (you)")).toBeInTheDocument();
     expect(screen.getAllByText("Production").length).toBeGreaterThan(0);
     expect(screen.getByText("May 26, 2026")).toBeInTheDocument();
+  });
+
+  it("keeps people who have never signed in out of a review cycle", async () => {
+    renderWithHub(<CyclePage />, admin, { path: `/gsr/cycles/${currentCycle.id}`, pattern: "/gsr/cycles/:cycleId" });
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Sam Ortega")).toBeInTheDocument();
+    expect(within(table).queryByText("Avery Cole")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Taylor Reed")).not.toBeInTheDocument();
   });
 });

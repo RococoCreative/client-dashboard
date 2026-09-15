@@ -1,11 +1,12 @@
 // Data layer for invitations. An invitation is a row, not an email: no server here holds
 // the service-role key that Supabase's invite mailer needs, so the admin sends the person
 // the sign-in link (inviteLink) and the signup gate lets that address through. When the
-// person signs in, handle_new_user places them and stamps accepted_at.
+// person signs in, handle_new_user claims the roster profile this invitation points at and
+// stamps accepted_at.
 import { db } from "./supabase.ts";
 import type { Invitation, Role } from "../types/database.ts";
 
-const COLUMNS = "id, company_id, email, role, title, invited_by, created_at, accepted_at";
+const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at";
 
 export async function listInvitations(companyId: string): Promise<Invitation[]> {
   const { data, error } = await db()
@@ -22,6 +23,7 @@ export async function createInvitation(input: {
   email: string;
   role: Role;
   title?: string | null;
+  profile_id?: string | null;
 }): Promise<Invitation> {
   const { data, error } = await db()
     .from("invitations")

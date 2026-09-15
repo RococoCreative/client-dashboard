@@ -7,13 +7,14 @@ export async function listInvitations(companyId: string): Promise<Invitation[]> 
   return invitations.filter((i) => i.company_id === companyId);
 }
 
-export async function createInvitation(input: { company_id: string; email: string; role: Role; title?: string | null }): Promise<Invitation> {
+export async function createInvitation(input: { company_id: string; email: string; role: Role; title?: string | null; profile_id?: string | null }): Promise<Invitation> {
   const created: Invitation = {
     id: `invite-${invitations.length + 1}`,
     company_id: input.company_id,
     email: input.email.trim().toLowerCase(),
     role: input.role,
     title: input.title?.trim() || null,
+    profile_id: input.profile_id ?? null,
     invited_by: null,
     created_at: new Date().toISOString(),
     accepted_at: null,

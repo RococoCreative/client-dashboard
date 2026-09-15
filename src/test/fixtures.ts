@@ -203,6 +203,7 @@ function build(company: Company): CompanyBundle {
 
   const profiles: Profile[] = spec.people.map((person, i) => ({
     id: p(`user-${i + 1}`),
+    user_id: p(`auth-${i + 1}`),
     email: `${slugName(person.name)}@${spec.domain}`,
     full_name: person.name,
     title: person.title,
@@ -666,9 +667,51 @@ function build(company: Company): CompanyBundle {
     updated_at: EARLIER,
   }));
 
+  // Staff an admin set up who have no account yet. The first has been invited (the pending
+  // invitation below points at them); at Klasik a second one has not been invited at all, which
+  // is the state this whole feature exists for.
+  const pendingStaff: Profile[] = [
+    {
+      id: p("staff-invited"),
+      user_id: null,
+      email: `new.hire@${spec.domain}`,
+      full_name: "Avery Cole",
+      title: "Carpenter",
+      company_id: company.id,
+      role: "employee",
+      is_rococo_admin: false,
+      is_active: true,
+      hire_date: "2026-10-05",
+      phone: null,
+      department: "Field",
+      reports_to: p("user-1"),
+      created_at: NOW,
+      updated_at: NOW,
+    },
+  ];
+  if (company.slug === "klasik") {
+    pendingStaff.push({
+      id: p("staff-draft"),
+      user_id: null,
+      email: `taylor.reed@${spec.domain}`,
+      full_name: "Taylor Reed",
+      title: "Assistant Superintendent",
+      company_id: company.id,
+      role: "employee",
+      is_rococo_admin: false,
+      is_active: true,
+      hire_date: "2026-11-02",
+      phone: null,
+      department: "Production",
+      reports_to: p("user-1"),
+      created_at: NOW,
+      updated_at: NOW,
+    });
+  }
+
   const invitations: Invitation[] = [
-    { id: p("invite-1"), company_id: company.id, email: `new.hire@${spec.domain}`, role: "employee", title: "Carpenter", invited_by: profiles[0].id, created_at: NOW, accepted_at: null },
-    { id: p("invite-2"), company_id: company.id, email: profiles[1]?.email ?? `someone@${spec.domain}`, role: "employee", title: null, invited_by: profiles[0].id, created_at: EARLIER, accepted_at: EARLIER },
+    { id: p("invite-1"), company_id: company.id, email: `new.hire@${spec.domain}`, role: "employee", title: "Carpenter", profile_id: p("staff-invited"), invited_by: profiles[0].id, created_at: NOW, accepted_at: null },
+    { id: p("invite-2"), company_id: company.id, email: profiles[1]?.email ?? `someone@${spec.domain}`, role: "employee", title: null, profile_id: profiles[1]?.id ?? null, invited_by: profiles[0].id, created_at: EARLIER, accepted_at: EARLIER },
   ];
 
   // Eight months of 2026 with a gentle upward trend, plus two quarters and last year.
@@ -710,13 +753,14 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles, pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
 
 const ROCOCO: Profile = {
   id: "rococo-user-1",
+  user_id: "rococo-auth-1",
   email: "austin@rocococreative.io",
   full_name: "Austin Rococo",
   title: null,

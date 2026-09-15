@@ -26,7 +26,7 @@ import { listCompensation, listEmployeeKpis } from "../../services/employees.ts"
 import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
-import { formatTenure, totalAnnual } from "../../lib/people.ts";
+import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
 
 export default function PersonPage() {
@@ -87,7 +87,11 @@ export default function PersonPage() {
         description={
           <span className="flex flex-wrap items-center gap-2">
             {person.email}
-            <Badge tone={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge>
+            {!hasAccount(person) ? (
+              <Badge tone="warning">Not signed in yet</Badge>
+            ) : (
+              <Badge tone={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge>
+            )}
             {person.hire_date ? <span className="text-ink-3">Hired {formatDate(person.hire_date)}{tenure ? ` · ${tenure}` : ""}</span> : null}
             {manager ? <span className="text-ink-3">Reports to {displayName(manager)}</span> : null}
           </span>
