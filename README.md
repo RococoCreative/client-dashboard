@@ -7,6 +7,10 @@ walled off from each other by row-level security.
 
 > Working on this repo with Claude? Start with `CLAUDE.md` (the standing guardrails).
 
+Designed but not built: the Project assistant module for Kingdom, a per-company to-do list
+that orders itself by importance and location. The full specification is in
+`docs/project-assistant.md`.
+
 ## What is inside
 
 | Module | Admins | Employees |
@@ -152,6 +156,7 @@ and the RBA theme picks them up without a code change.
 - `src/test/`: fixtures and the mocked services the page tests render against.
 - `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
+- `docs/`: designs for work that is specified but not built.
 
 ## Deploy
 
