@@ -1,6 +1,6 @@
 // The Goal Setting Review rules: progress to status, hit or miss, carry forward, splitting.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, hitCount, parseTopics, progressPatch, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, hitCount, progressPatch, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -80,8 +80,3 @@ describe("splitGoals", () => {
   });
 });
 
-describe("parseTopics", () => {
-  it("splits, trims, and deduplicates against existing topics", () => {
-    expect(parseTopics(" Safety, client updates ,safety\nSchedule", ["Client updates"])).toEqual(["Client updates", "Safety", "Schedule"]);
-  });
-});

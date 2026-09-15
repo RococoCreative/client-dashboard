@@ -37,7 +37,11 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    `private` schema (`auth_company_id()`, `is_company_member(cid)`, `can_manage_company(cid)`),
    which PostgREST never exposes; the only public functions are the two login lookups. Child rows
    inherit `company_id` from their parent by trigger; guard triggers stop self-elevation.
-   Pages always pass `company_id` explicitly (a Rococo admin acts on a chosen company).
+   Pages always pass `company_id` explicitly (a Rococo admin acts on a chosen company) and
+   query by it rather than fetching widely and filtering in the UI.
+   Any page that loads a record by an id from the URL calls `assertInCompany()` on what comes
+   back: a Rococo admin can read all three companies and the sidebar switcher changes company
+   without navigating, so a stale id otherwise keeps another tenant's record on screen, live.
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
 5. **A profile is a person, not an account.** `profiles.id` is the person and is stable
    forever; `profiles.user_id` is null until they first sign in. Admins add staff and fill in

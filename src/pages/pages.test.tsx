@@ -60,11 +60,13 @@ describe("dashboard", () => {
     expect(await screen.findByText("2 live campaigns")).toBeInTheDocument();
   });
 
-  it("shows an employee their own score and goals only", async () => {
+  it("shows an employee their own score and goals, plus the company goals, and nobody else's", async () => {
     renderWithHub(<DashboardPage />, employee);
     expect(await screen.findByText(/Welcome back, Sam/)).toBeInTheDocument();
     expect(await screen.findByText("Run the weekly client update without prompting")).toBeInTheDocument();
-    expect(screen.queryByText("Closed sales")).not.toBeInTheDocument();
+    // The company goals page promises these show on the dashboard for everyone, so they do.
+    expect(await screen.findByText("Closed sales")).toBeInTheDocument();
+    // A teammate's name is another matter: an employee's dashboard is their own.
     expect(screen.queryByText("Riley Park")).not.toBeInTheDocument();
   });
 });

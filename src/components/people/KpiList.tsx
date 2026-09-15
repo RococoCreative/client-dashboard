@@ -6,6 +6,7 @@ import { Check, Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
+import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../services/employees.ts";
@@ -33,6 +34,11 @@ export default function KpiList({
 }) {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
+  // Removing a KPI drops the year's target and where it stands, so it is confirmed the same
+  // way the compensation table beside it confirms a removed line.
+  const [deleting, setDeleting] = useState<EmployeeKpi | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function save(kpi: EmployeeKpi, patch: Parameters<typeof updateEmployeeKpi>[1]) {
     try {
@@ -57,12 +63,19 @@ export default function KpiList({
     }
   }
 
-  async function remove(kpi: EmployeeKpi) {
+  async function remove() {
+    if (!deleting) return;
+    setBusy(true);
+    setError("");
     try {
-      await deleteEmployeeKpi(kpi.id);
-      onChange((list) => list.filter((k) => k.id !== kpi.id));
+      const id = deleting.id;
+      await deleteEmployeeKpi(id);
+      onChange((list) => list.filter((k) => k.id !== id));
+      setDeleting(null);
     } catch (err) {
-      onError(errorMessage(err));
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -119,7 +132,7 @@ export default function KpiList({
                 hitBadge(kpi)
               )}
               {canEdit && !compact ? (
-                <IconButton label={`Remove KPI ${kpi.name}`} onClick={() => void remove(kpi)}>
+                <IconButton label={`Remove KPI ${kpi.name}`} onClick={() => setDeleting(kpi)}>
                   <Trash2 size={14} aria-hidden />
                 </IconButton>
               ) : null}
@@ -139,6 +152,17 @@ export default function KpiList({
             <Plus size={14} aria-hidden /> Add
           </Button>
         </form>
+      ) : null}
+      {deleting ? (
+        <ConfirmDialog
+          title={`Remove "${deleting.name}"?`}
+          body={`The ${year} target and where it stands are removed with it.`}
+          confirmLabel="Remove KPI"
+          busy={busy}
+          error={error}
+          onConfirm={() => void remove()}
+          onCancel={() => { setDeleting(null); setError(""); }}
+        />
       ) : null}
     </div>
   );

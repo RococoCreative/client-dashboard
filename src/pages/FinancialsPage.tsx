@@ -21,15 +21,8 @@ import { useAsync } from "../hooks/useAsync.ts";
 import { createSnapshot, deleteSnapshot, listSnapshots, updateSnapshot, upsertSnapshots } from "../services/financials.ts";
 import { CSV_HEADER_HELP, CSV_SAMPLE, deriveSnapshot, parseSnapshotsCsv, periodLabel, snapPeriodEnd, snapPeriodStart, type CsvImportResult } from "../lib/financials.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatMoney, formatPercent, parseDate, todayIso } from "../lib/format.ts";
+import { formatMoney, formatPercent, parseDate, parseMoney, pluralize, todayIso } from "../lib/format.ts";
 import { PERIOD_TYPE_LABELS, keysOf, type FinancialSnapshot, type PeriodType } from "../types/database.ts";
-
-function numberOrNull(raw: string): number | null {
-  const text = raw.trim().replace(/[$,\s]/g, "");
-  if (text === "") return null;
-  const value = Number(text);
-  return Number.isFinite(value) ? value : null;
-}
 
 function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: { companyId: string; snapshot: FinancialSnapshot | null; defaultType: PeriodType; onClose: () => void; onSaved: (s: FinancialSnapshot) => void }) {
   const [type, setType] = useState<PeriodType>(snapshot?.period_type ?? defaultType);
@@ -43,12 +36,12 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const preview = deriveSnapshot({ revenue: numberOrNull(revenue) ?? 0, cogs: numberOrNull(cogs) ?? 0, opex: numberOrNull(opex) ?? 0, net_profit: numberOrNull(net) });
+  const preview = deriveSnapshot({ revenue: parseMoney(revenue) ?? 0, cogs: parseMoney(cogs) ?? 0, opex: parseMoney(opex) ?? 0, net_profit: parseMoney(net) });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    const revenueValue = numberOrNull(revenue);
+    const revenueValue = parseMoney(revenue);
     if (revenueValue === null) return setError("Enter the revenue for the period.");
     const startDate = parseDate(start);
     if (!startDate) return setError("Pick the period.");
@@ -61,10 +54,10 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
         period_start: snapped,
         period_end: snapPeriodEnd(type, snapped),
         revenue: revenueValue,
-        cogs: numberOrNull(cogs) ?? 0,
-        opex: numberOrNull(opex) ?? 0,
-        net_profit: numberOrNull(net),
-        cash_on_hand: numberOrNull(cash),
+        cogs: parseMoney(cogs) ?? 0,
+        opex: parseMoney(opex) ?? 0,
+        net_profit: parseMoney(net),
+        cash_on_hand: parseMoney(cash),
         notes: notes.trim() || null,
       };
       onSaved(snapshot ? await updateSnapshot(snapshot.id, payload) : await createSnapshot({ company_id: companyId, source: "manual", ...payload }));
@@ -206,7 +199,7 @@ function ImportDialog({ companyId, onClose, onImported }: { companyId: string; o
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button onClick={() => void handleImport()} disabled={busy || !parsed || parsed.rows.length === 0}>
-            {busy ? "Importing..." : `Import ${parsed?.rows.length ?? 0} ${parsed?.rows.length === 1 ? "period" : "periods"}`}
+            {busy ? "Importing..." : `Import ${pluralize(parsed?.rows.length ?? 0, "period")}`}
           </Button>
         </div>
       </div>
@@ -297,7 +290,7 @@ export default function FinancialsPage() {
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
-      ) : rows.length === 0 ? (
+      ) : !state.data ? null : rows.length === 0 ? (
         <EmptyState
           eyebrow="Financials"
           title={`No ${PERIOD_TYPE_LABELS[type].toLowerCase()} snapshots yet`}
@@ -396,7 +389,7 @@ export default function FinancialsPage() {
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete ${periodLabel(deleting.period_type, deleting.period_start)}?`} body="The period's figures are removed. Re-importing the CSV brings them back." confirmLabel="Delete period" busy={busy} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete ${periodLabel(deleting.period_type, deleting.period_start)}?`} body="The period's figures are removed. Re-importing the CSV brings them back." confirmLabel="Delete period" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
       ) : null}
     </>
   );

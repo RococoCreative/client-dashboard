@@ -67,7 +67,7 @@ export default function Onboarding({
             autoComplete="organization-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Project Manager"
+            placeholder="Your position"
             className={inputClass}
           />
         </Field>

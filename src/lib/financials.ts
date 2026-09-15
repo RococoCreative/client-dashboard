@@ -1,9 +1,9 @@
 // Financial snapshot math and the CSV import mapping. Pure and tested. Margins derive from
 // the stored figures; periods snap to the first day of their month, quarter, or year so
 // two uploads of the same month land on the same row.
-import { csvToObjects, parseMoney } from "./csv.ts";
+import { csvToObjects } from "./csv.ts";
 import { periodEnd, periodStart } from "./gsr/cycles.ts";
-import { parseDate } from "./format.ts";
+import { parseDate, parseMoney } from "./format.ts";
 import type { Cadence, FinancialSnapshot, PeriodType } from "../types/database.ts";
 
 const CADENCE_FOR: Record<PeriodType, Cadence> = { month: "monthly", quarter: "quarterly", year: "annual" };

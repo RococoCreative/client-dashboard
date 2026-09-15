@@ -78,6 +78,10 @@ export default function CompanyGoalsPage() {
   const companyId = company!.id;
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
+  // Next year for planning, and four years back so past goals stay reachable. The old
+  // one-year-back window locked a year out of being opened, edited, or marked hit as soon as it
+  // was eighteen months old, while reviews and the employee snapshot went on rendering it.
+  const yearOptions = [currentYear + 1, currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
   const [dialog, setDialog] = useState<{ goal: CompanyGoal | null } | null>(null);
   const [deleting, setDeleting] = useState<CompanyGoal | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,7 +124,7 @@ export default function CompanyGoalsPage() {
         actions={
           <>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>
-              {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
+              {yearOptions.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -132,7 +136,7 @@ export default function CompanyGoalsPage() {
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {!state.data && !state.error ? (
         <SkeletonRows rows={3} />
-      ) : goals.length === 0 ? (
+      ) : !state.data ? null : goals.length === 0 ? (
         <EmptyState eyebrow={String(year)} title="No company goals yet" body="Add the three to six numbers leadership reviews every month." action={<Button onClick={() => setDialog({ goal: null })}>Add goal</Button>} />
       ) : (
         <ul className="space-y-3">
@@ -170,7 +174,7 @@ export default function CompanyGoalsPage() {
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="This removes the goal from the dashboard for everyone." confirmLabel="Delete goal" busy={busy} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="This removes the goal from the dashboard for everyone." confirmLabel="Delete goal" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
       ) : null}
     </>
   );

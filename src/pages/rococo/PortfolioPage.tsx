@@ -28,6 +28,8 @@ import { currentCycle } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
+import { hasAccount } from "../../lib/people.ts";
+import { errorMessage } from "../../lib/errors.ts";
 import type { Company, CompanyDomain, FinancialSnapshot, ReviewCycle } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
@@ -63,6 +65,10 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     listInvitations(company.id),
   ]);
   const active = people.filter((p) => p.is_active);
+  // A cycle only opens reviews for people who have signed in, so the fraction here counts
+  // those, the way the cycle page does. Counting the whole roster made a finished cycle read
+  // as permanently unfinished as soon as an admin added staff they had not invited yet.
+  const reviewable = active.filter(hasAccount);
   const admins = active.filter((p) => p.role === "admin");
   const cycle = currentCycle(cycles);
   const cycleReviews = cycle ? reviews.filter((r) => r.cycle_id === cycle.id) : [];
@@ -99,7 +105,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     admins: admins.length,
     cycle,
     reviewsComplete: cycleReviews.filter((r) => r.status === "complete").length,
-    reviewsTotal: active.length,
+    reviewsTotal: reviewable.length,
     teamScore,
     pillarTotal,
     publishedSops: published.length,
@@ -198,6 +204,7 @@ export default function PortfolioPage() {
   const { companies, setActiveCompanyId, refreshCompanies } = useHub();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
   const companyKey = companies.map((c) => c.id).join(",");
 
   const state = useAsync(async () => {
@@ -229,11 +236,12 @@ export default function PortfolioPage() {
       <Tabs items={PORTFOLIO_TABS} />
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
+      {refreshError ? <Notice tone="error" className="mb-4">{refreshError}</Notice> : null}
 
-      {companies.length === 0 ? (
-        <EmptyState eyebrow="Portfolio" title="No companies yet" body="Create the first company, set its theme and sign-in domain, and invite its owner." action={<Button onClick={() => setCreating(true)}>New company</Button>} />
-      ) : !state.data && !state.error ? (
+      {!state.data && !state.error ? (
         <div className="grid gap-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
+      ) : !state.data ? null : companies.length === 0 ? (
+        <EmptyState eyebrow="Portfolio" title="No companies yet" body="Create the first company, set its theme and sign-in domain, and invite its owner." action={<Button onClick={() => setCreating(true)}>New company</Button>} />
       ) : (
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-4">
@@ -255,7 +263,7 @@ export default function PortfolioPage() {
           onClose={() => setCreating(false)}
           onCreated={() => {
             setCreating(false);
-            void refreshCompanies();
+            refreshCompanies().catch((err: unknown) => setRefreshError(errorMessage(err)));
           }}
         />
       ) : null}

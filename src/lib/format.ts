@@ -22,6 +22,29 @@ export function formatMoney(value: number | null | undefined, compact = false): 
   return compact ? moneyCompact.format(value) : money.format(value);
 }
 
+// The inverse of formatMoney, for anything a person types into a money or number field:
+// "$1,240,000.50" -> 1240000.5; "(500)" -> -500; "1 200" -> 1200; "" and "n/a" -> null.
+// One implementation, because a copy that forgets one of these shapes silently saves null and
+// the figure disappears from the screen it was typed into.
+export function parseMoney(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  let text = value.trim();
+  if (text === "") return null;
+  let negative = false;
+  if (/^\(.*\)$/.test(text)) {
+    negative = true;
+    text = text.slice(1, -1);
+  }
+  text = text.replace(/[$,\s]/g, "");
+  if (text.startsWith("-")) {
+    negative = !negative;
+    text = text.slice(1);
+  }
+  if (!/^\d*\.?\d+$/.test(text)) return null;
+  const number = Number(text);
+  return negative ? -number : number;
+}
+
 export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return EMPTY;
   return number.format(value);

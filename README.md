@@ -53,8 +53,13 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0013`). Every file is
-   idempotent and safe to re-run. `0006` seeds the three companies, their sign-in domains
+   `supabase/migrations/` in numeric order (`0001` through `0014`), once each, on a fresh
+   project. Each file is idempotent in the sense that it can be applied to a project that
+   already has part of it, but the set is a history, not a menu: later files move helpers into
+   the `private` schema and rewrite policies, so re-running an earlier file on an
+   already-migrated project either errors or reinstates a superseded rule. Go forwards only,
+   and write a new numbered file rather than re-running an old one. `0006` seeds the three
+   companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
    GSR configuration for each. Check the domains in the Rococo section before inviting
    anyone; a domain decides who can self-serve a sign-in.

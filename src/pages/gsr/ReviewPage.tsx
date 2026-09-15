@@ -5,7 +5,7 @@
 // status. Employees open the same page read-only for their own review (RLS makes sure it
 // is theirs) with their reflection and their own goals' steps and progress writable. Every
 // change saves on its own, so there is no save button to forget.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
@@ -13,6 +13,7 @@ import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
+import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -25,6 +26,7 @@ import { inputClass, labelClass, selectClass } from "../../components/ui/forms.t
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
+import { assertInCompany } from "../../lib/tenancy.ts";
 import {
   createScore,
   deleteScore,
@@ -45,7 +47,7 @@ import { listEmployeeKpis } from "../../services/employees.ts";
 import { computeReviewScore } from "../../lib/gsr/scoring.ts";
 import { cycleYear, previousCycle } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDateTime, formatNumber, formatPeriod } from "../../lib/format.ts";
+import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney } from "../../lib/format.ts";
 import {
   PREVIOUS_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -65,9 +67,23 @@ export default function ReviewPage() {
   const companyId = company!.id;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // A deliverable line carries its target, actual and notes, and removing it changes the
+  // pillar's score, so it is confirmed rather than deleted on a single icon click.
+  const [removing, setRemoving] = useState<ReviewScore | null>(null);
+  const [removeError, setRemoveError] = useState("");
+
+  // A criterion can have two saves in flight at once: blurring a note commits it as the rating
+  // beside it is clicked. Both would read the same render-time scores array, both would see
+  // nothing stored yet, and both would insert. The partial unique index rejects the second and
+  // the rating is silently lost. So saves for one criterion queue behind each other, and this
+  // map carries the row id the previous save created to the next one. Keyed by review as well
+  // as criterion, so nothing survives a move to another review.
+  const savedScoreIds = useRef(new Map<string, string>());
+  const saveChains = useRef(new Map<string, Promise<unknown>>());
 
   const state = useAsync(async () => {
     const review = await getReview(reviewId);
+    assertInCompany(review, companyId, "review");
     const [cycle, cycles, pillars, criteria, scores, people, goals] = await Promise.all([
       getCycle(review.cycle_id),
       listCycles(review.company_id),
@@ -85,11 +101,14 @@ export default function ReviewPage() {
     return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year };
   }, [reviewId, companyId]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
   const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
+  // Written on Mark complete; this is where it is read back, so a signed-off review says who
+  // signed it off.
+  const reviewer = review.reviewer_id ? (people.find((p) => p.id === review.reviewer_id) ?? null) : null;
   const isOwn = review.employee_id === profile.id;
   const canScore = isAdmin && cycle.status === "open";
   // Monthly cycles are Goal Setting Reviews: goals lead, scores follow.
@@ -106,21 +125,30 @@ export default function ReviewPage() {
     );
   }
 
+  // Only an admin may move a review's status: guard_review_employee_fields rejects the write
+  // from anyone else. An employee ticking a step on their own goal would otherwise get a
+  // permission error for a save that actually succeeded.
   async function markInProgress() {
-    if (review.status !== "not_started") return;
+    if (!isAdmin || review.status !== "not_started") return;
     const next = await updateReview(review.id, { status: "in_progress" });
     state.setData((prev) => (prev ? { ...prev, review: next } : prev));
   }
 
   async function saveRating(pillar: GsrPillar, criterion: GsrCriterion, patch: { rating?: number | null; notes?: string | null }) {
     setError("");
-    try {
-      const existing = scores.find((s) => s.criterion_id === criterion.id);
-      const saved = existing
-        ? await updateScore(existing.id, patch)
+    const key = `${review.id}:${criterion.id}`;
+    const run = (saveChains.current.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+      const existingId = savedScoreIds.current.get(key) ?? scores.find((s) => s.criterion_id === criterion.id)?.id;
+      const saved = existingId
+        ? await updateScore(existingId, patch)
         : await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, criterion_id: criterion.id, ...patch });
+      savedScoreIds.current.set(key, saved.id);
       replaceScore(saved);
       await markInProgress();
+    });
+    saveChains.current.set(key, run);
+    try {
+      await run;
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -147,13 +175,19 @@ export default function ReviewPage() {
     }
   }
 
-  async function removeLineItem(score: ReviewScore) {
-    setError("");
+  async function removeLineItem() {
+    if (!removing) return;
+    setBusy(true);
+    setRemoveError("");
     try {
-      await deleteScore(score.id);
-      state.setData((prev) => (prev ? { ...prev, scores: prev.scores.filter((s) => s.id !== score.id) } : prev));
+      const id = removing.id;
+      await deleteScore(id);
+      state.setData((prev) => (prev ? { ...prev, scores: prev.scores.filter((s) => s.id !== id) } : prev));
+      setRemoving(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setRemoveError(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -176,13 +210,6 @@ export default function ReviewPage() {
     return patch;
   };
 
-  const numberOrNull = (raw: string): number | null => {
-    const trimmed = raw.trim();
-    if (trimmed === "") return null;
-    const value = Number(trimmed.replace(/[$,]/g, ""));
-    return Number.isFinite(value) ? value : null;
-  };
-
   return (
     <>
       <PageHeader
@@ -195,7 +222,12 @@ export default function ReviewPage() {
             {employee?.title ? <span>{employee.title}</span> : null}
             <Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge>
             {cycle.status === "closed" ? <Badge>Cycle closed</Badge> : null}
-            {review.completed_at ? <span className="text-ink-3">Completed {formatDateTime(review.completed_at)}</span> : null}
+            {review.completed_at ? (
+              <span className="text-ink-3">
+                Completed {formatDateTime(review.completed_at)}
+                {reviewer ? ` by ${displayName(reviewer)}` : ""}
+              </span>
+            ) : null}
           </span>
         }
         actions={
@@ -213,6 +245,7 @@ export default function ReviewPage() {
         }
       />
 
+      {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {cycle.theme ? (
         <Notice tone="info" className="mb-6">
@@ -353,17 +386,17 @@ export default function ReviewPage() {
                                     ) : null}
                                   </td>
                                   <td className="w-28 py-2 pr-2 align-top">
-                                    <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { target: numberOrNull(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                    <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { target: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
                                   </td>
                                   <td className="w-28 py-2 pr-2 align-top">
-                                    <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { actual: numberOrNull(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                    <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { actual: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
                                   </td>
                                   <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
                                     {achieved === null ? "-" : `${Math.round(achieved * 100)}%`}
                                   </td>
                                   <td className="w-10 py-2 text-right align-top">
                                     {canScore ? (
-                                      <IconButton label="Remove deliverable" onClick={() => void removeLineItem(item)}>
+                                      <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
                                         <Trash2 size={14} aria-hidden />
                                       </IconButton>
                                     ) : null}
@@ -433,6 +466,18 @@ export default function ReviewPage() {
           </Section>
         </div>
       </div>
+
+      {removing ? (
+        <ConfirmDialog
+          title={removing.label ? `Remove "${removing.label}"?` : "Remove this deliverable?"}
+          body="Its target, actual and notes go with it, and the pillar's score is recalculated without it."
+          confirmLabel="Remove deliverable"
+          busy={busy}
+          error={removeError}
+          onConfirm={() => void removeLineItem()}
+          onCancel={() => { setRemoving(null); setRemoveError(""); }}
+        />
+      ) : null}
     </>
   );
 }

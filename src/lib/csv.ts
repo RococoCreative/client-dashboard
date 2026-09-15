@@ -69,23 +69,3 @@ export function csvToObjects(text: string): Record<string, string>[] {
     return record;
   });
 }
-
-// "$1,240,000.50" -> 1240000.5; "(500)" -> -500; "" -> null.
-export function parseMoney(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  let text = value.trim();
-  if (text === "") return null;
-  let negative = false;
-  if (/^\(.*\)$/.test(text)) {
-    negative = true;
-    text = text.slice(1, -1);
-  }
-  text = text.replace(/[$,\s]/g, "");
-  if (text.startsWith("-")) {
-    negative = !negative;
-    text = text.slice(1);
-  }
-  if (!/^\d*\.?\d+$/.test(text)) return null;
-  const number = Number(text);
-  return negative ? -number : number;
-}

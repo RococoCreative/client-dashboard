@@ -16,7 +16,7 @@ import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/statu
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
-import { computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { reviewHistory } from "../../lib/gsr/history.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
 import { MY_TABS } from "./myTabs.ts";
@@ -31,18 +31,11 @@ export default function MyGsrPage() {
     return { reviews, cycles, pillars, scores };
   }, [companyId, profile.id]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { reviews, cycles, pillars, scores } = state.data;
-  const rows = reviews
-    .map((review) => {
-      const cycle = cycles.find((c) => c.id === review.cycle_id) ?? null;
-      const own = scores.filter((s) => s.review_id === review.id);
-      const result = own.length > 0 ? computeReviewScore(pillars, own) : null;
-      return { review, cycle, result };
-    })
-    .sort((a, b) => (a.cycle?.period_start ?? "") < (b.cycle?.period_start ?? "") ? 1 : -1);
+  const rows = reviewHistory(reviews, cycles, pillars, scores);
   const latest = rows[0] ?? null;
 
   return (

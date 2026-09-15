@@ -210,10 +210,10 @@ export default function PeoplePage() {
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
-      ) : (
+      ) : !state.data ? null : (
         <Section
           eyebrow="Team"
-          title={`${people.length} ${people.length === 1 ? "person" : "people"}`}
+          title={pluralize(people.length, "person", "people")}
           description={waiting.length > 0 ? `${pluralize(waiting.length, "person", "people")} set up and not signed in yet.` : undefined}
           padded={false}
         >
@@ -337,6 +337,7 @@ export default function PeoplePage() {
           body="They stay on the team here and the link stops working. Send a new invitation whenever you are ready."
           confirmLabel="Cancel invitation"
           busy={busy}
+          error={error}
           onConfirm={() => void handleCancelInvite()}
           onCancel={() => setCancelling(null)}
         />
@@ -347,6 +348,7 @@ export default function PeoplePage() {
           body="This deletes their profile along with anything set up for them. They have never signed in, so nothing they did is lost."
           confirmLabel="Remove"
           busy={busy}
+          error={error}
           onConfirm={() => void handleRemoveStaff()}
           onCancel={() => setRemoving(null)}
         />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayName, formatMoney, formatPercent, formatPeriod, initials, parseDate } from "./format.ts";
+import { displayName, formatMoney, formatPercent, formatPeriod, initials, parseDate, parseMoney } from "./format.ts";
 
 describe("format", () => {
   it("formats money and percentages with a hyphen for empties", () => {
@@ -29,5 +29,17 @@ describe("format", () => {
     expect(initials({ full_name: "Jeff Klasik", email: "j@x.com" })).toBe("JK");
     expect(initials({ full_name: "Cher", email: "c@x.com" })).toBe("C");
     expect(initials({ full_name: null, email: "jk@x.com" })).toBe("JK");
+  });
+});
+
+describe("parseMoney", () => {
+  it("reads accounting formats", () => {
+    expect(parseMoney("$1,240,000.50")).toBe(1240000.5);
+    expect(parseMoney("(500)")).toBe(-500);
+    expect(parseMoney("-$20")).toBe(-20);
+    expect(parseMoney("")).toBeNull();
+    expect(parseMoney("n/a")).toBeNull();
+    expect(parseMoney(undefined)).toBeNull();
+    expect(parseMoney("1 200")).toBe(1200);
   });
 });

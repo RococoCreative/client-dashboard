@@ -10,16 +10,9 @@ import IconButton from "../ui/IconButton.tsx";
 import { inputClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { createCompensationItem, deleteCompensationItem, updateCompensationItem } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { formatMoney } from "../../lib/format.ts";
+import { formatMoney, parseMoney } from "../../lib/format.ts";
 import { totalAnnual } from "../../lib/people.ts";
 import type { CompensationItem } from "../../types/database.ts";
-
-function moneyOrNull(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  const value = Number(trimmed.replace(/[$,\s]/g, ""));
-  return Number.isFinite(value) ? value : null;
-}
 
 export default function CompensationTable({
   companyId,
@@ -40,6 +33,9 @@ export default function CompensationTable({
   const [annual, setAnnual] = useState("");
   const [deleting, setDeleting] = useState<CompensationItem | null>(null);
   const [busy, setBusy] = useState(false);
+  // A refused delete has to be said inside the dialog: the page's own notice would sit behind
+  // the scrim where nobody reads it.
+  const [error, setError] = useState("");
 
   async function save(item: CompensationItem, patch: Parameters<typeof updateCompensationItem>[1]) {
     try {
@@ -55,7 +51,7 @@ export default function CompensationTable({
     const text = name.trim();
     if (!text) return;
     try {
-      const created = await createCompensationItem({ company_id: companyId, employee_id: employeeId, name: text, annual_amount: moneyOrNull(annual) ?? 0, sort_order: items.length + 1 });
+      const created = await createCompensationItem({ company_id: companyId, employee_id: employeeId, name: text, annual_amount: parseMoney(annual) ?? 0, sort_order: items.length + 1 });
       onChange((list) => [...list, created]);
       setName("");
       setAnnual("");
@@ -67,13 +63,14 @@ export default function CompensationTable({
   async function remove() {
     if (!deleting) return;
     setBusy(true);
+    setError("");
     try {
       await deleteCompensationItem(deleting.id);
       const id = deleting.id;
       onChange((list) => list.filter((c) => c.id !== id));
       setDeleting(null);
     } catch (err) {
-      onError(errorMessage(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -105,7 +102,7 @@ export default function CompensationTable({
                   </td>
                   <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(item.annual_amount / 12)}</td>
                   <td className={`${tdClass} tnum text-right`}>
-                    {canEdit ? <div className="ml-auto w-28"><BlurInput value={String(item.annual_amount)} ariaLabel={`Annual for ${item.name}`} onSave={(next) => void save(item, { annual_amount: moneyOrNull(next) ?? 0 })} className={`${inputClass} tnum mt-0 text-right text-[13px]`} /></div> : formatMoney(item.annual_amount)}
+                    {canEdit ? <div className="ml-auto w-28"><BlurInput value={String(item.annual_amount)} ariaLabel={`Annual for ${item.name}`} onSave={(next) => void save(item, { annual_amount: parseMoney(next) ?? 0 })} className={`${inputClass} tnum mt-0 text-right text-[13px]`} /></div> : formatMoney(item.annual_amount)}
                   </td>
                   <td className={`${tdClass} text-ink-2`}>
                     {canEdit ? <BlurInput value={item.note ?? ""} placeholder="Optional" ariaLabel={`Note for ${item.name}`} onSave={(next) => void save(item, { note: next.trim() || null })} className={`${inputClass} mt-0 text-[13px]`} /> : item.note ?? ""}
@@ -145,7 +142,7 @@ export default function CompensationTable({
         </form>
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Remove "${deleting.name}"?`} body="The line comes off this person's compensation table." confirmLabel="Remove line" busy={busy} onConfirm={() => void remove()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Remove "${deleting.name}"?`} body="The line comes off this person's compensation table." confirmLabel="Remove line" busy={busy} error={error} onConfirm={() => void remove()} onCancel={() => { setDeleting(null); setError(""); }} />
       ) : null}
     </div>
   );

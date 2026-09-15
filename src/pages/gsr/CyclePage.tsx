@@ -20,6 +20,7 @@ import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { bandClass } from "../../components/ui/bandClass.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
+import { assertInCompany } from "../../lib/tenancy.ts";
 import {
   deleteCycle,
   ensureReview,
@@ -118,11 +119,14 @@ export default function CyclePage() {
       listPillars(companyId),
       listCompanyProfiles(companyId),
     ]);
+    // The roster below belongs to the active company, so the cycle has to as well. Otherwise
+    // starting reviews here pairs this company's people with another company's cycle.
+    assertInCompany(cycle, companyId, "review cycle");
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     return { cycle, reviews, pillars, people, scores };
   }, [cycleId, companyId]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { cycle, reviews, pillars, people, scores } = state.data;
@@ -135,7 +139,9 @@ export default function CyclePage() {
     const result = review && own.length > 0 ? computeReviewScore(pillars, own) : null;
     return { person, review, result };
   });
-  const complete = reviews.filter((r) => r.status === "complete").length;
+  // Counted over the same rows the table shows, so the fraction on top and the list below
+  // never disagree about who is in this cycle.
+  const complete = rows.filter((r) => r.review?.status === "complete").length;
   const teamAverage = averageScore(rows.map((r) => r.result?.overall ?? null));
   const missing = rows.filter((r) => !r.review);
 
@@ -210,11 +216,12 @@ export default function CyclePage() {
         }
       />
 
+      {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {actionError ? <Notice tone="error" className="mb-4">{actionError}</Notice> : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="People" value={team.length} />
-        <Stat label="Reviews complete" value={`${complete}/${reviews.length}`} hint={missing.length > 0 ? `${missing.length} not started` : "Everyone has a review"} />
+        <Stat label="Reviews complete" value={`${complete}/${team.length}`} hint={missing.length > 0 ? `${missing.length} not started` : "Everyone has a review"} />
         <Stat label="Team score" value={<span className={bandClass(teamAverage)}>{teamAverage ?? "-"}</span>} hint="Average of scored reviews" />
       </div>
 
@@ -310,6 +317,7 @@ export default function CyclePage() {
           body="Every review and score in this cycle is deleted with it. Closing the cycle keeps the history; deleting does not."
           confirmLabel="Delete cycle"
           busy={busy}
+          error={actionError}
           onConfirm={() => void handleDelete()}
           onCancel={() => setDeleting(false)}
         />

@@ -65,6 +65,11 @@ function GoalDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const legacyOngoing = goal !== null && goal.scope === "cycle" && goal.cycle_id === null;
+  // This year and next to set a new one, plus whatever year the goal being edited is actually
+  // stamped with. A yearly goal created from a cycle in another year would otherwise open on a
+  // blank period, and the only way out of blank was to move the goal to a year it does not
+  // belong to, which drops it out of the review that matches on the year.
+  const yearOptions = [...new Set([thisYear, thisYear + 1, ...(goal?.scope === "year" && goal.year ? [goal.year] : [])])].sort((a, b) => a - b);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -110,8 +115,9 @@ function GoalDialog({
             </Field>
             <Field label="Period" htmlFor="goal-period" hint="A yearly goal, or one tied to a review cycle so it shows up in that review.">
               <select id="goal-period" value={period} onChange={(e) => setPeriod(e.target.value)} className={selectClass}>
-                <option value={`year:${thisYear}`}>Yearly goal, {thisYear}</option>
-                <option value={`year:${thisYear + 1}`}>Yearly goal, {thisYear + 1}</option>
+                {yearOptions.map((y) => (
+                  <option key={y} value={`year:${y}`}>Yearly goal, {y}</option>
+                ))}
                 {cycles.map((c) => (
                   <option key={c.id} value={`cycle:${c.id}`}>{c.name}</option>
                 ))}
@@ -325,6 +331,7 @@ export default function GoalsPanel({
           body="The goal and its action steps are removed. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
+          error={error}
           onConfirm={() => void handleDelete()}
           onCancel={() => setDeleting(null)}
         />

@@ -13,7 +13,7 @@ import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import { SkeletonCard, SkeletonRows } from "../components/ui/Skeleton.tsx";
-import { GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
+import { CAMPAIGN_STATUS_TONE, GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import {
@@ -32,10 +32,13 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
-import { currentCycle } from "../lib/gsr/cycles.ts";
+import { currentCycle, cycleSettled } from "../lib/gsr/cycles.ts";
+import { goalOutcome, stepsTaken } from "../lib/gsr/goals.ts";
+import { reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { hasAccount } from "../lib/people.ts";
 import {
+  CAMPAIGN_STATUS_LABELS,
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
@@ -95,7 +98,7 @@ function AdminDashboard() {
     return { people, cycles, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns };
   }, [companyId, year]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -276,7 +279,7 @@ function AdminDashboard() {
                   {liveCampaigns.slice(0, 4).map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-3 text-[13px]">
                       <span className="truncate text-ink">{c.name}</span>
-                      <Badge tone={c.status === "active" ? "success" : "warning"}>{c.status === "active" ? "Active" : "Paused"}</Badge>
+                      <Badge tone={CAMPAIGN_STATUS_TONE[c.status]}>{CAMPAIGN_STATUS_LABELS[c.status]}</Badge>
                     </li>
                   ))}
                 </ul>
@@ -318,27 +321,38 @@ function AdminDashboard() {
 function EmployeeDashboard() {
   const { company, profile } = useHub();
   const companyId = company!.id;
+  const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [reviews, pillars, goals, recentSops, cycles] = await Promise.all([
+    const [reviews, pillars, goals, recentSops, cycles, companyGoals] = await Promise.all([
       listEmployeeReviews(profile.id),
       listPillars(companyId),
       listGoals(companyId, profile.id),
       listRecentSops(companyId, 5),
       listCycles(companyId),
+      listCompanyGoals(companyId, year),
     ]);
-    const latest = reviews[0] ?? null;
+    // Latest by the period the review covers, the same rule My GSR and the person page use.
+    // The service orders by row creation time, which puts a review started out of order first.
+    const history = reviewHistory(reviews, cycles, pillars, []);
+    const latest = history[0]?.review ?? null;
+    const cycle: ReviewCycle | null = history[0]?.cycle ?? null;
     const scores = latest ? await listScoresForReviews([latest.id]) : [];
-    const cycle: ReviewCycle | null = latest ? (cycles.find((c) => c.id === latest.cycle_id) ?? null) : null;
-    return { latest, cycle, pillars, scores, goals, recentSops };
-  }, [companyId, profile.id]);
+    return { latest, cycle, pillars, scores, goals, recentSops, cycles, companyGoals };
+  }, [companyId, profile.id, year]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { latest, cycle, pillars, scores, goals, recentSops } = state.data;
+  const { latest, cycle, pillars, scores, goals, recentSops, cycles, companyGoals } = state.data;
   const result = latest && scores.length > 0 ? computeReviewScore(pillars, scores) : null;
-  const openGoals = goals.filter((g) => g.status !== "achieved" && g.status !== "missed");
+  // A goal is open until it is hit, or until its period settles and it reads as a miss.
+  // Nothing ever writes the 'missed' status, so counting on status alone kept every unfinished
+  // goal from every closed cycle on this list for good.
+  const openGoals = goals.filter((goal) => {
+    const goalCycle = goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id) ?? null) : null;
+    return goalOutcome(goal, goalCycle ? cycleSettled(goalCycle) : false) === "open";
+  });
 
   return (
     <>
@@ -377,13 +391,13 @@ function EmployeeDashboard() {
           ) : (
             <ul className="divide-y divide-line">
               {openGoals.slice(0, 6).map((goal) => {
-                const done = goal.action_steps.filter((s) => s.done).length;
+                const steps = stepsTaken(goal);
                 return (
                   <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-sm text-ink">{goal.title}</p>
                       <p className="text-[12px] text-ink-3">
-                        {goal.action_steps.length > 0 ? `${done}/${goal.action_steps.length} steps done` : "No action steps yet"}
+                        {steps.total > 0 ? `${steps.done}/${steps.total} steps done` : "No action steps yet"}
                       </p>
                     </div>
                     <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
@@ -393,6 +407,24 @@ function EmployeeDashboard() {
             </ul>
           )}
         </Section>
+
+        {companyGoals.length > 0 ? (
+          <Section eyebrow={`Company goals ${year}`} title="What the team is chasing" className="lg:col-span-3" padded={false}>
+            <ul className="divide-y divide-line">
+              {companyGoals.map((goal) => (
+                <li key={goal.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-ink">{goal.name}</p>
+                    <p className="tnum text-[12px] text-ink-3">
+                      {goal.current_display || "-"}{goal.target_display ? ` of ${goal.target_display}` : ""}
+                    </p>
+                  </div>
+                  <Badge tone={goal.is_hit ? "success" : "neutral"}>{goal.is_hit ? "Hit" : "In progress"}</Badge>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
 
         <Section
           eyebrow="SOP library"

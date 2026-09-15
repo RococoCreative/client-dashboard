@@ -77,17 +77,3 @@ export function splitGoals(
 export function hitCount(goals: Goal[], settled: boolean): { hit: number; total: number } {
   return { hit: goals.filter((g) => goalOutcome(g, settled) === "hit").length, total: goals.length };
 }
-
-// Focus topics typed as a comma or line separated list, trimmed and deduplicated against
-// the ones already there (case-insensitive).
-export function parseTopics(raw: string, existing: string[] = []): string[] {
-  const seen = new Set(existing.map((t) => t.toLowerCase()));
-  const out = [...existing];
-  for (const part of raw.split(/[,\n]/)) {
-    const topic = part.trim();
-    if (!topic || seen.has(topic.toLowerCase())) continue;
-    seen.add(topic.toLowerCase());
-    out.push(topic);
-  }
-  return out;
-}

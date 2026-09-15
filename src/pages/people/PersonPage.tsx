@@ -16,14 +16,15 @@ import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import CompensationTable from "../../components/people/CompensationTable.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
-import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
-import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { averageScore } from "../../lib/gsr/scoring.ts";
+import { reviewHistory } from "../../lib/gsr/history.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
 import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
@@ -49,18 +50,12 @@ export default function PersonPage() {
     return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, scores, kpis, compensation };
   }, [companyId, profileId, year]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
   const { people, person, reviews, cycles, pillars, scores, kpis, compensation } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
 
-  const rows = reviews
-    .map((review) => {
-      const cycle = cycles.find((c) => c.id === review.cycle_id) ?? null;
-      const own = scores.filter((s) => s.review_id === review.id);
-      return { review, cycle, result: own.length > 0 ? computeReviewScore(pillars, own) : null };
-    })
-    .sort((a, b) => ((a.cycle?.period_start ?? "") < (b.cycle?.period_start ?? "") ? 1 : -1));
+  const rows = reviewHistory(reviews, cycles, pillars, scores);
   const latest = rows[0] ?? null;
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
@@ -116,15 +111,15 @@ export default function PersonPage() {
               </div>
               <div>
                 <label htmlFor="person-title" className={labelClass}>Title</label>
-                <BlurInput id="person-title" value={person.title ?? ""} placeholder="Project Manager" onSave={(next) => void patch({ title: next.trim() || null })} />
+                <BlurInput id="person-title" value={person.title ?? ""} placeholder="Their position" onSave={(next) => void patch({ title: next.trim() || null })} />
               </div>
               <div>
                 <label htmlFor="person-department" className={labelClass}>Department</label>
-                <BlurInput id="person-department" value={person.department ?? ""} placeholder="Production" onSave={(next) => void patch({ department: next.trim() || null })} />
+                <BlurInput id="person-department" value={person.department ?? ""} placeholder="Their department" onSave={(next) => void patch({ department: next.trim() || null })} />
               </div>
               <div>
                 <label htmlFor="person-hire-date" className={labelClass}>Hire date</label>
-                <input id="person-hire-date" type="date" value={person.hire_date ?? ""} onChange={(e) => void patch({ hire_date: e.target.value || null })} className={inputClass} />
+                <BlurInput id="person-hire-date" type="date" value={person.hire_date ?? ""} onSave={(next) => void patch({ hire_date: next || null })} />
                 {tenure ? <p className="mt-1 text-[12px] text-ink-3">{tenure}</p> : null}
               </div>
               <div>
@@ -158,7 +153,7 @@ export default function PersonPage() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Visible to this person and company admins only." padded={false}>
+          <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>
             <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
           </Section>
 

@@ -39,6 +39,10 @@ export async function listAllDomains(): Promise<CompanyDomain[]> {
   return [...domains];
 }
 
+export async function listCompanyDomains(companyId: string): Promise<CompanyDomain[]> {
+  return domains.filter((d) => d.company_id === companyId);
+}
+
 export async function addCompanyDomain(companyId: string, domain: string): Promise<CompanyDomain> {
   const created = { company_id: companyId, domain, created_at: new Date().toISOString() };
   domains.push(created);

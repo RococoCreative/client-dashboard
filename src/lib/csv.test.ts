@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvToObjects, normalizeHeader, parseCsv, parseMoney } from "./csv.ts";
+import { csvToObjects, normalizeHeader, parseCsv } from "./csv.ts";
 
 describe("parseCsv", () => {
   it("handles quotes, escaped quotes, and CRLF", () => {
@@ -28,13 +28,3 @@ describe("csvToObjects", () => {
   });
 });
 
-describe("parseMoney", () => {
-  it("reads accounting formats", () => {
-    expect(parseMoney("$1,240,000.50")).toBe(1240000.5);
-    expect(parseMoney("(500)")).toBe(-500);
-    expect(parseMoney("-$20")).toBe(-20);
-    expect(parseMoney("")).toBeNull();
-    expect(parseMoney("n/a")).toBeNull();
-    expect(parseMoney(undefined)).toBeNull();
-  });
-});

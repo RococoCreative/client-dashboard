@@ -248,6 +248,10 @@ export default function GoalSettingPanel({
   const summary = hitCount(lastCycle, lastSettled);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
+  // A refused delete (a closed cycle freezes its goals) has to be said inside the dialog, not
+  // on the page behind the scrim.
+  const [error, setError] = useState("");
+  const [carrying, setCarrying] = useState("");
   // The focus topic leads the month's list; everything else keeps its order.
   const ordered = [...thisCycle].sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0));
   const focusGoal = thisCycle.find((g) => g.kind === "focus") ?? null;
@@ -275,25 +279,32 @@ export default function GoalSettingPanel({
     }
   }
 
+  // Carrying is one click, and the label only changes once the round trip lands, so without a
+  // guard a double click files the same goal twice for an admin to delete again.
   async function carry(goal: Goal) {
+    if (carrying) return;
+    setCarrying(goal.id);
     try {
       upsert(await createGoal(carryForward(goal, cycle.id, thisCycle.length + 1)));
       onTouched();
     } catch (err) {
       onError(errorMessage(err));
+    } finally {
+      setCarrying("");
     }
   }
 
   async function removeGoal() {
     if (!deleting) return;
     setBusy(true);
+    setError("");
     try {
       await deleteGoal(deleting.id);
       const id = deleting.id;
       onGoals((list) => list.filter((g) => g.id !== id));
       setDeleting(null);
     } catch (err) {
-      onError(errorMessage(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -393,8 +404,9 @@ export default function GoalSettingPanel({
           body="The goal and its action steps are removed from this review. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
+          error={error}
           onConfirm={() => void removeGoal()}
-          onCancel={() => setDeleting(null)}
+          onCancel={() => { setDeleting(null); setError(""); }}
         />
       ) : null}
     </div>

@@ -9,7 +9,7 @@ import Section from "../components/ui/Section.tsx";
 import { inputClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
-import { listAllDomains, updateCompany } from "../services/companies.ts";
+import { listCompanyDomains, updateCompany } from "../services/companies.ts";
 import { THEMES } from "../lib/theme.ts";
 import { errorMessage } from "../lib/errors.ts";
 
@@ -20,8 +20,8 @@ export default function CompanySettingsPage() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  const domains = useAsync(() => listAllDomains(), [company!.id]);
-  const ownDomains = (domains.data ?? []).filter((d) => d.company_id === company!.id);
+  const domains = useAsync(() => listCompanyDomains(company!.id), [company!.id]);
+  const ownDomains = domains.data ?? [];
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();

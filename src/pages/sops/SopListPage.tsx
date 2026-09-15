@@ -66,7 +66,7 @@ export default function SopListPage() {
       {state.error ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? (
         <SkeletonRows rows={5} />
-      ) : filtered.length === 0 ? (
+      ) : !state.data ? null : filtered.length === 0 ? (
         <EmptyState
           eyebrow="SOPs"
           title={state.data && state.data.length > 0 ? "Nothing matches" : "No SOPs yet"}

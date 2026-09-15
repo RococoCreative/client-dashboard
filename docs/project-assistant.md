@@ -1,7 +1,9 @@
 # Project assistant
 
 **Status: designed, not built.** Shelved on 2026-09-15 for a future round. Nothing in this
-document has been implemented, and no migration numbered 0013 exists yet. Read `CLAUDE.md` and
+document has been implemented. The reference SQL below is written as `0013`, which has since
+been taken: take the next free number in `supabase/migrations/` when you build this, and check
+the schema against what is there now rather than against this document. Read `CLAUDE.md` and
 `README.md` first; everything here obeys those rules and this document does not override them.
 
 This is the full specification for a per-company to-do module, designed for Kingdom Custom

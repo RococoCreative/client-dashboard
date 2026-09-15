@@ -180,9 +180,9 @@ export default function GsrCyclesPage() {
       />
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
-      {!state.data ? (
+      {!state.data && !state.error ? (
         <SkeletonRows rows={4} />
-      ) : state.data.cycles.length === 0 ? (
+      ) : !state.data ? null : state.data.cycles.length === 0 ? (
         <EmptyState
           eyebrow="No cycles yet"
           title="Start the first review cycle"

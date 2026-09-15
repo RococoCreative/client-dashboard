@@ -18,6 +18,7 @@ import { useAsync } from "../hooks/useAsync.ts";
 import { createResource, deleteResource, listResources, parseTags, updateResource } from "../services/resources.ts";
 import { buildObjectPath, getSignedUrl, removeFile, uploadFile } from "../services/storage.ts";
 import { errorMessage } from "../lib/errors.ts";
+import { openSignedUrl } from "../lib/newTab.ts";
 import { RESOURCE_KIND_LABELS, keysOf, type Resource, type ResourceKind } from "../types/database.ts";
 
 function KindIcon({ kind }: { kind: ResourceKind }) {
@@ -128,9 +129,11 @@ export default function ResourcesPage() {
     setError("");
     try {
       if (resource.url) {
+        // A plain link needs no round trip, so it opens straight from the click.
         window.open(resource.url, "_blank", "noopener");
       } else if (resource.file_path) {
-        window.open(await getSignedUrl(resource.file_path), "_blank", "noopener");
+        const path = resource.file_path;
+        await openSignedUrl(() => getSignedUrl(path));
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -179,7 +182,7 @@ export default function ResourcesPage() {
 
       {!state.data && !state.error ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
-      ) : filtered.length === 0 ? (
+      ) : !state.data ? null : filtered.length === 0 ? (
         <EmptyState
           eyebrow="Resources"
           title={resources.length > 0 ? "Nothing matches" : "No resources yet"}
@@ -238,7 +241,7 @@ export default function ResourcesPage() {
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete "${deleting.title}"?`} body={deleting.file_path ? "The file is removed from storage as well." : "The link is removed from the library."} confirmLabel="Delete resource" busy={busy} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete "${deleting.title}"?`} body={deleting.file_path ? "The file is removed from storage as well." : "The link is removed from the library."} confirmLabel="Delete resource" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
       ) : null}
     </>
   );

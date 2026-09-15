@@ -44,6 +44,14 @@ export async function listAllDomains(): Promise<CompanyDomain[]> {
   return (data as CompanyDomain[]) ?? [];
 }
 
+// One company's sign-in domains. The portfolio still reads them all at once; a company page
+// asks for its own, because scoping in the UI is not scoping (rule 4).
+export async function listCompanyDomains(companyId: string): Promise<CompanyDomain[]> {
+  const { data, error } = await db().from("company_domains").select(DOMAIN_COLUMNS).eq("company_id", companyId).order("domain");
+  if (error) throw error;
+  return (data as CompanyDomain[]) ?? [];
+}
+
 export async function addCompanyDomain(companyId: string, domain: string): Promise<CompanyDomain> {
   const { data, error } = await db()
     .from("company_domains")

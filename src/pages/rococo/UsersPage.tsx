@@ -69,7 +69,7 @@ export default function UsersPage() {
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={8} />
-      ) : (
+      ) : !state.data ? null : (
         <Section eyebrow="Everyone" title={pluralize(filtered.length, "user")} padded={false}>
           <div className="overflow-x-auto">
             <table className={tableClass}>

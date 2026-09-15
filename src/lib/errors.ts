@@ -17,5 +17,15 @@ function friendly(message: string): string {
   if (/duplicate key|already exists/i.test(message)) return "That already exists.";
   if (/violates foreign key/i.test(message)) return "Something still depends on this. Remove that first.";
   if (/Failed to fetch|NetworkError|network/i.test(message)) return "The connection dropped. Check your signal and try again.";
+  // What PostgREST says when a single-row request matched nothing: the row is gone, or RLS is
+  // hiding it. Either way the page asked for something it cannot have, and the raw sentence
+  // names internals the reader has no use for.
+  if (/JSON object requested|multiple \(or no\) rows|PGRST116/i.test(message)) {
+    return "That is not here any more, or it is not yours to open.";
+  }
+  // A constraint the database rejected: the name is for us, not for the person reading it.
+  if (/violates check constraint|violates not-null constraint/i.test(message)) {
+    return "Some of that will not save as entered. Check the values and try again.";
+  }
   return message;
 }

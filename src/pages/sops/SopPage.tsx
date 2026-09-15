@@ -16,10 +16,12 @@ import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
 import { SOP_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
+import { assertInCompany } from "../../lib/tenancy.ts";
+import { openSignedUrl } from "../../lib/newTab.ts";
 import { addSopAttachment, deleteSop, getSop, listSopAttachments, listSopVersions, removeSopAttachment, updateSop } from "../../services/sops.ts";
 import { buildObjectPath, formatBytes, getSignedUrl, removeFile, uploadFile } from "../../services/storage.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { formatDateTime } from "../../lib/format.ts";
+import { formatDateTime, pluralize } from "../../lib/format.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, type SopAttachment, type SopStatus } from "../../types/database.ts";
 
 export default function SopPage() {
@@ -29,16 +31,21 @@ export default function SopPage() {
   const companyId = company!.id;
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Removing an attachment deletes the stored file too, so it is confirmed like the SOP itself.
+  const [removingAttachment, setRemovingAttachment] = useState<SopAttachment | null>(null);
+  const [attachmentError, setAttachmentError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   const state = useAsync(async () => {
     const [sop, versions, attachments] = await Promise.all([getSop(sopId), listSopVersions(sopId), listSopAttachments(sopId)]);
+    // Publish, archive and delete are live on this page, so it must be this company's SOP.
+    assertInCompany(sop, companyId, "SOP");
     return { sop, versions, attachments };
   }, [sopId, companyId]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
   const { sop, versions, attachments } = state.data;
@@ -97,21 +104,26 @@ export default function SopPage() {
   async function openAttachment(attachment: SopAttachment) {
     setError("");
     try {
-      const url = await getSignedUrl(attachment.file_path);
-      window.open(url, "_blank", "noopener");
+      await openSignedUrl(() => getSignedUrl(attachment.file_path));
     } catch (err) {
       setError(errorMessage(err));
     }
   }
 
-  async function deleteAttachment(attachment: SopAttachment) {
-    setError("");
+  async function deleteAttachment() {
+    if (!removingAttachment) return;
+    setBusy(true);
+    setAttachmentError("");
     try {
+      const attachment = removingAttachment;
       await removeSopAttachment(attachment.id);
       await removeFile(attachment.file_path).catch(() => undefined);
       state.setData((prev) => (prev ? { ...prev, attachments: prev.attachments.filter((a) => a.id !== attachment.id) } : prev));
+      setRemovingAttachment(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setAttachmentError(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -146,6 +158,7 @@ export default function SopPage() {
           ) : null
         }
       />
+      {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {sop.summary ? <p className="mb-6 max-w-3xl text-sm leading-relaxed text-ink-2">{sop.summary}</p> : null}
 
@@ -170,7 +183,7 @@ export default function SopPage() {
         <div className="space-y-6">
           <Section
             eyebrow="Files"
-            title={`${attachments.length} ${attachments.length === 1 ? "attachment" : "attachments"}`}
+            title={pluralize(attachments.length, "attachment")}
             actions={
               isAdmin ? (
                 <>
@@ -193,14 +206,14 @@ export default function SopPage() {
                     </button>
                     <div className="flex shrink-0 items-center">
                       <IconButton label="Download" onClick={() => void openAttachment(a)}><Download size={14} aria-hidden /></IconButton>
-                      {isAdmin ? <IconButton label="Remove attachment" onClick={() => void deleteAttachment(a)}><Trash2 size={14} aria-hidden /></IconButton> : null}
+                      {isAdmin ? <IconButton label="Remove attachment" onClick={() => setRemovingAttachment(a)}><Trash2 size={14} aria-hidden /></IconButton> : null}
                     </div>
                   </li>
                 ))}
               </ul>
             )}
           </Section>
-          <Section eyebrow="History" title={`${versions.length} ${versions.length === 1 ? "version" : "versions"}`} padded={false}>
+          <Section eyebrow="History" title={pluralize(versions.length, "version")} padded={false}>
             <ul className="divide-y divide-line">
               {versions.map((v) => (
                 <li key={v.id}>
@@ -219,7 +232,18 @@ export default function SopPage() {
       </div>
 
       {deleting ? (
-        <ConfirmDialog title={`Delete "${sop.title}"?`} body="Every version and attachment is deleted with it. Archive instead to keep it out of the way but on record." confirmLabel="Delete SOP" busy={busy} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(false)} />
+        <ConfirmDialog title={`Delete "${sop.title}"?`} body="Every version and attachment is deleted with it. Archive instead to keep it out of the way but on record." confirmLabel="Delete SOP" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(false)} />
+      ) : null}
+      {removingAttachment ? (
+        <ConfirmDialog
+          title={`Remove "${removingAttachment.file_name}"?`}
+          body="The file is deleted from storage as well, so the link in this SOP stops working for everyone."
+          confirmLabel="Remove attachment"
+          busy={busy}
+          error={attachmentError}
+          onConfirm={() => void deleteAttachment()}
+          onCancel={() => { setRemovingAttachment(null); setAttachmentError(""); }}
+        />
       ) : null}
     </>
   );

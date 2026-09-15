@@ -105,7 +105,7 @@ export default function CompaniesPage() {
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
-      ) : (
+      ) : !state.data ? null : (
         <div className="space-y-4">
           {companies.map((company) => {
             const ownDomains = domains.filter((d) => d.company_id === company.id);
@@ -121,7 +121,7 @@ export default function CompaniesPage() {
                 <div className="grid gap-4 md:grid-cols-12">
                   <div className="md:col-span-4">
                     <label htmlFor={`co-name-${company.id}`} className={labelClass}>Name</label>
-                    <BlurInput id={`co-name-${company.id}`} value={company.name} onSave={(next) => next.trim() && void patchCompany(company, { name: next.trim() })} />
+                    <BlurInput id={`co-name-${company.id}`} value={company.name} required onSave={(next) => void patchCompany(company, { name: next.trim() })} />
                   </div>
                   <div className="md:col-span-3">
                     <label htmlFor={`co-theme-${company.id}`} className={labelClass}>Theme</label>

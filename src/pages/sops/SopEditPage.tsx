@@ -96,7 +96,7 @@ function SopForm({ existing }: { existing: ExistingSop | null }) {
         <div className="space-y-6 lg:col-span-2">
           <Section eyebrow="Content" title="Procedure">
             <Field label="Title" htmlFor="sop-title">
-              <input id="sop-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Jobsite safety walk" className={inputClass} autoFocus={isNew} />
+              <input id="sop-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Name the procedure" className={inputClass} autoFocus={isNew} />
             </Field>
             <Field label="Body (Markdown)" htmlFor="sop-body" className="mt-4" hint="Headings with ##, numbered steps, bullet lists, and links all render.">
               <textarea id="sop-body" value={body} onChange={(e) => setBody(e.target.value)} className={`${textareaClass} min-h-[420px] font-mono text-[13px]`} spellCheck />
@@ -124,7 +124,7 @@ function SopForm({ existing }: { existing: ExistingSop | null }) {
                 <textarea id="sop-summary" value={summary} onChange={(e) => setSummary(e.target.value)} className={`${textareaClass} min-h-[64px]`} rows={2} />
               </Field>
               <Field label={isNew ? "First version note" : "What changed"} htmlFor="sop-change-note">
-                <input id="sop-change-note" type="text" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} placeholder={isNew ? "First version" : "Added the lockout step"} className={inputClass} />
+                <input id="sop-change-note" type="text" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} placeholder={isNew ? "First version" : "What changed in this version"} className={inputClass} />
               </Field>
             </div>
           </Section>

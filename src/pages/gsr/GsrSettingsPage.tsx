@@ -35,6 +35,10 @@ export default function GsrSettingsPage() {
   const companyId = company!.id;
   const [error, setError] = useState("");
   const [deletingPillar, setDeletingPillar] = useState<GsrPillar | null>(null);
+  // Deleting a criterion cascades to every score ever recorded against it, so it is confirmed
+  // and the copy points at the Active tickbox, which is the way to retire one without
+  // rewriting last quarter's numbers.
+  const [deletingCriterion, setDeletingCriterion] = useState<GsrCriterion | null>(null);
   const [busy, setBusy] = useState(false);
   const [newCriterion, setNewCriterion] = useState<Record<string, string>>({});
 
@@ -43,7 +47,7 @@ export default function GsrSettingsPage() {
     return { pillars, criteria };
   }, [companyId]);
 
-  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { pillars, criteria } = state.data;
@@ -129,10 +133,13 @@ export default function GsrSettingsPage() {
     });
   }
 
-  async function removeCriterion(criterion: GsrCriterion) {
+  async function removeCriterion() {
+    if (!deletingCriterion) return;
+    const id = deletingCriterion.id;
     await run(async () => {
-      await deleteCriterion(criterion.id);
-      setCriteria((list) => list.filter((c) => c.id !== criterion.id));
+      await deleteCriterion(id);
+      setCriteria((list) => list.filter((c) => c.id !== id));
+      setDeletingCriterion(null);
     });
   }
 
@@ -154,6 +161,7 @@ export default function GsrSettingsPage() {
         }
       />
 
+      {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {total !== 100 && pillars.length > 0 ? (
         <Notice tone="warning" className="mb-4">Active pillar weights should add up to 100%. Scores still compute (normalized to the total), but the percentages people see will not match the weights until they do.</Notice>
@@ -179,7 +187,7 @@ export default function GsrSettingsPage() {
               <div className="grid gap-4 md:grid-cols-12">
                 <div className="md:col-span-5">
                   <label htmlFor={`pillar-name-${pillar.id}`} className={labelClass}>Name</label>
-                  <BlurInput id={`pillar-name-${pillar.id}`} value={pillar.name} onSave={(next) => next.trim() && void patchPillar(pillar, { name: next.trim() })} />
+                  <BlurInput id={`pillar-name-${pillar.id}`} value={pillar.name} required onSave={(next) => void patchPillar(pillar, { name: next.trim() })} />
                 </div>
                 <div className="md:col-span-2">
                   <label htmlFor={`pillar-weight-${pillar.id}`} className={labelClass}>Weight %</label>
@@ -221,15 +229,20 @@ export default function GsrSettingsPage() {
                   {pillarCriteria.length === 0 ? <p className="mt-2 text-[13px] text-ink-3">Add at least one criterion or reviewers will have nothing to rate.</p> : null}
                   <ul className="mt-2 space-y-2">
                     {pillarCriteria.map((criterion) => (
-                      <li key={criterion.id} className="grid gap-2 rounded-md border border-line bg-surface-2/50 p-3 md:grid-cols-12">
+                      <li key={criterion.id} className={`grid gap-2 rounded-md border border-line bg-surface-2/50 p-3 md:grid-cols-12 ${criterion.is_active ? "" : "opacity-70"}`}>
                         <div className="md:col-span-4">
-                          <BlurInput ariaLabel="Criterion name" value={criterion.name} className={`${inputClass} mt-0`} onSave={(next) => next.trim() && void patchCriterion(criterion, { name: next.trim() })} />
+                          <BlurInput ariaLabel="Criterion name" value={criterion.name} required className={`${inputClass} mt-0`} onSave={(next) => void patchCriterion(criterion, { name: next.trim() })} />
                         </div>
-                        <div className="md:col-span-7">
+                        <div className="md:col-span-5">
                           <BlurInput ariaLabel="Criterion description" value={criterion.description ?? ""} placeholder="Description shown to the reviewer" className={`${inputClass} mt-0`} onSave={(next) => void patchCriterion(criterion, { description: next.trim() || null })} />
                         </div>
+                        <div className="flex items-center md:col-span-2">
+                          <label className="flex items-center gap-2 text-[13px] text-ink">
+                            <input type="checkbox" checked={criterion.is_active} onChange={(e) => void patchCriterion(criterion, { is_active: e.target.checked })} className={checkboxClass} /> Active
+                          </label>
+                        </div>
                         <div className="flex items-center justify-end md:col-span-1">
-                          <IconButton label="Delete criterion" onClick={() => void removeCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
+                          <IconButton label="Delete criterion" onClick={() => setDeletingCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
                         </div>
                       </li>
                     ))}
@@ -260,8 +273,20 @@ export default function GsrSettingsPage() {
           body="Every score ever recorded against this pillar is deleted with it. To retire a pillar without losing history, untick Active instead."
           confirmLabel="Delete pillar"
           busy={busy}
+          error={error}
           onConfirm={() => void handleDeletePillar()}
           onCancel={() => setDeletingPillar(null)}
+        />
+      ) : null}
+      {deletingCriterion ? (
+        <ConfirmDialog
+          title={`Delete "${deletingCriterion.name}"?`}
+          body="Every rating ever recorded against this criterion is deleted with it, which changes the scores on reviews already finished. To retire it without touching that history, untick Active instead."
+          confirmLabel="Delete criterion"
+          busy={busy}
+          error={error}
+          onConfirm={() => void removeCriterion()}
+          onCancel={() => setDeletingCriterion(null)}
         />
       ) : null}
     </>

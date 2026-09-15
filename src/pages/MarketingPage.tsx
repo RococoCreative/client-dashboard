@@ -18,23 +18,10 @@ import { inputClass, selectClass, textareaClass } from "../components/ui/forms.t
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "../services/marketing.ts";
+import { CAMPAIGN_STATUS_TONE } from "../components/status.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatDate, formatMoney, formatNumber, formatPercent } from "../lib/format.ts";
+import { formatDate, formatMoney, formatNumber, formatPercent, parseMoney } from "../lib/format.ts";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUS_LABELS, keysOf, type CampaignStatus, type MarketingCampaign } from "../types/database.ts";
-
-const STATUS_TONE: Record<CampaignStatus, "neutral" | "success" | "warning" | "info"> = {
-  planned: "info",
-  active: "success",
-  paused: "warning",
-  complete: "neutral",
-};
-
-function numberOrNull(raw: string): number | null {
-  const text = raw.trim().replace(/[$,\s]/g, "");
-  if (text === "") return null;
-  const value = Number(text);
-  return Number.isFinite(value) ? value : null;
-}
 
 function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { companyId: string; campaign: MarketingCampaign | null; count: number; onClose: () => void; onSaved: (c: MarketingCampaign) => void }) {
   const [name, setName] = useState(campaign?.name ?? "");
@@ -66,11 +53,11 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
         status,
         start_date: start || null,
         end_date: end || null,
-        budget: numberOrNull(budget),
-        actual_spend: numberOrNull(spend),
+        budget: parseMoney(budget),
+        actual_spend: parseMoney(spend),
         goal: goal.trim() || null,
         key_metric_label: metricLabel.trim() || null,
-        key_metric_value: numberOrNull(metricValue),
+        key_metric_value: parseMoney(metricValue),
         results: results.trim() || null,
         notes: notes.trim() || null,
       };
@@ -87,7 +74,7 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
         <h2 id="campaign-title" className="font-display text-lg text-heading">{campaign ? "Edit campaign" : "New campaign"}</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Campaign" htmlFor="mc-name" className="sm:col-span-2">
-            <input id="mc-name" type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="Spring remodel showcase" className={inputClass} />
+            <input id="mc-name" type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="Name the campaign" className={inputClass} />
           </Field>
           <Field label="Channel" htmlFor="mc-channel">
             <input id="mc-channel" type="text" list="mc-channels" value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="Google Ads" className={inputClass} />
@@ -183,7 +170,7 @@ function CampaignCard({ campaign, onEdit, onDelete, onStatus }: { campaign: Mark
       ) : null}
       {campaign.results ? <p className="mt-2 text-[13px] leading-relaxed text-ink">{campaign.results}</p> : null}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <Badge tone={STATUS_TONE[campaign.status]}>{CAMPAIGN_STATUS_LABELS[campaign.status]}</Badge>
+        <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>{CAMPAIGN_STATUS_LABELS[campaign.status]}</Badge>
         <select value={campaign.status} aria-label={`Move ${campaign.name}`} onChange={(e) => onStatus(e.target.value as CampaignStatus)} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
           {keysOf(CAMPAIGN_STATUS_LABELS).map((k) => (
             <option key={k} value={k}>{CAMPAIGN_STATUS_LABELS[k]}</option>
@@ -251,7 +238,7 @@ export default function MarketingPage() {
 
       {!state.data && !state.error ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
-      ) : campaigns.length === 0 ? (
+      ) : !state.data ? null : campaigns.length === 0 ? (
         <EmptyState eyebrow="Marketing" title="No campaigns yet" body="Add what is running or planned so leadership sees the whole board at a glance." action={<Button onClick={() => setDialog({ campaign: null })}>New campaign</Button>} />
       ) : (
         <>
@@ -298,7 +285,7 @@ export default function MarketingPage() {
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="The campaign and its results are removed from the board. Mark it complete instead to keep the record." confirmLabel="Delete campaign" busy={busy} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="The campaign and its results are removed from the board. Mark it complete instead to keep the record." confirmLabel="Delete campaign" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
       ) : null}
     </>
   );

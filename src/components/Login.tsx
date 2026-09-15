@@ -26,6 +26,9 @@ export default function Login() {
   // The last domain lookup that landed, tagged with the domain it answered for.
   const [lookup, setLookup] = useState<{ domain: string; company: PublicCompany | null } | null>(null);
   const [companies, setCompanies] = useState<PublicCompany[] | null>(null);
+  // Separate from the list itself: an empty list and a list that failed to load look the same
+  // to the picker, but only one of them is worth telling the person about and retrying.
+  const [companiesFailed, setCompaniesFailed] = useState(false);
   const [picked, setPicked] = useState(params.get("company") ?? "");
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState("");
@@ -57,12 +60,24 @@ export default function Login() {
     return () => clearTimeout(timer);
   }, [email, rococo]);
 
-  // The picker list loads once it is first needed.
+  // The picker list loads once it is first needed. A failure leaves companies null so this
+  // runs again on the next keystroke rather than stranding the person with an empty picker
+  // they cannot get past.
   useEffect(() => {
     if (!needsPick || companies) return;
+    let active = true;
     listPublicCompanies()
-      .then(setCompanies)
-      .catch(() => setCompanies([]));
+      .then((list) => {
+        if (!active) return;
+        setCompanies(list);
+        setCompaniesFailed(false);
+      })
+      .catch(() => {
+        if (active) setCompaniesFailed(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [needsPick, companies]);
 
   const pickedCompany = needsPick ? (companies?.find((c) => c.slug === picked) ?? null) : null;
@@ -158,7 +173,11 @@ export default function Login() {
             <Field
               label="Your company"
               htmlFor="login-company"
-              hint="We did not recognize that email domain. Choose the company you work with."
+              hint={
+                companiesFailed
+                  ? "We could not load the company list. Check your connection and try again."
+                  : "We did not recognize that email domain. Choose the company you work with."
+              }
             >
               <select
                 id="login-company"

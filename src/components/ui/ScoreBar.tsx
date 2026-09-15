@@ -1,5 +1,6 @@
 // A single pillar or deliverable as a bar: label left, figure right, fill banded by
 // achievement.
+import { bandBgClass } from "./bandClass.ts";
 import { formatNumber } from "../../lib/format.ts";
 
 export default function ScoreBar({
@@ -13,8 +14,7 @@ export default function ScoreBar({
   detail?: string;
 }) {
   const fill = percent === null ? 0 : Math.min(Math.max(percent, 0), 100);
-  const tone =
-    percent === null ? "bg-line-strong" : fill >= 80 ? "bg-success" : fill >= 60 ? "bg-accent" : fill >= 40 ? "bg-warning" : "bg-danger";
+  const tone = bandBgClass(percent === null ? null : fill);
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
