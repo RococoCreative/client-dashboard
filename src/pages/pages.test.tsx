@@ -178,6 +178,25 @@ describe("GSR", () => {
     );
   });
 
+  it("creates a category the first time a deliverable is filed under one", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy");
+
+    // Klasik has never named Operations, so it is offered in the pulldown without existing as a
+    // row. Choosing it is the whole step: no separate "add the category first".
+    expect(KLASIK.deliverableCategories.some((c) => c.name === "Operations")).toBe(false);
+    await user.type(screen.getByLabelText("New deliverable"), "Fleet upkeep");
+    await user.selectOptions(screen.getByLabelText("Category"), "new:Operations");
+    await user.click(screen.getByRole("button", { name: /Add deliverable/ }));
+
+    // It lands under a real Operations heading, and the pulldown now points at the row it made.
+    const filed = await screen.findByDisplayValue("Fleet upkeep");
+    const section = filed.closest("section") as HTMLElement;
+    expect(within(section).getByText("Operations", { selector: "p" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Category")).not.toHaveValue("new:Operations"));
+  });
+
   it("shows pillars, weights, and criteria in settings", async () => {
     renderWithHub(<GsrSettingsPage />, admin);
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
