@@ -131,6 +131,11 @@ Exceeded puts the person over. Unrated tasks count toward the target but not the
 half-reviewed heading reads low rather than flattering. Categories roll up the same way. The
 arithmetic is in `src/lib/gsr/deliverables.ts`, pure and tested.
 
+Adding a heading asks which category it belongs to in a pulldown, and every heading carries the
+same pulldown so it can be refiled later. A company that has named no categories yet is offered
+Sales, Production, Operations, Financial and Leadership as one-click starters; they are
+suggestions only, and a company can name its categories anything.
+
 The same panel appears on the person page and inside the review, because the ratings get set in
 the meeting. Nothing is weighted between the two modules yet.
 

@@ -27,6 +27,11 @@ export const RATING_LABELS: Record<DeliverableRating, string> = {
 // Hit is the bar, and the bar is what a target is made of.
 export const POINTS_PER_TASK = 2;
 
+// Offered to a company that has not named its own categories yet, as one-click starters. They are
+// suggestions, not a fixed list: categories are company data, a company can name them anything,
+// and nothing in the code depends on these five existing.
+export const SUGGESTED_CATEGORIES = ["Sales", "Production", "Operations", "Financial", "Leadership"] as const;
+
 export function isDeliverableRating(value: unknown): value is DeliverableRating {
   return value === 0 || value === 1 || value === 2 || value === 3;
 }

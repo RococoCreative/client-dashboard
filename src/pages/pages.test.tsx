@@ -1,7 +1,7 @@
 // Every page renders real content against the mocked data layer, for an admin and, where it
 // differs, an employee. The mocks mirror the services module for module, so a page calling a
 // service that does not exist fails here rather than in someone's browser.
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -142,13 +142,40 @@ describe("GSR", () => {
     expect(await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy")).toBeInTheDocument();
     // Its category heading, and the three tasks under it: Hit, Partial, Partial is 4 of 6. The
     // category holds this one heading, so both figures read the same.
-    expect(screen.getByText("Sales & Mktg.")).toBeInTheDocument();
+    // The name also appears in the category pulldowns, so the group header is matched on its own tag.
+    expect(screen.getByText("Sales & Mktg.", { selector: "p" })).toBeInTheDocument();
     expect((await screen.findAllByText("4 of 6")).length).toBe(2);
 
     // Moving one task from Partial to Exceeded moves the heading, and the category with it.
     const group = screen.getByRole("radiogroup", { name: "Rating for Post occupancy value check in" });
     await user.click(within(group).getByRole("radio", { name: "Exceeded (3)" }));
     expect((await screen.findAllByText("6 of 6")).length).toBe(2);
+  });
+
+  it("files a new deliverable under the category chosen in the pulldown", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy");
+
+    // Production starts with a heading of its own, so the new one has to join it rather than
+    // landing in whichever category happens to be first.
+    await user.type(screen.getByLabelText("New deliverable"), "Warranty response time");
+    const production = KLASIK.deliverableCategories.find((c) => c.name === "Production")!;
+    await user.selectOptions(screen.getByLabelText("Category"), production.id);
+    await user.click(screen.getByRole("button", { name: /Add deliverable/ }));
+
+    // It arrives with no tasks, and its category pulldown reads the one it was filed under.
+    const filed = await screen.findByDisplayValue("Warranty response time");
+    const row = filed.closest("div.px-4") as HTMLElement;
+    expect(within(row).getByLabelText("Category for Warranty response time")).toHaveValue(production.id);
+    expect(within(row).getByText("No tasks yet")).toBeInTheDocument();
+
+    // The same pulldown on the row refiles it, which is how a heading leaves Uncategorized.
+    const sales = KLASIK.deliverableCategories.find((c) => c.name === "Sales & Mktg.")!;
+    await user.selectOptions(within(row).getByLabelText("Category for Warranty response time"), sales.id);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Category for Warranty response time")).toHaveValue(sales.id),
+    );
   });
 
   it("shows pillars, weights, and criteria in settings", async () => {

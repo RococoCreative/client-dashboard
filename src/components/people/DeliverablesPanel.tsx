@@ -19,7 +19,7 @@ import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import RatingChoice from "../ui/RatingChoice.tsx";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
-import { inputClass } from "../ui/forms.ts";
+import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import {
   createDeliverableCategory,
@@ -33,7 +33,7 @@ import {
   updateDeliverableTask,
   updateEmployeeDeliverable,
 } from "../../services/deliverables.ts";
-import { groupByCategory, scoreCategory, scoreDeliverable } from "../../lib/gsr/deliverables.ts";
+import { SUGGESTED_CATEGORIES, groupByCategory, scoreCategory, scoreDeliverable } from "../../lib/gsr/deliverables.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { DeliverableCategory, DeliverableTask, EmployeeDeliverable } from "../../types/database.ts";
 
@@ -138,7 +138,8 @@ export default function DeliverablesPanel({
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<EmployeeDeliverable | null>(null);
   const [removingTask, setRemovingTask] = useState<DeliverableTask | null>(null);
-  const [newDeliverable, setNewDeliverable] = useState<Record<string, string>>({});
+  const [newDeliverable, setNewDeliverable] = useState("");
+  const [newDeliverableCategory, setNewDeliverableCategory] = useState("");
   const [newTask, setNewTask] = useState<Record<string, string>>({});
   const [newCategory, setNewCategory] = useState("");
   // Clicking a rating blurs the note beside it, so one task can have two saves in flight. Each
@@ -161,22 +162,25 @@ export default function DeliverablesPanel({
 
   const tasksFor = (deliverableId: string) => tasks.filter((t) => t.deliverable_id === deliverableId);
 
-  async function addCategory(event: FormEvent) {
-    event.preventDefault();
-    const name = newCategory.trim();
-    if (!name || adding) return;
+  async function addCategory(name: string) {
+    const clean = name.trim();
+    if (!clean || adding) return;
     setAdding(true);
     await run(async () => {
-      const created = await createDeliverableCategory({ company_id: companyId, name, sort_order: categories.length + 1 });
+      const created = await createDeliverableCategory({ company_id: companyId, name: clean, sort_order: categories.length + 1 });
       state.setData((prev) => (prev ? { ...prev, categories: [...prev.categories, created] } : prev));
       setNewCategory("");
+      // A category made on the spot is almost always the one about to be used.
+      setNewDeliverableCategory(created.id);
     });
     setAdding(false);
   }
 
-  async function addDeliverable(categoryId: string) {
-    const name = (newDeliverable[categoryId] ?? "").trim();
-    if (!name || adding) return;
+  async function addDeliverable(event: FormEvent) {
+    event.preventDefault();
+    const name = newDeliverable.trim();
+    const categoryId = newDeliverableCategory || categories[0]?.id;
+    if (!name || !categoryId || adding) return;
     setAdding(true);
     await run(async () => {
       const created = await createEmployeeDeliverable({
@@ -187,7 +191,7 @@ export default function DeliverablesPanel({
         sort_order: deliverables.length + 1,
       });
       state.setData((prev) => (prev ? { ...prev, deliverables: [...prev.deliverables, created] } : prev));
-      setNewDeliverable((prev) => ({ ...prev, [categoryId]: "" }));
+      setNewDeliverable("");
     });
     setAdding(false);
   }
@@ -261,6 +265,11 @@ export default function DeliverablesPanel({
   }
 
   const groups = groupByCategory(deliverables, categories);
+  // Starters for a company that has not named its own categories. Anything it already has drops
+  // off the list, so this empties itself as the company sets up.
+  const missingSuggestions = canEdit
+    ? SUGGESTED_CATEGORIES.filter((name) => !categories.some((c) => c.name.toLowerCase() === name.toLowerCase()))
+    : [];
   // Categories with nothing filed yet still need somewhere to add the first heading.
   const emptyCategories = canEdit ? categories.filter((c) => !deliverables.some((d) => d.category_id === c.id)) : [];
 
@@ -298,7 +307,7 @@ export default function DeliverablesPanel({
                     return (
                       <div key={deliverable.id} className="px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="min-w-[220px] flex-1">
+                          <div className="min-w-[180px] flex-1">
                             {canEdit ? (
                               <BlurInput
                                 value={deliverable.name}
@@ -311,6 +320,27 @@ export default function DeliverablesPanel({
                               <p className="text-sm font-medium text-ink">{deliverable.name}</p>
                             )}
                           </div>
+                          {canEdit && categories.length > 0 ? (
+                            // Refiling a heading is the only way out of Uncategorized, which is where a
+                            // deleted category and a move between companies both leave one.
+                            <div className="w-40 shrink-0">
+                              <select
+                                value={deliverable.category_id ?? ""}
+                                aria-label={`Category for ${deliverable.name}`}
+                                onChange={(e) => void saveDeliverable(deliverable, { category_id: e.target.value || null })}
+                                className={`${selectClass} mt-0 py-1.5 text-[12.5px]`}
+                              >
+                                {deliverable.category_id === null || !categories.some((c) => c.id === deliverable.category_id) ? (
+                                  // Offered only on a row that is already uncategorized, so nobody can file a
+                                  // heading back into nowhere.
+                                  <option value="">Uncategorized</option>
+                                ) : null}
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : null}
                           <Figure actual={figure.actual} target={figure.target} hit={figure.hit} />
                           {canEdit ? (
                             <IconButton label={`Remove ${deliverable.name}`} onClick={() => setRemoving(deliverable)}>
@@ -360,27 +390,6 @@ export default function DeliverablesPanel({
                     );
                   })}
 
-                  {canEdit && group.categoryId ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void addDeliverable(group.categoryId!);
-                      }}
-                      className="flex flex-wrap gap-2 px-4 py-3"
-                    >
-                      <input
-                        type="text"
-                        value={newDeliverable[group.categoryId] ?? ""}
-                        onChange={(e) => setNewDeliverable((prev) => ({ ...prev, [group.categoryId!]: e.target.value }))}
-                        placeholder={`Add a deliverable to ${group.name}`}
-                        aria-label={`Add a deliverable to ${group.name}`}
-                        className={`${inputClass} mt-0 max-w-md flex-1`}
-                      />
-                      <Button type="submit" variant="secondary" size="sm" disabled={adding || !(newDeliverable[group.categoryId] ?? "").trim()}>
-                        <Plus size={13} aria-hidden /> Add deliverable
-                      </Button>
-                    </form>
-                  ) : null}
                 </div>
               </section>
             );
@@ -392,44 +401,84 @@ export default function DeliverablesPanel({
                 <p className={eyebrowClass}>{category.name}</p>
                 <span className="text-[12px] text-ink-3">Nothing here yet</span>
               </header>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void addDeliverable(category.id);
-                }}
-                className="flex flex-wrap gap-2 px-4 py-3"
-              >
-                <input
-                  type="text"
-                  value={newDeliverable[category.id] ?? ""}
-                  onChange={(e) => setNewDeliverable((prev) => ({ ...prev, [category.id]: e.target.value }))}
-                  placeholder={`Add a deliverable to ${category.name}`}
-                  aria-label={`Add a deliverable to ${category.name}`}
-                  className={`${inputClass} mt-0 max-w-md flex-1`}
-                />
-                <Button type="submit" variant="secondary" size="sm" disabled={adding || !(newDeliverable[category.id] ?? "").trim()}>
-                  <Plus size={13} aria-hidden /> Add deliverable
-                </Button>
-              </form>
+              <p className="px-4 py-3 text-[12.5px] text-ink-3">
+                Add a deliverable below and pick {category.name} as its category.
+              </p>
             </section>
           ))}
         </>
       )}
 
       {canEdit && state.data ? (
-        <form onSubmit={addCategory} className="flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-            placeholder="Add a category (Sales & Mktg., Production)"
-            aria-label="Add a deliverable category"
-            className={`${inputClass} mt-0 max-w-sm flex-1`}
-          />
-          <Button type="submit" variant="secondary" size="sm" disabled={adding || !newCategory.trim()}>
-            <Plus size={13} aria-hidden /> Add category
-          </Button>
-        </form>
+        <div className="space-y-3 rounded-md border border-line bg-surface-2/40 px-4 py-3">
+          {categories.length > 0 ? (
+            <form onSubmit={addDeliverable} className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[220px] flex-1">
+                <label htmlFor="new-deliverable" className={labelClass}>New deliverable</label>
+                <input
+                  id="new-deliverable"
+                  type="text"
+                  value={newDeliverable}
+                  onChange={(e) => setNewDeliverable(e.target.value)}
+                  placeholder="What does this person own?"
+                  className={`${inputClass} mt-1`}
+                />
+              </div>
+              <div className="w-56">
+                <label htmlFor="new-deliverable-category" className={labelClass}>Category</label>
+                <select
+                  id="new-deliverable-category"
+                  value={newDeliverableCategory || categories[0]?.id || ""}
+                  onChange={(e) => setNewDeliverableCategory(e.target.value)}
+                  className={`${selectClass} mt-1`}
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <Button type="submit" variant="secondary" size="sm" disabled={adding || !newDeliverable.trim()}>
+                <Plus size={13} aria-hidden /> Add deliverable
+              </Button>
+            </form>
+          ) : (
+            <p className="text-[12.5px] text-ink-3">Name a category first; a deliverable is always filed under one.</p>
+          )}
+
+          <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
+            <div className="min-w-[200px] flex-1">
+              <label htmlFor="new-category" className={labelClass}>New category</label>
+              <input
+                id="new-category"
+                type="text"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="Name a category"
+                className={`${inputClass} mt-1`}
+              />
+            </div>
+            <Button type="button" variant="secondary" size="sm" disabled={adding || !newCategory.trim()} onClick={() => void addCategory(newCategory)}>
+              <Plus size={13} aria-hidden /> Add category
+            </Button>
+          </div>
+
+          {missingSuggestions.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[12px] text-ink-3">Or start with:</span>
+              {missingSuggestions.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  disabled={adding}
+                  onClick={() => void addCategory(name)}
+                  className="rounded-full border border-line-strong bg-surface px-2.5 py-0.5 text-[12px] text-ink-2 transition-colors duration-150 hover:border-accent hover:text-ink disabled:opacity-60"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {removing ? (
