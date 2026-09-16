@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0014`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0015`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -114,6 +114,25 @@ have ever signed in. That is the state every new company is in on its first day,
 works that way by default; the cycle's team table simply marks who cannot open theirs yet.
 Because all of it hangs off a profile id that survives the sign-in claim, nothing has to be
 redone when they finally arrive.
+
+## Personal KPIs and deliverables
+
+A person is measured on two separate things, and they stay separate.
+
+**Personal KPIs** are the numeric ones: a name, a target as people say it ("$2M in newly closed
+sales"), where it stands, and whether it is hit. Unchanged.
+
+**Deliverables** are the standing brief. A company defines the categories it thinks in
+("Sales & Mktg.", "Production"); each person carries headings under those categories for the
+year; and each heading has the support tasks it is actually judged by. The rating lives on the
+task, on the client's own four-step scale: Miss 0, Partial 1, Hit 2, Exceeded 3. A heading's
+target is two points for every task on it, so a Hit on every task lands exactly on target and an
+Exceeded puts the person over. Unrated tasks count toward the target but not the score, so a
+half-reviewed heading reads low rather than flattering. Categories roll up the same way. The
+arithmetic is in `src/lib/gsr/deliverables.ts`, pure and tested.
+
+The same panel appears on the person page and inside the review, because the ratings get set in
+the meeting. Nothing is weighted between the two modules yet.
 
 ## Monthly Goal Setting Reviews
 

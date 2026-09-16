@@ -73,6 +73,47 @@ export interface EmployeeKpi {
   updated_at: string;
 }
 
+// A category a company groups its deliverables under: "Sales & Mktg.", "Production".
+export interface DeliverableCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// One deliverable heading for a person for the year. Its score is derived from its tasks, so
+// there is no target or actual column here: see lib/gsr/deliverables.ts.
+export interface EmployeeDeliverable {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  // Null when the category it sat in was deleted; it shows as uncategorized until refiled.
+  category_id: string | null;
+  year: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// A support task under a deliverable. The rating is where the person is actually measured:
+// 0 Miss, 1 Partial, 2 Hit, 3 Exceeded, null until it is rated.
+export interface DeliverableTask {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  deliverable_id: string;
+  name: string;
+  note: string | null;
+  rating: number | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // One line of a person's compensation: base, a stipend, a match, performance pay. Annual
 // amounts; the monthly figure is derived. Readable by the person and their admins only.
 export interface CompensationItem {

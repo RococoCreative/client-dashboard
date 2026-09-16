@@ -17,6 +17,7 @@ import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
+import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -273,6 +274,17 @@ export default function ReviewPage() {
             onError={setError}
           />
         </div>
+      ) : null}
+
+      {employee ? (
+        <Section
+          eyebrow={String(year)}
+          title="Deliverables"
+          className="mb-6"
+          description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
+        >
+          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canScore} />
+        </Section>
       ) : null}
 
       {monthly ? (

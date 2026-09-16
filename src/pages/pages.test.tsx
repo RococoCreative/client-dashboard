@@ -17,6 +17,7 @@ vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
 vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
+vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
@@ -119,15 +120,35 @@ describe("GSR", () => {
     expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
     // The notes box on each goal is the record of the conversation, so it stays.
     expect(screen.getAllByLabelText(/^Notes for /).length).toBeGreaterThan(0);
-    // None of the scoring or written-feedback modules belong here.
+    // None of the scoring or written-feedback modules belong here. Pillar sections are the ones
+    // carrying a weight, which is what tells them apart from the deliverables module below that
+    // happens to share Klasik's pillar name.
     expect(screen.queryByRole("heading", { name: /^Score/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Deliverables" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/% of overall/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Brand Impact" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Manager notes and feedback" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Management feedback")).not.toBeInTheDocument();
-    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    // Criterion ratings are named "<criterion> rating"; the deliverable task ratings below are
+    // named "Rating for <task>" and are supposed to be here.
+    expect(screen.queryByRole("radiogroup", { name: /\srating$/ })).not.toBeInTheDocument();
     // Signing the review off is still the admin's call.
     expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
+  });
+
+  it("rates deliverables by their tasks in the review, two points a task", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    // An admin edits in place, so the headings and tasks are inputs rather than text.
+    expect(await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy")).toBeInTheDocument();
+    // Its category heading, and the three tasks under it: Hit, Partial, Partial is 4 of 6. The
+    // category holds this one heading, so both figures read the same.
+    expect(screen.getByText("Sales & Mktg.")).toBeInTheDocument();
+    expect((await screen.findAllByText("4 of 6")).length).toBe(2);
+
+    // Moving one task from Partial to Exceeded moves the heading, and the category with it.
+    const group = screen.getByRole("radiogroup", { name: "Rating for Post occupancy value check in" });
+    await user.click(within(group).getByRole("radio", { name: "Exceeded (3)" }));
+    expect((await screen.findAllByText("6 of 6")).length).toBe(2);
   });
 
   it("shows pillars, weights, and criteria in settings", async () => {

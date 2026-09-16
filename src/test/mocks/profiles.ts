@@ -3,6 +3,13 @@ import { ALL_PROFILES, personaFromLocation } from "../fixtures.ts";
 
 const profiles: Profile[] = ALL_PROFILES.map((p) => ({ ...p }));
 
+// The company a person is placed with, read from this live store rather than the fixture
+// snapshot, so the deliverables mock sees people added or moved during a demo session the way
+// inherit_company_from_employee sees them in the database.
+export function companyOf(profileId: string): string | null {
+  return profiles.find((p) => p.id === profileId)?.company_id ?? null;
+}
+
 export async function getMyProfile(): Promise<Profile | null> {
   const { profile } = personaFromLocation();
   return profiles.find((p) => p.id === profile.id) ?? profile;

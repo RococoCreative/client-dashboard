@@ -16,8 +16,9 @@ about the chosen company is persisted. Vite + React 19 + TypeScript, Tailwind v4
 storage), deployed on Vercel.
 
 Read order for context: this file, then README.md, then supabase/migrations/ (the schema
-is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine) and src/lib/gsr/goals.ts
-(the Goal Setting Review rules: progress, hit or miss, carry forward).
+is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine), src/lib/gsr/goals.ts
+(the Goal Setting Review rules: progress, hit or miss, carry forward), and src/lib/gsr/deliverables.ts
+(the two-points-a-task rule behind the deliverables module).
 
 ## Hard rules
 
@@ -59,8 +60,16 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    rejects everyone else. The app-side domain lookup is UX, not security. No service-role
    key anywhere in the app or in Vercel; invitations are rows plus a link, not emails.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
-   only implementation: pillar weights, rating and deliverable scoring, the unscored-is-zero
-   rule. Never duplicate it in SQL or in a component.
+   only implementation of review scoring: pillar weights, rating and deliverable line items, the
+   unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
+   module: two points a task, so a Hit on every task lands exactly on target. Never duplicate
+   either in SQL or in a component.
+   Careful with the word "deliverable": it names a `gsr_pillars.scoring_type`, where a review
+   line item carries a target and an actual, and it names the standing module a person is
+   measured on for the year (category, heading, tasks). They are different things.
+   A person is measured on two modules that stay separate: **personal KPIs**, which are numeric
+   (target, current, hit), and **deliverables**, which are a heading rated by the tasks under it.
+   Neither is weighted against the other yet.
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.

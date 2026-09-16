@@ -8,6 +8,9 @@ import type {
   CompanyDomain,
   CompanyGoal,
   CompensationItem,
+  DeliverableCategory,
+  DeliverableTask,
+  EmployeeDeliverable,
   FinancialSnapshot,
   MarketingCampaign,
   EmployeeKpi,
@@ -157,6 +160,9 @@ export interface CompanyBundle {
   goals: Goal[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
+  deliverableCategories: DeliverableCategory[];
+  deliverables: EmployeeDeliverable[];
+  deliverableTasks: DeliverableTask[];
   compensation: CompensationItem[];
   sops: Sop[];
   versions: SopVersion[];
@@ -589,6 +595,72 @@ function build(company: Company): CompanyBundle {
       }))
     : [];
 
+  // Deliverables, the way the client's workbook lays them out: a category, headings under it,
+  // and support tasks that carry the rating. Two points a task is the target, so the first
+  // heading below reads 4 of 6 (Hit, Partial, Partial) and the second 2 of 4, because one of its
+  // two tasks is still unrated and an unrated task counts toward the target but not the score.
+  const deliverableCategories: DeliverableCategory[] = [
+    { name: "Sales & Mktg.", sort: 1 },
+    { name: "Production", sort: 2 },
+  ].map((c, i) => ({
+    id: p(`dcat-${i + 1}`),
+    company_id: company.id,
+    name: c.name,
+    sort_order: c.sort,
+    is_active: true,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
+
+  const deliverableSpec = employees.length
+    ? [
+        {
+          category: 0,
+          name: "Customer Lifecycle & Retention Strategy",
+          tasks: [
+            { name: "Customer project roadmap (Customer Journey)", rating: 2, note: "Phase by phase, start to finish." },
+            { name: "Post occupancy value check in", rating: 1, note: "A 30 and 90 day success call." },
+            { name: "Incentivize referrals from previous customers", rating: 1, note: null },
+          ],
+        },
+        {
+          category: 1,
+          name: "Quality Assurance & Communication Standards",
+          tasks: [
+            { name: "Monthly jobsite inspections", rating: 2, note: null },
+            { name: "Friday progress reports", rating: null, note: "A weekly summary of milestones and health." },
+          ],
+        },
+      ]
+    : [];
+
+  const deliverables: EmployeeDeliverable[] = deliverableSpec.map((d, i) => ({
+    id: p(`deliv-${i + 1}`),
+    company_id: company.id,
+    employee_id: employees[0].id,
+    category_id: deliverableCategories[d.category].id,
+    year: 2026,
+    name: d.name,
+    sort_order: i + 1,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
+
+  const deliverableTasks: DeliverableTask[] = deliverableSpec.flatMap((d, i) =>
+    d.tasks.map((t, j) => ({
+      id: p(`dtask-${i + 1}-${j + 1}`),
+      company_id: company.id,
+      employee_id: employees[0].id,
+      deliverable_id: deliverables[i].id,
+      name: t.name,
+      note: t.note,
+      rating: t.rating,
+      sort_order: j + 1,
+      created_at: EARLIER,
+      updated_at: EARLIER,
+    })),
+  );
+
   const compensation: CompensationItem[] = employees.length
     ? [
         { name: "Base salary", annual: 75000, note: null },
@@ -753,7 +825,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

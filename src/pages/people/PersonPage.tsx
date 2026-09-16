@@ -14,6 +14,7 @@ import Section from "../../components/ui/Section.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import CompensationTable from "../../components/people/CompensationTable.tsx";
+import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
 import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
@@ -159,6 +160,14 @@ export default function PersonPage() {
 
           <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
             <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
+          </Section>
+
+          <Section
+            eyebrow={String(year)}
+            title="Deliverables"
+            description="What this person owns, grouped the way the company thinks about it. Each heading is scored by the tasks under it: two points a task, so a Hit on every one lands on target."
+          >
+            <DeliverablesPanel companyId={companyId} employeeId={person.id} year={year} canEdit />
           </Section>
 
           <Section eyebrow="Reviews" title="Review history" padded={false}>
