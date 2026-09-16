@@ -123,7 +123,7 @@ A person is measured on two separate things, and they stay separate.
 sales"), where it stands, and whether it is hit. Unchanged.
 
 **Deliverables** are the standing brief. A company defines the categories it thinks in
-("Sales & Mktg.", "Production"); each person carries headings under those categories for the
+("BD & Sales", "Production"); each person carries headings under those categories for the
 year; and each heading has the support tasks it is actually judged by. The rating lives on the
 task, on the client's own four-step scale: Miss 0, Partial 1, Hit 2, Exceeded 3. A heading's
 target is two points for every task on it, so a Hit on every task lands exactly on target and an
@@ -132,8 +132,9 @@ half-reviewed heading reads low rather than flattering. Categories roll up the s
 arithmetic is in `src/lib/gsr/deliverables.ts`, pure and tested.
 
 Filing a heading is one step. The add form sits at the top of the module and its category
-pulldown offers the company's own categories alongside the starters it has not named yet: Sales,
-Production, Operations, Financial, Leadership, plus an option to type any other name. A starter
+pulldown offers the company's own categories alongside the starters it has not named yet: BD &
+Sales, Production, Financial, Operations & Systems, Leadership, plus an option to type any other
+name. A starter
 becomes a real category row the first moment a heading is filed under it, so nothing is created
 speculatively and a company can still name its categories anything. Every heading carries the
 same pulldown, which is how one is refiled and the only way out of Uncategorized.

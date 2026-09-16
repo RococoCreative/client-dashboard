@@ -600,7 +600,7 @@ function build(company: Company): CompanyBundle {
   // heading below reads 4 of 6 (Hit, Partial, Partial) and the second 2 of 4, because one of its
   // two tasks is still unrated and an unrated task counts toward the target but not the score.
   const deliverableCategories: DeliverableCategory[] = [
-    { name: "Sales & Mktg.", sort: 1 },
+    { name: "BD & Sales", sort: 1 },
     { name: "Production", sort: 2 },
   ].map((c, i) => ({
     id: p(`dcat-${i + 1}`),

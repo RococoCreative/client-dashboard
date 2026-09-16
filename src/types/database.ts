@@ -73,7 +73,7 @@ export interface EmployeeKpi {
   updated_at: string;
 }
 
-// A category a company groups its deliverables under: "Sales & Mktg.", "Production".
+// A category a company groups its deliverables under: "BD & Sales", "Production".
 export interface DeliverableCategory {
   id: string;
   company_id: string;

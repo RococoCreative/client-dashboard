@@ -64,7 +64,7 @@ describe("scoreCategory", () => {
 describe("groupByCategory", () => {
   const categories = [
     { id: "c2", name: "Production", sort_order: 2 },
-    { id: "c1", name: "Sales & Mktg.", sort_order: 1 },
+    { id: "c1", name: "BD & Sales", sort_order: 1 },
   ];
   const deliverable = (id: string, category_id: string | null): EmployeeDeliverable => ({
     id,
@@ -80,17 +80,17 @@ describe("groupByCategory", () => {
 
   it("orders categories the way the company set them", () => {
     const groups = groupByCategory([deliverable("a", "c2"), deliverable("b", "c1")], categories);
-    expect(groups.map((g) => g.name)).toEqual(["Sales & Mktg.", "Production"]);
+    expect(groups.map((g) => g.name)).toEqual(["BD & Sales", "Production"]);
   });
 
   it("drops a category with nothing filed under it", () => {
     const groups = groupByCategory([deliverable("a", "c1")], categories);
-    expect(groups.map((g) => g.name)).toEqual(["Sales & Mktg."]);
+    expect(groups.map((g) => g.name)).toEqual(["BD & Sales"]);
   });
 
   it("keeps a heading whose category was deleted rather than losing it", () => {
     const groups = groupByCategory([deliverable("a", "c1"), deliverable("orphan", null), deliverable("gone", "deleted")], categories);
-    expect(groups.map((g) => g.name)).toEqual(["Sales & Mktg.", "Uncategorized"]);
+    expect(groups.map((g) => g.name)).toEqual(["BD & Sales", "Uncategorized"]);
     expect(groups[1].deliverables.map((d) => d.id)).toEqual(["orphan", "gone"]);
   });
 });

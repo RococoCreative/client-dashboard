@@ -1,5 +1,5 @@
 // A person's deliverables for the year, grouped the way the client's workbook groups them: a
-// category the company defines ("Sales & Mktg.", "Production"), headings under it, and the
+// category the company defines ("BD & Sales", "Production"), headings under it, and the
 // support tasks each heading is actually measured by. The rating sits on the task; the heading's
 // figure and the category's are derived in lib/gsr/deliverables.ts.
 //

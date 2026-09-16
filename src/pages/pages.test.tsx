@@ -143,7 +143,7 @@ describe("GSR", () => {
     // Its category heading, and the three tasks under it: Hit, Partial, Partial is 4 of 6. The
     // category holds this one heading, so both figures read the same.
     // The name also appears in the category pulldowns, so the group header is matched on its own tag.
-    expect(screen.getByText("Sales & Mktg.", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("BD & Sales", { selector: "p" })).toBeInTheDocument();
     expect((await screen.findAllByText("4 of 6")).length).toBe(2);
 
     // Moving one task from Partial to Exceeded moves the heading, and the category with it.
@@ -171,7 +171,7 @@ describe("GSR", () => {
     expect(within(row).getByText("No tasks yet")).toBeInTheDocument();
 
     // The same pulldown on the row refiles it, which is how a heading leaves Uncategorized.
-    const sales = KLASIK.deliverableCategories.find((c) => c.name === "Sales & Mktg.")!;
+    const sales = KLASIK.deliverableCategories.find((c) => c.name === "BD & Sales")!;
     await user.selectOptions(within(row).getByLabelText("Category for Warranty response time"), sales.id);
     await waitFor(() =>
       expect(screen.getByLabelText("Category for Warranty response time")).toHaveValue(sales.id),
@@ -183,18 +183,19 @@ describe("GSR", () => {
     renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy");
 
-    // Klasik has never named Operations, so it is offered in the pulldown without existing as a
-    // row. Choosing it is the whole step: no separate "add the category first".
-    expect(KLASIK.deliverableCategories.some((c) => c.name === "Operations")).toBe(false);
+    // Klasik has never named Operations & Systems, so it is offered in the pulldown without
+    // existing as a row. Choosing it is the whole step: no separate "add the category first".
+    const starter = "Operations & Systems";
+    expect(KLASIK.deliverableCategories.some((c) => c.name === starter)).toBe(false);
     await user.type(screen.getByLabelText("New deliverable"), "Fleet upkeep");
-    await user.selectOptions(screen.getByLabelText("Category"), "new:Operations");
+    await user.selectOptions(screen.getByLabelText("Category"), `new:${starter}`);
     await user.click(screen.getByRole("button", { name: /Add deliverable/ }));
 
-    // It lands under a real Operations heading, and the pulldown now points at the row it made.
+    // It lands under a real category heading, and the pulldown now points at the row it made.
     const filed = await screen.findByDisplayValue("Fleet upkeep");
     const section = filed.closest("section") as HTMLElement;
-    expect(within(section).getByText("Operations", { selector: "p" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText("Category")).not.toHaveValue("new:Operations"));
+    expect(within(section).getByText(starter, { selector: "p" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Category")).not.toHaveValue(`new:${starter}`));
   });
 
   it("shows pillars, weights, and criteria in settings", async () => {
