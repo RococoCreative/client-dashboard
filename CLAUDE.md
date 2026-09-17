@@ -84,7 +84,19 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     PascalCase files with `export default function Name()`; private sub-components sit
     above the default export; no barrel files. Shared primitives (`components/ui/*`) are the
     only way to style controls; `BlurInput` is the pattern for save-on-blur fields.
-12. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
+12. **A company's shape is its data, never a branch in code.** The three companies share one
+    codebase and one schema; what differs between them is rows. Never branch on a company name,
+    slug, or theme key to change behavior, and never let one company's setup reach another's
+    screen. When a company needs a different shape, the difference becomes a column, a row, or a
+    setting every company carries, with the behavior the others have today as its default.
+    Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
+    deliverable categories, people and roles, KPIs, compensation, goals, SOPs, resources,
+    financial snapshots, marketing, email domains.
+    Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
+    task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, the
+    module set on a person page and a review, and `SUGGESTED_CATEGORIES`. Changing one of those
+    for one company means making it configurable first, not editing the shared value.
+13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
     motion, the tenant's accent as punctuation. It should feel like a command center, not a
     marketing site.
 
