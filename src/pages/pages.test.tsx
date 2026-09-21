@@ -46,6 +46,10 @@ const admin = makeHub("admin");
 const employee = makeHub("employee");
 const rococo = makeHub("rococo", null);
 const currentCycle = KLASIK.cycles[0];
+// Klasik's second open cycle, overlapping the first: the quarterly that its monthly Goal
+// Setting Review runs inside. Both cover today, which is the state that used to hide a
+// finished review from the dashboard.
+const overlappingCycle = KLASIK.cycles[2];
 const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!;
 // Klasik runs monthly, so its reviews are Goal Setting Reviews with no scoring. RBA runs
 // quarterly, which is where the scoring shape of a review still lives.
@@ -58,12 +62,34 @@ describe("dashboard", () => {
   it("summarizes the company for an admin", async () => {
     renderWithHub(<DashboardPage />, admin);
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(await screen.findByText(currentCycle.name)).toBeInTheDocument();
+    // The name appears in its own block and again in the reviews-complete hint.
+    expect((await screen.findAllByText(currentCycle.name)).length).toBeGreaterThan(0);
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
-    expect(screen.getByText("Sam Ortega")).toBeInTheDocument();
+    // The roster is listed once per open cycle; the next test checks each block on its own.
+    expect(screen.getAllByText("Sam Ortega").length).toBeGreaterThan(0);
     expect(await screen.findByText("Aug 2026")).toBeInTheDocument();
     expect(await screen.findByText("2 live campaigns")).toBeInTheDocument();
+  });
+
+  it("gives every open cycle its own progress instead of showing one of them", async () => {
+    renderWithHub(<DashboardPage />, admin);
+    // Two cycles cover today. Both get a block, each with its own fraction, so a review
+    // finished in one of them is never reported as not started because the other won.
+    const monthly = await screen.findByRole("heading", { name: currentCycle.name });
+    const quarterly = await screen.findByRole("heading", { name: overlappingCycle.name });
+    expect(monthly).toBeInTheDocument();
+    expect(quarterly).toBeInTheDocument();
+    // Each block lists the whole active roster under its own heading.
+    for (const heading of [monthly, quarterly]) {
+      const section = heading.closest("section") as HTMLElement;
+      expect(within(section).getByText("Sam Ortega")).toBeInTheDocument();
+      expect(within(section).getByText(/\d+ of \d+ complete/)).toBeInTheDocument();
+    }
+    // The monthly cycle is a Goal Setting Review with nothing to score, so it is labelled as
+    // one and the quarterly is not.
+    expect(within(monthly.closest("section") as HTMLElement).getByText(/Goal Setting Review/)).toBeInTheDocument();
+    expect(within(quarterly.closest("section") as HTMLElement).queryByText(/Goal Setting Review/)).not.toBeInTheDocument();
   });
 
   it("shows an employee their own score and goals, plus the company goals, and nobody else's", async () => {

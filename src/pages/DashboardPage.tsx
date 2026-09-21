@@ -32,7 +32,7 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
-import { currentCycle, cycleSettled } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, activeCycles, cycleSettled } from "../lib/gsr/cycles.ts";
 import { goalOutcome, stepsTaken } from "../lib/gsr/goals.ts";
 import { reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -42,6 +42,7 @@ import {
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
+  type Profile,
   type Review,
   type ReviewCycle,
   type ReviewScore,
@@ -71,6 +72,60 @@ function RecentSops({ sops }: { sops: Sop[] }) {
   );
 }
 
+// One live review cycle's progress: every active person, their score where the cycle is scored,
+// and where their review stands. Scoped to the cycle by cycle_id, because a person has a review
+// in every live cycle at once and matching on the person alone picks whichever came back first.
+function CycleProgress({
+  cycle,
+  people,
+  scored,
+}: {
+  cycle: ReviewCycle;
+  people: Profile[];
+  scored: Array<{ review: Review; score: number | null }>;
+}) {
+  const own = scored.filter((s) => s.review.cycle_id === cycle.id);
+  const complete = own.filter((s) => s.review.status === "complete").length;
+  // A monthly cycle is a Goal Setting Review and carries no scores, so it shows no score column.
+  const showScore = cycle.cadence !== "monthly";
+  return (
+    <Section
+      eyebrow={showScore ? CADENCE_LABELS[cycle.cadence] : `${CADENCE_LABELS[cycle.cadence]} · Goal Setting Review`}
+      title={cycle.name}
+      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${complete} of ${own.length} complete`}
+      actions={
+        <Link to={`/gsr/cycles/${cycle.id}`}>
+          <Button variant="secondary" size="sm">Open cycle</Button>
+        </Link>
+      }
+    >
+      {people.length === 0 ? (
+        <p className="text-sm text-ink-2">Nobody on the roster yet. Add the team in People and their reviews appear here.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {people.map((person) => {
+            const entry = own.find((s) => s.review.employee_id === person.id);
+            return (
+              <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-ink">{displayName(person)}</p>
+                  <p className="truncate text-[12px] text-ink-3">{person.title ?? person.email}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {showScore ? <span className="tnum text-sm text-ink">{entry?.score ?? "-"}</span> : null}
+                  <Badge tone={entry ? REVIEW_STATUS_TONE[entry.review.status] : "neutral"}>
+                    {entry ? REVIEW_STATUS_LABELS[entry.review.status] : "Not started"}
+                  </Badge>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 function AdminDashboard() {
   const { company } = useHub();
   const companyId = company!.id;
@@ -88,14 +143,17 @@ function AdminDashboard() {
       listSnapshots(companyId),
       listCampaigns(companyId),
     ]);
-    const cycle = currentCycle(cycles);
+    // Every cycle that covers today, because a monthly Goal Setting Review runs inside a
+    // quarterly scored review and both are live. Reading one of them is how a finished review
+    // goes missing from this page.
+    const live = activeCycles(cycles);
     let reviews: Review[] = [];
     let scores: ReviewScore[] = [];
-    if (cycle) {
-      reviews = await listCycleReviews(cycle.id);
+    if (live.length > 0) {
+      reviews = (await Promise.all(live.map((c) => listCycleReviews(c.id)))).flat();
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
-    return { people, cycles, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns };
+    return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns };
   }, [companyId, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
@@ -110,7 +168,7 @@ function AdminDashboard() {
     );
   }
 
-  const { people, cycle, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns } = state.data;
+  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns } = state.data;
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
   // anyone else; the only difference is that they cannot open it until they sign in.
@@ -121,7 +179,10 @@ function AdminDashboard() {
     return { review: r, score: own.length > 0 ? computeReviewScore(pillars, own).overall : null };
   });
   const complete = reviews.filter((r) => r.status === "complete").length;
-  const teamAverage = averageScore(scored.map((s) => s.score));
+  // A monthly cycle is a Goal Setting Review and carries no scores, so averaging it in would
+  // drag the team score toward nothing. Only scored cycles count.
+  const scoredCycleIds = new Set(live.filter((c) => c.cadence !== "monthly").map((c) => c.id));
+  const teamAverage = averageScore(scored.filter((s) => scoredCycleIds.has(s.review.cycle_id)).map((s) => s.score));
   const published = allSops.filter((s) => s.status === "published").length;
   const goalsHit = companyGoals.filter((g) => g.is_hit).length;
   const latestMonth = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start))[0] ?? snapshots[0] ?? null;
@@ -141,60 +202,43 @@ function AdminDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
         <Stat
-          label="Current cycle"
-          value={cycle ? `${complete}/${reviews.length}` : "-"}
-          hint={cycle ? `${cycle.name}: reviews complete` : "No open review cycle"}
+          label="Reviews complete"
+          value={live.length > 0 ? `${complete}/${reviews.length}` : "-"}
+          hint={live.length > 0 ? live.map((c) => c.name).join(" · ") : "No open review cycle"}
         />
-        <Stat label="Team score" value={teamAverage ?? "-"} hint={cycle ? "Average of scored reviews" : "Open a cycle to start scoring"} />
+        <Stat
+          label="Team score"
+          value={teamAverage ?? "-"}
+          hint={
+            live.length === 0
+              ? "Open a cycle to start scoring"
+              : scoredCycleIds.size === 0
+                ? "Monthly cycles are not scored"
+                : "Average of scored reviews"
+          }
+        />
         <Stat label="Library" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "resource")}`} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Section
-            eyebrow="Goal Setting and Review"
-            title={cycle ? cycle.name : "Review cycles"}
-            description={cycle ? formatPeriod(cycle.period_start, cycle.period_end) : undefined}
-            actions={
-              cycle ? (
-                <Link to={`/gsr/cycles/${cycle.id}`}>
-                  <Button variant="secondary" size="sm">Open cycle</Button>
-                </Link>
-              ) : (
+          {live.length === 0 ? (
+            <Section
+              eyebrow="Goal Setting and Review"
+              title="Review cycles"
+              actions={
                 <Link to="/gsr">
                   <Button size="sm">Start a cycle</Button>
                 </Link>
-              )
-            }
-          >
-            {!cycle ? (
+              }
+            >
               <p className="text-sm text-ink-2">
                 No review cycle is open. Start one to create a review for every person and track the team's scores.
               </p>
-            ) : employees.length === 0 ? (
-              <p className="text-sm text-ink-2">Nobody has signed in yet. Invite the team to begin reviews.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {employees.map((person) => {
-                  const entry = scored.find((s) => s.review.employee_id === person.id);
-                  return (
-                    <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-ink">{displayName(person)}</p>
-                        <p className="truncate text-[12px] text-ink-3">{person.title ?? person.email}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="tnum text-sm text-ink">{entry?.score ?? "-"}</span>
-                        <Badge tone={entry ? REVIEW_STATUS_TONE[entry.review.status] : "neutral"}>
-                          {entry ? REVIEW_STATUS_LABELS[entry.review.status] : "Not started"}
-                        </Badge>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Section>
+            </Section>
+          ) : (
+            live.map((c) => <CycleProgress key={c.id} cycle={c} people={employees} scored={scored} />)
+          )}
 
           <Section
             eyebrow={String(year)}

@@ -283,6 +283,23 @@ function build(company: Company): CompanyBundle {
       created_at: EARLIER,
       updated_at: EARLIER,
     },
+    {
+      // A second open cycle on the other cadence, overlapping the first. This is the real shape
+      // every company runs: a monthly Goal Setting Review inside a longer scored cycle, so two
+      // cycles cover today at once. Anything that summarises review state has to read both.
+      id: p("cycle-overlapping"),
+      company_id: company.id,
+      name: quarterly ? "September 2026" : "Q3 2026",
+      cadence: quarterly ? "monthly" : "quarterly",
+      period_start: quarterly ? "2026-09-01" : "2026-07-01",
+      period_end: "2026-09-30",
+      theme: null,
+      theme_description: null,
+      status: "open",
+      created_by: profiles[0].id,
+      created_at: NOW,
+      updated_at: NOW,
+    },
   ];
 
   const employees = profiles.filter((x) => x.role === "employee");

@@ -24,7 +24,7 @@ import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { averageScore, computeReviewScore, weightTotal } from "../../lib/gsr/scoring.ts";
-import { currentCycle } from "../../lib/gsr/cycles.ts";
+import { activeCycles } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
@@ -37,7 +37,7 @@ interface CompanySummary {
   domains: string[];
   people: number;
   admins: number;
-  cycle: ReviewCycle | null;
+  cycles: ReviewCycle[];
   reviewsComplete: number;
   reviewsTotal: number;
   teamScore: number | null;
@@ -68,14 +68,21 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   // people the cycle page does.
   const reviewable = active;
   const admins = active.filter((p) => p.role === "admin");
-  const cycle = currentCycle(cycles);
-  const cycleReviews = cycle ? reviews.filter((r) => r.cycle_id === cycle.id) : [];
+  // Every cycle covering today, not one of them: a monthly Goal Setting Review runs inside a
+  // quarterly scored review, so reading one reports the other's people as not started.
+  const liveCycles = activeCycles(cycles);
+  const liveCycleIds = new Set(liveCycles.map((c) => c.id));
+  const cycleReviews = reviews.filter((r) => liveCycleIds.has(r.cycle_id));
   const scores = cycleReviews.length > 0 ? await listScoresForReviews(cycleReviews.map((r) => r.id)) : [];
+  // A monthly cycle carries no scores by design, so only scored cycles reach the team score.
+  const scoredIds = new Set(liveCycles.filter((c) => c.cadence !== "monthly").map((c) => c.id));
   const teamScore = averageScore(
-    cycleReviews.map((r) => {
-      const own = scores.filter((s) => s.review_id === r.id);
-      return own.length > 0 ? computeReviewScore(pillars, own).overall : null;
-    }),
+    cycleReviews
+      .filter((r) => scoredIds.has(r.cycle_id))
+      .map((r) => {
+        const own = scores.filter((s) => s.review_id === r.id);
+        return own.length > 0 ? computeReviewScore(pillars, own).overall : null;
+      }),
   );
   const published = sops.filter((s) => s.status === "published");
   const lastSop = [...sops].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))[0] ?? null;
@@ -89,7 +96,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   const alerts: string[] = [];
   if (admins.length === 0) alerts.push("No admin yet");
   if (ownDomains.length === 0) alerts.push("No sign-in domain");
-  if (!cycle) alerts.push("No open review cycle");
+  if (liveCycles.length === 0) alerts.push("No open review cycle");
   if (pillars.length === 0) alerts.push("No GSR pillars");
   else if (pillarTotal !== 100) alerts.push(`Pillar weights total ${formatNumber(pillarTotal)}%`);
   if (pending.length > 0) alerts.push(pluralize(pending.length, "invitation pending", "invitations pending"));
@@ -101,7 +108,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     domains: ownDomains,
     people: active.length,
     admins: admins.length,
-    cycle,
+    cycles: liveCycles,
     reviewsComplete: cycleReviews.filter((r) => r.status === "complete").length,
     reviewsTotal: reviewable.length,
     teamScore,
@@ -128,7 +135,7 @@ function Signal({ label, value, hint }: { label: string; value: string; hint?: s
 }
 
 function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (path: string) => void }) {
-  const { company, cycle, latestSnapshot } = summary;
+  const { company, cycles, latestSnapshot } = summary;
   const theme = THEMES[company.theme_key];
   const derived = latestSnapshot ? deriveSnapshot(latestSnapshot) : null;
   return (
@@ -152,9 +159,13 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
       <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Signal label="People" value={String(summary.people)} hint={pluralize(summary.admins, "admin")} />
         <Signal
-          label="Review cycle"
-          value={cycle ? `${summary.reviewsComplete}/${summary.reviewsTotal} complete` : "None open"}
-          hint={cycle ? `${cycle.name}${summary.teamScore !== null ? ` · team ${summary.teamScore}` : ""}` : undefined}
+          label={cycles.length > 1 ? "Review cycles" : "Review cycle"}
+          value={cycles.length > 0 ? `${summary.reviewsComplete}/${summary.reviewsTotal} complete` : "None open"}
+          hint={
+            cycles.length > 0
+              ? `${cycles.map((c) => c.name).join(" · ")}${summary.teamScore !== null ? ` · team ${summary.teamScore}` : ""}`
+              : undefined
+          }
         />
         <Signal label="SOP library" value={pluralize(summary.publishedSops, "published SOP")} hint={summary.lastSopUpdate ? `Updated ${formatDate(summary.lastSopUpdate)}` : "Nothing yet"} />
         <Signal
@@ -218,7 +229,7 @@ export default function PortfolioPage() {
   const summaries = state.data ?? [];
   const totals = {
     people: summaries.reduce((sum, s) => sum + s.people, 0),
-    openCycles: summaries.filter((s) => s.cycle).length,
+    openCycles: summaries.filter((s) => s.cycles.length > 0).length,
     pending: summaries.reduce((sum, s) => sum + s.pendingInvites, 0),
     attention: summaries.filter((s) => s.alerts.length > 0).length,
   };

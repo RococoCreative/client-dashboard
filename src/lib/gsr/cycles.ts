@@ -64,17 +64,45 @@ export function defaultCycleName(cadence: Cadence, start: string, end?: string |
   }
 }
 
-// The cycle whose period contains today, else the most recently started one.
-export function currentCycle<T extends { period_start: string; period_end: string; status: string }>(
+// Every open cycle whose period covers today, the one ending soonest first.
+//
+// A company can have several at once and usually does: a monthly Goal Setting Review runs inside
+// a quarterly scored review, so both cover today. Collapsing that to one cycle is how a finished
+// review goes missing, because the summary shows whichever cycle won and reports the other's
+// people as not started. Anything summarising a company's review state reads all of these.
+//
+// When nothing covers today the most recently started open cycle stands in, so a company between
+// periods still sees where it left off. Ties break on the dates and then the id, so the answer
+// never depends on the order the rows arrived in.
+export function activeCycles<T extends { id: string; period_start: string; period_end: string; status: string }>(
+  cycles: T[],
+  today = new Date(),
+): T[] {
+  const todayIso = toDateOnly(today);
+  const open = cycles.filter((c) => c.status === "open");
+  const live = open.filter((c) => c.period_start <= todayIso && c.period_end >= todayIso);
+  if (live.length > 0) {
+    // Ending soonest first, because that is the one with a deadline on it. When two end together
+    // the shorter one leads: a September review inside Q3 is the more immediate of the two.
+    return [...live].sort(
+      (a, b) =>
+        a.period_end.localeCompare(b.period_end) ||
+        b.period_start.localeCompare(a.period_start) ||
+        a.id.localeCompare(b.id),
+    );
+  }
+  return [...open]
+    .sort((a, b) => b.period_start.localeCompare(a.period_start) || b.period_end.localeCompare(a.period_end) || a.id.localeCompare(b.id))
+    .slice(0, 1);
+}
+
+// The most pressing open cycle, for a caller that can genuinely only show one. Prefer
+// activeCycles anywhere a company's whole review state is being summarised.
+export function currentCycle<T extends { id: string; period_start: string; period_end: string; status: string }>(
   cycles: T[],
   today = new Date(),
 ): T | null {
-  const todayIso = toDateOnly(today);
-  const open = cycles.filter((c) => c.status === "open");
-  const containing = open.find((c) => c.period_start <= todayIso && c.period_end >= todayIso);
-  if (containing) return containing;
-  const sorted = [...open].sort((a, b) => (a.period_start < b.period_start ? 1 : -1));
-  return sorted[0] ?? null;
+  return activeCycles(cycles, today)[0] ?? null;
 }
 
 // The cycle before `current` with the same cadence: the latest one that started earlier.
