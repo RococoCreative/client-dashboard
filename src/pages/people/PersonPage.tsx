@@ -25,7 +25,7 @@ import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } fr
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
 import { averageScore } from "../../lib/gsr/scoring.ts";
-import { reviewHistory } from "../../lib/gsr/history.ts";
+import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
 import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
@@ -33,7 +33,7 @@ import { REVIEW_STATUS_LABELS, ROLE_LABELS, keysOf, type Profile, type Role } fr
 
 export default function PersonPage() {
   const { profileId = "" } = useParams();
-  const { company, profile: me } = useHub();
+  const { company, profile: me, refreshProfile } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
   const [error, setError] = useState("");
@@ -57,7 +57,10 @@ export default function PersonPage() {
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
 
   const rows = reviewHistory(reviews, cycles, pillars, scores);
-  const latest = rows[0] ?? null;
+  // The newest review and the newest scored review are different rows once a monthly Goal
+  // Setting Review, which carries no scores, sits inside a scored quarter. The score figures
+  // read the scored one so a finished review is not hidden behind a blank monthly card.
+  const latestScored = latestScoredReview(rows);
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
   const tenure = formatTenure(person.hire_date);
@@ -68,6 +71,10 @@ export default function PersonPage() {
     try {
       const next: Profile = await updateProfile(person!.id, patchValue);
       state.setData((prev) => (prev ? { ...prev, person: next, people: prev.people.map((p) => (p.id === next.id ? next : p)) } : prev));
+      // HubContext holds the sign-in snapshot of who you are, and the sidebar footer renders it
+      // from a layout route that never remounts. Editing your own name or title here otherwise
+      // left the old one in the corner of every screen until the next sign-in.
+      if (next.id === me.id) await refreshProfile();
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -148,7 +155,7 @@ export default function PersonPage() {
           </Section>
           <div className="grid gap-4">
             <Stat label="Annual compensation" value={formatMoney(totalAnnual(compensation))} hint={compensation.length > 0 ? `${formatMoney(totalAnnual(compensation) / 12)} a month` : "Not recorded"} />
-            <Stat label="Latest score" value={<span className={bandClass(latest?.result?.overall ?? null)}>{latest?.result?.overall ?? "-"}</span>} hint={latest?.cycle?.name} />
+            <Stat label="Latest score" value={<span className={bandClass(latestScored?.result?.overall ?? null)}>{latestScored?.result?.overall ?? "-"}</span>} hint={latestScored?.cycle?.name ?? "Not scored yet"} />
             <Stat label="Average" value={average ?? "-"} hint={pluralize(rows.length, "review")} />
           </div>
         </div>
@@ -200,12 +207,12 @@ export default function PersonPage() {
               </div>
             )}
           </Section>
-          {latest?.result ? (
-            <Section eyebrow="Latest review" title={latest.cycle?.name ?? "Scores"}>
+          {latestScored?.result ? (
+            <Section eyebrow="Latest scored review" title={latestScored.cycle?.name ?? "Scores"}>
               <div className="flex items-center gap-5">
-                <ScoreRing score={latest.result.overall} size={80} />
+                <ScoreRing score={latestScored.result.overall} size={80} />
                 <ul className="flex-1 space-y-1 text-sm">
-                  {latest.result.pillars.map((p) => (
+                  {latestScored.result.pillars.map((p) => (
                     <li key={p.pillarId} className="flex justify-between gap-3">
                       <span className="text-ink-2">{p.name}</span>
                       <span className="tnum text-ink">{p.score === null ? "-" : Math.round(p.score)}</span>

@@ -120,7 +120,15 @@ export default function PeoplePage() {
     return { people, invitations };
   }, [companyId]);
 
-  const people = state.data?.people ?? [];
+  // Sorted the way listCompanyProfiles sorts, names first and the nameless last, so somebody
+  // added from the dialog appears where they will still be after the next load instead of at
+  // the bottom and then jumping to the top, taking the Send invite button with them.
+  const people = [...(state.data?.people ?? [])].sort(
+    (a, b) =>
+      Number(a.full_name === null) - Number(b.full_name === null) ||
+      (a.full_name ?? "").localeCompare(b.full_name ?? "") ||
+      a.email.localeCompare(b.email),
+  );
   const invitations = state.data?.invitations ?? [];
   const pendingFor = (person: Profile): Invitation | null =>
     invitations.find((i) => !i.accepted_at && (i.profile_id === person.id || i.email === person.email)) ?? null;

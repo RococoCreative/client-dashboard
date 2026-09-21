@@ -320,6 +320,15 @@ describe("library", () => {
     expect((await screen.findByLabelText(/Body/)).textContent).toContain("Added this month");
   });
 
+  it("refuses to open another company's SOP in the editor", async () => {
+    // A Rococo admin can read all three companies and the sidebar switcher changes company
+    // without navigating, so a stale id must not leave another tenant's document on screen in
+    // a form whose save appends a version to it.
+    renderWithHub(<SopEditPage />, admin, { path: `/sops/${RBA.sops[0].id}/edit`, pattern: "/sops/:sopId/edit" });
+    expect(await screen.findByText(/not in this company/)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(RBA.sops[0].title)).not.toBeInTheDocument();
+  });
+
   it("filters resources by tag", async () => {
     const user = userEvent.setup();
     renderWithHub(<ResourcesPage />, employee);

@@ -125,7 +125,19 @@ export default function ReviewPage() {
   const criteriaCount = Object.fromEntries(pillars.map((p) => [p.id, criteria.filter((c) => c.pillar_id === p.id).length]));
   const result = computeReviewScore(pillars, scores, criteriaCount);
 
-  function replaceScore(next: ReviewScore) {
+  // A row that came back from a write we started: it replaces what is in state, and it is
+  // dropped if the row is no longer there. Removing a line item blurs the Notes box beside the
+  // trash icon, so a patch for that row is often still in flight when the delete lands; adding
+  // an unknown id back here put the deleted line item on screen again, target, actual and all,
+  // where it stayed until the next load because nothing reloads after a delete.
+  function updateScoreInState(next: ReviewScore) {
+    state.setData((prev) =>
+      prev ? { ...prev, scores: prev.scores.map((s) => (s.id === next.id ? next : s)) } : prev,
+    );
+  }
+
+  // A row this page has just created. Only adding ever inserts.
+  function addScoreToState(next: ReviewScore) {
     state.setData((prev) =>
       prev
         ? { ...prev, scores: prev.scores.some((s) => s.id === next.id) ? prev.scores.map((s) => (s.id === next.id ? next : s)) : [...prev.scores, next] }
@@ -151,7 +163,9 @@ export default function ReviewPage() {
         ? await updateScore(existingId, patch)
         : await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, criterion_id: criterion.id, ...patch });
       savedScoreIds.current.set(key, saved.id);
-      replaceScore(saved);
+      // First write for this criterion creates the row, later writes update it.
+      if (existingId) updateScoreInState(saved);
+      else addScoreToState(saved);
       await markInProgress();
     });
     saveChains.current.set(key, run);
@@ -167,7 +181,7 @@ export default function ReviewPage() {
     try {
       const items = scores.filter((s) => s.pillar_id === pillar.id && !s.criterion_id);
       const saved = await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, label: "", sort_order: items.length });
-      replaceScore(saved);
+      addScoreToState(saved);
       await markInProgress();
     } catch (err) {
       setError(errorMessage(err));
@@ -176,8 +190,16 @@ export default function ReviewPage() {
 
   async function saveLineItem(score: ReviewScore, patch: { label?: string; target?: number | null; actual?: number | null; notes?: string | null }) {
     setError("");
+    // Label, target, actual and notes sit in one row, so tabbing across them puts several
+    // whole-row writes in flight at once. Queued per row, the same way saveRating is, because
+    // each response carries that write's whole row and out of order they undo each other on
+    // screen while the database is correct.
+    const run = (saveChains.current.get(score.id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+      updateScoreInState(await updateScore(score.id, patch));
+    });
+    saveChains.current.set(score.id, run);
     try {
-      replaceScore(await updateScore(score.id, patch));
+      await run;
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -293,6 +315,7 @@ export default function ReviewPage() {
             review={review}
             cycle={cycle}
             previousCycle={lastMonth}
+            cycles={cycles}
             goals={goals}
             isAdmin={isAdmin}
             isOwn={isOwn}

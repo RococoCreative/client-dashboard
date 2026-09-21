@@ -221,6 +221,7 @@ export default function GoalSettingPanel({
   review,
   cycle,
   previousCycle,
+  cycles,
   goals,
   isAdmin,
   isOwn,
@@ -231,6 +232,9 @@ export default function GoalSettingPanel({
   review: Review;
   cycle: ReviewCycle;
   previousCycle: ReviewCycle | null;
+  // Every cycle this company has, so a carried goal can name the cycle it actually came from
+  // rather than whichever one happens to be the previous one now.
+  cycles: ReviewCycle[];
   goals: Goal[];
   isAdmin: boolean;
   isOwn: boolean;
@@ -245,6 +249,19 @@ export default function GoalSettingPanel({
   const year = cycleYear(cycle);
   const { thisCycle, lastCycle, yearly } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
   const lastSettled = previousCycle ? cycleSettled(previousCycle) : true;
+
+  // Where a carried goal came from is a property of the link, not of "the previous cycle".
+  // Reading it off previousCycle named the wrong month whenever the source cycle was deleted
+  // (goals.cycle_id is ON DELETE SET NULL, so the goal outlives its cycle) or whenever a
+  // skipped month was created later and slid in between. The source goal is only in `goals`
+  // when it belongs to this person, which it always does, and the neutral wording covers the
+  // case where the source goal or its cycle is gone.
+  const carriedFromName = (goal: Goal): string | null => {
+    if (!goal.carried_from_goal_id) return null;
+    const source = goals.find((g) => g.id === goal.carried_from_goal_id);
+    const sourceCycle = source?.cycle_id ? cycles.find((c) => c.id === source.cycle_id) : null;
+    return sourceCycle?.name ?? "an earlier cycle";
+  };
   const summary = hitCount(lastCycle, lastSettled);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
@@ -382,7 +399,7 @@ export default function GoalSettingPanel({
                 goal={goal}
                 canEdit={canEdit}
                 canTick={canTick}
-                carriedFrom={goal.carried_from_goal_id && previousCycle ? previousCycle.name : null}
+                carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
                 onDelete={() => setDeleting(goal)}
                 onError={onError}

@@ -1,6 +1,6 @@
 // The Goal Setting Review rules: progress to status, hit or miss, carry forward, splitting.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, hitCount, progressPatch, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, goalSettled, hitCount, progressPatch, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -80,3 +80,36 @@ describe("splitGoals", () => {
   });
 });
 
+describe("when a goal's period is over", () => {
+  const cycles = [
+    { id: "open-now", status: "open", period_end: "2026-12-31" },
+    { id: "over", status: "open", period_end: "2026-08-31" },
+    { id: "shut", status: "closed", period_end: "2026-12-31" },
+  ];
+  const today = new Date(2026, 8, 21);
+  const yearly = (year: number | null) => ({ scope: "year" as const, year, cycle_id: null });
+  const onCycle = (cycleId: string | null) => ({ scope: "cycle" as const, year: null, cycle_id: cycleId });
+
+  it("settles a yearly goal once its year is behind us", () => {
+    expect(goalSettled(yearly(2025), cycles, today)).toBe(true);
+    expect(goalSettled(yearly(2026), cycles, today)).toBe(false);
+    expect(goalSettled(yearly(null), cycles, today)).toBe(false);
+  });
+
+  it("settles a cycle goal when its cycle is closed or its period is over", () => {
+    expect(goalSettled(onCycle("open-now"), cycles, today)).toBe(false);
+    expect(goalSettled(onCycle("over"), cycles, today)).toBe(true);
+    expect(goalSettled(onCycle("shut"), cycles, today)).toBe(true);
+    // A goal whose cycle was deleted has no period to be over.
+    expect(goalSettled(onCycle(null), cycles, today)).toBe(false);
+    expect(goalSettled(onCycle("gone"), cycles, today)).toBe(false);
+  });
+
+  it("keeps an unfinished goal from a past year off an open-goals list forever", () => {
+    // The employee dashboard passed settled=false for every yearly goal, so a 2026 goal at 40
+    // per cent counted as open through 2027 while My Goals printed it as a miss.
+    const stale = { progress: 40, status: "in_progress" as const, ...yearly(2026) };
+    expect(goalOutcome(stale, goalSettled(stale, cycles, new Date(2027, 0, 2)))).toBe("miss");
+    expect(goalOutcome(stale, goalSettled(stale, cycles, today))).toBe("open");
+  });
+});

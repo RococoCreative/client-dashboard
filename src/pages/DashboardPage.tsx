@@ -32,9 +32,9 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, activeCycles, cycleSettled } from "../lib/gsr/cycles.ts";
-import { goalOutcome, stepsTaken } from "../lib/gsr/goals.ts";
-import { reviewHistory } from "../lib/gsr/history.ts";
+import { CADENCE_LABELS, activeCycles, cycleProgress } from "../lib/gsr/cycles.ts";
+import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
+import { latestScoredReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { hasAccount } from "../lib/people.ts";
 import {
@@ -85,14 +85,16 @@ function CycleProgress({
   scored: Array<{ review: Review; score: number | null }>;
 }) {
   const own = scored.filter((s) => s.review.cycle_id === cycle.id);
-  const complete = own.filter((s) => s.review.status === "complete").length;
+  // Counted over the roster the cycle covers, so a person with no review row yet reads as a
+  // review still owed rather than vanishing from both halves of the fraction.
+  const progress = cycleProgress(people, own.map((s) => s.review), cycle.id);
   // A monthly cycle is a Goal Setting Review and carries no scores, so it shows no score column.
   const showScore = cycle.cadence !== "monthly";
   return (
     <Section
       eyebrow={showScore ? CADENCE_LABELS[cycle.cadence] : `${CADENCE_LABELS[cycle.cadence]} · Goal Setting Review`}
       title={cycle.name}
-      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${complete} of ${own.length} complete`}
+      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete`}
       actions={
         <Link to={`/gsr/cycles/${cycle.id}`}>
           <Button variant="secondary" size="sm">Open cycle</Button>
@@ -178,7 +180,15 @@ function AdminDashboard() {
     const own = scores.filter((s) => s.review_id === r.id);
     return { review: r, score: own.length > 0 ? computeReviewScore(pillars, own).overall : null };
   });
-  const complete = reviews.filter((r) => r.status === "complete").length;
+  // Every live cycle owes a review for everybody active, so the tile adds the per-cycle
+  // fractions and cannot report all clear while a cycle has no rows in it at all.
+  const standing = live.reduce(
+    (sum, c) => {
+      const own = cycleProgress(activePeople, reviews, c.id);
+      return { complete: sum.complete + own.complete, total: sum.total + own.total };
+    },
+    { complete: 0, total: 0 },
+  );
   // A monthly cycle is a Goal Setting Review and carries no scores, so averaging it in would
   // drag the team score toward nothing. Only scored cycles count.
   const scoredCycleIds = new Set(live.filter((c) => c.cadence !== "monthly").map((c) => c.id));
@@ -188,8 +198,13 @@ function AdminDashboard() {
   const latestMonth = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start))[0] ?? snapshots[0] ?? null;
   const latestDerived = latestMonth ? deriveSnapshot(latestMonth) : null;
   const liveCampaigns = campaigns.filter((c) => c.status === "active" || c.status === "paused");
-  const liveBudget = liveCampaigns.reduce((sum, c) => sum + (c.budget ?? 0), 0);
-  const liveSpend = liveCampaigns.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
+  // Spend against budget is only a share of anything when both sides cover the same campaigns.
+  // Counting a campaign with no budget set as zero budget while counting its spend in full read
+  // "$13,400 spent of $12,000 (112%)": over budget against a total that left one campaign out.
+  const budgeted = liveCampaigns.filter((c) => c.budget !== null);
+  const unbudgeted = liveCampaigns.length - budgeted.length;
+  const liveBudget = budgeted.reduce((sum, c) => sum + (c.budget ?? 0), 0);
+  const liveSpend = budgeted.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
 
   return (
     <>
@@ -203,7 +218,7 @@ function AdminDashboard() {
         <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
         <Stat
           label="Reviews complete"
-          value={live.length > 0 ? `${complete}/${reviews.length}` : "-"}
+          value={live.length > 0 ? `${standing.complete}/${standing.total}` : "-"}
           hint={live.length > 0 ? live.map((c) => c.name).join(" · ") : "No open review cycle"}
         />
         <Stat
@@ -320,6 +335,11 @@ function AdminDashboard() {
                   {formatMoney(liveSpend)} spent of {formatMoney(liveBudget)}
                   {liveBudget > 0 ? ` (${formatPercent(liveSpend / liveBudget)})` : ""}
                 </p>
+                {unbudgeted > 0 ? (
+                  <p className="mt-1 text-[12px] text-ink-3">
+                    {pluralize(unbudgeted, "live campaign")} with no budget set, left out of the total.
+                  </p>
+                ) : null}
                 <ul className="mt-3 space-y-1.5">
                   {liveCampaigns.slice(0, 4).map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-3 text-[13px]">
@@ -379,39 +399,45 @@ function EmployeeDashboard() {
     ]);
     // Latest by the period the review covers, the same rule My GSR and the person page use.
     // The service orders by row creation time, which puts a review started out of order first.
-    const history = reviewHistory(reviews, cycles, pillars, []);
-    const latest = history[0]?.review ?? null;
-    const cycle: ReviewCycle | null = history[0]?.cycle ?? null;
-    const scores = latest ? await listScoresForReviews([latest.id]) : [];
-    return { latest, cycle, pillars, scores, goals, recentSops, cycles, companyGoals };
+    //
+    // Scores are fetched for every review, not for the newest one, because the newest review is
+    // a monthly Goal Setting Review that carries none: asking for that one row's scores meant
+    // the card could only ever show an empty ring while a rated quarterly review sat behind it.
+    const scores = await listScoresForReviews(reviews.map((r) => r.id));
+    const history = reviewHistory(reviews, cycles, pillars, scores);
+    const featured = latestScoredReview(history) ?? history[0] ?? null;
+    return { featured, goals, recentSops, cycles, companyGoals };
   }, [companyId, profile.id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { latest, cycle, pillars, scores, goals, recentSops, cycles, companyGoals } = state.data;
-  const result = latest && scores.length > 0 ? computeReviewScore(pillars, scores) : null;
+  const { featured, goals, recentSops, cycles, companyGoals } = state.data;
+  const cycle = featured?.cycle ?? null;
+  const result = featured?.result ?? null;
   // A goal is open until it is hit, or until its period settles and it reads as a miss.
   // Nothing ever writes the 'missed' status, so counting on status alone kept every unfinished
-  // goal from every closed cycle on this list for good.
-  const openGoals = goals.filter((goal) => {
-    const goalCycle = goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id) ?? null) : null;
-    return goalOutcome(goal, goalCycle ? cycleSettled(goalCycle) : false) === "open";
-  });
+  // goal from every closed cycle on this list for good. goalSettled knows both shapes of
+  // period, cycle and year, so this list and My Goals cannot reach opposite verdicts.
+  const openGoals = goals.filter((goal) => goalOutcome(goal, goalSettled(goal, cycles)) === "open");
 
   return (
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Section eyebrow="Latest review" title={cycle?.name ?? "No review yet"} className="lg:col-span-1">
-          {latest ? (
+        <Section
+          eyebrow={result ? "Latest scored review" : "Latest review"}
+          title={cycle?.name ?? "No review yet"}
+          className="lg:col-span-1"
+        >
+          {featured ? (
             <div className="flex items-center gap-5">
               <ScoreRing score={result?.overall ?? null} size={88} label="Overall" />
               <div className="min-w-0 text-sm">
-                <Badge tone={REVIEW_STATUS_TONE[latest.status]}>{REVIEW_STATUS_LABELS[latest.status]}</Badge>
+                <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                 <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={`/gsr/reviews/${latest.id}`} className="mt-2 inline-block text-accent hover:underline">
+                <Link to={`/gsr/reviews/${featured.review.id}`} className="mt-2 inline-block text-accent hover:underline">
                   View review
                 </Link>
               </div>

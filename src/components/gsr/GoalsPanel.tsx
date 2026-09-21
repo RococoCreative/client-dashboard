@@ -21,8 +21,7 @@ import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createGoal, deleteGoal, listGoals, updateGoal } from "../../services/gsr.ts";
-import { goalOutcome, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
-import { cycleSettled } from "../../lib/gsr/cycles.ts";
+import { goalOutcome, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type ReviewCycle } from "../../types/database.ts";
 
@@ -46,6 +45,7 @@ function GoalDialog({
   companyId,
   employeeId,
   goal,
+  goals,
   cycles,
   onClose,
   onSaved,
@@ -53,6 +53,9 @@ function GoalDialog({
   companyId: string;
   employeeId: string;
   goal: Goal | null;
+  // Everything already filed for this person, so a new goal gets a sort_order that puts it at
+  // the end of its group instead of defaulting to 0 and jumping to the top on the next load.
+  goals: Goal[];
   cycles: ReviewCycle[];
   onClose: () => void;
   onSaved: (goal: Goal) => void;
@@ -89,7 +92,12 @@ function GoalDialog({
       };
       const saved = goal
         ? await updateGoal(goal.id, payload)
-        : await createGoal({ company_id: companyId, employee_id: employeeId, ...payload });
+        : await createGoal({
+            company_id: companyId,
+            employee_id: employeeId,
+            ...payload,
+            sort_order: goals.filter((g) => g.kind === kind).length + 1,
+          });
       onSaved(saved);
     } catch (err) {
       setError(errorMessage(err));
@@ -253,18 +261,16 @@ export default function GoalsPanel({
     }
   }
 
-  const goals = state.data ?? [];
-  const thisYear = new Date().getFullYear();
+  // Sorted the way listGoals sorts, so the position a goal is shown in is the position it keeps
+  // through the next load or tab-focus refresh rather than sliding out from under the pointer.
+  const goals = [...(state.data ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
   const periodLabel = (goal: Goal): string => {
     if (goal.scope === "year") return `${goal.year} goal`;
     return goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id)?.name ?? "Review cycle") : "Ongoing";
   };
   // A goal reads as hit or miss once its period is over: a closed or past cycle, or a past year.
-  const settled = (goal: Goal): boolean => {
-    if (goal.scope === "year") return (goal.year ?? thisYear) < thisYear;
-    const cycle = goal.cycle_id ? cycles.find((c) => c.id === goal.cycle_id) : undefined;
-    return cycle ? cycleSettled(cycle) : false;
-  };
+  // The rule is in lib/gsr/goals.ts so the employee dashboard reaches the same verdict.
+  const settled = (goal: Goal): boolean => goalSettled(goal, cycles);
 
   return (
     <div className="space-y-6">
@@ -317,6 +323,7 @@ export default function GoalsPanel({
           companyId={companyId}
           employeeId={employeeId}
           goal={dialog.goal}
+          goals={goals}
           cycles={cycles}
           onClose={() => setDialog(null)}
           onSaved={(goal) => {

@@ -40,6 +40,10 @@ interface Settled<T> {
   error: string;
   // The request number this result belongs to; -1 until the first one lands.
   request: number;
+  // Which deps generation the data belongs to. reload() keeps the generation, because it is
+  // asking the same question again; a deps change starts a new one, because it is a different
+  // question. Rows from an older generation are not an answer to the current one.
+  gen: number;
 }
 
 function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
@@ -52,12 +56,14 @@ export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]):
   // the deps comparison happens during render (the adjust-state-on-change pattern), so the
   // effect keys on one number and no state is written before the fetch resolves.
   const [request, setRequest] = useState(0);
+  const [gen, setGen] = useState(0);
   const [seenDeps, setSeenDeps] = useState(deps);
   if (!sameDeps(seenDeps, deps)) {
     setSeenDeps(deps);
     setRequest((n) => n + 1);
+    setGen((n) => n + 1);
   }
-  const [settled, setSettled] = useState<Settled<T>>({ data: null, error: "", request: -1 });
+  const [settled, setSettled] = useState<Settled<T>>({ data: null, error: "", request: -1, gen: 0 });
 
   // The loader closure changes every render; the effect reads the latest one through a ref
   // so a parent re-render never refetches. Synced in an effect, never during render.
@@ -80,18 +86,25 @@ export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]):
         if (!active) return;
         settledAt.current = Date.now();
         inFlight.current = false;
-        setSettled({ data: next, error: "", request });
+        setSettled({ data: next, error: "", request, gen });
       })
       .catch((err: unknown) => {
         if (!active) return;
         settledAt.current = Date.now();
         inFlight.current = false;
-        setSettled((prev) => ({ data: prev.data, error: errorMessage(err), request }));
+        // A failed reload keeps what is on screen: a flaky signal must not blank a page someone
+        // is reading. A failed deps change must not, because the rows on screen answer the old
+        // question and the page around them already says the new one. Showing 2026's goals
+        // under a header reading 2025, with Edit, Delete and the Hit toggle live on them, is
+        // worse than showing the error alone.
+        setSettled((prev) => ({ data: prev.gen === gen ? prev.data : null, error: errorMessage(err), request, gen }));
       });
     return () => {
       active = false;
     };
-  }, [request]);
+    // gen moves only together with request, on a deps change, so listing it starts no extra
+    // fetch. It is here because the effect stamps results with it.
+  }, [request, gen]);
 
   // Returning to the tab is the signal that time has passed and the page may be behind.
   useEffect(() => {

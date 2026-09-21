@@ -254,18 +254,23 @@ export default function DeliverablesPanel({
     await run(() => chained);
   }
 
+  // The heading's name box and its category pulldown sit in the same row, so correcting the
+  // spelling and then refiling it puts two whole-row writes in flight against one heading. The
+  // name write's response carries the old category_id, so landing last it moved the heading
+  // back to where it was. Queued per heading, the same way the task saves are.
   async function saveDeliverable(deliverable: EmployeeDeliverable, patch: Partial<Pick<EmployeeDeliverable, "name" | "category_id">>) {
-    await run(async () => {
+    const chained = (saveChains.current.get(deliverable.id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
       const next = await updateEmployeeDeliverable(deliverable.id, patch);
       state.setData((prev) => (prev ? { ...prev, deliverables: prev.deliverables.map((d) => (d.id === next.id ? next : d)) } : prev));
     });
+    saveChains.current.set(deliverable.id, chained);
+    await run(() => chained);
   }
 
   async function refileDeliverable(deliverable: EmployeeDeliverable, choice: string) {
     await run(async () => {
       const categoryId = await resolveCategory(choice);
-      const next = await updateEmployeeDeliverable(deliverable.id, { category_id: categoryId });
-      state.setData((prev) => (prev ? { ...prev, deliverables: prev.deliverables.map((d) => (d.id === next.id ? next : d)) } : prev));
+      await saveDeliverable(deliverable, { category_id: categoryId });
     });
   }
 

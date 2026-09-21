@@ -24,7 +24,7 @@ import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { averageScore, computeReviewScore, weightTotal } from "../../lib/gsr/scoring.ts";
-import { activeCycles } from "../../lib/gsr/cycles.ts";
+import { activeCycles, cycleProgress } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
@@ -109,8 +109,16 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     people: active.length,
     admins: admins.length,
     cycles: liveCycles,
-    reviewsComplete: cycleReviews.filter((r) => r.status === "complete").length,
-    reviewsTotal: reviewable.length,
+    // Both halves counted over the same set: every live cycle owes a review for everybody
+    // active. Summing completes across cycles against a single roster could otherwise print a
+    // fraction above one on the portfolio card.
+    ...liveCycles.reduce(
+      (sum, c) => {
+        const own = cycleProgress(reviewable, cycleReviews, c.id);
+        return { reviewsComplete: sum.reviewsComplete + own.complete, reviewsTotal: sum.reviewsTotal + own.total };
+      },
+      { reviewsComplete: 0, reviewsTotal: 0 },
+    ),
     teamScore,
     pillarTotal,
     publishedSops: published.length,

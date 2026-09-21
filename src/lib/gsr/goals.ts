@@ -1,6 +1,7 @@
 // Goal Setting Review logic, pure and tested: what a goal's progress means, how a missed goal
 // carries into the next cycle, and how one person's goals split across last cycle, this
 // cycle, and the year. Scores live in scoring.ts; this never touches them.
+import { cycleSettled } from "./cycles.ts";
 import type { ActionStep, Goal, GoalKind, GoalStatus } from "../../types/database.ts";
 
 export type GoalOutcome = "hit" | "miss" | "open";
@@ -10,6 +11,23 @@ export type GoalOutcome = "hit" | "miss" | "open";
 export function goalOutcome(goal: Pick<Goal, "progress" | "status">, settled: boolean): GoalOutcome {
   if (goal.progress >= 100 || goal.status === "achieved") return "hit";
   return settled ? "miss" : "open";
+}
+
+// Whether a goal's period is over, so goalOutcome can call an unfinished goal a miss.
+//
+// Two shapes of goal, two rules: a cycle goal settles when its cycle closes or its period ends,
+// a yearly goal when the year it belongs to is behind us. A caller that handled only the cycle
+// case treated every yearly goal as never settled, so an unfinished 2026 goal stayed on the
+// employee dashboard's open list through 2027 and beyond while My Goals printed the same goal
+// as a miss. Two screens, one goal, opposite verdicts, which is why the rule lives here now.
+export function goalSettled(
+  goal: Pick<Goal, "scope" | "year" | "cycle_id">,
+  cycles: Array<{ id: string; status: string; period_end: string }>,
+  today = new Date(),
+): boolean {
+  if (goal.scope === "year") return (goal.year ?? today.getFullYear()) < today.getFullYear();
+  const cycle = goal.cycle_id ? cycles.find((c) => c.id === goal.cycle_id) : undefined;
+  return cycle ? cycleSettled(cycle, today) : false;
 }
 
 // The slider drives status: 100 marks the goal achieved, moving back off 100 reopens it, and

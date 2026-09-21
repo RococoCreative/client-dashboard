@@ -13,6 +13,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { addSopVersion, createSop, getCurrentSopVersion, getSop, updateSop } from "../../services/sops.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { assertInCompany } from "../../lib/tenancy.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, keysOf, type SopCategory, type SopStatus } from "../../types/database.ts";
 
 const TEMPLATE = `## Purpose
@@ -136,11 +137,18 @@ function SopForm({ existing }: { existing: ExistingSop | null }) {
 
 export default function SopEditPage() {
   const { sopId } = useParams();
+  const { company } = useHub();
+  const companyId = company!.id;
   const existing = useAsync(async (): Promise<ExistingSop | null> => {
     if (!sopId) return null;
     const [sop, version] = await Promise.all([getSop(sopId), getCurrentSopVersion(sopId)]);
+    // Saving here appends an immutable sop_versions row to whatever this id resolves to, and
+    // getSop filters on the id alone. A Rococo admin can read all three companies, so a stale
+    // or pasted URL would otherwise open another tenant's document in an editable form under
+    // this company's branding and write a version into it.
+    assertInCompany(sop, companyId, "SOP");
     return { sop, version };
-  }, [sopId]);
+  }, [sopId, companyId]);
 
   if (sopId && existing.error) return <Notice tone="error">{existing.error}</Notice>;
   if (sopId && !existing.data) return <SkeletonRows rows={8} />;

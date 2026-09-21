@@ -105,6 +105,26 @@ export function currentCycle<T extends { id: string; period_start: string; perio
   return activeCycles(cycles, today)[0] ?? null;
 }
 
+// How far one cycle has got, counted over the roster it covers rather than over the review rows
+// that happen to exist.
+//
+// A cycle covers everybody active, and a person with no review row yet is a review still owed.
+// Counting rows put that person in neither half of the fraction, so a cycle owing four reviews
+// read "0 of 0 complete" and a cycle with three rows all signed off read "3 of 3" while a fourth
+// person had no row at all. Starting the missing reviews then moved the denominator instead of
+// the progress, which is backwards.
+export function cycleProgress(
+  roster: Array<{ id: string }>,
+  reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,
+  cycleId: string,
+): { complete: number; total: number } {
+  const own = reviews.filter((r) => r.cycle_id === cycleId);
+  return {
+    complete: roster.filter((person) => own.some((r) => r.employee_id === person.id && r.status === "complete")).length,
+    total: roster.length,
+  };
+}
+
 // The cycle before `current` with the same cadence: the latest one that started earlier.
 export function previousCycle<T extends { id: string; cadence: string; period_start: string }>(cycles: T[], current: T): T | null {
   return (

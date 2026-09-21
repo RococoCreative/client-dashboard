@@ -20,7 +20,7 @@ import { useAsync } from "../hooks/useAsync.ts";
 import { createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "../services/marketing.ts";
 import { CAMPAIGN_STATUS_TONE } from "../components/status.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatDate, formatMoney, formatNumber, formatPercent, parseMoney } from "../lib/format.ts";
+import { formatDate, formatMoney, formatNumber, formatPercent, parseMoney, pluralize } from "../lib/format.ts";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUS_LABELS, keysOf, type CampaignStatus, type MarketingCampaign } from "../types/database.ts";
 
 function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { companyId: string; campaign: MarketingCampaign | null; count: number; onClose: () => void; onSaved: (c: MarketingCampaign) => void }) {
@@ -192,8 +192,14 @@ export default function MarketingPage() {
 
   const campaigns = state.data ?? [];
   const live = campaigns.filter((c) => c.status === "active" || c.status === "paused");
-  const totalBudget = live.reduce((sum, c) => sum + (c.budget ?? 0), 0);
-  const totalSpend = live.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
+  // Spend against budget only means something when both sides cover the same campaigns. A
+  // campaign with no budget recorded was counted as zero budget with its spend in full, which
+  // pushed the figure over 100% of a total that did not include it. Left out of both instead,
+  // and said so, because a campaign with no budget is real data and not a zero.
+  const budgeted = live.filter((c) => c.budget !== null);
+  const unbudgeted = live.length - budgeted.length;
+  const totalBudget = budgeted.reduce((sum, c) => sum + (c.budget ?? 0), 0);
+  const totalSpend = budgeted.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
 
   function upsert(saved: MarketingCampaign) {
     state.setData((prev) => {
@@ -244,7 +250,11 @@ export default function MarketingPage() {
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-3">
             <Stat label="Live campaigns" value={live.length} hint={`${campaigns.filter((c) => c.status === "planned").length} planned`} />
-            <Stat label="Live budget" value={formatMoney(totalBudget)} hint="Active and paused campaigns" />
+            <Stat
+              label="Live budget"
+              value={formatMoney(totalBudget)}
+              hint={unbudgeted > 0 ? `${pluralize(unbudgeted, "campaign")} with no budget set` : "Active and paused campaigns"}
+            />
             <Stat label="Live spend" value={<span className={totalBudget > 0 && totalSpend > totalBudget ? "text-danger" : ""}>{formatMoney(totalSpend)}</span>} hint={totalBudget > 0 ? `${formatPercent(totalSpend / totalBudget)} of budget` : "No budget set"} />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
