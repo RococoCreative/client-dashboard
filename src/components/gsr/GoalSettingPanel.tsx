@@ -1,9 +1,10 @@
 // The Goal Setting Review for a monthly cycle. The manager and the person set this month's
 // goals together, live: each with action steps and a progress slider where 100 is complete.
 // The month's focus topic is a goal too, seeded from the cycle theme. Last month's goals
-// read back as hit or miss with a "why" and a one-click carry forward, and the person's
-// yearly goals sit alongside. Every change saves on its own; a closed cycle is read-only
-// except for the why, which is written the month after.
+// read back as hit or miss with a "why" and a one-click carry forward. Yearly goals are not
+// here: they live on the profile and on the quarterly and annual reviews, because a Goal
+// Setting Review is the month and nothing else. Every change saves on its own; a closed cycle
+// is read-only except for the why, which is written the month after.
 import { useState, type FormEvent } from "react";
 import { ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
@@ -247,7 +248,7 @@ export default function GoalSettingPanel({
   // The person ticks steps and moves progress on their own goals; the manager does everything.
   const canTick = (isAdmin || isOwn) && open;
   const year = cycleYear(cycle);
-  const { thisCycle, lastCycle, yearly } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
+  const { thisCycle, lastCycle } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
   const lastSettled = previousCycle ? cycleSettled(previousCycle) : true;
 
   // Where a carried goal came from is a property of the link, not of "the previous cycle".
@@ -276,7 +277,9 @@ export default function GoalSettingPanel({
   const upsert = (goal: Goal) => onGoals((list) => (list.some((g) => g.id === goal.id) ? list.map((g) => (g.id === goal.id ? goal : g)) : [...list, goal]));
   const carriedTitle = (source: Goal) => thisCycle.find((g) => g.carried_from_goal_id === source.id)?.title ?? null;
 
-  async function add(scope: "cycle" | "year", title: string, kind: GoalKind = "professional", description: string | null = null) {
+  // Everything set here belongs to this month. Yearly goals are set on the profile and read on
+  // the quarterly and annual reviews; a Goal Setting Review is the month and nothing else.
+  async function add(title: string, kind: GoalKind = "professional", description: string | null = null) {
     try {
       const created = await createGoal({
         company_id: review.company_id,
@@ -284,10 +287,10 @@ export default function GoalSettingPanel({
         title,
         kind,
         description,
-        scope,
-        cycle_id: scope === "cycle" ? cycle.id : null,
-        year: scope === "year" ? year : null,
-        sort_order: (scope === "cycle" ? thisCycle : yearly).length + 1,
+        scope: "cycle",
+        cycle_id: cycle.id,
+        year: null,
+        sort_order: thisCycle.length + 1,
       });
       upsert(created);
       onTouched();
@@ -355,20 +358,6 @@ export default function GoalSettingPanel({
             </ul>
           )}
         </Section>
-
-        <Section eyebrow={String(year)} title="Yearly goals" description="The year's goals for this person, with where each one stands.">
-          {yearly.length === 0 ? <p className="text-sm text-ink-2">No yearly goals set for {year} yet.</p> : null}
-          <ul className="space-y-3">
-            {yearly.map((goal) => (
-              <GoalEditor key={goal.id} goal={goal} canEdit={canEdit} canTick={canTick} carriedFrom={null} onChange={upsert} onDelete={() => setDeleting(goal)} onError={onError} onTouched={onTouched} />
-            ))}
-          </ul>
-          {canEdit ? (
-            <div className={yearly.length > 0 ? "mt-4" : "mt-3"}>
-              <AddGoalForm placeholder={`Add a goal for ${year}`} onAdd={(title) => void add("year", title)} />
-            </div>
-          ) : null}
-        </Section>
       </div>
 
       <div className="space-y-6 lg:col-span-2">
@@ -384,7 +373,7 @@ export default function GoalSettingPanel({
                 <p className="mt-0.5 text-sm text-ink">{cycle.theme ?? "No theme on this cycle yet. Set one in the cycle details, or name the topic here."}</p>
                 {cycle.theme_description ? <p className="mt-0.5 text-[12.5px] text-ink-2">{cycle.theme_description}</p> : null}
               </div>
-              <Button variant="secondary" size="sm" onClick={() => void add("cycle", cycle.theme ?? "Focus topic", "focus", cycle.theme_description)}>
+              <Button variant="secondary" size="sm" onClick={() => void add(cycle.theme ?? "Focus topic", "focus", cycle.theme_description)}>
                 <Plus size={13} aria-hidden /> Set as this month's focus topic
               </Button>
             </div>
@@ -409,7 +398,7 @@ export default function GoalSettingPanel({
           </ul>
           {canEdit ? (
             <div className={thisCycle.length > 0 ? "mt-4" : "mt-3"}>
-              <AddGoalForm placeholder="Add a goal for this month" onAdd={(title) => void add("cycle", title)} />
+              <AddGoalForm placeholder="Add a goal for this month" onAdd={(title) => void add(title)} />
             </div>
           ) : null}
         </Section>

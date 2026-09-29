@@ -228,11 +228,16 @@ export default function GoalsPanel({
   employeeId,
   canEdit,
   cycles = [],
+  scope = "all",
 }: {
   companyId: string;
   employeeId: string;
   canEdit: boolean;
   cycles?: ReviewCycle[];
+  // "year" shows and files yearly goals only: the Goals section and the quarterly and annual
+  // reviews. Monthly goals and focus topics belong to the Goal Setting Review, and a goal must
+  // not be editable in two sections at once.
+  scope?: "all" | "year";
 }) {
   const state = useAsync(() => listGoals(companyId, employeeId), [companyId, employeeId]);
   const [dialog, setDialog] = useState<{ goal: Goal | null } | null>(null);
@@ -263,7 +268,9 @@ export default function GoalsPanel({
 
   // Sorted the way listGoals sorts, so the position a goal is shown in is the position it keeps
   // through the next load or tab-focus refresh rather than sliding out from under the pointer.
-  const goals = [...(state.data ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+  const goals = [...(state.data ?? [])]
+    .filter((g) => scope === "all" || g.scope === "year")
+    .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
   const periodLabel = (goal: Goal): string => {
     if (goal.scope === "year") return `${goal.year} goal`;
     return goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id)?.name ?? "Review cycle") : "Ongoing";
@@ -324,7 +331,8 @@ export default function GoalsPanel({
           employeeId={employeeId}
           goal={dialog.goal}
           goals={goals}
-          cycles={cycles}
+          // With no cycles offered, the period select can only file a yearly goal.
+          cycles={scope === "year" ? [] : cycles}
           onClose={() => setDialog(null)}
           onSaved={(goal) => {
             upsert(goal);

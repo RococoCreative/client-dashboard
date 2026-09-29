@@ -17,6 +17,7 @@ import { useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
+import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
@@ -283,7 +284,10 @@ export default function ReviewPage() {
         </Notice>
       ) : null}
 
-      {employee ? (
+      {/* Annual content, the KPIs, company goals, deliverables and yearly goals, belongs to the
+          quarterly and annual reviews. A monthly cycle is a Goal Setting Review: the month's
+          goals and nothing else. */}
+      {employee && !monthly ? (
         <div className="mb-6">
           <EmployeeSnapshot
             employee={employee}
@@ -298,7 +302,7 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
-      {employee ? (
+      {employee && !monthly ? (
         <Section
           eyebrow={String(year)}
           title="Deliverables"
@@ -306,6 +310,17 @@ export default function ReviewPage() {
           description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
         >
           <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canScore} />
+        </Section>
+      ) : null}
+
+      {employee && !monthly ? (
+        <Section
+          eyebrow={String(year)}
+          title="Yearly goals"
+          className="mb-6"
+          description="Personal and professional goals for the year, tracked on the profile and on every quarterly and annual review."
+        >
+          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} cycles={cycles} scope="year" />
         </Section>
       ) : null}
 

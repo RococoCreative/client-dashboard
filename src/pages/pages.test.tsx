@@ -154,16 +154,20 @@ describe("GSR", () => {
     expect(screen.queryByRole("heading", { name: "Brand Impact" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Manager notes and feedback" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Management feedback")).not.toBeInTheDocument();
-    // Criterion ratings are named "<criterion> rating"; the deliverable task ratings below are
-    // named "Rating for <task>" and are supposed to be here.
     expect(screen.queryByRole("radiogroup", { name: /\srating$/ })).not.toBeInTheDocument();
+    // Nor does any of the year's content: KPIs, company goals, deliverables and yearly goals
+    // belong to the quarterly and annual reviews and to the profile.
+    expect(screen.queryByText("Personal KPIs 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("Company goals 2026")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Deliverables" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Yearly goals" })).not.toBeInTheDocument();
     // Signing the review off is still the admin's call.
     expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
   });
 
   it("rates deliverables by their tasks in the review, two points a task", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     // An admin edits in place, so the headings and tasks are inputs rather than text.
     expect(await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy")).toBeInTheDocument();
     // Its category heading, and the three tasks under it: Hit, Partial, Partial is 4 of 6. The
@@ -180,15 +184,18 @@ describe("GSR", () => {
 
   it("files a new deliverable under the category chosen in the pulldown", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy");
 
     // Production starts with a heading of its own, so the new one has to join it rather than
     // landing in whichever category happens to be first.
     await user.type(screen.getByLabelText("New deliverable"), "Warranty response time");
-    const production = KLASIK.deliverableCategories.find((c) => c.name === "Production")!;
+    const production = RBA.deliverableCategories.find((c) => c.name === "Production")!;
     await user.selectOptions(screen.getByLabelText("Category"), production.id);
-    await user.click(screen.getByRole("button", { name: /Add deliverable/ }));
+    // The quarterly review's deliverables pillar has an add button of its own, so the module's
+    // is reached through the form that owns the New deliverable box.
+    const form = screen.getByLabelText("New deliverable").closest("form") as HTMLElement;
+    await user.click(within(form).getByRole("button", { name: /Add deliverable/ }));
 
     // It arrives with no tasks, and its category pulldown reads the one it was filed under.
     const filed = await screen.findByDisplayValue("Warranty response time");
@@ -197,7 +204,7 @@ describe("GSR", () => {
     expect(within(row).getByText("No tasks yet")).toBeInTheDocument();
 
     // The same pulldown on the row refiles it, which is how a heading leaves Uncategorized.
-    const sales = KLASIK.deliverableCategories.find((c) => c.name === "BD & Sales")!;
+    const sales = RBA.deliverableCategories.find((c) => c.name === "BD & Sales")!;
     await user.selectOptions(within(row).getByLabelText("Category for Warranty response time"), sales.id);
     await waitFor(() =>
       expect(screen.getByLabelText("Category for Warranty response time")).toHaveValue(sales.id),
@@ -206,16 +213,19 @@ describe("GSR", () => {
 
   it("creates a category the first time a deliverable is filed under one", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     await screen.findByDisplayValue("Customer Lifecycle & Retention Strategy");
 
     // Klasik has never named Operations & Systems, so it is offered in the pulldown without
     // existing as a row. Choosing it is the whole step: no separate "add the category first".
     const starter = "Operations & Systems";
-    expect(KLASIK.deliverableCategories.some((c) => c.name === starter)).toBe(false);
+    expect(RBA.deliverableCategories.some((c) => c.name === starter)).toBe(false);
     await user.type(screen.getByLabelText("New deliverable"), "Fleet upkeep");
     await user.selectOptions(screen.getByLabelText("Category"), `new:${starter}`);
-    await user.click(screen.getByRole("button", { name: /Add deliverable/ }));
+    // The quarterly review's deliverables pillar has an add button of its own, so the module's
+    // is reached through the form that owns the New deliverable box.
+    const form = screen.getByLabelText("New deliverable").closest("form") as HTMLElement;
+    await user.click(within(form).getByRole("button", { name: /Add deliverable/ }));
 
     // It lands under a real category heading, and the pulldown now points at the row it made.
     const filed = await screen.findByDisplayValue("Fleet upkeep");
@@ -405,7 +415,7 @@ describe("phase 2 modules", () => {
 describe("monthly goal setting review", () => {
   const at = { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" };
 
-  it("reads last month back as hit or miss, with the year's goals and focus topics alongside", async () => {
+  it("reads last month back as hit or miss, with the focus topic leading this month", async () => {
     renderWithHub(<ReviewPage />, admin, at);
     expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
     expect(await screen.findByText("2 of 4 goals hit")).toBeInTheDocument();
@@ -413,8 +423,9 @@ describe("monthly goal setting review", () => {
     expect(screen.getByText("Missed at 30%")).toBeInTheDocument();
     expect(screen.getByText("Carried into this month")).toBeInTheDocument();
     expect(screen.getByLabelText("Why for Send the Friday client update every week")).toHaveValue("Two Fridays slipped to Monday when closings ran late.");
-    expect(screen.getByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Title for Get the OSHA 30 certification")).toBeInTheDocument();
+    // The year's goals are not part of the month's meeting.
+    expect(screen.queryByRole("heading", { name: "Yearly goals" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Title for Get the OSHA 30 certification")).not.toBeInTheDocument();
     // The month's focus topic is a goal seeded from the cycle theme, listed first.
     expect(screen.getByLabelText("Title for Core value: Integrity")).toBeInTheDocument();
     expect(screen.getAllByText("Focus topic").length).toBeGreaterThan(0);
@@ -442,22 +453,34 @@ describe("monthly goal setting review", () => {
   it("lets the person move their own progress but not set goals", async () => {
     renderWithHub(<ReviewPage />, employee, at);
     expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
-    expect(screen.getByLabelText("Progress for Get the OSHA 30 certification")).not.toBeDisabled();
+    expect(screen.getByLabelText("Progress for Run the weekly client update without prompting")).not.toBeDisabled();
     expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /into this month/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^Why for/)).not.toBeInTheDocument();
     expect(screen.getByText("Every crew logged daily. Two misses in week one, none after.")).toBeInTheDocument();
   });
 
-  it("opens with the employee snapshot: tenure, KPIs, and company goals", async () => {
-    renderWithHub(<ReviewPage />, admin, at);
+  it("opens a scored review with the employee snapshot: tenure, KPIs, and company goals", async () => {
+    // The snapshot is annual content, so it belongs to the quarterly review, not the monthly GSR.
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByText("$2M in newly closed sales")).toBeInTheDocument();
     expect(screen.getByText("Personal KPIs 2026")).toBeInTheDocument();
     expect(screen.getByText("Company goals 2026")).toBeInTheDocument();
-    expect(screen.getAllByText("Gross margin").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Projects under contract").length).toBeGreaterThan(0);
     expect(screen.getByText(/May 26, 2026/)).toBeInTheDocument();
-    expect(screen.getByText("Jordan Vale")).toBeInTheDocument();
+    expect(screen.getByText("Alex Morgan")).toBeInTheDocument();
     expect(screen.queryByText("Total compensation")).not.toBeInTheDocument();
+  });
+});
+
+describe("scored review", () => {
+  it("keeps the year's goals on the quarterly review and leaves the month's goals to the GSR", async () => {
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
+    expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    // A cycle goal is the Goal Setting Review's, and the yearly panel files nothing but years.
+    expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
+    expect(screen.queryByText("Goals for this month")).not.toBeInTheDocument();
   });
 });
 
