@@ -22,12 +22,13 @@ vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
-import GsrCyclesPage from "./gsr/GsrCyclesPage.tsx";
+import CyclesPage from "./gsr/CyclesPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import GsrSettingsPage from "./gsr/GsrSettingsPage.tsx";
 import CompanyGoalsPage from "./gsr/CompanyGoalsPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
+import MyReviewsPage from "./gsr/MyReviewsPage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
@@ -104,11 +105,22 @@ describe("dashboard", () => {
 });
 
 describe("GSR", () => {
-  it("lists cycles with progress", async () => {
-    renderWithHub(<GsrCyclesPage />, admin);
+  it("lists the months in the GSRs section and the scored cycles in Reviews", async () => {
+    // Klasik's monthly cycles are GSRs; its overlapping quarterly is a review. Same component,
+    // keyed on cadence, so neither list shows the other's cycles.
+    const gsrs = renderWithHub(<CyclesPage section="gsr" />, admin);
     expect(await screen.findByText(currentCycle.name)).toBeInTheDocument();
     expect(await screen.findByText(KLASIK.cycles[1].name)).toBeInTheDocument();
+    expect(screen.queryByText(overlappingCycle.name)).not.toBeInTheDocument();
     expect(screen.getAllByText(/complete$/).length).toBeGreaterThan(0);
+    // A month is not scored, so the list carries no team score column.
+    expect(screen.queryByText("Team")).not.toBeInTheDocument();
+    gsrs.unmount();
+
+    renderWithHub(<CyclesPage section="reviews" />, admin);
+    expect(await screen.findByText(overlappingCycle.name)).toBeInTheDocument();
+    expect(screen.queryByText(currentCycle.name)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Pillars and weights/ })).toBeInTheDocument();
   });
 
   it("shows the team table for a cycle with pillar columns", async () => {
@@ -248,15 +260,36 @@ describe("GSR", () => {
   });
 
   it("shows an employee their review history and goals", async () => {
-    renderWithHub(<MyGsrPage />, employee);
-    expect(await screen.findByRole("heading", { name: "My GSR" })).toBeInTheDocument();
+    renderWithHub(<MyReviewsPage />, rbaEmployee);
+    expect(await screen.findByRole("heading", { name: "My reviews" })).toBeInTheDocument();
     expect(await screen.findByText("All reviews")).toBeInTheDocument();
-    expect((await screen.findAllByText(currentCycle.name)).length).toBeGreaterThan(0);
+    // RBA's scored quarters are listed; a monthly GSR never is, whatever it carries.
+    expect((await screen.findAllByText(RBA.cycles[0].name)).length).toBeGreaterThan(0);
   });
 
-  it("lets an employee tick an action step", async () => {
-    const user = userEvent.setup();
+  it("opens the employee's own Goal Setting Review for the live month", async () => {
+    renderWithHub(<MyGsrPage />, employee);
+    // Sam's September GSR is in progress, so the month renders in place: last month read back,
+    // this month's goals, no back link (the tabs are the way around).
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /My GSR/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Personal KPIs 2026")).not.toBeInTheDocument();
+  });
+
+  it("keeps My Goals to the year's goals", async () => {
     renderWithHub(<MyGoalsPage />, employee);
+    expect(await screen.findByRole("heading", { name: "My goals" })).toBeInTheDocument();
+    expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    // A month goal is the GSR's, so it is neither listed nor editable here.
+    expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
+  });
+
+  it("lets an employee tick an action step on this month's GSR", async () => {
+    const user = userEvent.setup();
+    // The step belongs to a month goal, and the month lives on the GSR tab now.
+    renderWithHub(<MyGsrPage />, employee);
     const step = await screen.findByLabelText("Ask two clients how it landed");
     expect(step).not.toBeChecked();
     await user.click(step);

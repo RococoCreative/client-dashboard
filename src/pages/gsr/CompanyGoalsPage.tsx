@@ -116,7 +116,7 @@ export default function CompanyGoalsPage() {
   return (
     <>
       <PageHeader
-        backTo="/gsr"
+        backTo="/reviews"
         backLabel="Review cycles"
         eyebrow="Company goals"
         title={`Company goals ${year}`}

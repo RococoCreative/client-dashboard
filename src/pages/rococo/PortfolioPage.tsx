@@ -203,7 +203,8 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
       <footer className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3">
         {[
           ["/people", "People"],
-          ["/gsr", "Reviews"],
+          ["/gsr", "GSRs"],
+          ["/reviews", "Reviews"],
           ["/sops", "SOPs"],
           ["/financials", "Financials"],
           ["/settings", "Settings"],

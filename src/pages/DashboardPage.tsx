@@ -32,7 +32,7 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, activeCycles, cycleProgress } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -96,7 +96,7 @@ function CycleProgress({
       title={cycle.name}
       description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete`}
       actions={
-        <Link to={`/gsr/cycles/${cycle.id}`}>
+        <Link to={cyclePath(cycle)}>
           <Button variant="secondary" size="sm">Open cycle</Button>
         </Link>
       }
@@ -161,7 +161,8 @@ function AdminDashboard() {
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -180,15 +181,22 @@ function AdminDashboard() {
     const own = scores.filter((s) => s.review_id === r.id);
     return { review: r, score: own.length > 0 ? computeReviewScore(pillars, own).overall : null };
   });
-  // Every live cycle owes a review for everybody active, so the tile adds the per-cycle
-  // fractions and cannot report all clear while a cycle has no rows in it at all.
-  const standing = live.reduce(
-    (sum, c) => {
-      const own = cycleProgress(activePeople, reviews, c.id);
-      return { complete: sum.complete + own.complete, total: sum.total + own.total };
-    },
-    { complete: 0, total: 0 },
-  );
+  // Every live cycle owes a review for everybody active, so a tile adds the per-cycle fractions
+  // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are
+  // counted apart: they are different sections, and "3 of 8 reviews" with five of them GSRs
+  // would have said something false under the wrong word.
+  const standingOf = (section: HubSection) =>
+    live
+      .filter((c) => sectionOf(c.cadence) === section)
+      .reduce(
+        (sum, c) => {
+          const own = cycleProgress(activePeople, reviews, c.id);
+          return { complete: sum.complete + own.complete, total: sum.total + own.total, cycles: [...sum.cycles, c.name] };
+        },
+        { complete: 0, total: 0, cycles: [] as string[] },
+      );
+  const gsrs = standingOf("gsr");
+  const scoredCycles = standingOf("reviews");
   // A monthly cycle is a Goal Setting Review and carries no scores, so averaging it in would
   // drag the team score toward nothing. Only scored cycles count.
   const scoredCycleIds = new Set(live.filter((c) => c.cadence !== "monthly").map((c) => c.id));
@@ -214,12 +222,17 @@ function AdminDashboard() {
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
         <Stat
+          label="GSRs complete"
+          value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
+          hint={gsrs.cycles.length > 0 ? gsrs.cycles.join(" · ") : "No month open"}
+        />
+        <Stat
           label="Reviews complete"
-          value={live.length > 0 ? `${standing.complete}/${standing.total}` : "-"}
-          hint={live.length > 0 ? live.map((c) => c.name).join(" · ") : "No open review cycle"}
+          value={scoredCycles.cycles.length > 0 ? `${scoredCycles.complete}/${scoredCycles.total}` : "-"}
+          hint={scoredCycles.cycles.length > 0 ? scoredCycles.cycles.join(" · ") : "No review cycle open"}
         />
         <Stat
           label="Team score"
@@ -260,7 +273,7 @@ function AdminDashboard() {
             title="Company goals"
             description={companyGoals.length > 0 ? `${goalsHit} of ${companyGoals.length} hit` : undefined}
             actions={
-              <Link to="/gsr/company-goals">
+              <Link to="/reviews/company-goals">
                 <Button variant="secondary" size="sm">Manage</Button>
               </Link>
             }
@@ -404,7 +417,9 @@ function EmployeeDashboard() {
     // a monthly Goal Setting Review that carries none: asking for that one row's scores meant
     // the card could only ever show an empty ring while a rated quarterly review sat behind it.
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    const history = reviewHistory(reviews, cycles, pillars, scores);
+    // Scored reviews only: a monthly GSR is not a review and, with leftover scores, would
+    // otherwise be featured over the quarter it sits inside. The GSR gets a block of its own.
+    const history = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.cadence !== "monthly");
     const featured = latestScoredReview(history) ?? history[0] ?? null;
     return { featured, goals, recentSops, cycles, companyGoals };
   }, [companyId, profile.id, year]);
@@ -437,7 +452,7 @@ function EmployeeDashboard() {
               <div className="min-w-0 text-sm">
                 <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                 <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={`/gsr/reviews/${featured.review.id}`} className="mt-2 inline-block text-accent hover:underline">
+                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-accent hover:underline">
                   View review
                 </Link>
               </div>

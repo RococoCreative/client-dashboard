@@ -1,6 +1,8 @@
-// GSR home for admins: every review cycle the company has run, newest first, with progress
-// and the team score, plus the door to settings and company goals. New cycles are created
-// here; the period math (cadence -> dates -> name) lives in lib/gsr/cycles.ts.
+// The cycles list behind two sidebar entries: GSRs (monthly Goal Setting Reviews) and Reviews
+// (every scored cadence), one component keyed on the section. Progress per cycle, the team score
+// where a cycle carries one, the door to settings and company goals on the Reviews side, and the
+// new-cycle form offering only the cadences that belong to the section. The period math
+// (cadence -> dates -> name) lives in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Settings2, Target } from "lucide-react";
@@ -18,16 +20,33 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCycle, listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, defaultCycleName, periodEnd, periodStart } from "../../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, SECTION_LABEL, cyclePath, defaultCycleName, periodEnd, periodStart, sectionOf, type HubSection } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
-import { keysOf, type Cadence } from "../../types/database.ts";
+import type { Cadence, ReviewCycle } from "../../types/database.ts";
 
-function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; onClose: () => void; onCreated: (id: string) => void }) {
-  const [cadence, setCadence] = useState<Cadence>("monthly");
-  const [start, setStart] = useState(() => periodStart("monthly", new Date()));
-  const [end, setEnd] = useState(() => periodEnd("monthly", periodStart("monthly", new Date())) ?? todayIso());
-  const [name, setName] = useState(() => defaultCycleName("monthly", periodStart("monthly", new Date())));
+// The cadences a section files: a GSR is monthly by definition, a review is anything scored.
+const SECTION_CADENCES: Record<HubSection, Cadence[]> = {
+  gsr: ["monthly"],
+  reviews: ["quarterly", "annual", "custom"],
+};
+
+function NewCycleDialog({
+  companyId,
+  section,
+  onClose,
+  onCreated,
+}: {
+  companyId: string;
+  section: HubSection;
+  onClose: () => void;
+  onCreated: (cycle: ReviewCycle) => void;
+}) {
+  const first = SECTION_CADENCES[section][0];
+  const [cadence, setCadence] = useState<Cadence>(first);
+  const [start, setStart] = useState(() => periodStart(first, new Date()));
+  const [end, setEnd] = useState(() => periodEnd(first, periodStart(first, new Date())) ?? todayIso());
+  const [name, setName] = useState(() => defaultCycleName(first, periodStart(first, new Date())));
   const [nameTouched, setNameTouched] = useState(false);
   const [theme, setTheme] = useState("");
   const [themeDescription, setThemeDescription] = useState("");
@@ -67,7 +86,7 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
         theme: theme.trim() || null,
         theme_description: themeDescription.trim() || null,
       });
-      onCreated(cycle.id);
+      onCreated(cycle);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
@@ -77,8 +96,8 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
   return (
     <Modal onClose={onClose} labelledBy="new-cycle-title">
       <form onSubmit={handleSubmit} className="p-6">
-        <h2 id="new-cycle-title" className="font-display text-lg text-heading">New review cycle</h2>
-        <p className="mt-1 text-[13px] text-ink-2">One review per person for the period. You choose the rhythm.</p>
+        <h2 id="new-cycle-title" className="font-display text-lg text-heading">{section === "gsr" ? "New Goal Setting Review" : "New review cycle"}</h2>
+        <p className="mt-1 text-[13px] text-ink-2">{section === "gsr" ? "One GSR per person for the month." : "One review per person for the period. You choose the rhythm."}</p>
         <div className="mt-5 space-y-4">
           <Field label="Cadence" htmlFor="cycle-cadence">
             <select
@@ -90,7 +109,7 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
               }}
               className={selectClass}
             >
-              {keysOf(CADENCE_LABELS).map((key) => (
+              {SECTION_CADENCES[section].map((key) => (
                 <option key={key} value={key}>{CADENCE_LABELS[key]}</option>
               ))}
             </select>
@@ -148,33 +167,43 @@ function NewCycleDialog({ companyId, onClose, onCreated }: { companyId: string; 
   );
 }
 
-export default function GsrCyclesPage() {
+export default function CyclesPage({ section }: { section: HubSection }) {
   const { company } = useHub();
   const navigate = useNavigate();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
+  const gsr = section === "gsr";
 
   const state = useAsync(async () => {
     const [cycles, reviews, pillars] = await Promise.all([listCycles(companyId), listCompanyReviews(companyId), listPillars(companyId)]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     return { cycles, reviews, pillars, scores };
   }, [companyId]);
+  const cycles = (state.data?.cycles ?? []).filter((c) => sectionOf(c.cadence) === section);
 
   return (
     <>
       <PageHeader
-        eyebrow="Goal Setting and Review"
-        title="Review cycles"
-        description="Each cycle creates one review per person. Score the pillars, leave feedback, and watch the team average."
+        eyebrow={gsr ? "Monthly" : "Quarterly, annual and custom"}
+        title={SECTION_LABEL[section]}
+        description={
+          gsr
+            ? "One month, one meeting per person: last month read back as hit or miss, this month's goals and action steps, the focus topic. Nothing is scored here."
+            : "Each cycle creates one review per person. Score the pillars, leave feedback, and watch the team average."
+        }
         actions={
           <>
-            <Link to="/gsr/company-goals">
-              <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
-            </Link>
-            <Link to="/gsr/settings">
-              <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Pillars and weights</Button>
-            </Link>
-            <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> New cycle</Button>
+            {gsr ? null : (
+              <>
+                <Link to="/reviews/company-goals">
+                  <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
+                </Link>
+                <Link to="/reviews/settings">
+                  <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Pillars and weights</Button>
+                </Link>
+              </>
+            )}
+            <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button>
           </>
         }
       />
@@ -182,16 +211,20 @@ export default function GsrCyclesPage() {
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {!state.data && !state.error ? (
         <SkeletonRows rows={4} />
-      ) : !state.data ? null : state.data.cycles.length === 0 ? (
+      ) : !state.data ? null : cycles.length === 0 ? (
         <EmptyState
-          eyebrow="No cycles yet"
-          title="Start the first review cycle"
-          body="Pick a cadence (monthly, quarterly, whatever the company runs) and the hub creates a review for every person."
-          action={<Button onClick={() => setCreating(true)}>New cycle</Button>}
+          eyebrow={gsr ? "No months yet" : "No cycles yet"}
+          title={gsr ? "Open the first month" : "Start the first review cycle"}
+          body={
+            gsr
+              ? "A Goal Setting Review is one month: the hub opens a GSR for every person and reads last month back the month after."
+              : "Pick a cadence (quarterly, annual, or custom dates) and the hub creates a review for every person."
+          }
+          action={<Button onClick={() => setCreating(true)}>{gsr ? "New month" : "New cycle"}</Button>}
         />
       ) : (
         <ul className="space-y-3">
-          {state.data.cycles.map((cycle) => {
+          {cycles.map((cycle) => {
             const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id);
             const complete = reviews.filter((r) => r.status === "complete").length;
             const team = averageScore(
@@ -203,7 +236,7 @@ export default function GsrCyclesPage() {
             return (
               <li key={cycle.id}>
                 <Link
-                  to={`/gsr/cycles/${cycle.id}`}
+                  to={cyclePath(cycle)}
                   className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-surface px-5 py-4 transition-colors duration-150 hover:border-line-strong"
                 >
                   <div className="min-w-0">
@@ -221,10 +254,12 @@ export default function GsrCyclesPage() {
                       <p className="text-[11px] uppercase tracking-label text-ink-3">Reviews</p>
                       <p className="tnum text-sm text-ink">{complete}/{reviews.length} complete</p>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-label text-ink-3">Team</p>
-                      <p className="tnum text-sm text-ink">{team ?? "-"}</p>
-                    </div>
+                    {gsr ? null : (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-label text-ink-3">Team</p>
+                        <p className="tnum text-sm text-ink">{team ?? "-"}</p>
+                      </div>
+                    )}
                   </div>
                 </Link>
               </li>
@@ -236,10 +271,11 @@ export default function GsrCyclesPage() {
       {creating ? (
         <NewCycleDialog
           companyId={companyId}
+          section={section}
           onClose={() => setCreating(false)}
-          onCreated={(id) => {
+          onCreated={(cycle) => {
             setCreating(false);
-            navigate(`/gsr/cycles/${id}`);
+            navigate(cyclePath(cycle));
           }}
         />
       ) : null}

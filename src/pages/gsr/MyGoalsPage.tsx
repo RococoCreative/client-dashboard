@@ -1,4 +1,5 @@
-// An employee's own goals, editable. Admins see the same page for themselves.
+// An employee's own yearly goals, editable: personal, professional and role goals for the year.
+// The month's goals live on the GSR tab. Admins see the same page for themselves.
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -15,10 +16,10 @@ export default function MyGoalsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Goal Setting and Review" title="My goals" description="Professional, personal, and role goals with the action steps to get there. Your manager sees these alongside your review." />
+      <PageHeader eyebrow="This year" title="My goals" description="Professional, personal, and role goals for the year, with the action steps to get there. Your manager sees these on your profile and on every quarterly review." />
       <Tabs items={MY_TABS} />
       {cycles.error ? <Notice tone="error" className="mb-4">{cycles.error}</Notice> : null}
-      <GoalsPanel companyId={companyId} employeeId={profile.id} canEdit cycles={cycles.data ?? []} />
+      <GoalsPanel companyId={companyId} employeeId={profile.id} canEdit cycles={cycles.data ?? []} scope="year" />
     </>
   );
 }

@@ -26,6 +26,7 @@ import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
 import { averageScore } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
+import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
 import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
@@ -199,7 +200,7 @@ export default function PersonPage() {
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                         <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                        <td className={`${tdClass} text-right`}><Link to={`/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
+                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
                       </tr>
                     ))}
                   </tbody>

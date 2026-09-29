@@ -54,7 +54,7 @@ import {
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { computeReviewScore } from "../../lib/gsr/scoring.ts";
-import { cycleYear, previousCycle } from "../../lib/gsr/cycles.ts";
+import { SECTION_MY, cyclePath, cycleYear, previousCycle, sectionOf } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney } from "../../lib/format.ts";
 import {
@@ -70,8 +70,12 @@ import {
 // Table headers must stay table-cells: the shared label class sets display:block.
 const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
 
-export default function ReviewPage() {
-  const { reviewId = "" } = useParams();
+// Mounted by the router with the id in the URL, and by My GSR with the id as a prop so the
+// employee's own month renders under their own sidebar entry and tabs. Embedded, it has no back
+// link: the tabs above are the way around.
+export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }: { reviewId?: string; embedded?: boolean } = {}) {
+  const params = useParams();
+  const reviewId = reviewIdProp ?? params.reviewId ?? "";
   const { company, profile, isAdmin } = useHub();
   const companyId = company!.id;
   const [error, setError] = useState("");
@@ -244,8 +248,8 @@ export default function ReviewPage() {
   return (
     <>
       <PageHeader
-        backTo={isAdmin ? `/gsr/cycles/${cycle.id}` : "/my"}
-        backLabel={isAdmin ? cycle.name : "My GSR"}
+        backTo={embedded ? undefined : isAdmin ? cyclePath(cycle) : SECTION_MY[sectionOf(cycle.cadence)]}
+        backLabel={embedded ? undefined : isAdmin ? cycle.name : sectionOf(cycle.cadence) === "gsr" ? "My GSR" : "My reviews"}
         eyebrow={`${monthly ? "Goal Setting Review · " : ""}${cycle.name} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
         title={employee ? displayName(employee) : "Review"}
         description={

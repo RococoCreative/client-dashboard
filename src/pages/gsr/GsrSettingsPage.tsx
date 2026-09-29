@@ -148,7 +148,7 @@ export default function GsrSettingsPage() {
   return (
     <>
       <PageHeader
-        backTo="/gsr"
+        backTo="/reviews"
         backLabel="Review cycles"
         eyebrow="GSR settings"
         title="Pillars and weights"

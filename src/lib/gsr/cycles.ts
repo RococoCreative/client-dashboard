@@ -105,6 +105,25 @@ export function currentCycle<T extends { id: string; period_start: string; perio
   return activeCycles(cycles, today)[0] ?? null;
 }
 
+// Where a cycle lives in the hub. A monthly cycle is a Goal Setting Review and sits in the GSRs
+// section; every scored cadence (quarterly, annual, custom) is a review and sits in Reviews. The
+// split is keyed on cadence, a column, so it is data and never a company branch. Every link to a
+// cycle or a review goes through these, because a sidebar entry highlights by path prefix and a
+// quarterly cycle reached under /gsr would light up the wrong section.
+export type HubSection = "gsr" | "reviews";
+export function sectionOf(cadence: Cadence): HubSection {
+  return cadence === "monthly" ? "gsr" : "reviews";
+}
+export const SECTION_HOME: Record<HubSection, string> = { gsr: "/gsr", reviews: "/reviews" };
+export const SECTION_MY: Record<HubSection, string> = { gsr: "/my/gsr", reviews: "/my/reviews" };
+export const SECTION_LABEL: Record<HubSection, string> = { gsr: "Goal Setting Reviews", reviews: "Review cycles" };
+export function cyclePath(cycle: { id: string; cadence: Cadence }): string {
+  return `${SECTION_HOME[sectionOf(cycle.cadence)]}/cycles/${cycle.id}`;
+}
+export function reviewPath(reviewId: string, cadence: Cadence): string {
+  return sectionOf(cadence) === "gsr" ? `/gsr/reviews/${reviewId}` : `/reviews/${reviewId}`;
+}
+
 // How far one cycle has got, counted over the roster it covers rather than over the review rows
 // that happen to exist.
 //

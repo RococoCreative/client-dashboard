@@ -5,23 +5,7 @@
 // refetches for the new tenant.
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import {
-  ArrowLeft,
-  BookOpen,
-  Building2,
-  CircleDollarSign,
-  ClipboardCheck,
-  FolderOpen,
-  LayoutDashboard,
-  LayoutGrid,
-  LogOut,
-  Megaphone,
-  Settings,
-  Target,
-  UserRound,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowLeft, BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, LayoutDashboard, LayoutGrid, LogOut, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
 import Avatar from "./ui/Avatar.tsx";
 import IconButton from "./ui/IconButton.tsx";
 import { labelClass, selectClass } from "./ui/forms.ts";
@@ -40,13 +24,15 @@ interface NavItem {
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/gsr", label: "Reviews", icon: ClipboardCheck },
+  { to: "/gsr", label: "GSRs", icon: CalendarCheck },
+  { to: "/reviews", label: "Reviews", icon: ClipboardCheck },
+  { to: "/goals", label: "Goals", icon: Target },
   { to: "/people", label: "People", icon: Users },
   { to: "/sops", label: "SOPs", icon: BookOpen },
   { to: "/resources", label: "Resources", icon: FolderOpen },
   { to: "/financials", label: "Financials", icon: CircleDollarSign },
   { to: "/marketing", label: "Marketing", icon: Megaphone },
-  { to: "/my", label: "My GSR", icon: UserRound },
+  { to: "/my/gsr", label: "My GSR", icon: UserRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -58,7 +44,8 @@ const PORTFOLIO_NAV: NavItem[] = [
 
 const EMPLOYEE_NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/my", label: "My GSR", icon: UserRound, end: true },
+  { to: "/my/gsr", label: "My GSR", icon: CalendarCheck },
+  { to: "/my/reviews", label: "My Reviews", icon: ClipboardCheck },
   { to: "/my/goals", label: "My Goals", icon: Target },
   { to: "/sops", label: "SOPs", icon: BookOpen },
   { to: "/resources", label: "Resources", icon: FolderOpen },
@@ -89,7 +76,7 @@ export default function AppLayout() {
   // which React Router commits separately) free of any in-between flicker or bounce.
   const portfolio = isRococo && (company === null || location.pathname.startsWith("/rococo"));
   // Rococo admins have no company of their own, so "My GSR" would be empty for them.
-  const nav = portfolio ? PORTFOLIO_NAV : isAdmin ? ADMIN_NAV.filter((item) => !(isRococo && item.to === "/my")) : EMPLOYEE_NAV;
+  const nav = portfolio ? PORTFOLIO_NAV : isAdmin ? ADMIN_NAV.filter((item) => !(isRococo && item.to.startsWith("/my"))) : EMPLOYEE_NAV;
 
   // The shell owns the theme once signed in: Rococo on the portfolio, the company's inside.
   useEffect(() => {

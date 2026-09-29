@@ -372,8 +372,9 @@ function build(company: Company): CompanyBundle {
       updated_at: NOW,
     };
     reviews.push(current);
-    if (i === 0) scoreReview(current, 0.6);
-    if (i === 1) scoreReview(current, 1);
+    // A monthly cycle is a Goal Setting Review and carries no scores; only scored cadences do.
+    if (spec.cadence !== "monthly" && i === 0) scoreReview(current, 0.6);
+    if (spec.cadence !== "monthly" && i === 1) scoreReview(current, 1);
 
     const previous: Review = {
       ...current,
@@ -389,7 +390,7 @@ function build(company: Company): CompanyBundle {
       updated_at: EARLIER,
     };
     reviews.push(previous);
-    scoreReview(previous, 1);
+    if (spec.cadence !== "monthly") scoreReview(previous, 1);
   });
 
   // One person's goals as the monthly review reads them: this month's (one carried over from

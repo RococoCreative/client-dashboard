@@ -32,7 +32,7 @@ import {
 } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
-import { CADENCE_LABELS } from "../../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, SECTION_HOME, SECTION_LABEL, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatPeriod } from "../../lib/format.ts";
 import { hasAccount } from "../../lib/people.ts";
@@ -151,7 +151,7 @@ export default function CyclePage() {
     setActionError("");
     try {
       const review = await ensureReview(cycle.id, companyId, personId);
-      navigate(`/gsr/reviews/${review.id}`);
+      navigate(reviewPath(review.id, cycle.cadence));
     } catch (err) {
       setActionError(errorMessage(err));
       setBusy(false);
@@ -190,7 +190,7 @@ export default function CyclePage() {
     setBusy(true);
     try {
       await deleteCycle(cycle.id);
-      navigate("/gsr");
+      navigate(SECTION_HOME[sectionOf(cycle.cadence)]);
     } catch (err) {
       setActionError(errorMessage(err));
       setBusy(false);
@@ -201,8 +201,8 @@ export default function CyclePage() {
   return (
     <>
       <PageHeader
-        backTo="/gsr"
-        backLabel="Review cycles"
+        backTo={SECTION_HOME[sectionOf(cycle.cadence)]}
+        backLabel={SECTION_LABEL[sectionOf(cycle.cadence)]}
         eyebrow={`${CADENCE_LABELS[cycle.cadence]} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
         title={cycle.name}
         description={cycle.theme ? `Theme: ${cycle.theme}${cycle.theme_description ? `. ${cycle.theme_description}` : ""}` : undefined}
@@ -290,7 +290,7 @@ export default function CyclePage() {
                     </td>
                     <td className={`${tdClass} text-right`}>
                       {review ? (
-                        <Link to={`/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link>
+                        <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-accent hover:underline">Open</Link>
                       ) : (
                         <button type="button" onClick={() => void openReview(person.id)} disabled={busy} className="text-[13px] text-accent hover:underline disabled:opacity-50">
                           Start review

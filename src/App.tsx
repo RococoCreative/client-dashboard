@@ -24,7 +24,9 @@ import CenteredCard from "./components/CenteredCard.tsx";
 import Button from "./components/ui/Button.tsx";
 import Spinner from "./components/ui/Spinner.tsx";
 import DashboardPage from "./pages/DashboardPage.tsx";
-import GsrCyclesPage from "./pages/gsr/GsrCyclesPage.tsx";
+import CyclesPage from "./pages/gsr/CyclesPage.tsx";
+import GoalsPage from "./pages/gsr/GoalsPage.tsx";
+import MyReviewsPage from "./pages/gsr/MyReviewsPage.tsx";
 import CyclePage from "./pages/gsr/CyclePage.tsx";
 import ReviewPage from "./pages/gsr/ReviewPage.tsx";
 import GsrSettingsPage from "./pages/gsr/GsrSettingsPage.tsx";
@@ -288,12 +290,23 @@ function SignedIn({ session }: { session: Session }) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
-            <Route path="gsr" element={<WithCompany>{isAdmin ? <GsrCyclesPage /> : <Navigate to="/my" replace />}</WithCompany>} />
-            <Route path="gsr/settings" element={<AdminOnly><GsrSettingsPage /></AdminOnly>} />
-            <Route path="gsr/company-goals" element={<AdminOnly><CompanyGoalsPage /></AdminOnly>} />
+            {/* Three sections keyed on cadence: GSRs (monthly), Reviews (every scored cadence), Goals
+                (the year's). A cycle and a review are reachable under either prefix so old links keep
+                working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
+            <Route path="gsr" element={<WithCompany>{isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />}</WithCompany>} />
+            <Route path="reviews" element={<WithCompany>{isAdmin ? <CyclesPage section="reviews" /> : <RedirectTo path="/my/reviews" />}</WithCompany>} />
+            <Route path="goals" element={<WithCompany>{isAdmin ? <GoalsPage /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
+            <Route path="reviews/settings" element={<AdminOnly><GsrSettingsPage /></AdminOnly>} />
+            <Route path="reviews/company-goals" element={<AdminOnly><CompanyGoalsPage /></AdminOnly>} />
+            <Route path="gsr/settings" element={<RedirectTo path="/reviews/settings" />} />
+            <Route path="gsr/company-goals" element={<RedirectTo path="/reviews/company-goals" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
+            <Route path="reviews/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
             <Route path="gsr/reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
-            <Route path="my" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGsrPage /></WithCompany>} />
+            <Route path="reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
+            <Route path="my" element={isRococo ? <Navigate to="/" replace /> : <RedirectTo path="/my/gsr" />} />
+            <Route path="my/gsr" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGsrPage /></WithCompany>} />
+            <Route path="my/reviews" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyReviewsPage /></WithCompany>} />
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<AdminOnly><PeoplePage /></AdminOnly>} />
             <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
