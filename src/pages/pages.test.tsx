@@ -96,11 +96,30 @@ describe("dashboard", () => {
   it("shows an employee their own score and goals, plus the company goals, and nobody else's", async () => {
     renderWithHub(<DashboardPage />, employee);
     expect(await screen.findByText(/Welcome back, Sam/)).toBeInTheDocument();
+    // This month's goal sits in the Goal Setting Review block; the year's in Goals.
     expect(await screen.findByText("Run the weekly client update without prompting")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: currentCycle.name })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open my GSR/ })).toBeInTheDocument();
+    expect(screen.getByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    // Klasik has never rated Sam, so the impact block says so rather than showing a zero.
+    expect(screen.getByRole("heading", { name: "Not rated yet" })).toBeInTheDocument();
     // The company goals page promises these show on the dashboard for everyone, so they do.
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     // A teammate's name is another matter: an employee's dashboard is their own.
     expect(screen.queryByText("Riley Park")).not.toBeInTheDocument();
+  });
+});
+
+describe("employee dashboard", () => {
+  it("shows a rated employee their impact score and how it moved since the last signed-off review", async () => {
+    renderWithHub(<DashboardPage />, rbaEmployee);
+    expect(await screen.findByText(/Welcome back, Jamie/)).toBeInTheDocument();
+    // Jamie's working copy is their newest rated review; the baseline is the completed Q2, so
+    // the block carries a number and names the review it is measured against.
+    const impact = (await screen.findByText("Impact score")).closest("section") as HTMLElement;
+    expect(within(impact).queryByText("Not rated yet")).not.toBeInTheDocument();
+    expect(within(impact).getByText(/Against Q2 2026/)).toBeInTheDocument();
+    expect(within(impact).getByText("Core Values")).toBeInTheDocument();
   });
 });
 

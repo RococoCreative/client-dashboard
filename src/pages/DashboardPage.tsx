@@ -16,29 +16,22 @@ import { SkeletonCard, SkeletonRows } from "../components/ui/Skeleton.tsx";
 import { CAMPAIGN_STATUS_TONE, GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
-import {
-  listCompanyGoals,
-  listCycles,
-  listCycleReviews,
-  listEmployeeReviews,
-  listGoals,
-  listPillars,
-  listScoresForReviews,
-} from "../services/gsr.ts";
+import { listCompanyGoals, listCriteria, listCycleReviews, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews } from "../services/gsr.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
 import { listRecentSops, listSops } from "../services/sops.ts";
 import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
-import { averageScore, computeReviewScore, hasScoredItem } from "../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem, scoreProfile } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
-import { latestScoredReview, reviewHistory } from "../lib/gsr/history.ts";
+import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { hasAccount } from "../lib/people.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
+  GOAL_KIND_LABELS,
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
@@ -402,9 +395,11 @@ function EmployeeDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [reviews, pillars, goals, recentSops, cycles, companyGoals] = await Promise.all([
+    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals] = await Promise.all([
       listEmployeeReviews(profile.id),
       listPillars(companyId),
+      listCriteria(companyId),
+      listImpactScores(companyId, profile.id),
       listGoals(companyId, profile.id),
       listRecentSops(companyId, 5),
       listCycles(companyId),
@@ -421,26 +416,121 @@ function EmployeeDashboard() {
     // otherwise be featured over the quarter it sits inside. The GSR gets a block of its own.
     const history = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.cadence !== "monthly");
     const featured = latestScoredReview(history) ?? history[0] ?? null;
-    return { featured, goals, recentSops, cycles, companyGoals };
+    // The impact score is the person's current ratings, measured against the last signed-off
+    // review; the current GSR is this month's Goal Setting Review, if the manager has opened it.
+    const baseline = previousCompletedReview(history);
+    const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
+    const gsrCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
+    const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
+    return { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals };
   }, [companyId, profile.id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { featured, goals, recentSops, cycles, companyGoals } = state.data;
+  const { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals } = state.data;
   const cycle = featured?.cycle ?? null;
   const result = featured?.result ?? null;
   // A goal is open until it is hit, or until its period settles and it reads as a miss.
   // Nothing ever writes the 'missed' status, so counting on status alone kept every unfinished
   // goal from every closed cycle on this list for good. goalSettled knows both shapes of
-  // period, cycle and year, so this list and My Goals cannot reach opposite verdicts.
-  const openGoals = goals.filter((goal) => goalOutcome(goal, goalSettled(goal, cycles)) === "open");
+  // period, cycle and year, so this list and My Goals cannot reach opposite verdicts. The
+  // Goals block is the year's goals; the month's live in the GSR block.
+  const openGoals = goals.filter((goal) => goal.scope === "year" && goalOutcome(goal, goalSettled(goal, cycles)) === "open");
+  const monthGoals = gsrCycle ? goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id).sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0)) : [];
+  const profileScore = scoreProfile(pillars, criteria, impact);
+  const rated = impact.length > 0;
+  const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
+  // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
+  const moves = criteria
+    .filter((c) => c.is_active)
+    .map((c) => {
+      const now = impact.find((i) => i.criterion_id === c.id)?.rating ?? null;
+      const was = baselineScores.find((s) => s.criterion_id === c.id)?.rating ?? null;
+      return { criterion: c, delta: now !== null && was !== null ? now - was : null };
+    })
+    .filter((m) => m.delta !== null && m.delta !== 0)
+    .sort((a, b) => (b.delta as number) - (a.delta as number));
 
   return (
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
 
       <div className="grid gap-6 lg:grid-cols-3">
+        {ratingPillars.length > 0 ? (
+          <Section
+            eyebrow="Impact score"
+            title={rated ? String(profileScore.overall) : "Not rated yet"}
+            description={baseline ? `Against ${baseline.cycle?.name ?? "your last review"}` : "Set by your manager and trued up before each review."}
+            className="lg:col-span-1"
+          >
+            {rated ? (
+              <div className="space-y-3">
+                <ul className="space-y-1.5 text-sm">
+                  {profileScore.pillars.map((p) => (
+                    <li key={p.pillarId} className="flex justify-between gap-3">
+                      <span className="text-ink-2">{p.name}</span>
+                      <span className="tnum text-ink">{p.score === null ? "-" : Math.round(p.score)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {moves.length > 0 ? (
+                  <ul className="flex flex-wrap gap-1.5 text-[12px]">
+                    {moves.slice(0, 4).map((m) => (
+                      <li key={m.criterion.id} className={`rounded-full border px-2 py-0.5 ${(m.delta as number) > 0 ? "border-success/40 bg-success/10" : "border-danger/40 bg-danger/10"} text-ink`}>
+                        {m.criterion.name} {(m.delta as number) > 0 ? `+${m.delta}` : m.delta}
+                      </li>
+                    ))}
+                  </ul>
+                ) : baseline ? (
+                  <p className="text-[12px] text-ink-3">No change since {baseline.cycle?.name ?? "your last review"}.</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
+            )}
+          </Section>
+        ) : null}
+
+        <Section
+          eyebrow="Goal Setting Review"
+          title={gsrCycle ? gsrCycle.name : "No month open"}
+          className={ratingPillars.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}
+          actions={
+            gsrReview ? (
+              <Link to="/my/gsr">
+                <Button variant="secondary" size="sm">Open my GSR</Button>
+              </Link>
+            ) : undefined
+          }
+        >
+          {!gsrCycle ? (
+            <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
+          ) : !gsrReview ? (
+            <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Once your manager opens it, this month's goals are here.</p>
+          ) : monthGoals.length === 0 ? (
+            <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. They are set together in the meeting.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {monthGoals.map((goal) => {
+                const steps = stepsTaken(goal);
+                return (
+                  <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-ink">{goal.title}</p>
+                      <p className="text-[12px] text-ink-3">
+                        {goal.kind === "focus" ? "Focus topic" : GOAL_KIND_LABELS[goal.kind]}
+                        {steps.total > 0 ? ` · ${steps.done}/${steps.total} steps done` : ""}
+                      </p>
+                    </div>
+                    <span className="tnum w-12 text-right text-sm text-ink">{goal.progress}%</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Section>
+
         <Section
           eyebrow={result ? "Latest scored review" : "Latest review"}
           title={cycle?.name ?? "No review yet"}
