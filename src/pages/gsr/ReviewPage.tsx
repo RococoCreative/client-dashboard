@@ -37,13 +37,14 @@ import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/statu
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
-import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
+import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { computeReviewScore , countCriteria, hasScoredItem, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
-import { SECTION_MY, cyclePath, cycleYear, previousCycle, sectionOf } from "../../lib/gsr/cycles.ts";
+import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
+import { goalOutcome, hitCount } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney } from "../../lib/format.ts";
+import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
 import {
   PREVIOUS_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -96,18 +97,20 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       listGoals(review.company_id, review.employee_id),
     ]);
     const year = cycleYear(cycle);
-    const [kpis, companyGoals, impact] = await Promise.all([
+    const [kpis, companyGoals, impact, personReviews] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
+      // The person's other reviews, so each month inside this period can link to its GSR.
+      listEmployeeReviews(review.employee_id),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, year };
   }, [reviewId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -117,6 +120,16 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // Monthly cycles are Goal Setting Reviews: goals lead, scores follow.
   const monthly = cycle.cadence === "monthly";
   const lastMonth = monthly ? previousCycle(cycles, cycle) : null;
+  // A scored review reads back the Goal Setting Reviews that ran inside its period: each
+  // month's goals, hit or miss, and a link to the month. The reviewer's own previous-period
+  // judgment stays where it is; this is the record beside it.
+  const months = monthly
+    ? []
+    : monthsWithin(cycle, cycles).map((month) => {
+        const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === month.id);
+        const gsr = personReviews.find((r) => r.cycle_id === month.id) ?? null;
+        return { month, gsr, tally: hitCount(own, cycleSettled(month)), open: own.filter((g) => goalOutcome(g, cycleSettled(month)) === "open").length };
+      });
   const frozen = review.status === "complete";
   const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
   // What scores this review right now. Frozen rows once it is complete; before that the
@@ -379,7 +392,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           review stay in the database; they are simply not what a monthly review is for. */}
       {monthly ? null : (
         <div className="grid gap-6 lg:grid-cols-3">
-          <Section eyebrow="Overall" title={result.complete ? "Score" : "Score so far"} className="lg:col-span-1">
+          <div className="space-y-6 lg:col-span-1">
+          <Section eyebrow="Overall" title={result.complete ? "Score" : "Score so far"}>
             <div className="flex items-center gap-5">
               <ScoreRing score={hasScoredItem(inputs) ? result.overall : null} size={104} />
               <div className="min-w-0 flex-1 space-y-3">
@@ -393,6 +407,31 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               <p className="mt-3 text-[12px] text-warning">Pillar weights total {formatNumber(result.weightTotal)}%, not 100%. Scores are normalized; fix this in GSR settings.</p>
             ) : null}
           </Section>
+
+          <Section eyebrow="Goal Setting Reviews" title="The months in this period" description="Each month's goals as they were read back.">
+            {months.length === 0 ? (
+              <p className="text-sm text-ink-2">No Goal Setting Review ran inside this period.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {months.map(({ month, gsr, tally, open }) => (
+                  <li key={month.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink">{month.name}</p>
+                      <p className="tnum text-[12px] text-ink-3">
+                        {tally.total === 0 ? "No goals set" : `${tally.hit} of ${pluralize(tally.total, "goal")} hit${open > 0 ? `, ${open} still open` : ""}`}
+                      </p>
+                    </div>
+                    {gsr ? (
+                      <Link to={reviewPath(gsr.id, month.cadence)} className="text-[13px] text-accent hover:underline">Open month</Link>
+                    ) : (
+                      <span className="text-[12px] text-ink-3">Not started</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+          </div>
 
           <div className="space-y-6 lg:col-span-2">
             {pillars.map((pillar) => {

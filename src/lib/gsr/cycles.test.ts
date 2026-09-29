@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, defaultCycleName, periodEnd, periodStart } from "./cycles.ts";
+import { activeCycles, currentCycle, defaultCycleName, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -41,6 +41,20 @@ describe("cycle periods", () => {
     // Nothing covers today: the most recently started open cycle stands in, on its own.
     expect(activeCycles(cycles, new Date(2026, 11, 1)).map((c) => c.id)).toEqual(["month"]);
     expect(activeCycles([], new Date())).toEqual([]);
+  });
+
+  it("finds the months that ran inside a scored period, oldest first", () => {
+    const cycles = [
+      { id: "q3", cadence: "quarterly", period_start: "2026-07-01", period_end: "2026-09-30" },
+      { id: "sep", cadence: "monthly", period_start: "2026-09-01", period_end: "2026-09-30" },
+      { id: "jul", cadence: "monthly", period_start: "2026-07-01", period_end: "2026-07-31" },
+      { id: "jun", cadence: "monthly", period_start: "2026-06-01", period_end: "2026-06-30" },
+      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+    ];
+    expect(monthsWithin(cycles[0], cycles).map((c) => c.id)).toEqual(["jul", "sep"]);
+    // A custom period straddling a month boundary counts only the months it wholly covers.
+    expect(monthsWithin({ period_start: "2026-07-15", period_end: "2026-09-30" }, cycles).map((c) => c.id)).toEqual(["sep"]);
+    expect(monthsWithin({ period_start: "2026-01-01", period_end: "2026-03-31" }, cycles)).toEqual([]);
   });
 
   it("picks the open cycle containing today, else the latest open one", () => {

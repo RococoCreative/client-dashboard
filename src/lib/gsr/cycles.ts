@@ -144,6 +144,20 @@ export function cycleProgress(
   };
 }
 
+// The Goal Setting Reviews that ran inside a scored period: every monthly cycle whose whole
+// period sits within the cycle's, oldest first. A quarterly review reads them back as the
+// months' goals, hit or miss, which is the record the meeting works from. Containment is on
+// dates, so a custom cycle that straddles a month boundary counts only the months it wholly
+// covers, and a month is never counted under two quarters.
+export function monthsWithin<T extends { cadence: string; period_start: string; period_end: string }>(
+  cycle: { period_start: string; period_end: string },
+  cycles: T[],
+): T[] {
+  return cycles
+    .filter((c) => c.cadence === "monthly" && c.period_start >= cycle.period_start && c.period_end <= cycle.period_end)
+    .sort((a, b) => a.period_start.localeCompare(b.period_start));
+}
+
 // The cycle before `current` with the same cadence: the latest one that started earlier.
 export function previousCycle<T extends { id: string; cadence: string; period_start: string }>(cycles: T[], current: T): T | null {
   return (

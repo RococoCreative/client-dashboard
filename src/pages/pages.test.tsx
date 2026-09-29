@@ -543,6 +543,17 @@ describe("monthly goal setting review", () => {
 });
 
 describe("scored review", () => {
+  it("reads back the Goal Setting Reviews that ran inside the period", async () => {
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: "The months in this period" })).toBeInTheDocument();
+    // RBA's September GSR sits inside its Q3 cycle; Jamie has no goals filed against the month
+    // and no review row in it yet, and the block says both plainly rather than inventing a hit rate.
+    const block = screen.getByRole("heading", { name: "The months in this period" }).closest("section") as HTMLElement;
+    expect(within(block).getByText(RBA.cycles[2].name)).toBeInTheDocument();
+    expect(within(block).getByText("No goals set")).toBeInTheDocument();
+    expect(within(block).getByText("Not started")).toBeInTheDocument();
+  });
+
   it("keeps the year's goals on the quarterly review and leaves the month's goals to the GSR", async () => {
     renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
