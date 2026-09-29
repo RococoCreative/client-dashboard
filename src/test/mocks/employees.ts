@@ -1,8 +1,10 @@
-import type { CompensationItem, EmployeeKpi } from "../../types/database.ts";
+import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { companyOf } from "./profiles.ts";
 
 const kpis = fromAll((b) => b.kpis).map((x) => ({ ...x }));
 const compensation = fromAll((b) => b.compensation).map((x) => ({ ...x }));
+const financials = fromAll((b) => b.financials).map((x) => ({ ...x }));
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-new-${++counter}`;
@@ -50,4 +52,23 @@ export async function updateCompensationItem(id: string, patch: Partial<Omit<Com
 }
 export async function deleteCompensationItem(id: string): Promise<void> {
   removeFrom(compensation, id);
+}
+
+export async function listEmployeeFinancials(companyId: string, employeeId: string, year: number): Promise<EmployeeFinancial[]> {
+  return financials.filter((f) => f.company_id === companyId && f.employee_id === employeeId && f.year === year).sort((a, b) => a.sort_order - b.sort_order);
+}
+export type EmployeeFinancialInput = Pick<EmployeeFinancial, "employee_id" | "year" | "metric"> &
+  Partial<Pick<EmployeeFinancial, "target" | "current" | "source" | "note" | "sort_order">>;
+export async function createEmployeeFinancial(input: EmployeeFinancialInput): Promise<EmployeeFinancial> {
+  const company = companyOf(input.employee_id);
+  if (!company) throw new Error("This person is not placed with a company yet.");
+  const created: EmployeeFinancial = { id: nextId("fin"), company_id: company, target: null, current: null, source: "manual", note: null, sort_order: 0, created_at: now(), updated_at: now(), ...input };
+  financials.push(created);
+  return created;
+}
+export async function updateEmployeeFinancial(id: string, patch: Partial<Pick<EmployeeFinancial, "metric" | "target" | "current" | "source" | "note" | "sort_order">>): Promise<EmployeeFinancial> {
+  return patchIn(financials, id, { ...patch, updated_at: now() });
+}
+export async function deleteEmployeeFinancial(id: string): Promise<void> {
+  removeFrom(financials, id);
 }

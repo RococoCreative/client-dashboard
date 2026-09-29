@@ -1,7 +1,8 @@
 // The front door. Admins see the state of every module for their company at a glance:
 // people, the current review cycle's progress and team score, company goals for the year,
-// the libraries. Employees see their own latest score, open goals, and what changed in the
-// SOP library. Everything here is a summary with a link into the module that owns it.
+// the libraries. Employees see their own latest score, open goals, what changed in the SOP
+// library, and the modules their job role carries (their own financial figures, for now).
+// Everything here is a summary with a link into the module that owns it.
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
@@ -9,6 +10,7 @@ import Button from "../components/ui/Button.tsx";
 import EmptyState from "../components/ui/EmptyState.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
+import ScoreBar from "../components/ui/ScoreBar.tsx";
 import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
@@ -18,6 +20,8 @@ import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { listCompanyGoals, listCriteria, listCycleReviews, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews } from "../services/gsr.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
+import { listEmployeeFinancials } from "../services/employees.ts";
+import { listJobRoles } from "../services/jobRoles.ts";
 import { listRecentSops, listSops } from "../services/sops.ts";
 import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
@@ -28,9 +32,10 @@ import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, reviewPath, sec
 import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
-import { hasAccount } from "../lib/people.ts";
+import { financialProgress, hasAccount } from "../lib/people.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
+  FINANCIAL_SOURCE_LABELS,
   GOAL_KIND_LABELS,
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -395,7 +400,7 @@ function EmployeeDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals] = await Promise.all([
+    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, jobRoles, financials] = await Promise.all([
       listEmployeeReviews(profile.id),
       listPillars(companyId),
       listCriteria(companyId),
@@ -404,7 +409,13 @@ function EmployeeDashboard() {
       listRecentSops(companyId, 5),
       listCycles(companyId),
       listCompanyGoals(companyId, year),
+      listJobRoles(companyId),
+      listEmployeeFinancials(companyId, profile.id, year),
     ]);
+    // The person's job role decides which optional blocks this dashboard carries. The role is
+    // a row the company set up, so a new module is a new entry in its list, never a branch on
+    // who the company is.
+    const jobRole = jobRoles.find((r) => r.id === profile.job_role_id) ?? null;
     // Latest by the period the review covers, the same rule My GSR and the person page use.
     // The service orders by row creation time, which puts a review started out of order first.
     //
@@ -422,13 +433,14 @@ function EmployeeDashboard() {
     const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
     const gsrCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
-    return { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals };
-  }, [companyId, profile.id, year]);
+    return { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
+  }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals } = state.data;
+  const { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
+  const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
   const cycle = featured?.cycle ?? null;
   const result = featured?.result ?? null;
   // A goal is open until it is hit, or until its period settles and it reads as a miss.
@@ -583,6 +595,30 @@ function EmployeeDashboard() {
             </ul>
           )}
         </Section>
+
+        {showFinancials && jobRole ? (
+          <Section eyebrow={`Financials ${year}`} title="Your figures" description={`What ${jobRole.name} owns this year, against target. Your manager keeps these on your profile.`} className="lg:col-span-3">
+            {financials.length === 0 ? (
+              <p className="text-sm text-ink-2">No figures set for {year} yet.</p>
+            ) : (
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {financials.map((row) => {
+                  const progress = financialProgress(row);
+                  return (
+                    <li key={row.id}>
+                      <ScoreBar
+                        label={row.metric}
+                        percent={progress === null ? null : progress * 100}
+                        detail={row.target === null ? formatMoney(row.current) : `${formatMoney(row.current)} of ${formatMoney(row.target)}`}
+                      />
+                      <p className="mt-1 text-[12px] text-ink-3">{FINANCIAL_SOURCE_LABELS[row.source]}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+        ) : null}
 
         {companyGoals.length > 0 ? (
           <Section eyebrow={`Company goals ${year}`} title="What the team is chasing" className="lg:col-span-3" padded={false}>

@@ -18,6 +18,7 @@ vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts")
 vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
+vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
@@ -616,5 +617,55 @@ describe("sign-off", () => {
     // Reopened, the review reads the working copy again.
     await user.click(screen.getByRole("button", { name: /Reopen/ }));
     expect((await screen.findAllByText(/Current ratings from/)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("job roles", () => {
+  it("manages job roles, their modules, and their goals in settings", async () => {
+    renderWithHub(<CompanySettingsPage />, admin);
+    expect(await screen.findByText("Job roles")).toBeInTheDocument();
+    // Klasik's one role so far, with the module it carries and the goal it brings.
+    expect(await screen.findByLabelText("Name for Production Manager")).toHaveValue("Production Manager");
+    expect(screen.getByLabelText(/^Financial figures .* for Production Manager$/)).toBeChecked();
+    expect(screen.getByLabelText("Role goal Walk every active site once a week")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Add a job role"), "Estimator");
+    await userEvent.click(screen.getByRole("button", { name: "Add role" }));
+    expect(await screen.findByLabelText("Name for Estimator")).toHaveValue("Estimator");
+    // A new role carries nothing until an admin says so.
+    expect(screen.getByLabelText(/^Financial figures .* for Estimator$/)).not.toBeChecked();
+  });
+
+  it("places a person in a job role and keeps their own figures on the profile", async () => {
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Job role")).toHaveValue(KLASIK.jobRoles[0].id);
+    expect(screen.getByLabelText("Target for Revenue managed")).toHaveValue("2000000");
+    expect(screen.getByLabelText("Current for Revenue managed")).toHaveValue("640000");
+    expect(screen.getByText(/32% of target/)).toBeInTheDocument();
+    // The section says where the figures go, which is the role's call.
+    expect(screen.getByText(/On their dashboard, because Production Manager carries the module/)).toBeInTheDocument();
+    const form = screen.getByLabelText("Add a figure for 2026").closest("form") as HTMLElement;
+    await userEvent.type(screen.getByLabelText("Add a figure for 2026"), "Gross profit on my jobs");
+    await userEvent.type(screen.getByLabelText("New figure target"), "$450,000");
+    await userEvent.click(within(form).getByRole("button", { name: "Add" }));
+    expect(await screen.findByLabelText("Target for Gross profit on my jobs")).toHaveValue("450000");
+  });
+
+  it("shows an employee the figures their job role carries on the dashboard", async () => {
+    renderWithHub(<DashboardPage />, employee);
+    expect(await screen.findByText(/Welcome back, Sam/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Your figures" })).toBeInTheDocument();
+    expect(screen.getByText("Revenue managed")).toBeInTheDocument();
+    expect(screen.getByText("$640,000 of $2,000,000")).toBeInTheDocument();
+  });
+
+  it("files the job role's goals into the month with one click", async () => {
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /Add role goals/ }));
+    expect(await screen.findByLabelText("Title for Walk every active site once a week")).toHaveValue("Walk every active site once a week");
+    expect(screen.getByLabelText("Kind for Walk every active site once a week")).toHaveValue("role");
+    // Filed once: the offer goes away, and it is a goal of the month like any other.
+    expect(screen.queryByRole("button", { name: /Add role goals/ })).not.toBeInTheDocument();
   });
 });

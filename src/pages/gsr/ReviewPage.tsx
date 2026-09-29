@@ -40,6 +40,7 @@ import { assertInCompany } from "../../lib/tenancy.ts";
 import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
+import { listJobRoleGoals } from "../../services/jobRoles.ts";
 import { computeReviewScore , countCriteria, hasScoredItem, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount } from "../../lib/gsr/goals.ts";
@@ -97,20 +98,23 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       listGoals(review.company_id, review.employee_id),
     ]);
     const year = cycleYear(cycle);
-    const [kpis, companyGoals, impact, personReviews] = await Promise.all([
+    const person = people.find((p) => p.id === review.employee_id) ?? null;
+    const [kpis, companyGoals, impact, personReviews, roleGoals] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
       // The person's other reviews, so each month inside this period can link to its GSR.
       listEmployeeReviews(review.employee_id),
+      // The goals their job role brings into a Goal Setting Review; nothing for a scored cycle.
+      cycle.cadence === "monthly" && person?.job_role_id ? listJobRoleGoals(review.company_id, person.job_role_id) : Promise.resolve([]),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year };
   }, [reviewId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -377,6 +381,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             previousCycle={lastMonth}
             cycles={cycles}
             goals={goals}
+            roleGoals={roleGoals}
             isAdmin={isAdmin}
             isOwn={isOwn}
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}

@@ -52,6 +52,62 @@ export interface Profile {
   phone: string | null;
   department: string | null;
   reports_to: string | null;
+  // The job they do here (job_roles), set by an admin. Null until placed.
+  job_role_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// A job at this company, with the dashboard modules the people in it get. Company data.
+export type DashboardModule = "financials";
+export const DASHBOARD_MODULE_LABELS: Record<DashboardModule, string> = {
+  financials: "Financial figures (their own targets and results for the year)",
+};
+export interface JobRole {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  dashboard_modules: DashboardModule[];
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// A goal a job role brings into every month's Goal Setting Review, set once by an admin.
+export interface JobRoleGoal {
+  id: string;
+  company_id: string;
+  job_role_id: string;
+  title: string;
+  description: string | null;
+  kind: "professional" | "personal" | "role";
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// A person's own financial figure for the year: what they own, target and current, and where
+// the number came from. Manual today; the integrations write the same rows with their source.
+export type FinancialSource = "manual" | "quickbooks" | "ghl";
+export const FINANCIAL_SOURCE_LABELS: Record<FinancialSource, string> = {
+  manual: "Entered by hand",
+  quickbooks: "QuickBooks",
+  ghl: "GoHighLevel",
+};
+export interface EmployeeFinancial {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  year: number;
+  metric: string;
+  target: number | null;
+  current: number | null;
+  source: FinancialSource;
+  note: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

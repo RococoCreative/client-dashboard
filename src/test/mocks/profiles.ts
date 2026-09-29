@@ -36,6 +36,7 @@ export async function createStaffProfile(input: {
     phone: null,
     department: null,
     reports_to: null,
+    job_role_id: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

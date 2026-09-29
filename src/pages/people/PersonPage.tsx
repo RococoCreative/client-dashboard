@@ -1,6 +1,7 @@
 // One person, for an admin: the profile the review opens with (position, hire date,
-// department, who they report to), their compensation table, this year's KPIs, every review
-// with its score, and their goals (editable, so a manager can set goals in a one-on-one).
+// department, who they report to, their job role), their compensation table, this year's KPIs
+// and their own financial figures, every review with its score, and their goals (editable, so
+// a manager can set goals in a one-on-one).
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -16,6 +17,7 @@ import Stat from "../../components/ui/Stat.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import CompensationTable from "../../components/people/CompensationTable.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
+import FinancialsTable from "../../components/people/FinancialsTable.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
 import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
@@ -24,7 +26,8 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCriteria, listCycles, listEmployeeReviews, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
-import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
+import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../../services/employees.ts";
+import { listJobRoles } from "../../services/jobRoles.ts";
 import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
 import { reviewPath } from "../../lib/gsr/cycles.ts";
@@ -41,7 +44,7 @@ export default function PersonPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation] = await Promise.all([
+    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles] = await Promise.all([
       listCompanyProfiles(companyId),
       listEmployeeReviews(profileId),
       listCycles(companyId),
@@ -50,15 +53,21 @@ export default function PersonPage() {
       listImpactScores(companyId, profileId),
       listEmployeeKpis(companyId, profileId, year),
       listCompensation(companyId, profileId),
+      listEmployeeFinancials(companyId, profileId, year),
+      // Retired roles too, so a person still in one shows it rather than a blank.
+      listJobRoles(companyId, true),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation };
+    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles };
   }, [companyId, profileId, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
-  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation } = state.data;
+  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
+  // The role they are in, and whether it puts their figures on their dashboard.
+  const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
+  const figuresOnDashboard = jobRole?.dashboard_modules.includes("financials") ?? false;
 
   const rows = reviewHistory(reviews, cycles, pillars, scores);
   // The newest review and the newest scored review are different rows once a monthly Goal
@@ -185,6 +194,16 @@ export default function PersonPage() {
                 </select>
               </div>
               <div>
+                <label htmlFor="person-job-role" className={labelClass}>Job role</label>
+                <select id="person-job-role" value={person.job_role_id ?? ""} onChange={(e) => void patch({ job_role_id: e.target.value || null })} className={selectClass}>
+                  <option value="">Not set</option>
+                  {jobRoles.filter((r) => r.is_active || r.id === person.job_role_id).map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}{r.is_active ? "" : " (retired)"}</option>
+                  ))}
+                </select>
+                {jobRoles.length === 0 ? <p className="mt-1 text-[12px] text-ink-3">No job roles yet. Add them in Settings.</p> : null}
+              </div>
+              <div>
                 <label htmlFor="person-phone" className={labelClass}>Phone</label>
                 <BlurInput id="person-phone" value={person.phone ?? ""} placeholder="(555) 010-0000" onSave={(next) => void patch({ phone: next.trim() || null })} />
               </div>
@@ -290,6 +309,20 @@ export default function PersonPage() {
 
           <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
             <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
+          </Section>
+
+          <Section
+            eyebrow={String(year)}
+            title="Financial figures"
+            description={
+              figuresOnDashboard && jobRole
+                ? `The numbers this person owns, against target. On their dashboard, because ${jobRole.name} carries the module.`
+                : jobRole
+                  ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on in Settings.`
+                  : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
+            }
+          >
+            <FinancialsTable employeeId={person.id} year={year} rows={financials} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, financials: update(prev.financials) } : prev))} onError={setError} />
           </Section>
 
           <Section

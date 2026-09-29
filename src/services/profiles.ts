@@ -9,7 +9,7 @@ import { db } from "./supabase.ts";
 import type { Profile, Role } from "../types/database.ts";
 
 const COLUMNS =
-  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, created_at, updated_at";
+  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
@@ -54,7 +54,7 @@ export async function listAllProfiles(): Promise<Profile[]> {
 }
 
 export type ProfilePatch = Partial<
-  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to">
+  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id">
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {

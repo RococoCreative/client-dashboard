@@ -1,11 +1,13 @@
-// Company settings for a company admin: name and logo. Theme, slug, and sign-in domains are
-// Rococo's to manage (they affect who can sign in), so they show read-only here.
+// Company settings for a company admin: name and logo, and the company's job roles with the
+// dashboard modules and goals each one carries. Theme, slug, and sign-in domains are Rococo's
+// to manage (they affect who can sign in), so they show read-only here.
 import { useState, type FormEvent } from "react";
 import Button from "../components/ui/Button.tsx";
 import Field from "../components/ui/Field.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
+import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import { inputClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
@@ -47,7 +49,8 @@ export default function CompanySettingsPage() {
     <>
       <PageHeader eyebrow={company!.name} title="Settings" description="How the company appears in the hub." />
       <div className="grid gap-6 lg:grid-cols-3">
-        <form onSubmit={handleSubmit} className="lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
+        <form onSubmit={handleSubmit}>
           <Section eyebrow="Identity" title="Company" actions={<Button type="submit" size="sm" disabled={busy}>{busy ? "Saving..." : "Save"}</Button>}>
             <div className="space-y-4">
               <Field label="Name" htmlFor="company-name">
@@ -62,6 +65,8 @@ export default function CompanySettingsPage() {
             </div>
           </Section>
         </form>
+        <JobRolesPanel companyId={company!.id} />
+        </div>
         <div className="space-y-6">
           <Section eyebrow="Managed by Rococo" title="Theme and sign-in">
             <dl className="space-y-3 text-sm">

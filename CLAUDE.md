@@ -98,8 +98,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     screen. When a company needs a different shape, the difference becomes a column, a row, or a
     setting every company carries, with the behavior the others have today as its default.
     Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
-    deliverable categories, people and roles, KPIs, compensation, goals, SOPs, resources,
-    financial snapshots, marketing, email domains.
+    deliverable categories, people and roles, job roles (with the dashboard modules and the
+    role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
+    SOPs, resources, financial snapshots, marketing, email domains.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the module set on a person page and a review, and

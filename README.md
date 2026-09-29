@@ -144,6 +144,22 @@ The same panel appears on the person page and inside the quarterly review. A pil
 review as one line item when the review is marked complete, so a task re-rated mid-review moves
 nothing until sign-off.
 
+## Job roles, role goals, and a person's own figures
+
+A job role is a row a company adds in Settings (Site Supervisor, Project Manager, Salesperson),
+and a person is placed in one from their profile. The role carries two things. First, the
+dashboard modules its people get: today that is one module, their own financial figures, and a
+new module is a new entry in the list every company sees, never a branch on who the company is.
+Second, the goals the role brings into every month's Goal Setting Review: an admin writes them
+once on the role, and the review offers them to file for the month in one click, as goals of
+kind Role that the meeting then owns like any other. The template is never edited from a review.
+
+A person's financial figures live on their profile: what they own for the year (closed sales,
+revenue managed), the target, where it stands, and where the number came from. Entered by hand
+today; QuickBooks and GoHighLevel will write the same rows under their own source, and a figure
+an admin corrects by hand is marked as a hand entry again. Only the person and their admins can
+read them, and they appear on the person's dashboard when their job role carries the module.
+
 ## Impact scores
 
 The ratings under the rating pillars (Klasik: Brand Impact, Character and Values) live on the

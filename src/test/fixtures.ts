@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { Company, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { Company, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -130,6 +130,9 @@ export interface CompanyBundle {
   reviews: Review[];
   scores: ReviewScore[];
   impactScores: ImpactScore[];
+  jobRoles: JobRole[];
+  jobRoleGoals: JobRoleGoal[];
+  financials: EmployeeFinancial[];
   goals: Goal[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
@@ -194,6 +197,7 @@ function build(company: Company): CompanyBundle {
     phone: i === 1 ? "(555) 010-2201" : null,
     department: person.role === "admin" ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
     reports_to: i === 0 ? null : p("user-1"),
+    job_role_id: null,
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -391,6 +395,19 @@ function build(company: Company): CompanyBundle {
       });
     }
   }
+
+  // One job role per company with a module and one role goal; the first employee holds it and
+  // carries one financial figure for the year, so the dashboard's optional block has data.
+  const jobRoles: JobRole[] = [
+    { id: p("role-1"), company_id: company.id, name: employees[0]?.title ?? "Site Supervisor", description: null, dashboard_modules: ["financials"], sort_order: 1, is_active: true, created_at: EARLIER, updated_at: EARLIER },
+  ];
+  const jobRoleGoals: JobRoleGoal[] = [
+    { id: p("rolegoal-1"), company_id: company.id, job_role_id: jobRoles[0].id, title: "Walk every active site once a week", description: "Eyes on quality and safety, in person.", kind: "role", sort_order: 1, is_active: true, created_at: EARLIER, updated_at: EARLIER },
+  ];
+  if (employees[0]) employees[0].job_role_id = jobRoles[0].id;
+  const financials: EmployeeFinancial[] = employees.length
+    ? [{ id: p("fin-1"), company_id: company.id, employee_id: employees[0].id, year: 2026, metric: "Revenue managed", target: 2000000, current: 640000, source: "manual", note: null, sort_order: 1, created_at: EARLIER, updated_at: EARLIER }]
+    : [];
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -774,6 +791,7 @@ function build(company: Company): CompanyBundle {
       phone: null,
       department: "Field",
       reports_to: p("user-1"),
+      job_role_id: null,
       created_at: NOW,
       updated_at: NOW,
     },
@@ -793,6 +811,7 @@ function build(company: Company): CompanyBundle {
       phone: null,
       department: "Production",
       reports_to: p("user-1"),
+      job_role_id: null,
       created_at: NOW,
       updated_at: NOW,
     });
@@ -842,7 +861,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -861,6 +880,7 @@ const ROCOCO: Profile = {
   phone: null,
   department: null,
   reports_to: null,
+  job_role_id: null,
   created_at: EARLIER,
   updated_at: EARLIER,
 };

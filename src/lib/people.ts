@@ -1,6 +1,15 @@
-// People helpers shared by the review header, the people table, and the person page:
-// tenure from a hire date and the annual total of a compensation table.
+// People helpers shared by the review header, the people table, the person page, and the
+// dashboard: tenure from a hire date, the annual total of a compensation table, and how far a
+// person's own financial figure is from its target.
 import { formatDate, parseDate } from "./format.ts";
+import type { EmployeeFinancial } from "../types/database.ts";
+
+// Progress against target as a fraction, or null when either side is missing or the target
+// is zero, so a blank never reads as zero percent.
+export function financialProgress(row: Pick<EmployeeFinancial, "target" | "current">): number | null {
+  if (row.target === null || row.current === null || row.target === 0) return null;
+  return row.current / row.target;
+}
 
 // "3 years, 2 months", "7 months", "Less than a month", or "Starts Oct 1, 2026".
 export function formatTenure(hireDate: string | null | undefined, today = new Date()): string | null {

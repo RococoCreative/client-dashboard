@@ -1,7 +1,8 @@
 // The Goal Setting Review for a monthly cycle. The manager and the person set this month's
 // goals together, live: each with action steps and a progress slider where 100 is complete.
-// The month's focus topic is a goal too, seeded from the cycle theme. Last month's goals
-// read back as hit or miss with a "why" and a one-click carry forward. Yearly goals are not
+// The month's focus topic is a goal too, seeded from the cycle theme, and the goals the
+// person's job role brings with it are offered the same way, one click to file. Last month's
+// goals read back as hit or miss with a "why" and a one-click carry forward. Yearly goals are not
 // here: they live on the profile and on the quarterly and annual reviews, because a Goal
 // Setting Review is the month and nothing else. Every change saves on its own; a closed cycle
 // is read-only except for the why, which is written the month after.
@@ -22,7 +23,7 @@ import { carryForward, goalOutcome, hitCount, progressPatch, splitGoals, stepsTa
 import { cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
-import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type Review, type ReviewCycle } from "../../types/database.ts";
+import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type JobRoleGoal, type Review, type ReviewCycle } from "../../types/database.ts";
 
 const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
@@ -224,6 +225,7 @@ export default function GoalSettingPanel({
   previousCycle,
   cycles,
   goals,
+  roleGoals = [],
   isAdmin,
   isOwn,
   onGoals,
@@ -237,6 +239,9 @@ export default function GoalSettingPanel({
   // rather than whichever one happens to be the previous one now.
   cycles: ReviewCycle[];
   goals: Goal[];
+  // The goals the person's job role brings into every month, set once in Settings. Offered
+  // here until each is filed for this month; the template itself is never edited from a review.
+  roleGoals?: JobRoleGoal[];
   isAdmin: boolean;
   isOwn: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
@@ -270,6 +275,10 @@ export default function GoalSettingPanel({
   // on the page behind the scrim.
   const [error, setError] = useState("");
   const [carrying, setCarrying] = useState("");
+  const [seeding, setSeeding] = useState(false);
+  // A role goal is filed once a goal with its title is on this month's list, whoever typed it.
+  const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const pendingRoleGoals = roleGoals.filter((template) => !thisCycle.some((g) => sameTitle(g.title, template.title)));
   // The focus topic leads the month's list; everything else keeps its order.
   const ordered = [...thisCycle].sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0));
   const focusGoal = thisCycle.find((g) => g.kind === "focus") ?? null;
@@ -296,6 +305,35 @@ export default function GoalSettingPanel({
       onTouched();
     } catch (err) {
       onError(errorMessage(err));
+    }
+  }
+
+  // The role's goals land one at a time, in their template order, as goals of kind 'role' that
+  // the meeting then owns like any other. Guarded the same way carrying is.
+  async function addRoleGoals() {
+    if (seeding) return;
+    setSeeding(true);
+    try {
+      let order = thisCycle.length + 1;
+      for (const template of pendingRoleGoals) {
+        const created = await createGoal({
+          company_id: review.company_id,
+          employee_id: review.employee_id,
+          title: template.title,
+          kind: "role",
+          description: template.description,
+          scope: "cycle",
+          cycle_id: cycle.id,
+          year: null,
+          sort_order: order++,
+        });
+        upsert(created);
+      }
+      onTouched();
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setSeeding(false);
     }
   }
 
@@ -375,6 +413,18 @@ export default function GoalSettingPanel({
               </div>
               <Button variant="secondary" size="sm" onClick={() => void add(cycle.theme ?? "Focus topic", "focus", cycle.theme_description)}>
                 <Plus size={13} aria-hidden /> Set as this month's focus topic
+              </Button>
+            </div>
+          ) : null}
+          {canEdit && pendingRoleGoals.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line-strong px-4 py-3">
+              <div className="min-w-0">
+                <p className={eyebrowClass}>Role goals</p>
+                <p className="mt-0.5 text-sm text-ink">{pendingRoleGoals.map((g) => g.title).join(" · ")}</p>
+                <p className="mt-0.5 text-[12.5px] text-ink-2">{pluralize(pendingRoleGoals.length, "goal")} their job role brings into every month, not filed for {cycle.name} yet.</p>
+              </div>
+              <Button variant="secondary" size="sm" disabled={seeding} onClick={() => void addRoleGoals()}>
+                <Plus size={13} aria-hidden /> Add role goals
               </Button>
             </div>
           ) : null}

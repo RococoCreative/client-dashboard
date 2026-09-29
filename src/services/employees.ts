@@ -2,7 +2,7 @@
 // KPIs for the year and the compensation table. Both live in their own tables so RLS can
 // keep them to the person and their company's admins. Plain async functions that throw.
 import { db } from "./supabase.ts";
-import type { CompensationItem, EmployeeKpi } from "../types/database.ts";
+import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../types/database.ts";
 
 const KPI_COLUMNS =
   "id, company_id, employee_id, year, name, target_display, current_display, target_numeric, current_numeric, is_hit, sort_order, created_at, updated_at";
@@ -72,5 +72,38 @@ export async function updateCompensationItem(id: string, patch: Partial<Omit<Com
 
 export async function deleteCompensationItem(id: string): Promise<void> {
   const { error } = await db().from("compensation_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// A person's own financial figures for the year. company_id is stamped from the person by
+// trigger; the source says who wrote the number, and defaults to a hand entry.
+const FINANCIAL_COLUMNS = "id, company_id, employee_id, year, metric, target, current, source, note, sort_order, created_at, updated_at";
+
+export async function listEmployeeFinancials(companyId: string, employeeId: string, year: number): Promise<EmployeeFinancial[]> {
+  const { data, error } = await db()
+    .from("employee_financials")
+    .select(FINANCIAL_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("employee_id", employeeId)
+    .eq("year", year)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return (data as EmployeeFinancial[]) ?? [];
+}
+export type EmployeeFinancialInput = Pick<EmployeeFinancial, "employee_id" | "year" | "metric"> &
+  Partial<Pick<EmployeeFinancial, "target" | "current" | "source" | "note" | "sort_order">>;
+export async function createEmployeeFinancial(input: EmployeeFinancialInput): Promise<EmployeeFinancial> {
+  const { data, error } = await db().from("employee_financials").insert(input).select(FINANCIAL_COLUMNS).single();
+  if (error) throw error;
+  return data as EmployeeFinancial;
+}
+export async function updateEmployeeFinancial(id: string, patch: Partial<Pick<EmployeeFinancial, "metric" | "target" | "current" | "source" | "note" | "sort_order">>): Promise<EmployeeFinancial> {
+  const { data, error } = await db().from("employee_financials").update(patch).eq("id", id).select(FINANCIAL_COLUMNS).single();
+  if (error) throw error;
+  return data as EmployeeFinancial;
+}
+export async function deleteEmployeeFinancial(id: string): Promise<void> {
+  const { error } = await db().from("employee_financials").delete().eq("id", id);
   if (error) throw error;
 }
