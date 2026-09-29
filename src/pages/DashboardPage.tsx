@@ -31,7 +31,7 @@ import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
-import { averageScore, computeReviewScore } from "../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, reviewHistory } from "../lib/gsr/history.ts";
@@ -179,7 +179,7 @@ function AdminDashboard() {
   const notInvited = activePeople.filter((p) => !hasAccount(p)).length;
   const scored = reviews.map((r) => {
     const own = scores.filter((s) => s.review_id === r.id);
-    return { review: r, score: own.length > 0 ? computeReviewScore(pillars, own).overall : null };
+    return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillars, own).overall : null };
   });
   // Every live cycle owes a review for everybody active, so a tile adds the per-cycle fractions
   // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are

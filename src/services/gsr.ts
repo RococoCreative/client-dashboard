@@ -4,19 +4,7 @@
 // behalf of a chosen company), and child rows are re-stamped by database triggers so a
 // score can never land under the wrong company.
 import { db } from "./supabase.ts";
-import type {
-  ActionStep,
-  CompanyGoal,
-  Goal,
-  GoalKind,
-  GoalScope,
-  GoalStatus,
-  GsrCriterion,
-  GsrPillar,
-  Review,
-  ReviewCycle,
-  ReviewScore,
-} from "../types/database.ts";
+import type { ActionStep, CompanyGoal, Goal, GoalKind, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
 const PILLAR_COLUMNS =
   "id, company_id, name, description, weight, scoring_type, rating_scale_max, sort_order, is_active, created_at, updated_at";
@@ -355,4 +343,26 @@ export async function updateCompanyGoal(
 export async function deleteCompanyGoal(id: string): Promise<void> {
   const { error } = await db().from("company_goals").delete().eq("id", id);
   if (error) throw error;
+}
+
+// Impact scores: a person's current ratings, one row per criterion. company_id and pillar_id are
+// stamped by the inherit trigger, so the caller sends the person, the criterion and the number.
+const IMPACT_COLUMNS = "id, company_id, employee_id, pillar_id, criterion_id, rating, note, set_by, created_at, updated_at";
+
+export async function listImpactScores(companyId: string, employeeId?: string): Promise<ImpactScore[]> {
+  let query = db().from("impact_scores").select(IMPACT_COLUMNS).eq("company_id", companyId);
+  if (employeeId) query = query.eq("employee_id", employeeId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as ImpactScore[]) ?? [];
+}
+export type ImpactScoreInput = { employee_id: string; criterion_id: string; rating: number; note?: string | null; set_by?: string | null };
+export async function upsertImpactScore(input: ImpactScoreInput): Promise<ImpactScore> {
+  const { data, error } = await db()
+    .from("impact_scores")
+    .upsert(input, { onConflict: "employee_id,criterion_id" })
+    .select(IMPACT_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as ImpactScore;
 }

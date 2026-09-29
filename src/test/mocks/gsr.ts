@@ -7,6 +7,7 @@ import type {
   GoalStatus,
   GsrCriterion,
   GsrPillar,
+  ImpactScore,
   Review,
   ReviewCycle,
   ReviewScore,
@@ -18,6 +19,7 @@ const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
 const cycles = fromAll((b) => b.cycles).map((x) => ({ ...x }));
 const reviews = fromAll((b) => b.reviews).map((x) => ({ ...x }));
 const scores = fromAll((b) => b.scores).map((x) => ({ ...x }));
+const impactScores = fromAll((b) => b.impactScores).map((x) => ({ ...x }));
 const goals = fromAll((b) => b.goals).map((x) => ({ ...x, action_steps: x.action_steps.map((s) => ({ ...s })) }));
 const companyGoals = fromAll((b) => b.companyGoals).map((x) => ({ ...x }));
 
@@ -112,7 +114,21 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 }
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
-  return patchIn(reviews, id, { ...patch, updated_at: now() });
+  const before = reviews.find((r) => r.id === id);
+  const next = patchIn(reviews, id, { ...patch, updated_at: now() });
+  // The database freezes the person's current impact ratings into the review's rows on the
+  // transition to complete (0017); the mock does the same so the page tests see it.
+  if (before && before.status !== "complete" && next.status === "complete") {
+    for (const impact of impactScores.filter((x) => x.employee_id === next.employee_id && x.company_id === next.company_id)) {
+      const criterion = criteria.find((c) => c.id === impact.criterion_id);
+      const pillar = pillars.find((p) => p.id === impact.pillar_id);
+      if (!criterion?.is_active || !pillar?.is_active || pillar.scoring_type !== "rating") continue;
+      const row = scores.find((x) => x.review_id === id && x.criterion_id === impact.criterion_id);
+      if (row) patchIn(scores, row.id, { rating: impact.rating, updated_at: now() });
+      else scores.push({ id: nextId("score"), review_id: id, company_id: next.company_id, pillar_id: impact.pillar_id, criterion_id: impact.criterion_id, label: null, rating: impact.rating, target: null, actual: null, notes: null, sort_order: 0, created_at: now(), updated_at: now() });
+    }
+  }
+  return next;
 }
 
 export async function listReviewScores(reviewId: string): Promise<ReviewScore[]> {
@@ -164,4 +180,33 @@ export async function updateCompanyGoal(id: string, patch: Partial<Omit<CompanyG
 }
 export async function deleteCompanyGoal(id: string): Promise<void> {
   removeFrom(companyGoals, id);
+}
+
+export async function listImpactScores(companyId: string, employeeId?: string): Promise<ImpactScore[]> {
+  return impactScores.filter((i) => i.company_id === companyId && (!employeeId || i.employee_id === employeeId));
+}
+export type ImpactScoreInput = { employee_id: string; criterion_id: string; rating: number; note?: string | null; set_by?: string | null };
+export async function upsertImpactScore(input: ImpactScoreInput): Promise<ImpactScore> {
+  // The inherit trigger stamps company and pillar from the criterion and refuses a rating off
+  // the pillar's scale; so does this, so a page behaves here the way it will in production.
+  const criterion = criteria.find((c) => c.id === input.criterion_id);
+  if (!criterion) throw new Error("That criterion does not exist.");
+  const pillar = pillars.find((p) => p.id === criterion.pillar_id)!;
+  if (input.rating < 1 || input.rating > pillar.rating_scale_max) throw new Error(`The rating must be between 1 and ${pillar.rating_scale_max}.`);
+  const existing = impactScores.find((i) => i.employee_id === input.employee_id && i.criterion_id === input.criterion_id);
+  if (existing) return patchIn(impactScores, existing.id, { rating: input.rating, note: input.note ?? existing.note, set_by: input.set_by ?? existing.set_by, updated_at: now() });
+  const created: ImpactScore = {
+    id: nextId("impact"),
+    company_id: criterion.company_id,
+    employee_id: input.employee_id,
+    pillar_id: criterion.pillar_id,
+    criterion_id: input.criterion_id,
+    rating: input.rating,
+    note: input.note ?? null,
+    set_by: input.set_by ?? null,
+    created_at: now(),
+    updated_at: now(),
+  };
+  impactScores.push(created);
+  return created;
 }

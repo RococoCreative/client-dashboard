@@ -69,7 +69,15 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    measured on for the year (category, heading, tasks). They are different things.
    A person is measured on two modules that stay separate: **personal KPIs**, which are numeric
    (target, current, hit), and **deliverables**, which are a heading rated by the tasks under it.
-   Neither is weighted against the other yet.
+   A pillar with `scoring_type = 'deliverables_module'` is scored from the deliverables module,
+   but only at sign-off: the app writes the module's target and actual as one review line item
+   on Mark complete, so re-rating a task mid-review never moves the review.
+   **Ratings live on the person, not in the review.** `impact_scores` is the working copy, one
+   row per person per criterion, set and trued up on the profile by an admin. An open review reads
+   it live (`scoreInputsForReview`); Mark complete freezes it into that review's `review_scores`
+   rows in the database (`freeze_review_ratings`, 0017), and a completed review scores from its
+   frozen rows only. A review has no score of record until it is complete: `reviewHistory` and
+   every list read "-" for an open review. Never write a rating from the review page.
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
@@ -93,8 +101,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     deliverable categories, people and roles, KPIs, compensation, goals, SOPs, resources,
     financial snapshots, marketing, email domains.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
-    task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, the
-    module set on a person page and a review, and `SUGGESTED_CATEGORIES`. Changing one of those
+    task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
+    section a cadence belongs to (`sectionOf`), the module set on a person page and a review, and
+    `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
     motion, the tenant's accent as punctuation. It should feel like a command center, not a

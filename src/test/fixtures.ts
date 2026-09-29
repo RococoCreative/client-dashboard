@@ -3,35 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type {
-  Company,
-  CompanyDomain,
-  CompanyGoal,
-  CompensationItem,
-  DeliverableCategory,
-  DeliverableTask,
-  EmployeeDeliverable,
-  FinancialSnapshot,
-  MarketingCampaign,
-  EmployeeKpi,
-  Goal,
-  GsrCriterion,
-  GsrPillar,
-  Invitation,
-  Profile,
-  Resource,
-  ResourceKind,
-  Review,
-  ReviewCycle,
-  ReviewScore,
-  Role,
-  ScoringType,
-  Sop,
-  SopAttachment,
-  SopCategory,
-  SopStatus,
-  SopVersion,
-} from "../types/database.ts";
+import type { Company, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -157,6 +129,7 @@ export interface CompanyBundle {
   cycles: ReviewCycle[];
   reviews: Review[];
   scores: ReviewScore[];
+  impactScores: ImpactScore[];
   goals: Goal[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
@@ -392,6 +365,32 @@ function build(company: Company): CompanyBundle {
     reviews.push(previous);
     if (spec.cadence !== "monthly") scoreReview(previous, 1);
   });
+
+  // The working copy of each person's ratings, built the way 0017 backfills it: the newest rated
+  // row per person and criterion, by the period the review covers. Monthly cycles never carry
+  // scores, so a monthly company has none until an admin sets them on the profile.
+  const impactScores: ImpactScore[] = [];
+  for (const review of [...reviews].sort((a, b) => {
+    const pa = cycles.find((c) => c.id === a.cycle_id)?.period_start ?? "";
+    const pb = cycles.find((c) => c.id === b.cycle_id)?.period_start ?? "";
+    return pb.localeCompare(pa);
+  })) {
+    for (const s of scores.filter((x) => x.review_id === review.id && x.criterion_id && x.rating !== null)) {
+      if (impactScores.some((i) => i.employee_id === review.employee_id && i.criterion_id === s.criterion_id)) continue;
+      impactScores.push({
+        id: p(`impact-${impactScores.length + 1}`),
+        company_id: company.id,
+        employee_id: review.employee_id,
+        pillar_id: s.pillar_id,
+        criterion_id: s.criterion_id as string,
+        rating: s.rating as number,
+        note: null,
+        set_by: profiles[0].id,
+        created_at: EARLIER,
+        updated_at: EARLIER,
+      });
+    }
+  }
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -843,7 +842,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

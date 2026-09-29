@@ -161,6 +161,21 @@ export interface GsrPillar {
   updated_at: string;
 }
 
+// A person's current rating on one criterion: the working copy between reviews, set on the
+// profile and frozen into a review's review_scores rows when that review is completed.
+export interface ImpactScore {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  pillar_id: string;
+  criterion_id: string;
+  rating: number;
+  note: string | null;
+  set_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GsrCriterion {
   id: string;
   pillar_id: string;
@@ -347,6 +362,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const SCORING_TYPE_LABELS: Record<ScoringType, string> = {
   rating: "Rated criteria",
   deliverables: "Target vs actual",
+  deliverables_module: "Deliverables module",
 };
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {

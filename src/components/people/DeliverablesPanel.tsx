@@ -13,7 +13,7 @@
 //
 // The same panel serves the person page and the review, because the ratings are set in the
 // meeting. `canEdit` is what separates an admin from the employee reading their own.
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -38,7 +38,7 @@ import {
   updateDeliverableTask,
   updateEmployeeDeliverable,
 } from "../../services/deliverables.ts";
-import { SUGGESTED_CATEGORIES, groupByCategory, scoreCategory, scoreDeliverable } from "../../lib/gsr/deliverables.ts";
+import { SUGGESTED_CATEGORIES, groupByCategory, scoreCategory, scoreDeliverable, type DeliverableScore } from "../../lib/gsr/deliverables.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { DeliverableCategory, DeliverableTask, EmployeeDeliverable } from "../../types/database.ts";
 
@@ -120,11 +120,15 @@ export default function DeliverablesPanel({
   employeeId,
   year,
   canEdit,
+  onRollup,
 }: {
   companyId: string;
   employeeId: string;
   year: number;
   canEdit: boolean;
+  // The year's figure across every heading, reported whenever it changes. The review reads it
+  // to score a pillar of type deliverables_module and to write the frozen line item at sign-off.
+  onRollup?: (score: DeliverableScore) => void;
 }) {
   const state = useAsync(async () => {
     const [categories, deliverables, tasks] = await Promise.all([
@@ -159,6 +163,9 @@ export default function DeliverablesPanel({
   const categories: DeliverableCategory[] = state.data?.categories ?? [];
   const deliverables: EmployeeDeliverable[] = state.data?.deliverables ?? [];
   const tasks: DeliverableTask[] = state.data?.tasks ?? [];
+  useEffect(() => {
+    if (state.data && onRollup) onRollup(scoreCategory(state.data.deliverables, state.data.tasks));
+  }, [state.data, onRollup]);
 
   async function run(work: () => Promise<void>) {
     setError("");

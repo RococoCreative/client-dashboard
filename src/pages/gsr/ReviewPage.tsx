@@ -13,12 +13,13 @@
 // with their reflection and their own goals' steps and progress writable. Every change saves
 // on its own, so there is no save button to forget.
 import { useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
+import type { DeliverableScore } from "../../lib/gsr/deliverables.ts";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -36,24 +37,10 @@ import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/statu
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
-import {
-  createScore,
-  deleteScore,
-  getCycle,
-  getReview,
-  listCompanyGoals,
-  listCriteria,
-  listCycles,
-  listGoals,
-  listPillars,
-  listReviewScores,
-  updateReview,
-  updateScore,
-  type ReviewPatch,
-} from "../../services/gsr.ts";
+import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
-import { computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { computeReviewScore , countCriteria, hasScoredItem, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleYear, previousCycle, sectionOf } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney } from "../../lib/format.ts";
@@ -84,6 +71,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // pillar's score, so it is confirmed rather than deleted on a single icon click.
   const [removing, setRemoving] = useState<ReviewScore | null>(null);
   const [removeError, setRemoveError] = useState("");
+  // The deliverables module's figure for the year, reported by the panel below once loaded.
+  const [rollup, setRollup] = useState<DeliverableScore | null>(null);
 
   // A criterion can have two saves in flight at once: blurring a note commits it as the rating
   // beside it is clicked. Both would read the same render-time scores array, both would see
@@ -107,17 +96,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       listGoals(review.company_id, review.employee_id),
     ]);
     const year = cycleYear(cycle);
-    const [kpis, companyGoals] = await Promise.all([
+    const [kpis, companyGoals, impact] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
+      listImpactScores(review.company_id, review.employee_id),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, year };
   }, [reviewId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -127,8 +117,23 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // Monthly cycles are Goal Setting Reviews: goals lead, scores follow.
   const monthly = cycle.cadence === "monthly";
   const lastMonth = monthly ? previousCycle(cycles, cycle) : null;
-  const criteriaCount = Object.fromEntries(pillars.map((p) => [p.id, criteria.filter((c) => c.pillar_id === p.id).length]));
-  const result = computeReviewScore(pillars, scores, criteriaCount);
+  const frozen = review.status === "complete";
+  const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
+  // What scores this review right now. Frozen rows once it is complete; before that the
+  // person's current impact ratings for the rating pillars, the typed line items for a
+  // 'deliverables' pillar, and the module's live rollup for a 'deliverables_module' pillar. The
+  // rollup arrives from the panel above once it has loaded.
+  const modulePillars = pillars.filter((p) => p.scoring_type === "deliverables_module" && p.is_active);
+  const liveScores: ScoreInput[] = frozen
+    ? scores
+    : [
+        ...scores.filter((s) => !modulePillars.some((p) => p.id === s.pillar_id)),
+        ...(rollup && rollup.target > 0 ? modulePillars.map((p) => ({ pillar_id: p.id, criterion_id: null, target: rollup.target, actual: rollup.actual })) : []),
+      ];
+  const inputs = scoreInputsForReview(review, liveScores, impact, criteria);
+  const result = computeReviewScore(pillars, inputs, countCriteria(criteria));
+  // Sign-off writes the module's figure as a line item, so it needs the figure in hand.
+  const awaitingRollup = !frozen && modulePillars.length > 0 && rollup === null;
 
   // A row that came back from a write we started: it replaces what is in state, and it is
   // dropped if the row is no longer there. Removing a line item blurs the Notes box beside the
@@ -245,6 +250,29 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     return patch;
   };
 
+  // Sign-off. The module's figure is written as this review's line item first, one row per
+  // module pillar, so the status flip that follows has everything it freezes. The database then
+  // copies the person's current ratings into the review (0017); the reload reads them back.
+  async function markComplete() {
+    setBusy(true);
+    setError("");
+    try {
+      for (const pillar of modulePillars) {
+        if (!rollup || rollup.target === 0) continue;
+        const line = { label: `Deliverables ${year}`, target: rollup.target, actual: rollup.actual };
+        const existing = scores.find((s) => s.pillar_id === pillar.id && !s.criterion_id);
+        if (existing) await updateScore(existing.id, line);
+        else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
+      }
+      await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id });
+      state.reload();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -272,7 +300,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 <RotateCcw size={14} aria-hidden /> Reopen
               </Button>
             ) : (
-              <Button size="sm" disabled={busy || cycle.status !== "open"} onClick={() => void patchReview({ status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id })}>
+              <Button size="sm" disabled={busy || cycle.status !== "open" || awaitingRollup} onClick={() => void markComplete()}>
                 <CheckCircle2 size={14} aria-hidden /> Mark complete
               </Button>
             )
@@ -313,7 +341,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           className="mb-6"
           description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
         >
-          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canScore} />
+          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canScore} onRollup={setRollup} />
         </Section>
       ) : null}
 
@@ -353,7 +381,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         <div className="grid gap-6 lg:grid-cols-3">
           <Section eyebrow="Overall" title={result.complete ? "Score" : "Score so far"} className="lg:col-span-1">
             <div className="flex items-center gap-5">
-              <ScoreRing score={scores.length > 0 ? result.overall : null} size={104} />
+              <ScoreRing score={hasScoredItem(inputs) ? result.overall : null} size={104} />
               <div className="min-w-0 flex-1 space-y-3">
                 {result.pillars.map((p) => (
                   <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
@@ -390,6 +418,21 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                       <p className="text-sm text-ink-2">No criteria defined for this pillar yet. Add them in GSR settings.</p>
                     ) : (
                       <ul className="divide-y divide-line">
+                        {/* Ratings are not set here. They live on the person and are read into the
+                            meeting; the meeting's record is the notes. Sign-off freezes them. */}
+                        <li className="pb-3 text-[12.5px] text-ink-3">
+                          {frozen
+                            ? "Ratings as they were when this review was signed off."
+                            : isAdmin && employee ? (
+                              <>
+                                Current ratings from{" "}
+                                <Link to={`/people/${employee.id}`} className="text-accent hover:underline">{displayName(employee)}'s profile</Link>
+                                , where they are set and trued up. Signing off freezes them into this review.
+                              </>
+                            ) : (
+                              "Current ratings from the profile, where your manager sets them. Signing off freezes them into this review."
+                            )}
+                        </li>
                         {pillarCriteria.map((criterion) => {
                           const score = scores.find((s) => s.criterion_id === criterion.id);
                           return (
@@ -401,9 +444,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                 </div>
                                 <RatingInput
                                   label={`${criterion.name} rating`}
-                                  value={score?.rating ?? null}
+                                  value={frozen ? (score?.rating ?? null) : (impactByCriterion.get(criterion.id)?.rating ?? null)}
                                   max={pillar.rating_scale_max}
-                                  onChange={canScore ? (next) => void saveRating(pillar, criterion, { rating: next }) : undefined}
                                 />
                               </div>
                               {canScore || score?.notes ? (
@@ -424,7 +466,17 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     )
                   ) : (
                     <div>
-                      {lineItems.length === 0 ? (
+                      {pillar.scoring_type === "deliverables_module" && !frozen ? (
+                        // Scored from the deliverables module above, live, and written into this
+                        // review as one line item at sign-off. Nothing to type here.
+                        <p className="text-sm text-ink-2">
+                          {rollup === null
+                            ? "Reading the year's deliverables..."
+                            : rollup.target === 0
+                              ? "No deliverable tasks for the year yet, so nothing to score here. Add them in the Deliverables section above."
+                              : `${rollup.actual} of ${rollup.target} points across the year's deliverables (${Math.min(100, Math.round((rollup.actual / rollup.target) * 100))}%). Frozen into this review when it is marked complete.`}
+                        </p>
+                      ) : lineItems.length === 0 ? (
                         <p className="text-sm text-ink-2">
                           {canScore ? "Add the deliverables agreed for this period with a target and the actual result." : "No deliverables recorded."}
                         </p>
@@ -474,7 +526,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                           </table>
                         </div>
                       )}
-                      {canScore ? (
+                      {canScore && pillar.scoring_type !== "deliverables_module" ? (
                         <Button variant="secondary" size="sm" className="mt-3" onClick={() => void addLineItem(pillar)}>
                           <Plus size={14} aria-hidden /> Add deliverable
                         </Button>

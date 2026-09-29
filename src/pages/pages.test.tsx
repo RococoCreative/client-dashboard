@@ -132,14 +132,31 @@ describe("GSR", () => {
     expect(within(table).getAllByText("Start review").length).toBeGreaterThan(0);
   });
 
-  it("lets an admin rate a criterion on a scoring cycle and the overall score updates", async () => {
-    const user = userEvent.setup();
+  it("reads the ratings on a scoring review from the person's profile, never sets them there", async () => {
     renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByRole("heading", { name: /^Score/ })).toBeInTheDocument();
+    // The criterion is shown, read-only: no radiogroup to click, and the caption says where the
+    // number comes from.
+    expect(await screen.findByLabelText("Communication rating")).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Communication rating" })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Current ratings from/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
+  });
+
+  it("sets an impact score on the profile and the open review reads it", async () => {
+    const user = userEvent.setup();
+    const jamie = RBA.profiles[1];
+    const profile = renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${jamie.id}`, pattern: "/people/:profileId" });
+    expect(await screen.findByRole("heading", { name: "Jamie Fox" })).toBeInTheDocument();
     const group = await screen.findByRole("radiogroup", { name: "Communication rating" });
     await user.click(within(group).getByRole("radio", { name: "5 of 5" }));
     expect(await within(group).findByText("5/5")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
+    profile.unmount();
+
+    // The review shows the number the profile now carries, without a control to change it.
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: /^Score/ })).toBeInTheDocument();
+    expect(within(await screen.findByLabelText("Communication rating")).getByText("5/5")).toBeInTheDocument();
   });
 
   it("renders a scoring review read-only for the employee it belongs to", async () => {
@@ -550,5 +567,24 @@ describe("employee profile", () => {
     expect(rowFor("Avery Cole")).toHaveTextContent("not signed in yet");
     expect(rowFor("Taylor Reed")).toHaveTextContent("not signed in yet");
     expect(rowFor("Sam Ortega")).not.toHaveTextContent("not signed in yet");
+  });
+});
+
+// Last, because signing the review off changes the mocked data every earlier test reads.
+describe("sign-off", () => {
+  it("freezes the profile's ratings into the review when it is marked complete", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByRole("heading", { name: /^Score/ })).toBeInTheDocument();
+    expect(screen.getAllByText(/Current ratings from/).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /Mark complete/ }));
+    // The database copies the person's current ratings into the review on the status flip (the
+    // mock does the same), and the page reads the frozen copy back.
+    expect((await screen.findAllByText("Ratings as they were when this review was signed off.")).length).toBeGreaterThan(0);
+    expect(within(screen.getByLabelText("Communication rating")).getByText("5/5")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Reopen/ })).toBeInTheDocument();
+    // Reopened, the review reads the working copy again.
+    await user.click(screen.getByRole("button", { name: /Reopen/ }));
+    expect((await screen.findAllByText(/Current ratings from/)).length).toBeGreaterThan(0);
   });
 });

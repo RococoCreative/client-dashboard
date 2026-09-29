@@ -19,7 +19,7 @@ import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCycle, listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
-import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem } from "../../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, SECTION_LABEL, cyclePath, defaultCycleName, periodEnd, periodStart, sectionOf, type HubSection } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
@@ -230,7 +230,7 @@ export default function CyclesPage({ section }: { section: HubSection }) {
             const team = averageScore(
               reviews.map((r) => {
                 const own = state.data!.scores.filter((s) => s.review_id === r.id);
-                return own.length > 0 ? computeReviewScore(state.data!.pillars, own).overall : null;
+                return r.status === "complete" && hasScoredItem(own) ? computeReviewScore(state.data!.pillars, own).overall : null;
               }),
             );
             return (

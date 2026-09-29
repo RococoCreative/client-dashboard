@@ -139,8 +139,28 @@ becomes a real category row the first moment a heading is filed under it, so not
 speculatively and a company can still name its categories anything. Every heading carries the
 same pulldown, which is how one is refiled and the only way out of Uncategorized.
 
-The same panel appears on the person page and inside the review, because the ratings get set in
-the meeting. Nothing is weighted between the two modules yet.
+The same panel appears on the person page and inside the quarterly review. A pillar of type
+"Deliverables module" is scored from it: the app writes the year's target and actual into the
+review as one line item when the review is marked complete, so a task re-rated mid-review moves
+nothing until sign-off.
+
+## Impact scores
+
+The ratings under the rating pillars (Klasik: Brand Impact, Character and Values) live on the
+person, not in a review. An admin sets and trues them up on the profile, where each criterion
+shows the current rating, a note, and the change since the last signed-off review. An open
+quarterly review reads those ratings live and read-only, with the meeting's notes beside them.
+Mark complete freezes the ratings into that review in the database, so a completed review is a
+dated snapshot and the next one measures against it. Reopening shows the working copy again;
+completing again freezes again. A review has no score of record until it is complete.
+
+## Sections
+
+Three sidebar sections, keyed on cadence: GSRs (monthly Goal Setting Reviews: last month at a
+glance, this month's goals and action steps, the focus topic, no scoring), Reviews (quarterly,
+annual and custom cycles: the scored review with the employee snapshot, deliverables, yearly goals
+and feedback) and Goals (the year's personal, professional and role goals across the roster).
+Employees see the same three as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 

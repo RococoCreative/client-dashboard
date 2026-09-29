@@ -8,6 +8,7 @@ import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
+import RatingInput from "../../components/ui/RatingInput.tsx";
 import ScoreRing from "../../components/ui/ScoreRing.tsx";
 import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
@@ -17,15 +18,15 @@ import CompensationTable from "../../components/people/CompensationTable.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
 import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
-import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listCriteria, listCycles, listEmployeeReviews, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeKpis } from "../../services/employees.ts";
-import { averageScore } from "../../lib/gsr/scoring.ts";
-import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
+import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
+import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
 import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
@@ -40,21 +41,23 @@ export default function PersonPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [people, reviews, cycles, pillars, kpis, compensation] = await Promise.all([
+    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation] = await Promise.all([
       listCompanyProfiles(companyId),
       listEmployeeReviews(profileId),
       listCycles(companyId),
       listPillars(companyId),
+      listCriteria(companyId),
+      listImpactScores(companyId, profileId),
       listEmployeeKpis(companyId, profileId, year),
       listCompensation(companyId, profileId),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, scores, kpis, compensation };
+    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation };
   }, [companyId, profileId, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
-  const { people, person, reviews, cycles, pillars, scores, kpis, compensation } = state.data;
+  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
 
   const rows = reviewHistory(reviews, cycles, pillars, scores);
@@ -62,6 +65,47 @@ export default function PersonPage() {
   // Setting Review, which carries no scores, sits inside a scored quarter. The score figures
   // read the scored one so a finished review is not hidden behind a blank monthly card.
   const latestScored = latestScoredReview(rows);
+  // The impact score: the person's current ratings, set here and trued up before each review.
+  // The baseline for "up two, down one" is the last signed-off review's frozen ratings.
+  const profileScore = scoreProfile(pillars, criteria, impact);
+  const baseline = previousCompletedReview(rows);
+  const baselineRating = (criterionId: string): number | null =>
+    baseline ? (scores.find((s) => s.review_id === baseline.review.id && s.criterion_id === criterionId)?.rating ?? null) : null;
+  const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
+  const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
+  const deltas = criteria
+    .filter((c) => c.is_active)
+    .map((c) => {
+      const current = impactByCriterion.get(c.id)?.rating ?? null;
+      const was = baselineRating(c.id);
+      return { criterion: c, current, was, delta: current !== null && was !== null ? current - was : null };
+    });
+  const moved = deltas.filter((d) => d.delta !== null && d.delta !== 0).sort((a, b) => (b.delta as number) - (a.delta as number));
+  const biggestGain = moved.find((d) => (d.delta as number) > 0) ?? null;
+  const slipped = [...moved].reverse().find((d) => (d.delta as number) < 0) ?? null;
+
+  async function setRating(criterionId: string, rating: number | null) {
+    if (rating === null) return;
+    setError("");
+    try {
+      const saved = await upsertImpactScore({ employee_id: person!.id, criterion_id: criterionId, rating, set_by: me.id });
+      state.setData((prev) => (prev ? { ...prev, impact: prev.impact.some((i) => i.id === saved.id) ? prev.impact.map((i) => (i.id === saved.id ? saved : i)) : [...prev.impact, saved] } : prev));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function setImpactNote(criterionId: string, note: string | null) {
+    const current = impactByCriterion.get(criterionId);
+    if (!current) return;
+    setError("");
+    try {
+      const saved = await upsertImpactScore({ employee_id: person!.id, criterion_id: criterionId, rating: current.rating, note, set_by: me.id });
+      state.setData((prev) => (prev ? { ...prev, impact: prev.impact.map((i) => (i.id === saved.id ? saved : i)) } : prev));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
   const tenure = formatTenure(person.hire_date);
@@ -162,6 +206,84 @@ export default function PersonPage() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {ratingPillars.length > 0 ? (
+            <Section
+              eyebrow="Impact score"
+              title={profileScore.overall > 0 || impact.length > 0 ? String(profileScore.overall) : "Not rated yet"}
+              description={
+                baseline
+                  ? `Set here and trued up before each review; frozen into the review at sign-off. Compared with ${baseline.cycle?.name ?? "the last review"}.`
+                  : "Set here and trued up before each review; frozen into the review at sign-off."
+              }
+            >
+              {biggestGain || slipped ? (
+                <div className="mb-4 flex flex-wrap gap-2 text-[12.5px]">
+                  {biggestGain ? (
+                    <span className="rounded-full border border-success/40 bg-success/10 px-2.5 py-0.5 text-ink">
+                      Biggest gain: {biggestGain.criterion.name} +{biggestGain.delta}
+                    </span>
+                  ) : null}
+                  {slipped ? (
+                    <span className="rounded-full border border-danger/40 bg-danger/10 px-2.5 py-0.5 text-ink">
+                      Slipped: {slipped.criterion.name} {slipped.delta}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="space-y-5">
+                {ratingPillars.map((pillar) => {
+                  const summary = profileScore.pillars.find((p) => p.pillarId === pillar.id);
+                  const own = deltas.filter((d) => d.criterion.pillar_id === pillar.id);
+                  return (
+                    <div key={pillar.id}>
+                      <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
+                        <p className="text-[11px] font-medium uppercase tracking-label text-ink-3">{pillar.name}</p>
+                        <span className={`tnum text-sm ${summary?.score === null || summary?.score === undefined ? "text-ink-3" : "text-heading"}`}>
+                          {summary?.score === null || summary?.score === undefined ? "-" : Math.round(summary.score)}
+                        </span>
+                      </div>
+                      {own.length === 0 ? (
+                        <p className="mt-2 text-[12.5px] text-ink-3">No criteria yet. Add them in Reviews, Pillars and weights.</p>
+                      ) : (
+                        <ul className="divide-y divide-line">
+                          {own.map(({ criterion, current, was, delta }) => (
+                            <li key={criterion.id} className="py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0 max-w-md">
+                                  <p className="text-sm text-ink">{criterion.name}</p>
+                                  {criterion.description ? <p className="mt-0.5 text-[12px] leading-relaxed text-ink-2">{criterion.description}</p> : null}
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {was !== null ? (
+                                    <span
+                                      aria-label={`Change for ${criterion.name}`}
+                                      className={`tnum text-[12px] ${delta === null || delta === 0 ? "text-ink-3" : delta > 0 ? "text-success" : "text-danger"}`}
+                                    >
+                                      {delta === null ? `was ${was}` : delta > 0 ? `+${delta}` : delta < 0 ? String(delta) : "no change"}
+                                    </span>
+                                  ) : null}
+                                  <RatingInput label={`${criterion.name} rating`} value={current} max={pillar.rating_scale_max} onChange={(next) => void setRating(criterion.id, next)} />
+                                </div>
+                              </div>
+                              {current !== null ? (
+                                <BlurInput
+                                  value={impactByCriterion.get(criterion.id)?.note ?? ""}
+                                  placeholder="Why this rating"
+                                  ariaLabel={`Note on ${criterion.name}`}
+                                  onSave={(next) => void setImpactNote(criterion.id, next.trim() || null)}
+                                  className={`${inputClass} mt-2 text-[12.5px]`}
+                                />
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          ) : null}
           <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>
             <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
           </Section>

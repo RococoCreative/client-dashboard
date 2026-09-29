@@ -31,7 +31,7 @@ import {
   updateCycle,
 } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
-import { averageScore, computeReviewScore } from "../../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem } from "../../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, SECTION_HOME, SECTION_LABEL, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatPeriod } from "../../lib/format.ts";
@@ -137,7 +137,9 @@ export default function CyclePage() {
   const rows = team.map((person) => {
     const review = reviews.find((r) => r.employee_id === person.id) ?? null;
     const own = review ? scores.filter((s) => s.review_id === review.id) : [];
-    const result = review && own.length > 0 ? computeReviewScore(pillars, own) : null;
+    // A review has a score of record once it is signed off; until then its ratings live on the
+    // person and its rows are not the whole picture.
+    const result = review?.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillars, own) : null;
     return { person, review, result };
   });
   // Counted over the same rows the table shows, so the fraction on top and the list below
