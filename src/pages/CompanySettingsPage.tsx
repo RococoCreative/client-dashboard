@@ -1,12 +1,14 @@
-// Company settings for a company admin: name and logo, and the company's job roles with the
-// dashboard modules and goals each one carries. Theme, slug, and sign-in domains are Rococo's
-// to manage (they affect who can sign in), so they show read-only here.
+// Company settings for a company admin: name and logo, the company's job roles with the
+// dashboard modules and goals each one carries, and its own connections to outside systems.
+// Theme, slug, and sign-in domains are Rococo's to manage (they affect who can sign in), so
+// they show read-only here.
 import { useState, type FormEvent } from "react";
 import Button from "../components/ui/Button.tsx";
 import Field from "../components/ui/Field.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
+import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
 import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import { inputClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
@@ -89,6 +91,7 @@ export default function CompanySettingsPage() {
             </dl>
             {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
           </Section>
+          <ConnectionsPanel companyId={company!.id} />
         </div>
       </div>
     </>

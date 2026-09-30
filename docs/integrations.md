@@ -1,8 +1,11 @@
 # Integrations: QuickBooks Online and GoHighLevel
 
-Status: research and field mapping only. Nothing is wired. Every figure in the hub is entered by
-hand (or by CSV for financial snapshots), and the rows already carry a `source` column so the
-integrations can write the same rows later without a schema change.
+Status: the sign-in is built, the figures are not synced yet. Each company connects its own
+GoHighLevel and QuickBooks Online accounts from Settings, Connections, through the app's own
+OAuth flow (the `connections` Edge Function). Company Hub is a standalone app: no connection
+runs through Rococo's own tools or accounts. Every figure in the hub is still entered by hand
+(or by CSV for financial snapshots), and the rows already carry a `source` column so the sync
+can write the same rows later without a schema change.
 
 This note maps each hub figure to where it will come from, what has to be true in the source
 system for the number to mean anything, and the decisions still open. API facts come from the
@@ -36,9 +39,10 @@ hand turns that row manual, and the worker leaves it alone until the row is dele
 - Production keys require Intuit's app assessment questionnaire, and Intuit says this applies to
   private, unlisted, single-company apps too. Plan for one Rococo-owned Intuit app, assessed once,
   that each client company connects to with their own QuickBooks login.
-- The QuickBooks tokens never reach the browser or Vercel. They live with a worker (a Supabase
-  Edge Function on a schedule is the natural fit), which is also the only thing that writes
-  synced rows. Same posture as rule 6 in `CLAUDE.md`: no service-role key in the app.
+- The QuickBooks tokens never reach the browser or Vercel. The `connections` function stores
+  them in `connection_tokens` when the company's admin signs in, and the sync worker (a
+  scheduled Edge Function) will be the only thing that reads them and writes synced rows.
+  Same posture as rule 6 in `CLAUDE.md`: no service-role key in the app.
 - Pin a `minorversion` on every call. Intuit ships a new minor version most months and old ones
   get retired.
 
@@ -114,12 +118,13 @@ figures the hub shows; webhooks only make them fresher.
 
 ## GoHighLevel
 
-### What is connected today
+### How a company connects
 
-The HighLevel connection available in this session is bound to one sub-account: RBA Projects
-(Toronto, Canadian dollars). Klasik's sub-account is separate and would be connected on its
-own. In the hub that becomes one setting row per company (the location id), the way rule 12
-wants it, never a branch on the company name.
+From Settings, Connections, a company admin clicks Connect and signs in to HighLevel, choosing
+the one sub-account to link. The `connections` function stores that sub-account's id on the
+company's row and the tokens where only it can read them. The sample below was read during
+research from RBA's sub-account (Toronto, Canadian dollars); Klasik connects its own the same
+way, and the two never touch.
 
 Pipelines and stages on the RBA sub-account:
 
@@ -172,9 +177,9 @@ currency setting and the formatter needs to read it. This is a company row, not 
 
 ## Sync design, when it is built
 
-- A worker outside the browser (Supabase Edge Function on a schedule) holds both connections'
-  tokens and is the only writer of synced rows. It runs nightly, and on a webhook when one
-  arrives.
+- A worker outside the browser (Supabase Edge Function on a schedule) reads each company's
+  tokens from `connection_tokens`, refreshes them, and is the only writer of synced rows. It
+  runs nightly, and on a webhook when one arrives.
 - Per-company settings, as rows: QuickBooks realm id and accounting method, HighLevel location
   id and the pipeline ids that count as sales, the attribution method in QuickBooks (class or
   custom field) with its value-to-person map, the closed sales definition (HighLevel won, or

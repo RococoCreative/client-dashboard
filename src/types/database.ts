@@ -547,3 +547,30 @@ export const CAMPAIGN_CHANNELS = [
   "Social (organic)",
   "Direct mail",
 ];
+
+// A company's connection to an outside system, made by its own admin signing in to that system
+// from Company Hub. The status row is all the browser sees; tokens live in connection_tokens,
+// which only the connections Edge Function reads. A new provider is a new key here and a new
+// entry in that function's registry.
+export type ConnectionProvider = "gohighlevel" | "quickbooks";
+export const CONNECTION_PROVIDER_LABELS: Record<ConnectionProvider, string> = {
+  gohighlevel: "GoHighLevel",
+  quickbooks: "QuickBooks Online",
+};
+export type ConnectionStatus = "not_connected" | "connected" | "error";
+export interface CompanyConnection {
+  id: string;
+  company_id: string;
+  provider: ConnectionProvider;
+  status: ConnectionStatus;
+  external_account_id: string | null;
+  external_account_name: string | null;
+  scopes: string | null;
+  connected_by: string | null;
+  connected_at: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}

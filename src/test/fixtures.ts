@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { Company, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -133,6 +133,7 @@ export interface CompanyBundle {
   jobRoles: JobRole[];
   jobRoleGoals: JobRoleGoal[];
   financials: EmployeeFinancial[];
+  connections: CompanyConnection[];
   goals: Goal[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
@@ -408,6 +409,11 @@ function build(company: Company): CompanyBundle {
   const financials: EmployeeFinancial[] = employees.length
     ? [{ id: p("fin-1"), company_id: company.id, employee_id: employees[0].id, year: 2026, metric: "Revenue managed", target: 2000000, current: 640000, source: "manual", note: null, sort_order: 1, created_at: EARLIER, updated_at: EARLIER }]
     : [];
+
+  // The company's own connections: HighLevel connected by the owner, QuickBooks not yet.
+  const connections: CompanyConnection[] = [
+    { id: p("conn-ghl"), company_id: company.id, provider: "gohighlevel", status: "connected", external_account_id: p("ghl-location"), external_account_name: `${company.name} (HighLevel)`, scopes: "opportunities.readonly users.readonly locations.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+  ];
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -861,7 +867,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

@@ -19,6 +19,7 @@ vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
+vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
@@ -667,5 +668,19 @@ describe("job roles", () => {
     expect(screen.getByLabelText("Kind for Walk every active site once a week")).toHaveValue("role");
     // Filed once: the offer goes away, and it is a goal of the month like any other.
     expect(screen.queryByRole("button", { name: /Add role goals/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("connections", () => {
+  it("shows the company's own connections and disconnects one from settings", async () => {
+    renderWithHub(<CompanySettingsPage />, admin);
+    expect(await screen.findByText("Connections")).toBeInTheDocument();
+    // HighLevel is connected by the owner, with the account it points at; QuickBooks is not.
+    expect(await screen.findByText("Klasik Construction (HighLevel)", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Disconnect GoHighLevel" }));
+    await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
   });
 });

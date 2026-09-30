@@ -160,6 +160,18 @@ today; QuickBooks and GoHighLevel will write the same rows under their own sourc
 an admin corrects by hand is marked as a hand entry again. Only the person and their admins can
 read them, and they appear on the person's dashboard when their job role carries the module.
 
+## Connections to outside systems
+
+Each company connects its own GoHighLevel and QuickBooks Online accounts from Settings,
+Connections. Connect sends the admin to the provider's own sign-in page; the provider sends
+the browser back to the `connections` Edge Function, which exchanges the code for tokens,
+records the connection on `company_connections` (the status row admins see: which account,
+since when, last sync) and keeps the tokens in `connection_tokens`, a table with row level
+security on and no policies, so only the function's service role can read it. Nothing in the
+browser holds a provider secret or token, and nothing is shared between companies. Disconnect
+revokes at the provider where it can and drops the tokens either way. The figures themselves
+are not synced yet; `docs/integrations.md` maps where each one will come from.
+
 ## Impact scores
 
 The ratings under the rating pillars (Klasik: Brand Impact, Character and Values) live on the
@@ -246,6 +258,26 @@ and the RBA theme picks them up without a code change.
 - `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
 - `docs/`: designs for work that is specified but not built.
+
+## The connections function
+
+`supabase/functions/connections` is deployed with the gateway's JWT check off, because the
+provider's callback arrives with no session; the function checks the admin's own JWT on
+`start` and `disconnect` and its own signed state on `callback`. It needs these secrets
+(Dashboard, Edge Functions, Secrets):
+
+- `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
+  the company and admin who started it.
+- `APP_ORIGINS`: comma separated origins the browser may be returned to, such as the
+  production domain and the Vercel preview domain. Localhost is always allowed.
+- `GHL_CLIENT_ID` and `GHL_CLIENT_SECRET`: from a HighLevel Marketplace app owned by Rococo
+  with the scopes `opportunities.readonly users.readonly locations.readonly`.
+- `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` (`sandbox` or `production`): from
+  an Intuit developer app owned by Rococo with the `com.intuit.quickbooks.accounting` scope.
+
+Both provider apps must list exactly one redirect URL:
+`https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until the keys are in
+place, Connect answers with a plain "not set up yet" line and nothing else changes.
 
 ## Deploy
 

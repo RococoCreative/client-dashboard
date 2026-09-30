@@ -59,6 +59,11 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and
    rejects everyone else. The app-side domain lookup is UX, not security. No service-role
    key anywhere in the app or in Vercel; invitations are rows plus a link, not emails.
+   The same posture covers outside systems: a company connects its own GoHighLevel or
+   QuickBooks account through the app's own OAuth flow in the `connections` Edge Function
+   (`supabase/functions/connections`), never through anything of Rococo's. Provider tokens
+   live in `connection_tokens`, which only that function reads; the browser sees status rows
+   and never calls a provider.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
@@ -100,7 +105,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
-    SOPs, resources, financial snapshots, marketing, email domains.
+    SOPs, resources, financial snapshots, marketing, email domains, connections to outside
+    systems.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the module set on a person page and a review, and
