@@ -4,6 +4,7 @@
 // person signs in, handle_new_user claims the roster profile this invitation points at and
 // stamps accepted_at.
 import { db } from "./supabase.ts";
+import { appOrigin } from "../lib/appUrl.ts";
 import type { Invitation, Role } from "../types/database.ts";
 
 const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at";
@@ -40,7 +41,8 @@ export async function deleteInvitation(id: string): Promise<void> {
 }
 
 // The login screen reads ?email= and pre-fills the field, so this link is all a new
-// person needs.
-export function inviteLink(email: string, origin = window.location.origin): string {
+// person needs. It always carries the production domain (appOrigin), whatever host the
+// admin copied it from.
+export function inviteLink(email: string, origin = appOrigin()): string {
   return `${origin}/?email=${encodeURIComponent(email.trim().toLowerCase())}`;
 }

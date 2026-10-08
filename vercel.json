@@ -3,6 +3,14 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "company-hub-rocococreative.vercel.app" }],
+      "destination": "https://companyhub.rocococreative.io/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/((?!assets/|fonts/|.*\\.).*)", "destination": "/index.html" }
   ],

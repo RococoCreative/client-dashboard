@@ -72,7 +72,8 @@ a reload resets the data.
    Quick check: try a throwaway @gmail.com address on the login screen and confirm it is
    rejected.
 5. **Redirect URLs.** Authentication, URL Configuration: set Site URL to the production
-   domain and add `http://localhost:5173/**` plus the Vercel preview wildcard.
+   domain (`https://companyhub.rocococreative.io`) and add `https://companyhub.rocococreative.io/**`,
+   `http://localhost:5173/**` and the Vercel preview wildcard to Redirect URLs.
 6. **Keys.** Project Settings, API: copy the Project URL and the anon (publishable) key
    into `.env` locally and into Vercel's environment variables. Never put the service_role
    key or database password in `.env`, in Vercel, or in any `VITE_` variable.
@@ -269,7 +270,8 @@ provider's callback arrives with no session; the function checks the admin's own
 - `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
   the company and admin who started it.
 - `APP_ORIGINS`: comma separated origins the browser may be returned to, such as the
-  production domain and the Vercel preview domain. Localhost is always allowed.
+  production domain (`https://companyhub.rocococreative.io`) and the Vercel preview domain.
+  Localhost is always allowed.
 - `GHL_CLIENT_ID` and `GHL_CLIENT_SECRET`: from a HighLevel Marketplace app owned by Rococo
   with the scopes `opportunities.readonly users.readonly locations.readonly`.
 - `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` (`sandbox` or `production`): from
@@ -282,11 +284,13 @@ place, Connect answers with a plain "not set up yet" line and nothing else chang
 ## Deploy
 
 Live: Vercel project `company-hub` in the Rococo Creative team, production branch `main`,
-at https://company-hub-rocococreative.vercel.app. The Supabase project is "Rococo - Company
+at https://companyhub.rocococreative.io. The old https://company-hub-rocococreative.vercel.app
+address redirects there (`vercel.json`), so no link or bookmark lands on it. The Supabase project is "Rococo - Company
 Hub" (`https://jjdcejevdqpwuastsmpq.supabase.co`); its keys live in Vercel's environment
 variables and are never committed.
 
 Vercel with framework preset Vite. `vercel.json` carries the SPA rewrite and security
 headers. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for Production, Preview, and
-Development. CI (`.github/workflows/ci.yml`) runs the tests and the type-checked build on
+Development, and `VITE_APP_URL=https://companyhub.rocococreative.io` for Production and Preview so
+every invitation link carries the production domain, whichever build an admin copied it from. CI (`.github/workflows/ci.yml`) runs the tests and the type-checked build on
 every push and pull request.
