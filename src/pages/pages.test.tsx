@@ -324,6 +324,18 @@ describe("GSR", () => {
     expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
   });
 
+  it("lets an employee start their own GSR for the open month and prefill it", async () => {
+    const user = userEvent.setup();
+    // Avery has no review in September yet: nobody has started it, so they start it themselves.
+    const avery = KLASIK.profiles.find((p) => p.full_name === "Avery Cole")!;
+    const hub = { ...employee, profile: { ...avery, user_id: "klasik-auth-avery" } };
+    renderWithHub(<MyGsrPage />, hub);
+    expect(await screen.findByRole("heading", { name: "Get ready for your GSR" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start my GSR" }));
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add a goal for this month")).toBeInTheDocument();
+  });
+
   it("lets an employee tick an action step on this month's GSR", async () => {
     const user = userEvent.setup();
     // The step belongs to a month goal, and the month lives on the GSR tab now.
@@ -521,14 +533,25 @@ describe("monthly goal setting review", () => {
     expect(await screen.findByText("Complete")).toBeInTheDocument();
   });
 
-  it("lets the person move their own progress but not set goals", async () => {
+  it("lets the person prefill their own month: goals, steps, notes and the why on last month", async () => {
+    const user = userEvent.setup();
     renderWithHub(<ReviewPage />, employee, at);
-    expect(await screen.findByText("Last month at a glance")).toBeInTheDocument();
+    expect(await screen.findByText(/Fill these in before the meeting/)).toBeInTheDocument();
     expect(screen.getByLabelText("Progress for Run the weekly client update without prompting")).not.toBeDisabled();
+    expect(screen.getByLabelText("Title for Run the weekly client update without prompting")).toBeInTheDocument();
+    expect(screen.getByLabelText("Notes for Run the weekly client update without prompting")).toBeInTheDocument();
+    expect(screen.getByLabelText("Why for Send the Friday client update every week")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Add a goal for this month"), "Shadow an estimator for a day{Enter}");
+    expect(await screen.findByLabelText("Title for Shadow an estimator for a day")).toBeInTheDocument();
+  });
+
+  it("keeps a closed month read-only for the person", async () => {
+    // August, closed: the guard refuses any goal write, so the page offers none.
+    const closed = KLASIK.cycles.find((c) => c.cadence === "monthly" && c.status === "closed")!;
+    const review = KLASIK.reviews.find((r) => r.cycle_id === closed.id && r.employee_id === employeeProfile.id)!;
+    renderWithHub(<ReviewPage />, employee, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /into this month/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/^Why for/)).not.toBeInTheDocument();
-    expect(screen.getByText("Every crew logged daily. Two misses in week one, none after.")).toBeInTheDocument();
   });
 
   it("opens a scored review with the employee snapshot: tenure, KPIs, and company goals", async () => {

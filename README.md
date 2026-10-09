@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0015`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0020`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -204,6 +204,12 @@ manager writes now, and a missed goal carries into this month in one click (only
 not yet taken come along, linked to the goal it came from). The person's yearly goals sit
 alongside with the same slider. Closing a cycle freezes its goals (a database trigger, not
 just the UI; only the why stays writable), so what a month recorded stays as recorded.
+
+The person works their own open month the same way, from My GSR: they add and edit goals,
+steps, progress and notes, carry last month's misses forward, and write the why, so the
+meeting starts from their draft. If nobody has started their review for the month yet, they
+start it themselves (0020 allows exactly that: their own row, in an open monthly cycle, not
+started, with no feedback or sign-off). Status, feedback and sign-off stay with the manager.
 Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
 `src/lib/gsr/goals.ts`.
 

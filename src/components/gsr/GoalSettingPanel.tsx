@@ -1,5 +1,7 @@
 // The Goal Setting Review for a monthly cycle. The manager and the person set this month's
 // goals together, live: each with action steps and a progress slider where 100 is complete.
+// The person works their own month the same way the manager does, so they can fill it in
+// before the meeting and the meeting starts from their draft.
 // The month's focus topic is a goal too, seeded from the cycle theme, and the goals the
 // person's job role brings with it are offered the same way, one click to file. Last month's
 // goals read back as hit or miss with a "why" and a one-click carry forward. Yearly goals are not
@@ -249,9 +251,10 @@ export default function GoalSettingPanel({
   onTouched: () => void;
 }) {
   const open = cycle.status === "open";
-  const canEdit = isAdmin && open;
-  // The person ticks steps and moves progress on their own goals; the manager does everything.
-  const canTick = (isAdmin || isOwn) && open;
+  // The manager and the person both work an open month in full: set goals, steps, progress,
+  // notes, the why on last month. RLS is what keeps it to their own (goals are theirs to write
+  // since 0013); this only decides what the page offers.
+  const canEdit = (isAdmin || isOwn) && open;
   const year = cycleYear(cycle);
   const { thisCycle, lastCycle } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
   const lastSettled = previousCycle ? cycleSettled(previousCycle) : true;
@@ -391,7 +394,7 @@ export default function GoalSettingPanel({
           ) : (
             <ul className="divide-y divide-line">
               {lastCycle.map((goal) => (
-                <LastMonthGoal key={goal.id} goal={goal} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} />
+                <LastMonthGoal key={goal.id} goal={goal} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin || isOwn} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} />
               ))}
             </ul>
           )}
@@ -402,7 +405,11 @@ export default function GoalSettingPanel({
         <Section
           eyebrow={cycle.name}
           title="Goals for this month"
-          description="Set together in the review. The focus topic comes from the cycle theme. Progress is live; 100 marks a goal complete, and next month reads it back as a hit."
+          description={
+            isOwn && !isAdmin
+              ? "Fill these in before the meeting: the goals you want this month, the steps to get there, and where things stand. You and your manager go through them together in the review. 100 marks a goal complete."
+              : "Set together in the review. The focus topic comes from the cycle theme. Progress is live; 100 marks a goal complete, and next month reads it back as a hit."
+          }
         >
           {canEdit && !focusGoal ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line-strong px-4 py-3">
@@ -421,7 +428,7 @@ export default function GoalSettingPanel({
               <div className="min-w-0">
                 <p className={eyebrowClass}>Role goals</p>
                 <p className="mt-0.5 text-sm text-ink">{pendingRoleGoals.map((g) => g.title).join(" · ")}</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-2">{pluralize(pendingRoleGoals.length, "goal")} their job role brings into every month, not filed for {cycle.name} yet.</p>
+                <p className="mt-0.5 text-[12.5px] text-ink-2">{pluralize(pendingRoleGoals.length, "goal")} {isOwn ? "your" : "their"} job role brings into every month, not filed for {cycle.name} yet.</p>
               </div>
               <Button variant="secondary" size="sm" disabled={seeding} onClick={() => void addRoleGoals()}>
                 <Plus size={13} aria-hidden /> Add role goals
@@ -437,7 +444,7 @@ export default function GoalSettingPanel({
                 key={goal.id}
                 goal={goal}
                 canEdit={canEdit}
-                canTick={canTick}
+                canTick={canEdit}
                 carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
                 onDelete={() => setDeleting(goal)}

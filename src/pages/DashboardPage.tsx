@@ -509,9 +509,9 @@ function EmployeeDashboard() {
           title={gsrCycle ? gsrCycle.name : "No month open"}
           className={ratingPillars.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}
           actions={
-            gsrReview ? (
+            gsrCycle ? (
               <Link to="/my/gsr">
-                <Button variant="secondary" size="sm">Open my GSR</Button>
+                <Button variant="secondary" size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
               </Link>
             ) : undefined
           }
@@ -519,9 +519,9 @@ function EmployeeDashboard() {
           {!gsrCycle ? (
             <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
           ) : !gsrReview ? (
-            <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Once your manager opens it, this month's goals are here.</p>
+            <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Start it to fill in your goals before the meeting.</p>
           ) : monthGoals.length === 0 ? (
-            <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. They are set together in the meeting.</p>
+            <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. Add yours on the GSR tab before the meeting.</p>
           ) : (
             <ul className="divide-y divide-line">
               {monthGoals.map((goal) => {

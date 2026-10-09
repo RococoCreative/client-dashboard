@@ -9,9 +9,10 @@
 // pillars, target-vs-actual line items for deliverable pillars, the overall score, and the
 // management, peer and client feedback with the employee's reflection.
 //
-// Employees open the same page read-only for their own review (RLS makes sure it is theirs)
-// with their reflection and their own goals' steps and progress writable. Every change saves
-// on its own, so there is no save button to forget.
+// Employees open the same page for their own review (RLS makes sure it is theirs). A monthly
+// GSR is theirs to work in full so they can prefill it before the meeting; a scored review is
+// read-only apart from their reflection. Every change saves on its own, so there is no save
+// button to forget.
 import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
