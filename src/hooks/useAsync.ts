@@ -12,9 +12,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../lib/errors.ts";
 
-// Long enough that alt-tabbing back and forth does not refetch on every flick, short enough
-// that anything a person did while they were away is already on screen when they look.
-const REVALIDATE_AFTER_MS = 30_000;
+// Only long enough to fold one return into one fetch: coming back fires both focus and
+// visibilitychange. It used to be 30 seconds, which is exactly the gap that matters: open the
+// dashboard, mark a review complete in the next tab, come back, and the dashboard still read the
+// old world because it had loaded less than half a minute before.
+const REVALIDATE_AFTER_MS = 2_000;
 
 // A reload swaps the rows under the page, and BlurInput adopts a changed server value, so
 // reloading while somebody is mid-keystroke can take their uncommitted draft with it. If the

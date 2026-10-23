@@ -96,6 +96,27 @@ export function activeCycles<T extends { id: string; period_start: string; perio
     .slice(0, 1);
 }
 
+// Every open cycle with reviews still owed: the ones covering today (activeCycles), then every
+// open cycle whose period has already ended, the most recently ended first.
+//
+// An open cycle stays open until an admin closes it, and its reviews keep being worked and
+// signed off after the period is over. A summary that read only the cycles covering today lost
+// that work the day the period ended: September's GSRs and last quarter's reviews were still
+// being completed, and the dashboard counted none of it and showed none of their scores. A cycle
+// that has not started yet is not owed anything and stays out, unless it is activeCycles' stand-in.
+export function cyclesInPlay<T extends { id: string; period_start: string; period_end: string; status: string }>(
+  cycles: T[],
+  today = new Date(),
+): T[] {
+  const todayIso = toDateOnly(today);
+  const current = activeCycles(cycles, today);
+  const shown = new Set(current.map((c) => c.id));
+  const ended = cycles
+    .filter((c) => c.status === "open" && c.period_end < todayIso && !shown.has(c.id))
+    .sort((a, b) => b.period_end.localeCompare(a.period_end) || b.period_start.localeCompare(a.period_start) || a.id.localeCompare(b.id));
+  return [...current, ...ended];
+}
+
 // The most pressing open cycle, for a caller that can genuinely only show one. Prefer
 // activeCycles anywhere a company's whole review state is being summarised.
 export function currentCycle<T extends { id: string; period_start: string; period_end: string; status: string }>(

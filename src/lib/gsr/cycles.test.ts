@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, defaultCycleName, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
+import { activeCycles, currentCycle, cyclesInPlay, defaultCycleName, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -41,6 +41,27 @@ describe("cycle periods", () => {
     // Nothing covers today: the most recently started open cycle stands in, on its own.
     expect(activeCycles(cycles, new Date(2026, 11, 1)).map((c) => c.id)).toEqual(["month"]);
     expect(activeCycles([], new Date())).toEqual([]);
+  });
+
+  it("keeps an open cycle in play after its period ends, until it is closed", () => {
+    // October 23: October's GSR and Q4 cover today, while September's GSR and Q3 are over but
+    // still open, with reviews being signed off in them. Closed and not-yet-started cycles are
+    // owed nothing.
+    const cycles = [
+      { id: "q3", period_start: "2026-07-01", period_end: "2026-09-30", status: "open" },
+      { id: "sep", period_start: "2026-09-01", period_end: "2026-09-30", status: "open" },
+      { id: "aug", period_start: "2026-08-01", period_end: "2026-08-31", status: "closed" },
+      { id: "oct", period_start: "2026-10-01", period_end: "2026-10-31", status: "open" },
+      { id: "q4", period_start: "2026-10-01", period_end: "2026-12-31", status: "open" },
+      { id: "nov", period_start: "2026-11-01", period_end: "2026-11-30", status: "open" },
+    ];
+    const today = new Date(2026, 9, 23);
+    expect(cyclesInPlay(cycles, today).map((c) => c.id)).toEqual(["oct", "q4", "sep", "q3"]);
+    expect(cyclesInPlay([...cycles].reverse(), today).map((c) => c.id)).toEqual(["oct", "q4", "sep", "q3"]);
+    // Nothing covers today: activeCycles' stand-in leads, and the ended ones still follow.
+    const between = cycles.filter((c) => c.id === "sep" || c.id === "nov");
+    expect(cyclesInPlay(between, today).map((c) => c.id)).toEqual(["nov", "sep"]);
+    expect(cyclesInPlay([], today)).toEqual([]);
   });
 
   it("finds the months that ran inside a scored period, oldest first", () => {

@@ -24,7 +24,7 @@ import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, weightTotal } from "../../lib/gsr/scoring.ts";
-import { activeCycles, cycleProgress } from "../../lib/gsr/cycles.ts";
+import { cycleProgress, cyclesInPlay } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
@@ -68,9 +68,11 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   // people the cycle page does.
   const reviewable = active;
   const admins = active.filter((p) => p.role === "admin");
-  // Every cycle covering today, not one of them: a monthly Goal Setting Review runs inside a
-  // quarterly scored review, so reading one reports the other's people as not started.
-  const liveCycles = activeCycles(cycles);
+  // Every cycle with reviews still owed, not one of them: a monthly Goal Setting Review runs
+  // inside a quarterly scored review, and a cycle stays open after its period until an admin
+  // closes it. Reading fewer reports finished reviews as missing. The same set the company
+  // dashboard reads.
+  const liveCycles = cyclesInPlay(cycles);
   const liveCycleIds = new Set(liveCycles.map((c) => c.id));
   const cycleReviews = reviews.filter((r) => liveCycleIds.has(r.cycle_id));
   const scores = cycleReviews.length > 0 ? await listScoresForReviews(cycleReviews.map((r) => r.id)) : [];

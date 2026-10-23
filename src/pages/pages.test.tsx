@@ -95,6 +95,23 @@ describe("dashboard", () => {
     expect(within(quarterly.closest("section") as HTMLElement).queryByText(/Goal Setting Review/)).not.toBeInTheDocument();
   });
 
+  it("keeps counting an open cycle after its period ends, until someone closes it", async () => {
+    // October 5: nothing covers today any more, but September's GSR and Q3 are both still open,
+    // with a review already signed off in September. Both stay on the dashboard, counted.
+    vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
+    try {
+      renderWithHub(<DashboardPage />, admin);
+      const monthly = await screen.findByRole("heading", { name: currentCycle.name });
+      const quarterly = await screen.findByRole("heading", { name: overlappingCycle.name });
+      for (const heading of [monthly, quarterly]) {
+        expect(within(heading.closest("section") as HTMLElement).getByText(/Period ended, still open/)).toBeInTheDocument();
+      }
+      expect(within(monthly.closest("section") as HTMLElement).getByText(/[1-9]\d* of \d+ complete/)).toBeInTheDocument();
+    } finally {
+      vi.setSystemTime(new Date("2026-09-15T12:00:00.000Z"));
+    }
+  });
+
   it("shows an employee their own score and goals, plus the company goals, and nobody else's", async () => {
     renderWithHub(<DashboardPage />, employee);
     expect(await screen.findByText(/Welcome back, Sam/)).toBeInTheDocument();
@@ -142,6 +159,20 @@ describe("GSR", () => {
     expect(await screen.findByText(overlappingCycle.name)).toBeInTheDocument();
     expect(screen.queryByText(currentCycle.name)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Pillars and weights/ })).toBeInTheDocument();
+  });
+
+  it("reports the same completion on the cycles list as on the cycle itself", async () => {
+    // Both count over the active roster, so a person with no review row yet is owed one in
+    // both places. The list used to count only the rows that existed.
+    const list = renderWithHub(<CyclesPage section="gsr" />, admin);
+    const link = (await screen.findByText(currentCycle.name)).closest("a") as HTMLElement;
+    const fraction = within(link).getByText(/^\d+\/\d+ complete$/).textContent!.replace(" complete", "");
+    const roster = KLASIK.profiles.filter((p) => p.is_active).length;
+    expect(fraction.endsWith(`/${roster}`)).toBe(true);
+    list.unmount();
+
+    renderWithHub(<CyclePage />, admin, { path: `/gsr/cycles/${currentCycle.id}`, pattern: "/gsr/cycles/:cycleId" });
+    expect(await screen.findByText(fraction)).toBeInTheDocument();
   });
 
   it("shows the team table for a cycle with pillar columns", async () => {

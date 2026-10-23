@@ -28,7 +28,7 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore, hasScoredItem, scoreProfile } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -88,11 +88,13 @@ function CycleProgress({
   const progress = cycleProgress(people, own.map((s) => s.review), cycle.id);
   // A monthly cycle is a Goal Setting Review and carries no scores, so it shows no score column.
   const showScore = cycle.cadence !== "monthly";
+  // Still open after its period: the reviews in it are being finished, and it says so.
+  const ended = cycleSettled(cycle);
   return (
     <Section
       eyebrow={showScore ? CADENCE_LABELS[cycle.cadence] : `${CADENCE_LABELS[cycle.cadence]} · Goal Setting Review`}
       title={cycle.name}
-      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete`}
+      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete${ended ? " · Period ended, still open" : ""}`}
       actions={
         <Link to={cyclePath(cycle)}>
           <Button variant="secondary" size="sm">Open cycle</Button>
@@ -143,10 +145,11 @@ function AdminDashboard() {
       listSnapshots(companyId),
       listCampaigns(companyId),
     ]);
-    // Every cycle that covers today, because a monthly Goal Setting Review runs inside a
-    // quarterly scored review and both are live. Reading one of them is how a finished review
-    // goes missing from this page.
-    const live = activeCycles(cycles);
+    // Every cycle with reviews still owed: the ones covering today (a monthly Goal Setting Review
+    // runs inside a quarterly scored review, so both are live) and any open cycle whose period
+    // has ended but which nobody has closed yet. Reading fewer is how a finished review goes
+    // missing from this page.
+    const live = cyclesInPlay(cycles);
     let reviews: Review[] = [];
     let scores: ReviewScore[] = [];
     if (live.length > 0) {

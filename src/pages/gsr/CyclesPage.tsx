@@ -19,8 +19,9 @@ import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCycle, listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore, hasScoredItem } from "../../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, SECTION_LABEL, cyclePath, defaultCycleName, periodEnd, periodStart, sectionOf, type HubSection } from "../../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, SECTION_LABEL, cycleProgress, cyclePath, defaultCycleName, periodEnd, periodStart, sectionOf, type HubSection } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
 import type { Cadence, ReviewCycle } from "../../types/database.ts";
@@ -175,9 +176,9 @@ export default function CyclesPage({ section }: { section: HubSection }) {
   const gsr = section === "gsr";
 
   const state = useAsync(async () => {
-    const [cycles, reviews, pillars] = await Promise.all([listCycles(companyId), listCompanyReviews(companyId), listPillars(companyId)]);
+    const [cycles, reviews, pillars, people] = await Promise.all([listCycles(companyId), listCompanyReviews(companyId), listPillars(companyId), listCompanyProfiles(companyId)]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { cycles, reviews, pillars, scores };
+    return { cycles, reviews, pillars, scores, people };
   }, [companyId]);
   const cycles = (state.data?.cycles ?? []).filter((c) => sectionOf(c.cadence) === section);
 
@@ -225,8 +226,12 @@ export default function CyclesPage({ section }: { section: HubSection }) {
       ) : (
         <ul className="space-y-3">
           {cycles.map((cycle) => {
-            const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id);
-            const complete = reviews.filter((r) => r.status === "complete").length;
+            // Counted the way the cycle page and the dashboard count it: over everybody active on
+            // the roster, so a person with no review row yet is a review still owed. Counting the
+            // rows that exist read "1/2 complete" here while the dashboard read "1 of 5".
+            const roster = state.data!.people.filter((p) => p.is_active);
+            const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id && roster.some((p) => p.id === r.employee_id));
+            const progress = cycleProgress(roster, reviews, cycle.id);
             const team = averageScore(
               reviews.map((r) => {
                 const own = state.data!.scores.filter((s) => s.review_id === r.id);
@@ -252,7 +257,7 @@ export default function CyclesPage({ section }: { section: HubSection }) {
                   <div className="flex items-center gap-6 text-right">
                     <div>
                       <p className="text-[11px] uppercase tracking-label text-ink-3">Reviews</p>
-                      <p className="tnum text-sm text-ink">{complete}/{reviews.length} complete</p>
+                      <p className="tnum text-sm text-ink">{progress.complete}/{progress.total} complete</p>
                     </div>
                     {gsr ? null : (
                       <div>
