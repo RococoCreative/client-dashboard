@@ -5,7 +5,7 @@
 // than by the period the review covers. Start a review out of order and the same person's
 // dashboard, My GSR and person page disagreed about which review was the latest. The order a
 // review belongs in is a property of its cycle, so it is decided once, here.
-import { computeReviewScore, hasScoredItem, type PillarConfig, type ReviewScoreResult } from "./scoring.ts";
+import { computeReviewScore, hasScoredItem, pillarsForReview, type PillarConfig, type ReviewScoreResult } from "./scoring.ts";
 import type { Review, ReviewCycle, ReviewScore } from "../../types/database.ts";
 
 export interface ReviewHistoryRow {
@@ -29,7 +29,7 @@ export function reviewHistory(
       const cycle = cycles.find((c) => c.id === review.cycle_id) ?? null;
       const own = scores.filter((s) => s.review_id === review.id);
       const scored = review.status === "complete" && hasScoredItem(own);
-      return { review, cycle, result: scored ? computeReviewScore(pillars, own) : null };
+      return { review, cycle, result: scored ? computeReviewScore(pillarsForReview(review, pillars), own) : null };
     })
     .sort(
       (a, b) =>

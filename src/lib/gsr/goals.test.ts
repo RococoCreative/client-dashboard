@@ -1,7 +1,7 @@
 // The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
 // carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, progressPatch, rankGoals, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -147,5 +147,63 @@ describe("goalPeriodLabel", () => {
     expect(goalPeriodLabel({ scope: "year", year: 2027 }, 2026)).toBe("Next year (2027)");
     expect(goalPeriodLabel({ scope: "year", year: 2025 }, 2026)).toBe("2025");
     expect(goalPeriodLabel({ scope: "bhag", year: null }, 2026)).toBe("BHAG (3 to 5 years)");
+  });
+});
+
+describe("a month's GSRs, for a company that scores them", () => {
+  const g = (id: string, kind: Goal["kind"], progress: number, sortOrder = 1, cycleId = "cycle-1") => goal({ id, kind, progress, sort_order: sortOrder, cycle_id: cycleId });
+
+  it("fills the required GSRs from goals that are not personal, role goals first", () => {
+    const split = requiredAndStretch([g("me", "personal", 100, 1), g("pro", "professional", 75, 2), g("role", "role", 100, 3), g("pro-2", "professional", 0, 4)], 2);
+    expect(split.required.map((x) => x.id)).toEqual(["role", "pro"]);
+    expect(split.stretch.map((x) => x.id)).toEqual(["pro-2", "me"]);
+    expect(split.missing).toBe(0);
+  });
+
+  it("scores Justin's October the way the plan works it through: 88", () => {
+    expect(scoreMonth([g("role", "role", 100), g("pro", "professional", 75), g("me", "personal", 50)], 2)).toBe(88);
+  });
+
+  it("counts an empty required slot as zero, and a personal goal never fills one", () => {
+    expect(scoreMonth([g("pro", "professional", 50), g("me", "personal", 40)], 2)).toBe(25);
+    expect(requiredAndStretch([g("me", "personal", 100)], 2).missing).toBe(2);
+  });
+
+  it("counts the focus topic's GSR as a working goal", () => {
+    expect(scoreMonth([g("focus", "focus", 100), g("pro", "professional", 100)], 2)).toBe(100);
+  });
+
+  it("never lowers the month for a stretch goal left undone, and reads completion, not steps", () => {
+    const base = [g("role", "role", 80), g("pro", "professional", 60)];
+    expect(scoreMonth([...base, g("pro-2", "professional", 0, 9), g("me", "personal", 0, 9)], 2)).toBe(scoreMonth(base, 2));
+    const allSteps = goal({ kind: "professional", progress: 0, action_steps: [{ text: "Done", done: true }] });
+    expect(scoreMonth([allSteps], 1)).toBe(0);
+  });
+
+  it("adds up the months inside a period that have started, an empty month scoring zero", () => {
+    const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
+    const cycles = [
+      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+      { id: "dec", cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
+      { id: "q4", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" },
+    ];
+    const goals = [g("role", "role", 100, 1, "oct"), g("pro", "professional", 75, 2, "oct"), g("pro-nov", "professional", 50, 1, "nov")];
+    const midQuarter = scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 10, 15) });
+    expect(midQuarter.months.map((m) => [m.cycle.id, m.score, m.set])).toEqual([["oct", 88, 2], ["nov", 25, 1]]);
+    expect([midQuarter.target, midQuarter.actual]).toEqual([200, 113]);
+    // December has started by the 20th and has no goals, so it counts as a zero month.
+    expect(scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 11, 20) }).actual).toBe(113);
+    expect(scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 11, 20) }).target).toBe(300);
+  });
+
+  it("leaves out the months that ended before the person was hired", () => {
+    const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
+    const cycles = [
+      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+    ];
+    const figure = scoreGsrMonths(quarter, cycles, [], 2, { today: new Date(2026, 11, 20), hireDate: "2026-11-10" });
+    expect(figure.months.map((m) => m.cycle.id)).toEqual(["nov"]);
   });
 });

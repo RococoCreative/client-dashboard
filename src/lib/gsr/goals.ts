@@ -1,8 +1,10 @@
 // Goal Setting Review logic, pure and tested: what a goal's progress means, the order a month's
-// goals are read in, how a missed goal carries into the next cycle, and how one person's goals
-// split across last cycle, this cycle, and the year. Scores live in scoring.ts; this never
-// touches them.
-import { cycleSettled } from "./cycles.ts";
+// goals are read in, how a missed goal carries into the next cycle, how one person's goals split
+// across last cycle, this cycle, and the year, and how a month's goals add up for a company that
+// scores its GSRs. The pillar weighting lives in scoring.ts; this only produces the month figures
+// a 'gsr_goals' pillar's line item carries, the way deliverables.ts does for its module.
+import { cycleSettled, monthsWithin } from "./cycles.ts";
+import { toDateOnly } from "../format.ts";
 import type { ActionStep, Goal, GoalKind, GoalStatus } from "../../types/database.ts";
 
 // The order goals are read in, on every screen that lists them: the job role's goals first, then
@@ -117,4 +119,53 @@ export function splitGoals(
 
 export function hitCount(goals: Goal[], settled: boolean): { hit: number; total: number } {
   return { hit: goals.filter((g) => goalOutcome(g, settled) === "hit").length, total: goals.length };
+}
+
+// How a month's goals add up for a company with a Monthly GSRs pillar, which says how many goals a
+// month requires. The required GSRs are the first that many goals that are not personal, read in
+// rank order, so role goals fill the slots first and the focus topic's GSR counts like any other
+// working goal. Everything else is a stretch goal. A month scores the average agreed completion of
+// its required GSRs, an empty slot counting as zero, and a stretch goal never moves it: nobody is
+// marked down for setting more goals than the month requires.
+export function requiredAndStretch<T extends Pick<Goal, "kind" | "sort_order" | "created_at">>(
+  goals: T[],
+  required: number,
+): { required: T[]; stretch: T[]; missing: number } {
+  const ranked = rankGoals(goals);
+  const counted = ranked.filter((g) => g.kind !== "personal").slice(0, Math.max(0, required));
+  return { required: counted, stretch: ranked.filter((g) => !counted.includes(g)), missing: Math.max(0, required - counted.length) };
+}
+
+export function scoreMonth(goals: Array<Pick<Goal, "kind" | "sort_order" | "created_at" | "progress">>, required: number): number {
+  if (required <= 0) return 0;
+  const counted = requiredAndStretch(goals, required).required;
+  return Math.round(counted.reduce((sum, g) => sum + Math.min(100, Math.max(0, g.progress)), 0) / required);
+}
+
+export interface GsrMonthsFigure<C> {
+  months: Array<{ cycle: C; score: number; set: number }>;
+  target: number;
+  actual: number;
+}
+
+// The months a scored review reads for its Monthly GSRs pillar, and the one line item they make.
+// The months are the Goal Setting Reviews wholly inside its period (monthsWithin) that have
+// started, less any that ended before the person was hired; an open month counts as it stands, and
+// a month with no goals scores zero. The line item is 100 a month as the target and the month
+// scores as the actual, so the pillar's score, actual over target, is their average.
+export function scoreGsrMonths<C extends { id: string; cadence: string; period_start: string; period_end: string }>(
+  period: { period_start: string; period_end: string },
+  cycles: C[],
+  goals: Array<Pick<Goal, "scope" | "cycle_id" | "kind" | "sort_order" | "created_at" | "progress">>,
+  required: number,
+  { hireDate = null, today = new Date() }: { hireDate?: string | null; today?: Date } = {},
+): GsrMonthsFigure<C> {
+  const todayIso = toDateOnly(today);
+  const months = monthsWithin(period, cycles)
+    .filter((month) => month.period_start <= todayIso && (!hireDate || month.period_end >= hireDate))
+    .map((cycle) => {
+      const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id);
+      return { cycle, score: scoreMonth(own, required), set: required - requiredAndStretch(own, required).missing };
+    });
+  return { months, target: months.length * 100, actual: months.reduce((sum, m) => sum + m.score, 0) };
 }

@@ -42,9 +42,9 @@ import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCr
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals } from "../../services/jobRoles.ts";
-import { computeReviewScore , countCriteria, hasScoredItem, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
+import { computeReviewScore , countCriteria, hasScoredItem, pillarsForReview, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
-import { goalOutcome, hitCount } from "../../lib/gsr/goals.ts";
+import { goalOutcome, hitCount, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
 import {
@@ -54,11 +54,54 @@ import {
   type GsrCriterion,
   type GsrPillar,
   type PreviousStatus,
+  type ReviewCycle,
   type ReviewScore,
 } from "../../types/database.ts";
 
 // Table headers must stay table-cells: the shared label class sets display:block.
 const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
+
+// A Monthly GSRs pillar on a scored review: each Goal Setting Review inside the period with its
+// score, live until sign-off; after it, the figure the review was signed off with. The month
+// figures come from lib/gsr/goals.ts and the pillar's score from scoring.ts, like every pillar.
+function GsrPillarBody({
+  figure,
+  signedOff,
+  required,
+}: {
+  figure: GsrMonthsFigure<ReviewCycle> | null;
+  // Once the review is complete, the line item written at sign-off (null if none was); undefined
+  // while it is open, when the months read live.
+  signedOff: ReviewScore | null | undefined;
+  required: number;
+}) {
+  if (signedOff !== undefined) {
+    if (!signedOff?.target) return <p className="text-sm text-ink-2">No Goal Setting Review had run inside this period when it was signed off, so this pillar scored zero.</p>;
+    const months = Math.round(signedOff.target / 100);
+    return <p className="text-sm text-ink-2">{Math.round(((signedOff.actual ?? 0) / signedOff.target) * 100)}% across {pluralize(months, "month")} of GSRs, as signed off.</p>;
+  }
+  if (!figure || figure.months.length === 0) {
+    return <p className="text-sm text-ink-2">No Goal Setting Review has run inside this period yet, so there is nothing to score here.</p>;
+  }
+  return (
+    <div>
+      <ul className="divide-y divide-line">
+        {figure.months.map(({ cycle, score, set }) => (
+          <li key={cycle.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+            <div className="min-w-0">
+              <p className="text-sm text-ink">{cycle.name}</p>
+              <p className="tnum text-[12px] text-ink-3">{set} of {pluralize(required, "required GSR")} set</p>
+            </div>
+            <span className="tnum text-sm text-ink">{score}%</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">
+        {Math.round((figure.actual / figure.target) * 100)}% across the months so far. Each month is the average agreed completion of its {pluralize(required, "required GSR")}; stretch goals never lower it. Frozen into this review when it is marked complete.
+      </p>
+    </div>
+  );
+}
 
 // Mounted by the router with the id in the URL, and by My GSR with the id as a prop so the
 // employee's own month renders under their own sidebar entry and tabs. Embedded, it has no back
@@ -131,28 +174,56 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // A scored review reads back the Goal Setting Reviews that ran inside its period: each
   // month's goals, hit or miss, and a link to the month. The reviewer's own previous-period
   // judgment stays where it is; this is the record beside it.
+  // A Monthly GSRs pillar is scored from those same months: each month's required goals, live
+  // until sign-off, which writes the period's figure as one line item (lib/gsr/goals.ts).
+  const gsrPillars = pillars.filter((p) => p.scoring_type === "gsr_goals" && p.is_active);
+  const gsrFigures = new Map(
+    monthly ? [] : gsrPillars.map((p) => [p.id, scoreGsrMonths(cycle, cycles, goals, p.required_goals, { hireDate: employee?.hire_date ?? null })] as const),
+  );
   const months = monthly
     ? []
     : monthsWithin(cycle, cycles).map((month) => {
         const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === month.id);
         const gsr = personReviews.find((r) => r.cycle_id === month.id) ?? null;
-        return { month, gsr, tally: hitCount(own, cycleSettled(month)), open: own.filter((g) => goalOutcome(g, cycleSettled(month)) === "open").length };
+        const score = gsrPillars[0] ? scoreMonth(own, gsrPillars[0].required_goals) : null;
+        return { month, gsr, score, tally: hitCount(own, cycleSettled(month)), open: own.filter((g) => goalOutcome(g, cycleSettled(month)) === "open").length };
       });
   const frozen = review.status === "complete";
   const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
   // What scores this review right now. Frozen rows once it is complete; before that the
   // person's current impact ratings for the rating pillars, the typed line items for a
-  // 'deliverables' pillar, and the module's live rollup for a 'deliverables_module' pillar. The
-  // rollup arrives from the panel above once it has loaded.
+  // 'deliverables' pillar, the module's live rollup for a 'deliverables_module' pillar, and the
+  // months' live figure for a 'gsr_goals' pillar. The rollup arrives from the panel above once it
+  // has loaded. A completed review is scored with the pillars it was signed off with.
   const modulePillars = pillars.filter((p) => p.scoring_type === "deliverables_module" && p.is_active);
+  const signedOffLater = (pillarId: string) => modulePillars.some((p) => p.id === pillarId) || gsrPillars.some((p) => p.id === pillarId);
   const liveScores: ScoreInput[] = frozen
     ? scores
     : [
-        ...scores.filter((s) => !modulePillars.some((p) => p.id === s.pillar_id)),
+        ...scores.filter((s) => !signedOffLater(s.pillar_id)),
         ...(rollup && rollup.target > 0 ? modulePillars.map((p) => ({ pillar_id: p.id, criterion_id: null, target: rollup.target, actual: rollup.actual })) : []),
+        ...gsrPillars.flatMap((p) => {
+          const figure = gsrFigures.get(p.id);
+          return figure && figure.target > 0 ? [{ pillar_id: p.id, criterion_id: null, target: figure.target, actual: figure.actual }] : [];
+        }),
       ];
   const inputs = scoreInputsForReview(review, liveScores, impact, criteria);
-  const result = computeReviewScore(pillars, inputs, countCriteria(criteria));
+  const result = computeReviewScore(pillarsForReview(review, pillars), inputs, countCriteria(criteria));
+  // The sections a completed review shows are the pillars it was signed off with, described the
+  // way the live pillar is where it still exists; an open review shows today's.
+  const shownPillars: GsrPillar[] =
+    frozen && review.pillar_snapshot
+      ? review.pillar_snapshot.map((snap, i) => ({
+          description: null,
+          company_id: review.company_id,
+          sort_order: i,
+          is_active: true,
+          created_at: review.completed_at ?? review.updated_at,
+          updated_at: review.completed_at ?? review.updated_at,
+          ...pillars.find((p) => p.id === snap.id),
+          ...snap,
+        }))
+      : pillars;
   // Sign-off writes the module's figure as a line item, so it needs the figure in hand.
   const awaitingRollup = !frozen && modulePillars.length > 0 && rollup === null;
 
@@ -285,6 +356,16 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         if (existing) await updateScore(existing.id, line);
         else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
       }
+      // The months' figure, the same way: one line item, so a slider moved after sign-off moves
+      // nothing on the review.
+      for (const pillar of gsrPillars) {
+        const figure = gsrFigures.get(pillar.id);
+        if (!figure || figure.target === 0) continue;
+        const line = { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual };
+        const existing = scores.find((s) => s.pillar_id === pillar.id && !s.criterion_id);
+        if (existing) await updateScore(existing.id, line);
+        else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
+      }
       await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id });
       state.reload();
     } catch (err) {
@@ -392,6 +473,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             roleGoals={roleGoals}
             isAdmin={isAdmin}
             isOwn={isOwn}
+            gsrRequired={gsrPillars[0]?.required_goals ?? null}
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
             onNotes={(update) => state.setData((prev) => (prev ? { ...prev, notes: update(prev.notes) } : prev))}
             onError={setError}
@@ -414,10 +496,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 {result.pillars.map((p) => (
                   <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
                 ))}
-                {pillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
+                {shownPillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
               </div>
             </div>
-            {result.weightTotal !== 100 && pillars.length > 0 ? (
+            {result.weightTotal !== 100 && shownPillars.length > 0 ? (
               <p className="mt-3 text-[12px] text-warning">Pillar weights total {formatNumber(result.weightTotal)}%, not 100%. Scores are normalized; fix this in GSR settings.</p>
             ) : null}
           </Section>
@@ -427,12 +509,13 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               <p className="text-sm text-ink-2">No Goal Setting Review ran inside this period.</p>
             ) : (
               <ul className="divide-y divide-line">
-                {months.map(({ month, gsr, tally, open }) => (
+                {months.map(({ month, gsr, score, tally, open }) => (
                   <li key={month.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm text-ink">{month.name}</p>
                       <p className="tnum text-[12px] text-ink-3">
                         {tally.total === 0 ? "No goals set" : `${tally.hit} of ${pluralize(tally.total, "goal")} hit${open > 0 ? `, ${open} still open` : ""}`}
+                        {score !== null ? ` · GSR ${score}%` : ""}
                       </p>
                     </div>
                     {gsr ? (
@@ -448,7 +531,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           </div>
 
           <div className="space-y-6 lg:col-span-2">
-            {pillars.map((pillar) => {
+            {shownPillars.map((pillar) => {
               const pillarCriteria = criteria.filter((c) => c.pillar_id === pillar.id);
               const lineItems = scores
                 .filter((s) => s.pillar_id === pillar.id && !s.criterion_id)
@@ -466,7 +549,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     </span>
                   }
                 >
-                  {pillar.scoring_type === "rating" ? (
+                  {pillar.scoring_type === "gsr_goals" ? (
+                    <GsrPillarBody figure={gsrFigures.get(pillar.id) ?? null} signedOff={frozen ? (lineItems[0] ?? null) : undefined} required={pillar.required_goals} />
+                  ) : pillar.scoring_type === "rating" ? (
                     pillarCriteria.length === 0 ? (
                       <p className="text-sm text-ink-2">No criteria defined for this pillar yet. Add them in GSR settings.</p>
                     ) : (
@@ -579,7 +664,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                           </table>
                         </div>
                       )}
-                      {canScore && pillar.scoring_type !== "deliverables_module" ? (
+                      {canScore && pillar.scoring_type === "deliverables" ? (
                         <Button variant="secondary" size="sm" className="mt-3" onClick={() => void addLineItem(pillar)}>
                           <Plus size={14} aria-hidden /> Add deliverable
                         </Button>

@@ -3,7 +3,7 @@
 // service that does not exist fails here rather than in someone's browser.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -22,6 +22,7 @@ vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import { createGoal, createPillar, updatePillar } from "../services/gsr.ts";
 import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
@@ -548,6 +549,9 @@ describe("monthly goal setting review", () => {
     // Sam's GSR for the month's focus topic reads after any role goals and ahead of the rest.
     expect(screen.getByLabelText("Title for Core value: Integrity")).toBeInTheDocument();
     expect(screen.getAllByText("Focus topic").length).toBeGreaterThan(0);
+    // Klasik does not score its GSRs yet, so nothing is counted or called a stretch goal.
+    expect(screen.queryByText("Counts")).not.toBeInTheDocument();
+    expect(screen.queryByText(/required GSR/)).not.toBeInTheDocument();
   });
 
   it("carries a missed goal into this month with only the steps not taken", async () => {
@@ -900,5 +904,90 @@ describe("goals beyond the month", () => {
     expect(row).not.toHaveTextContent(/steps/);
     const bhag = screen.getByText("Lead a project from bid to closeout").closest("li") as HTMLElement;
     expect(bhag).toHaveTextContent("BHAG · Professional · 10%");
+  });
+});
+
+// A company scores its GSRs by adding a Monthly GSRs pillar. Klasik and RBA do here, at the very
+// end, because every earlier test reads their pillars as the fixtures ship them.
+describe("monthly GSRs, scored", () => {
+  let rbaPillarId = "";
+  beforeAll(async () => {
+    await createPillar({ company_id: KLASIK.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
+    rbaPillarId = (await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 })).id;
+  });
+
+  it("offers the required count in settings and says how the pillar scores", async () => {
+    renderWithHub(<GsrSettingsPage />, admin);
+    expect(await screen.findByLabelText("Required a month")).toHaveValue("2");
+    expect(screen.getByText(/Scored from the Goal Setting Reviews inside each review's period/)).toBeInTheDocument();
+  });
+
+  it("counts the month's required GSRs, role first, and calls the rest stretch goals", async () => {
+    const casey = KLASIK.profiles.find((p) => p.full_name === "Casey Nguyen")!;
+    const review = KLASIK.reviews.find((r) => r.cycle_id === currentCycle.id && r.employee_id === casey.id)!;
+    const month = [
+      ["Feel better day to day", "personal", 50],
+      ["Run the GSRs for the team", "professional", 75],
+      ["Build three lead relationships", "role", 100],
+    ] as const;
+    for (const [i, [title, kind, progress]] of month.entries()) {
+      await createGoal({ company_id: KLASIK.company.id, employee_id: casey.id, title, kind, progress, scope: "cycle", cycle_id: currentCycle.id, sort_order: i + 1 });
+    }
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
+    // Justin's October in miniature: role 100 and professional 75 count, the personal goal at 50
+    // is a stretch goal and costs nothing.
+    expect(await screen.findByText("2 of 2 required GSRs set · This month so far 88%")).toBeInTheDocument();
+    const card = (title: string) => screen.getByLabelText(`Title for ${title}`).closest("li") as HTMLElement;
+    expect(within(card("Build three lead relationships")).getByText("Counts")).toBeInTheDocument();
+    expect(within(card("Run the GSRs for the team")).getByText("Counts")).toBeInTheDocument();
+    expect(within(card("Feel better day to day")).getByText("Stretch")).toBeInTheDocument();
+  });
+
+  it("scores the months inside a review period and writes them into the review at sign-off", async () => {
+    const user = userEvent.setup();
+    const september = RBA.cycles[2];
+    for (const [i, [title, kind, progress]] of ([["Walk two jobs a week with the PM", "role", 100], ["Price change orders inside a day", "professional", 75]] as const).entries()) {
+      await createGoal({ company_id: RBA.company.id, employee_id: rbaReview.employee_id, title, kind, progress, scope: "cycle", cycle_id: september.id, sort_order: i + 1 });
+    }
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const pillar = (await screen.findByRole("heading", { name: "Monthly GSRs" })).closest("section") as HTMLElement;
+    expect(within(pillar).getByText(september.name)).toBeInTheDocument();
+    expect(within(pillar).getByText("88%")).toBeInTheDocument();
+    expect(within(pillar).getByText(/^88% across the months so far/)).toBeInTheDocument();
+    const months = screen.getByRole("heading", { name: "The months in this period" }).closest("section") as HTMLElement;
+    expect(within(months).getByText(/GSR 88%/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Mark complete/ }));
+    const signed = (await screen.findByRole("heading", { name: "Monthly GSRs" })).closest("section") as HTMLElement;
+    expect(await within(signed).findByText("88% across 1 month of GSRs, as signed off.")).toBeInTheDocument();
+  });
+
+  it("keeps a signed-off review on the weights it was signed off with when the company re-weights", async () => {
+    await updatePillar(rbaPillarId, { weight: 50 });
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByText("Monthly GSRs (20%)")).toBeInTheDocument();
+    expect(screen.queryByText("Monthly GSRs (50%)")).not.toBeInTheDocument();
+  });
+
+  it("leaves the agreed completion to the manager once GSRs are scored, and the rest to the person", async () => {
+    renderWithHub(<ReviewPage />, employee, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const slider = await screen.findByLabelText("Agreed completion for Run the weekly client update without prompting");
+    expect(slider).toBeDisabled();
+    expect(screen.getAllByText("Set with your manager in the review").length).toBeGreaterThan(0);
+    // Everything else about the month is still theirs to prepare.
+    expect(screen.getByLabelText("Add a goal for this month")).toBeInTheDocument();
+    expect(screen.getByLabelText("New note for Run the weekly client update without prompting")).toBeInTheDocument();
+  });
+
+  it("lets the manager set the agreed completion in the review", async () => {
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByLabelText("Agreed completion for Run the weekly client update without prompting")).not.toBeDisabled();
+    expect(screen.queryByText("Set with your manager in the review")).not.toBeInTheDocument();
+  });
+
+  it("shows where this quarter's GSRs stand on the impact score card, under the ratings", async () => {
+    renderWithHub(<DashboardPage />, rbaEmployee);
+    const impact = (await screen.findByText("Impact score")).closest("section") as HTMLElement;
+    expect(within(impact).getByText(`Monthly GSRs, ${RBA.cycles[0].name}`)).toBeInTheDocument();
+    expect(within(impact).getByText("88%")).toBeInTheDocument();
   });
 });

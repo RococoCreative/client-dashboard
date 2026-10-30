@@ -17,6 +17,7 @@ import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
+import GsrQuarterLine from "../../components/gsr/GsrQuarterLine.tsx";
 import CompensationTable from "../../components/people/CompensationTable.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import FinancialsTable from "../../components/people/FinancialsTable.tsx";
@@ -26,13 +27,14 @@ import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } fro
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { listCriteria, listCycles, listEmployeeReviews, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
+import { listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoles } from "../../services/jobRoles.ts";
 import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
-import { reviewPath } from "../../lib/gsr/cycles.ts";
+import { activeCycles, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
+import { scoreGsrMonths } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
 import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
@@ -46,7 +48,7 @@ export default function PersonPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles] = await Promise.all([
+    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles, goals] = await Promise.all([
       listCompanyProfiles(companyId),
       listEmployeeReviews(profileId),
       listCycles(companyId),
@@ -58,15 +60,21 @@ export default function PersonPage() {
       listEmployeeFinancials(companyId, profileId, year),
       // Retired roles too, so a person still in one shows it rather than a blank.
       listJobRoles(companyId, true),
+      // Their goals, for where this quarter's GSRs stand when the company scores them.
+      listGoals(companyId, profileId),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles };
+    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals };
   }, [companyId, profileId, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
-  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles } = state.data;
+  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
+  // For a company that scores its GSRs: where the months inside the open scored review stand.
+  const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
+  const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, gsrPillar.required_goals, { hireDate: person.hire_date }) : null;
   // The role they are in, and whether it puts their figures on their dashboard.
   const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
   const figuresOnDashboard = jobRole?.dashboard_modules.includes("financials") ?? false;
@@ -303,6 +311,7 @@ export default function PersonPage() {
                   );
                 })}
               </div>
+              {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
             </Section>
           ) : null}
           <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>

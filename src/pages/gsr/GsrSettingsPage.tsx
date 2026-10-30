@@ -204,14 +204,27 @@ export default function GsrSettingsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="md:col-span-2">
-                  <label htmlFor={`pillar-scale-${pillar.id}`} className={labelClass}>Scale (1 to)</label>
-                  <select id={`pillar-scale-${pillar.id}`} value={pillar.rating_scale_max} disabled={pillar.scoring_type !== "rating"} onChange={(e) => void patchPillar(pillar, { rating_scale_max: Number(e.target.value) })} className={selectClass}>
-                    {[3, 4, 5, 6, 7, 10].map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* The one setting each scoring type carries of its own: a rating pillar's scale, or
+                    how many goals a month needs for a Monthly GSRs pillar. */}
+                {pillar.scoring_type === "gsr_goals" ? (
+                  <div className="md:col-span-2">
+                    <label htmlFor={`pillar-required-${pillar.id}`} className={labelClass}>Required a month</label>
+                    <select id={`pillar-required-${pillar.id}`} value={pillar.required_goals} onChange={(e) => void patchPillar(pillar, { required_goals: Number(e.target.value) })} className={selectClass}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="md:col-span-2">
+                    <label htmlFor={`pillar-scale-${pillar.id}`} className={labelClass}>Scale (1 to)</label>
+                    <select id={`pillar-scale-${pillar.id}`} value={pillar.rating_scale_max} disabled={pillar.scoring_type !== "rating"} onChange={(e) => void patchPillar(pillar, { rating_scale_max: Number(e.target.value) })} className={selectClass}>
+                      {[3, 4, 5, 6, 7, 10].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="md:col-span-12">
                   <label htmlFor={`pillar-description-${pillar.id}`} className={labelClass}>Description</label>
                   <BlurInput id={`pillar-description-${pillar.id}`} value={pillar.description ?? ""} placeholder="What this pillar measures, in the company's words" onSave={(next) => void patchPillar(pillar, { description: next.trim() || null })} />
@@ -223,6 +236,11 @@ export default function GsrSettingsPage() {
                 </div>
               </div>
 
+              {pillar.scoring_type === "gsr_goals" ? (
+                <p className="mt-5 border-t border-line pt-4 text-[13px] leading-relaxed text-ink-2">
+                  Scored from the Goal Setting Reviews inside each review's period. Each month counts its first {pillar.required_goals === 1 ? "goal" : `${pillar.required_goals} goals`} that {pillar.required_goals === 1 ? "is" : "are"} not personal, role goals first, at their agreed completion; an empty slot counts as zero, and any more goals are stretch goals that never lower the score. Written into the review as one line item when it is marked complete.
+                </p>
+              ) : null}
               {pillar.scoring_type === "rating" ? (
                 <div className="mt-5 border-t border-line pt-4">
                   <p className={labelClass}>Criteria rated 1 to {pillar.rating_scale_max}</p>

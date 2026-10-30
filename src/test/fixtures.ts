@@ -213,11 +213,14 @@ function build(company: Company): CompanyBundle {
     weight: pillar.weight,
     scoring_type: pillar.type,
     rating_scale_max: 5,
+    required_goals: 2,
     sort_order: i + 1,
     is_active: true,
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
+  // What a completed review keeps of them, the way the database writes it at sign-off (0022).
+  const signedOffWith = pillars.map(({ id, name, weight, scoring_type, rating_scale_max, required_goals }) => ({ id, name, weight, scoring_type, rating_scale_max, required_goals }));
 
   const criteria: GsrCriterion[] = spec.pillars.flatMap((pillar, i) =>
     pillar.criteria.map((name, j) => ({
@@ -348,6 +351,7 @@ function build(company: Company): CompanyBundle {
       employee_reflection: i === 0 ? "Communication with the trades improved once we moved the huddle to 6:45." : null,
       reviewer_id: profiles[0].id,
       completed_at: i === 1 ? NOW : null,
+      pillar_snapshot: i === 1 ? signedOffWith : null,
       created_at: NOW,
       updated_at: NOW,
     };
@@ -366,6 +370,7 @@ function build(company: Company): CompanyBundle {
       client_feedback: null,
       employee_reflection: null,
       completed_at: EARLIER,
+      pillar_snapshot: signedOffWith,
       created_at: EARLIER,
       updated_at: EARLIER,
     };

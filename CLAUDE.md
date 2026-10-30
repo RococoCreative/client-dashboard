@@ -71,8 +71,12 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
-   module: two points a task, so a Hit on every task lands exactly on target. Never duplicate
-   either in SQL or in a component.
+   module: two points a task, so a Hit on every task lands exactly on target. `src/lib/gsr/goals.ts`
+   is the same deal for a Monthly GSRs pillar (`gsr_goals`): a month counts its required goals that
+   are not personal, role first, at their agreed completion, and stretch goals never lower it.
+   Never duplicate any of them in SQL or in a component.
+   A completed review is scored with the pillars it was signed off with (`pillarsForReview`;
+   `reviews.pillar_snapshot`, 0022). Every screen that puts a number on a review goes through it.
    Careful with the word "deliverable": it names a `gsr_pillars.scoring_type`, where a review
    line item carries a target and an actual, and it names the standing module a person is
    measured on for the year (category, heading, tasks). They are different things.
@@ -87,6 +91,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    rows in the database (`freeze_review_ratings`, 0017), and a completed review scores from its
    frozen rows only. A review has no score of record until it is complete: `reviewHistory` and
    every list read "-" for an open review. Never write a rating from the review page.
+   Nobody moves their own score: impact ratings are admin-only, and where a company scores its
+   GSRs, so is a monthly goal's agreed completion (`guard_goal_agreed_completion`, 0022).
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
@@ -109,12 +115,14 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
-    SOPs, resources, financial snapshots, marketing, email domains, connections to outside
+    how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at
+    all), SOPs, resources, financial snapshots, marketing, email domains, connections to outside
     systems.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
-    role, focus topic, professional, personal), the module set on a person page and a review, and
+    role, focus topic, professional, personal), how a scored month adds up (`requiredAndStretch`,
+    `scoreMonth`), the module set on a person page and a review, and
     `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms

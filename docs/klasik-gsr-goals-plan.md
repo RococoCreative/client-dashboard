@@ -4,7 +4,10 @@ October 30, 2026. Source: Justin Fara's list of eight items, walked against the 
 `6070f93` and the live Klasik data (read only, counts only).
 
 **Status: Phases 1 and 2 are built** on `claude/sharp-meitner-7tpnez`, with migration
-`0021_goal_notes_and_privacy.sql` to apply at deploy (see Rollout). Phase 3 waits on D1 to D4.
+`0021_goal_notes_and_privacy.sql` to apply at deploy (see Rollout). **Phase 3 is built to the
+recommended answers** (D1, D2, D3, D5, D6) with migration `0022_gsr_scoring.sql`, and is inert
+until a company adds a Monthly GSRs pillar. Still open: D4, which is a Settings change and no code.
+"If Justin answers differently" below says what each other answer changes.
 
 ## What the code says today
 
@@ -173,7 +176,7 @@ redefined from its latest version in `0018`.
 
 ## Phase 3: GSR completion scored
 
-Migration `0022_gsr_scoring.sql`. Waits on D1 to D4.
+Migration `0022_gsr_scoring.sql`. Built to the recommended answers; D4 still open.
 
 ### 3.1 Schema
 
@@ -188,8 +191,9 @@ Migration `0022_gsr_scoring.sql`. Waits on D1 to D4.
 ### 3.2 Rules (pure, tested)
 
 - `goals.ts`: `requiredAndStretch(goals, required)` picks the required GSRs (the top N
-  non-personal goals in rank order) and the stretch goals (everything else). `scoreMonth` and
-  `scorePeriod` return the target and actual a review line item carries.
+  non-personal goals in rank order) and the stretch goals (everything else). `scoreMonth` scores
+  one month, and `scoreGsrMonths` returns the months a review reads with the target and actual its
+  line item carries.
 - `scoring.ts`: `ScoringType` adds `'gsr_goals'`, using the existing line-item arithmetic, so the
   pillar math does not change. New `pillarsForReview(review, pillars)` returns the snapshot for a
   completed review.
@@ -205,8 +209,10 @@ Migration `0022_gsr_scoring.sql`. Waits on D1 to D4.
 - GSR page, for a company with a GSR pillar: each goal is badged "Counts" or "Stretch"; the header
   reads "2 of 2 required GSRs set · This month so far 88%"; fewer than required reads as a warning.
   A company without the pillar sees none of it.
-- Employee dashboard and person page: this quarter's GSR figure (D6).
-- GSR settings: the new type in the type list, and a "Required GSRs per month" field for it.
+- Employee dashboard and person page: this quarter's GSR figure (D6), as a line under the
+  ratings (`GsrQuarterLine`).
+- GSR settings: the new type in the type list, and a "Required a month" field for it, in the slot
+  a rating pillar uses for its scale.
 
 ### 3.4 Configuration (company data, set in Settings)
 
@@ -240,6 +246,17 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
 | D9 | Notes rights | The author edits and deletes their own; a closed month freezes notes | Admins may also edit |
 | D10 | Housekeeping | Delete the one orphaned monthly goal on Justin's profile from September 15 (its month was deleted); it disappears from every view after Phase 2 | Convert it to a 2026 goal |
 
+### If Justin answers differently
+
+| # | Other answer | What changes |
+| --- | --- | --- |
+| D1 | Extras add | `scoreMonth` in `goals.ts` adds stretch completion to the required total, capped at 100, plus its tests. Nothing else. |
+| D2 | Focus counts as Professional | Nothing: it already ranks inside the working goals. As its own kind outside the minimum: one filter in `requiredAndStretch`. |
+| D3 | Both, as today | Drop section 3 of 0022 (the agreed-completion guard) before it is applied, and `canAgree` in the GSR panel. Under an hour. |
+| D4 | Any split | Nothing in code. Set in Settings, Pillars and weights, after 0022 is applied. |
+| D5 | Settled months only | One filter in `scoreGsrMonths`. |
+| D6 | Fold into the card's number | `scoreProfile` takes the live GSR and deliverables figures; the two impact cards change. Half a day. |
+
 ### D1 worked through
 
 | Month | Required two | Extras add |
@@ -254,14 +271,24 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
 2. **Phase 2.** Apply 0021 in the SQL editor, then deploy the same hour. In between, an open tab
    shows empty notes and refuses an edit to a yearly goal's steps with a plain message; nothing is
    lost. Check live: 14 step lists and 8 notes moved, and an admin session reads no yearly steps.
-3. **Phase 3.** Apply 0022 and deploy. Confirm the two completed Klasik reviews read the same
-   numbers as before, then add the pillar and re-weight in Settings.
+3. **Phase 3.** Apply 0022 and deploy; it can go with 0021. Confirm the two completed Klasik
+   reviews read the same numbers as before (their weights are backfilled as signed off), then add
+   the Monthly GSRs pillar and re-weight in Settings. Nothing scores from the GSRs until that
+   pillar exists, so 0022 is safe to ship before Justin answers D4.
 
 ## Verification
 
 - Every phase: `npm run lint`, `npx vitest run`, `npm run build`. Baseline at `6070f93`: lint
   clean, 127 tests passing in 16 files. After Phases 1 and 2: lint clean, 142 tests passing,
   build clean.
+- 0022 was proven the same way: a review signed off before it keeps its 50/25/25 weights through
+  a re-weight and a new Monthly GSRs pillar, a client cannot rewrite the snapshot, reopening clears
+  it and completing again freezes all four pillars, the new type's bounds hold, a second run
+  changes nothing, and 0021's access tests still pass. The agreed-completion guard refuses the
+  person's own monthly completion or status where GSRs are scored, including a goal filed already
+  complete under another company's name, while titles, steps, new goals and yearly completion stay
+  theirs, an admin sets it, and a company without the pillar keeps today's rule. After Phase 3:
+  160 tests passing.
 - 0021 was proven on a scratch PostgreSQL 16 database that replays `0001` to `0021` with
   Supabase-style stubs: the backfill moves notes and yearly steps with their dates, a second run
   changes nothing, and access tests pass as an admin (shared fields and GSR notes only), a

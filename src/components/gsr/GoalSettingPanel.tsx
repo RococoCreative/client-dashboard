@@ -26,7 +26,7 @@ import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, carryForward, goalOutcome, hitCount, progressPatch, rankGoals, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { GOAL_KIND_ORDER, carryForward, goalOutcome, hitCount, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
 import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
@@ -42,8 +42,10 @@ function GoalEditor({
   goal,
   notes,
   people,
+  counts,
   canEdit,
   canTick,
+  canAgree,
   carriedFrom,
   onChange,
   onNotes,
@@ -54,8 +56,14 @@ function GoalEditor({
   goal: Goal;
   notes: GoalNote[];
   people: Profile[];
+  // Whether the goal is one of the month's required GSRs, for a company that scores its GSRs;
+  // null where nothing is scored.
+  counts: boolean | null;
   canEdit: boolean;
   canTick: boolean;
+  // Whether this reader moves the agreed completion. Where the company scores its GSRs it is the
+  // manager's, set in the review (the database refuses anyone else, 0022).
+  canAgree: boolean;
   carriedFrom: string | null;
   onChange: (goal: Goal) => void;
   onNotes: NotesUpdate;
@@ -99,6 +107,7 @@ function GoalEditor({
                 <ArrowRight size={11} aria-hidden /> Carried from {carriedFrom}
               </Badge>
             ) : null}
+            {counts === null ? null : counts ? <Badge tone="info">Counts</Badge> : <Badge>Stretch</Badge>}
           </div>
         </div>
         {canEdit ? (
@@ -111,8 +120,11 @@ function GoalEditor({
       {/* The completion is agreed in the review and is the one figure that says how the goal
           landed. Steps below are checkpoints on the way and move nothing. */}
       <div className="mt-3">
-        <p className={eyebrowClass}>Agreed completion</p>
-        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+        <p className={`${eyebrowClass} flex items-baseline gap-2`}>
+          Agreed completion
+          {canTick && !canAgree ? <span className="text-[12px] normal-case tracking-normal text-ink-3">Set with your manager in the review</span> : null}
+        </p>
+        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canAgree} onCommit={(next) => void save(progressPatch(next, goal.status))} />
       </div>
 
       {canEdit ? (
@@ -307,6 +319,7 @@ export default function GoalSettingPanel({
   notes,
   people,
   roleGoals = [],
+  gsrRequired = null,
   isAdmin,
   isOwn,
   onGoals,
@@ -328,6 +341,9 @@ export default function GoalSettingPanel({
   // The goals the person's job role brings into every month, set once in Settings. Offered
   // here until each is filed for this month; the template itself is never edited from a review.
   roleGoals?: JobRoleGoal[];
+  // How many goals a month requires, from the company's Monthly GSRs pillar; null for a company
+  // that does not score its GSRs, which then sees none of the counting.
+  gsrRequired?: number | null;
   isAdmin: boolean;
   isOwn: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
@@ -371,6 +387,12 @@ export default function GoalSettingPanel({
   const ordered = rankGoals(thisCycle);
   const focusGoal = ordered.find((g) => g.kind === "focus") ?? null;
   const notesFor = (goal: Goal) => notes.filter((n) => n.goal_id === goal.id);
+  // Which goals the month is scored on, for a company that scores its GSRs (lib/gsr/goals.ts).
+  const split = gsrRequired ? requiredAndStretch(thisCycle, gsrRequired) : null;
+  const counts = (goal: Goal): boolean | null => (split ? split.required.includes(goal) : null);
+  // The completion a score is built from is agreed in the review, so where GSRs are scored only the
+  // manager moves it; the person prepares everything else.
+  const canAgree = canEdit && (isAdmin || !gsrRequired);
 
   const upsert = (goal: Goal) => onGoals((list) => (list.some((g) => g.id === goal.id) ? list.map((g) => (g.id === goal.id ? goal : g)) : [...list, goal]));
   const carriedTitle = (source: Goal) => thisCycle.find((g) => g.carried_from_goal_id === source.id)?.title ?? null;
@@ -497,6 +519,15 @@ export default function GoalSettingPanel({
               : "Set together in the review. Agreed completion is the number for each goal, and 100 marks it complete; action steps are checkpoints along the way and do not count toward the score. Next month reads each goal back as a hit or a miss."
           }
         >
+          {split && gsrRequired ? (
+            <p className={`mb-4 text-[12.5px] leading-relaxed ${split.missing > 0 ? "text-warning" : "text-ink-2"}`}>
+              <span className="tnum">
+                {gsrRequired - split.missing} of {pluralize(gsrRequired, "required GSR")} set · This month so far {scoreMonth(thisCycle, gsrRequired)}%
+              </span>
+              . The first {gsrRequired === 1 ? "goal" : `${gsrRequired} goals`} that {gsrRequired === 1 ? "is" : "are"} not personal count toward the impact score, role goals first; any more are stretch goals and never lower it.
+              {split.missing > 0 ? ` ${split.missing === 1 ? "An empty slot counts" : "Empty slots count"} as zero.` : ""}
+            </p>
+          ) : null}
           {cycle.theme ? (
             <FocusTopicCard cycle={cycle} focusGoal={focusGoal} canEdit={canEdit} isOwn={isOwn} onAdd={(title) => void add(title, "focus")} />
           ) : canEdit && isAdmin ? (
@@ -527,8 +558,10 @@ export default function GoalSettingPanel({
                 goal={goal}
                 notes={notesFor(goal)}
                 people={people}
+                counts={counts(goal)}
                 canEdit={canEdit}
                 canTick={canEdit}
+                canAgree={canAgree}
                 carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
                 onNotes={onNotes}

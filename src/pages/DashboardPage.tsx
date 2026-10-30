@@ -13,6 +13,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import ScoreBar from "../components/ui/ScoreBar.tsx";
 import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
+import GsrQuarterLine from "../components/gsr/GsrQuarterLine.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import { SkeletonCard, SkeletonRows } from "../components/ui/Skeleton.tsx";
 import { CAMPAIGN_STATUS_TONE, GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
@@ -27,9 +28,9 @@ import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
-import { averageScore, computeReviewScore, hasScoredItem, scoreProfile } from "../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
-import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, stepsTaken } from "../lib/gsr/goals.ts";
+import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { financialProgress, hasAccount } from "../lib/people.ts";
@@ -180,7 +181,7 @@ function AdminDashboard() {
   const notInvited = activePeople.filter((p) => !hasAccount(p)).length;
   const scored = reviews.map((r) => {
     const own = scores.filter((s) => s.review_id === r.id);
-    return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillars, own).overall : null };
+    return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, pillars), own).overall : null };
   });
   // Every live cycle owes a review for everybody active, so a tile adds the per-cycle fractions
   // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are
@@ -456,6 +457,11 @@ function EmployeeDashboard() {
   const monthGoals = gsrCycle ? rankGoals(goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id)) : [];
   const profileScore = scoreProfile(pillars, criteria, impact);
   const rated = impact.length > 0;
+  // For a company that scores its GSRs: where this quarter's months stand. The impact score above
+  // it stays the ratings, as it always has; the months reach the score of record at sign-off.
+  const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
+  const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, gsrPillar.required_goals, { hireDate: profile.hire_date }) : null;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
   const moves = criteria
@@ -505,6 +511,7 @@ function EmployeeDashboard() {
             ) : (
               <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
             )}
+            {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
           </Section>
         ) : null}
 

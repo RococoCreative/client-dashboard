@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0021`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0022`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -212,7 +212,9 @@ recorded stays as recorded.
 
 The person works their own open month the same way, from My GSR: they add and edit goals,
 steps, completion and notes, carry last month's misses forward, and write the why, so the
-meeting starts from their draft. If nobody has started their review for the month yet, they
+meeting starts from their draft. Where the company scores its GSRs, the agreed completion is
+the one thing they leave to the review: the database lets only an admin move it (0022), the way
+nobody sets their own impact ratings. If nobody has started their review for the month yet, they
 start it themselves (0020 allows exactly that: their own row, in an open monthly cycle, not
 started, with no feedback or sign-off). Status, feedback and sign-off stay with the manager.
 Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
@@ -237,11 +239,24 @@ defines pillars, each with a weight and a scoring type:
   divided by N.
 - **Target vs actual:** the reviewer enters deliverable line items; pillar score is the
   average achievement with each item capped at 100%.
+- **Deliverables module:** scored from the deliverables module, written into the review as one
+  line item when it is marked complete.
+- **Monthly GSRs:** scored from the Goal Setting Reviews inside the review's period. The pillar
+  says how many goals a month requires (two by default). Each month counts that many goals that
+  are not personal, role goals first and then the focus topic's GSR and professional goals, at
+  their agreed completion; an empty slot counts as zero, and any further goals are stretch goals
+  that never lower the score. A month's score is the average of its required goals, the pillar's
+  is the average of its months, and it is written into the review as one line item on sign-off.
+  A company without such a pillar sees none of this. The rule is in `src/lib/gsr/goals.ts`.
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
 an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
 is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
 Character & Values 25) is seeded as-is.
+
+A completed review keeps the pillars and weights it was signed off with (0022), alongside its
+frozen ratings and line items, so re-weighting or adding a pillar later never moves a score of
+record. Reopening a review lets them go; completing it again freezes today's.
 
 ## Financial CSV import
 

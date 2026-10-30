@@ -211,10 +211,23 @@ export interface GsrPillar {
   weight: number;
   scoring_type: ScoringType;
   rating_scale_max: number;
+  // How many goals a month must carry for a 'gsr_goals' pillar; read by no other type (0022).
+  required_goals: number;
   sort_order: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// The pillars a completed review was signed off with, frozen with its ratings (0022). A completed
+// review is scored with these from then on, so re-weighting or adding a pillar never moves it.
+export interface PillarSnapshot {
+  id: string;
+  name: string;
+  weight: number;
+  scoring_type: ScoringType;
+  rating_scale_max: number;
+  required_goals: number;
 }
 
 // A person's current rating on one criterion: the working copy between reviews, set on the
@@ -278,6 +291,8 @@ export interface Review {
   employee_reflection: string | null;
   reviewer_id: string | null;
   completed_at: string | null;
+  // Written by the database when the review is marked complete, cleared on reopen.
+  pillar_snapshot: PillarSnapshot[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -446,6 +461,7 @@ export const SCORING_TYPE_LABELS: Record<ScoringType, string> = {
   rating: "Rated criteria",
   deliverables: "Target vs actual",
   deliverables_module: "Deliverables module",
+  gsr_goals: "Monthly GSRs",
 };
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {

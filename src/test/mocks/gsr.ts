@@ -46,9 +46,9 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 export async function listPillars(companyId: string, includeInactive = false): Promise<GsrPillar[]> {
   return pillars.filter((p) => p.company_id === companyId && (includeInactive || p.is_active)).sort((a, b) => a.sort_order - b.sort_order);
 }
-export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> & Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "sort_order" | "is_active">>;
+export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> & Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "required_goals" | "sort_order" | "is_active">>;
 export async function createPillar(input: PillarInput): Promise<GsrPillar> {
-  const created: GsrPillar = { id: nextId("pillar"), description: null, rating_scale_max: 5, sort_order: 0, is_active: true, created_at: now(), updated_at: now(), ...input };
+  const created: GsrPillar = { id: nextId("pillar"), description: null, rating_scale_max: 5, required_goals: 2, sort_order: 0, is_active: true, created_at: now(), updated_at: now(), ...input };
   pillars.push(created);
   return created;
 }
@@ -112,7 +112,7 @@ export async function getReview(id: string): Promise<Review> {
 export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
-  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, created_at: now(), updated_at: now() };
+  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
 }
@@ -120,6 +120,16 @@ export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "m
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
   const next = patchIn(reviews, id, { ...patch, updated_at: now() });
+  // The database keeps the pillars a review was signed off with, and lets them go on reopen
+  // (0022); the mock does the same.
+  if (before && before.status !== "complete" && next.status === "complete") {
+    next.pillar_snapshot = pillars
+      .filter((p) => p.company_id === next.company_id && p.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(({ id: pillarId, name, weight, scoring_type, rating_scale_max, required_goals }) => ({ id: pillarId, name, weight, scoring_type, rating_scale_max, required_goals }));
+  } else if (next.status !== "complete") {
+    next.pillar_snapshot = null;
+  }
   // The database freezes the person's current impact ratings into the review's rows on the
   // transition to complete (0017); the mock does the same so the page tests see it.
   if (before && before.status !== "complete" && next.status === "complete") {

@@ -7,12 +7,12 @@ import { db } from "./supabase.ts";
 import type { ActionStep, CompanyGoal, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
 const PILLAR_COLUMNS =
-  "id, company_id, name, description, weight, scoring_type, rating_scale_max, sort_order, is_active, created_at, updated_at";
+  "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
 const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_order, is_active, created_at, updated_at";
 const CYCLE_COLUMNS =
   "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
-  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, created_at, updated_at";
+  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, created_at, updated_at";
 const SCORE_COLUMNS =
   "id, review_id, company_id, pillar_id, criterion_id, label, rating, target, actual, notes, sort_order, created_at, updated_at";
 const GOAL_COLUMNS =
@@ -31,7 +31,7 @@ export async function listPillars(companyId: string, includeInactive = false): P
 }
 
 export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> &
-  Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "sort_order" | "is_active">>;
+  Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "required_goals" | "sort_order" | "is_active">>;
 
 export async function createPillar(input: PillarInput): Promise<GsrPillar> {
   const { data, error } = await db().from("gsr_pillars").insert(input).select(PILLAR_COLUMNS).single();
