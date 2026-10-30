@@ -293,6 +293,9 @@ export interface Review {
   completed_at: string | null;
   // Written by the database when the review is marked complete, cleared on reopen.
   pillar_snapshot: PillarSnapshot[] | null;
+  // A monthly GSR's score, 0 to 100, locked in by an admin marking the month complete where the
+  // company scores its GSRs; null otherwise, and cleared on reopen (0023).
+  gsr_score: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -313,8 +316,8 @@ export interface ReviewScore {
   updated_at: string;
 }
 
-// "focus" is the month's focus topic, seeded from the cycle theme.
-export type GoalKind = "professional" | "personal" | "role" | "focus";
+// The month's focus topic GSR is a role or professional goal marked is_focus (0023), not a kind.
+export type GoalKind = "professional" | "personal" | "role";
 export type GoalStatus = "not_started" | "in_progress" | "on_track" | "achieved" | "missed";
 // A goal belongs to a review cycle (the month's goals), to a year (a yearly goal), or to no
 // fixed period at all: a BHAG, the big goal three to five years out.
@@ -331,6 +334,9 @@ export interface Goal {
   employee_id: string;
   cycle_id: string | null;
   kind: GoalKind;
+  // The month's focus topic GSR: the person's #1 GSR, inspired by the cycle's focus topic, always
+  // a role or professional goal, at most one a month (0023).
+  is_focus: boolean;
   title: string;
   description: string | null;
   status: GoalStatus;
@@ -481,7 +487,6 @@ export const GOAL_KIND_LABELS: Record<GoalKind, string> = {
   professional: "Professional",
   personal: "Personal",
   role: "Role",
-  focus: "Focus topic",
 };
 
 export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {

@@ -3,11 +3,10 @@
 October 30, 2026. Source: Justin Fara's list of eight items, walked against the code at
 `6070f93` and the live Klasik data (read only, counts only).
 
-**Status: Phases 1 and 2 are built** on `claude/sharp-meitner-7tpnez`, with migration
-`0021_goal_notes_and_privacy.sql` to apply at deploy (see Rollout). **Phase 3 is built to the
-recommended answers** (D1, D2, D3, D5, D6) with migration `0022_gsr_scoring.sql`, and is inert
-until a company adds a Monthly GSRs pillar. Still open: D4, which is a Settings change and no code.
-"If Justin answers differently" below says what each other answer changes.
+**Status: all three phases are built** on `claude/sharp-meitner-7tpnez`, to Justin's answers on
+D1 to D4 ("Justin's answers" below). Three migrations go out with the deploy: `0021` (notes log,
+privacy, BHAG), `0022` (frozen weights, the Monthly GSRs pillar type) and `0023` (the focus GSR,
+the month lock). Scoring is inert until Klasik adds the Monthly GSRs pillar at 40/20/20/20.
 
 ## What the code says today
 
@@ -229,9 +228,19 @@ and Kingdom are untouched.
 - `pages.test.tsx`: the pillar section's live figure, sign-off writing the line item, badges only
   when configured, the settings field.
 
-## Decisions
+## Justin's answers
 
-Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
+| # | Answer | Built as |
+| --- | --- | --- |
+| D1 | A month accumulates up to 200% across its two mandatory GSRs, and a stretch GSR adds to the total. His example: 50% and 30% on the mandatory two and 80% on a stretch GSR is 160% of 200%. | `monthTotal` adds every goal's completion, capped at 100 for each mandatory GSR; `scoreMonth` is that total as a share of the cap, so his example scores 80. |
+| D2 | The focus topic's GSR is the #1 premier GSR, inspired by the topic, set as a role or professional goal, never personal. The topic itself is reference only. | `goals.is_focus` marks it (0023); the 'focus' kind is gone. It reads first, fills mandatory slot #1, and the focus card offers Role or Professional only. |
+| D3 | Either side adjusts the completion; only an admin marks the month complete, which locks the score in. Nothing reaches the impact score until then; the admin has the last adjustment. | No completion guard. Marking a monthly GSR complete writes `reviews.gsr_score` and freezes the person's month (0023); a scored review counts locked months only. A confirm states the score before it locks. |
+| D4 | 40/20/20/20, so each month is 1/12 of the 20, about 1.67 points. | A Settings change at deploy. A quarterly review averages its locked months, a third of its pillar each; across a year of four quarters, each month is a twelfth of the 20. |
+
+## Decisions as first proposed
+
+Kept for the record. D1 to D4 are superseded by Justin's answers above; D5 now reads "locked
+months only" (D3). The rest stand as built.
 
 | # | Decision | Recommended | Alternative |
 | --- | --- | --- | --- |
@@ -246,24 +255,21 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
 | D9 | Notes rights | The author edits and deletes their own; a closed month freezes notes | Admins may also edit |
 | D10 | Housekeeping | Delete the one orphaned monthly goal on Justin's profile from September 15 (its month was deleted); it disappears from every view after Phase 2 | Convert it to a 2026 goal |
 
-### If Justin answers differently
+### D1 as built, worked through
 
-| # | Other answer | What changes |
+| Month | Total | Month score |
 | --- | --- | --- |
-| D1 | Extras add | `scoreMonth` in `goals.ts` adds stretch completion to the required total, capped at 100, plus its tests. Nothing else. |
-| D2 | Focus counts as Professional | Nothing: it already ranks inside the working goals. As its own kind outside the minimum: one filter in `requiredAndStretch`. |
-| D3 | Both, as today | Drop section 3 of 0022 (the agreed-completion guard) before it is applied, and `canAgree` in the GSR panel. Under an hour. |
-| D4 | Any split | Nothing in code. Set in Settings, Pillars and weights, after 0022 is applied. |
-| D5 | Settled months only | One filter in `scoreGsrMonths`. |
-| D6 | Fold into the card's number | `scoreProfile` takes the live GSR and deliverables figures; the two impact cards change. Half a day. |
+| Justin's example: mandatory 50 and 30, stretch 80 | 160% of 200% | 80% |
+| Justin's October: Role 100, Professional 75, Personal 50 | 200% of 200% (capped) | 100% |
+| One non-personal GSR at 50, one personal at 40 | 90% of 200%, flagged 1 of 2 mandatory set | 45% |
 
-### D1 worked through
+### One reading to confirm with Justin
 
-| Month | Required two | Extras add |
-| --- | --- | --- |
-| Justin's October: Role 100, Professional 75, Personal 50 | 88% | 100% |
-| One non-personal GSR at 50, one personal at 40 | 25%, flagged 1 of 2 set | 45% |
-| A focus GSR at 100 and a Professional at 100 | 100% if focus counts (D2), 50% if not | Same |
+"Each month is 1/12 of 20" holds across a year: a quarterly review averages its locked months, so
+each is a third of that quarter's GSR pillar, and four quarters make each month a twelfth of the
+year's 20. If he instead wants every review to build the year up month by month (each locked month
+adding 1.67 points, so a review in March can show at most 5 of the 20), that is a change to
+`scoreGsrMonths` only. Klasik's GSRs started in October, so under that reading 2026 tops out at 5.
 
 ## Rollout
 
@@ -271,10 +277,13 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
 2. **Phase 2.** Apply 0021 in the SQL editor, then deploy the same hour. In between, an open tab
    shows empty notes and refuses an edit to a yearly goal's steps with a plain message; nothing is
    lost. Check live: 14 step lists and 8 notes moved, and an admin session reads no yearly steps.
-3. **Phase 3.** Apply 0022 and deploy; it can go with 0021. Confirm the two completed Klasik
-   reviews read the same numbers as before (their weights are backfilled as signed off), then add
-   the Monthly GSRs pillar and re-weight in Settings. Nothing scores from the GSRs until that
-   pillar exists, so 0022 is safe to ship before Justin answers D4.
+3. **Phase 3.** Apply 0022 and 0023 with 0021, in order, and deploy the same hour. 0023 turns the
+   two production focus goals into professional focus GSRs. Confirm the two completed Klasik
+   reviews read the same numbers as before (their weights are backfilled as signed off).
+4. **Klasik's configuration** (Settings, Pillars and weights): Deliverables 40, Brand Impact 20,
+   Character & Values 20, and a new Monthly GSRs pillar at 20 with 2 mandatory a month. Nothing
+   scores from the GSRs until that pillar exists.
+5. **Housekeeping:** delete Justin's orphaned September goal (D10).
 
 ## Verification
 
@@ -287,8 +296,14 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
   changes nothing, and 0021's access tests still pass. The agreed-completion guard refuses the
   person's own monthly completion or status where GSRs are scored, including a goal filed already
   complete under another company's name, while titles, steps, new goals and yearly completion stay
-  theirs, an admin sets it, and a company without the pillar keeps today's rule. After Phase 3:
-  160 tests passing.
+  theirs, an admin sets it, and a company without the pillar keeps today's rule. (That guard was
+  built to the D3 recommendation and removed with Justin's answer.)
+- 0023 was proven the same way: two focus-kind goals in one month become one professional focus
+  GSR and one plain goal, a personal or second focus GSR is refused, a person cannot write their
+  own month score, a locked month refuses goal, note, completion and new-goal writes from
+  everyone, the why still saves on a locked month and on a closed one (which 0014 had stopped),
+  reopening unlocks, a month completed with no score locks nothing, and a second run changes
+  nothing. After Justin's answers: 160 tests passing, lint and build clean.
 - 0021 was proven on a scratch PostgreSQL 16 database that replays `0001` to `0021` with
   Supabase-style stubs: the backfill moves notes and yearly steps with their dates, a second run
   changes nothing, and access tests pass as an admin (shared fields and GSR notes only), a

@@ -71,10 +71,11 @@ export default function PersonPage() {
   if (!state.data) return <SkeletonRows rows={6} />;
   const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
-  // For a company that scores its GSRs: where the months inside the open scored review stand.
+  // For a company that scores its GSRs: where the locked-in months inside the open scored review
+  // stand.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, gsrPillar.required_goals, { hireDate: person.hire_date }) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
   // The role they are in, and whether it puts their figures on their dashboard.
   const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
   const figuresOnDashboard = jobRole?.dashboard_modules.includes("financials") ?? false;

@@ -76,8 +76,6 @@ function GoalDialog({
     { scope: "bhag", year: null },
     ...(goal?.scope === "year" && goal.year !== null && goal.year !== thisYear && goal.year !== thisYear + 1 ? [{ scope: "year" as const, year: goal.year }] : []),
   ];
-  // The focus topic is the month's and is filed from a GSR; an old goal of that kind keeps it.
-  const kinds = GOAL_KIND_ORDER.filter((k) => k !== "focus" || goal?.kind === "focus");
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -121,7 +119,7 @@ function GoalDialog({
           <div className="grid grid-cols-2 gap-3">
             <Field label="Kind" htmlFor="goal-kind">
               <select id="goal-kind" value={kind} onChange={(e) => setKind(e.target.value as GoalKind)} className={selectClass}>
-                {kinds.map((k) => (
+                {GOAL_KIND_ORDER.map((k) => (
                   <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
                 ))}
               </select>
@@ -343,7 +341,7 @@ export default function GoalsPanel({
             const group = goals.filter((g) => g.kind === kind);
             if (group.length === 0) return null;
             return (
-              <Section key={kind} eyebrow={GOAL_KIND_LABELS[kind]} title={kind === "focus" ? "Focus topics" : `${GOAL_KIND_LABELS[kind]} goals`} padded={false}>
+              <Section key={kind} eyebrow={GOAL_KIND_LABELS[kind]} title={`${GOAL_KIND_LABELS[kind]} goals`} padded={false}>
                 <ul className="space-y-3 p-4">
                   {group.map((goal) => (
                     <GoalCard

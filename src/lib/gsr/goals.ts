@@ -4,18 +4,18 @@
 // scores its GSRs. The pillar weighting lives in scoring.ts; this only produces the month figures
 // a 'gsr_goals' pillar's line item carries, the way deliverables.ts does for its module.
 import { cycleSettled, monthsWithin } from "./cycles.ts";
-import { toDateOnly } from "../format.ts";
-import type { ActionStep, Goal, GoalKind, GoalStatus } from "../../types/database.ts";
+import type { ActionStep, Goal, GoalKind, GoalStatus, Review } from "../../types/database.ts";
 
-// The order goals are read in, on every screen that lists them: the job role's goals first, then
-// the month's focus topic, then professional goals, and personal goals last. Shared in code, so
-// every company reads its goals in the same order.
-export const GOAL_KIND_ORDER: GoalKind[] = ["role", "focus", "professional", "personal"];
+// The order goals are read in, on every screen that lists them: role goals first, then
+// professional goals, and personal goals last. Shared in code, so every company reads its goals
+// in the same order.
+export const GOAL_KIND_ORDER: GoalKind[] = ["role", "professional", "personal"];
 
-// A month's goals in that order; within a kind, the order they were filed in.
-export function rankGoals<T extends Pick<Goal, "kind" | "sort_order" | "created_at">>(goals: T[]): T[] {
-  const rank = (kind: GoalKind) => GOAL_KIND_ORDER.indexOf(kind);
-  return [...goals].sort((a, b) => rank(a.kind) - rank(b.kind) || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+// A month's goals in that order, the focus topic's GSR ahead of them all, because it is the
+// month's #1 GSR; within a kind, the order they were filed in.
+export function rankGoals<T extends Pick<Goal, "kind" | "is_focus" | "sort_order" | "created_at">>(goals: T[]): T[] {
+  const rank = (goal: T) => (goal.is_focus ? -1 : GOAL_KIND_ORDER.indexOf(goal.kind));
+  return [...goals].sort((a, b) => rank(a) - rank(b) || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
 }
 
 export type GoalOutcome = "hit" | "miss" | "open";
@@ -71,11 +71,13 @@ export function goalPeriodLabel(goal: Pick<Goal, "scope" | "year">, thisYear = n
 
 // A missed goal restated for the next cycle: same title, kind, and description; only the
 // steps not yet taken, all unticked; progress back to zero; and a link to where it came from.
+// It is not the new month's focus GSR: that comes from the new month's topic.
 export interface CarriedGoal {
   company_id: string;
   employee_id: string;
   title: string;
   kind: GoalKind;
+  is_focus: false;
   description: string | null;
   scope: "cycle";
   cycle_id: string;
@@ -92,6 +94,7 @@ export function carryForward(goal: Goal, cycleId: string, sortOrder = goal.sort_
     employee_id: goal.employee_id,
     title: goal.title,
     kind: goal.kind,
+    is_focus: false,
     description: goal.description,
     scope: "cycle",
     cycle_id: cycleId,
@@ -121,13 +124,14 @@ export function hitCount(goals: Goal[], settled: boolean): { hit: number; total:
   return { hit: goals.filter((g) => goalOutcome(g, settled) === "hit").length, total: goals.length };
 }
 
-// How a month's goals add up for a company with a Monthly GSRs pillar, which says how many goals a
-// month requires. The required GSRs are the first that many goals that are not personal, read in
-// rank order, so role goals fill the slots first and the focus topic's GSR counts like any other
-// working goal. Everything else is a stretch goal. A month scores the average agreed completion of
-// its required GSRs, an empty slot counting as zero, and a stretch goal never moves it: nobody is
-// marked down for setting more goals than the month requires.
-export function requiredAndStretch<T extends Pick<Goal, "kind" | "sort_order" | "created_at">>(
+// How a month's GSRs add up for a company with a Monthly GSRs pillar, which says how many
+// mandatory GSRs a month carries. The mandatory GSRs are the first that many goals that are not
+// personal, read in rank order: the focus topic's GSR is #1, then role goals, then professional
+// ones. Everything else is a stretch goal. A month adds up the completion of all its goals,
+// mandatory and stretch alike, up to 100 for each mandatory GSR: two mandatory GSRs make 200, and
+// a stretch goal adds to the total without ever lowering it. Justin's example: 50 and 30 on the
+// mandatory two and 80 on a stretch goal is 160 of 200, a month score of 80.
+export function requiredAndStretch<T extends Pick<Goal, "kind" | "is_focus" | "sort_order" | "created_at">>(
   goals: T[],
   required: number,
 ): { required: T[]; stretch: T[]; missing: number } {
@@ -136,36 +140,52 @@ export function requiredAndStretch<T extends Pick<Goal, "kind" | "sort_order" | 
   return { required: counted, stretch: ranked.filter((g) => !counted.includes(g)), missing: Math.max(0, required - counted.length) };
 }
 
-export function scoreMonth(goals: Array<Pick<Goal, "kind" | "sort_order" | "created_at" | "progress">>, required: number): number {
-  if (required <= 0) return 0;
-  const counted = requiredAndStretch(goals, required).required;
-  return Math.round(counted.reduce((sum, g) => sum + Math.min(100, Math.max(0, g.progress)), 0) / required);
+// The month's completion across all its goals, capped at 100 for each mandatory GSR.
+export function monthTotal(goals: Array<Pick<Goal, "progress">>, required: number): { total: number; cap: number } {
+  const cap = Math.max(0, required) * 100;
+  const sum = goals.reduce((acc, g) => acc + Math.min(100, Math.max(0, g.progress)), 0);
+  return { total: Math.min(sum, cap), cap };
+}
+
+// The month's score, 0 to 100: its total as a share of the cap. This is the figure an admin locks
+// in when they mark the month complete (reviews.gsr_score, 0023).
+export function scoreMonth(goals: Array<Pick<Goal, "progress">>, required: number): number {
+  const { total, cap } = monthTotal(goals, required);
+  return cap === 0 ? 0 : Math.round((total / cap) * 100);
 }
 
 export interface GsrMonthsFigure<C> {
-  months: Array<{ cycle: C; score: number; set: number }>;
+  // Every month in the period. `locked` is the score its GSR was locked in at, or null while the
+  // month is still open to change; `live` is where it stands now, for reading, never for scoring.
+  months: Array<{ cycle: C; locked: number | null; live: number }>;
   target: number;
   actual: number;
 }
 
 // The months a scored review reads for its Monthly GSRs pillar, and the one line item they make.
-// The months are the Goal Setting Reviews wholly inside its period (monthsWithin) that have
-// started, less any that ended before the person was hired; an open month counts as it stands, and
-// a month with no goals scores zero. The line item is 100 a month as the target and the month
-// scores as the actual, so the pillar's score, actual over target, is their average.
+// The months are the Goal Setting Reviews wholly inside its period (monthsWithin). A month counts
+// once an admin has locked its GSR in, and not before: an open month is shown but never applied.
+// The line item is 100 a locked month as the target and their locked scores as the actual, so the
+// pillar's score is their average. A quarter's three months are a third of its pillar each, and
+// across four quarters each month is a twelfth of the year's, the 1.67 points of 20 Justin set.
 export function scoreGsrMonths<C extends { id: string; cadence: string; period_start: string; period_end: string }>(
   period: { period_start: string; period_end: string },
   cycles: C[],
-  goals: Array<Pick<Goal, "scope" | "cycle_id" | "kind" | "sort_order" | "created_at" | "progress">>,
+  goals: Array<Pick<Goal, "scope" | "cycle_id" | "progress">>,
+  reviews: Array<Pick<Review, "cycle_id" | "status" | "gsr_score">>,
   required: number,
-  { hireDate = null, today = new Date() }: { hireDate?: string | null; today?: Date } = {},
 ): GsrMonthsFigure<C> {
-  const todayIso = toDateOnly(today);
-  const months = monthsWithin(period, cycles)
-    .filter((month) => month.period_start <= todayIso && (!hireDate || month.period_end >= hireDate))
-    .map((cycle) => {
-      const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id);
-      return { cycle, score: scoreMonth(own, required), set: required - requiredAndStretch(own, required).missing };
-    });
-  return { months, target: months.length * 100, actual: months.reduce((sum, m) => sum + m.score, 0) };
+  const months = monthsWithin(period, cycles).map((cycle) => {
+    const review = reviews.find((r) => r.cycle_id === cycle.id);
+    const locked = review?.status === "complete" && review.gsr_score !== null ? review.gsr_score : null;
+    const live = scoreMonth(goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id), required);
+    return { cycle, locked, live };
+  });
+  const counted = months.filter((m) => m.locked !== null);
+  return { months, target: counted.length * 100, actual: counted.reduce((sum, m) => sum + (m.locked ?? 0), 0) };
+}
+
+// Whether a person's month is locked in: their GSR for it marked complete with its score.
+export function monthLocked(review: Pick<Review, "status" | "gsr_score"> | null | undefined): boolean {
+  return review?.status === "complete" && review.gsr_score !== null;
 }

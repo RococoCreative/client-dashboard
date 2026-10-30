@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0022`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0023`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -198,23 +198,24 @@ Every review opens with the employee snapshot: position, hire date and tenure, d
 who they report to, this year's personal KPIs (current against target, hit or not, editable
 by admins in the meeting), and the company goals. A monthly cycle's review then leads with
 goals, not scores. The month's focus topic, from the cycle theme, sits at the top with its
-explanation, and the person sets a GSR of their own from it in their own words. The manager sets
-the rest of the month's goals with the person. Each goal carries an agreed completion from 0 to
+explanation for reference, and the person's #1 GSR comes from it: their own words, set as a role
+or professional goal, never a personal one. The manager sets the rest of the month's goals with
+the person. Each goal carries an agreed completion from 0 to
 100, where 100 marks it complete and which is the one figure that says how it landed; action
 steps, which are checkpoints and count toward nothing; and a notes log, one dated line at a time,
 that both sides add to between meetings and work from in the review (each person edits their own
-entries). Goals read role first, then the focus topic, then professional, and personal last. Last
+entries). Goals read the focus topic's GSR first, then role, then professional, and personal last. Last
 month's goals read back as hit or miss with the steps that were taken, their notes, and a "why"
 the manager writes now, and a missed goal carries into this month in one click (only the steps
 not yet taken come along, linked to the goal it came from). Closing a cycle freezes its goals and
-their notes (database triggers, not just the UI; only the why stays writable), so what a month
-recorded stays as recorded.
+their notes, and so does an admin locking a person's month in (database triggers, not just the
+UI; only the why stays writable), so what a month recorded stays as recorded.
 
 The person works their own open month the same way, from My GSR: they add and edit goals,
 steps, completion and notes, carry last month's misses forward, and write the why, so the
-meeting starts from their draft. Where the company scores its GSRs, the agreed completion is
-the one thing they leave to the review: the database lets only an admin move it (0022), the way
-nobody sets their own impact ratings. If nobody has started their review for the month yet, they
+meeting starts from their draft. Either side moves the completion; the manager has the last word,
+because only an admin marks the month complete, which is what locks it in. If nobody has started
+their review for the month yet, they
 start it themselves (0020 allows exactly that: their own row, in an open monthly cycle, not
 started, with no feedback or sign-off). Status, feedback and sign-off stay with the manager.
 Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
@@ -242,12 +243,16 @@ defines pillars, each with a weight and a scoring type:
 - **Deliverables module:** scored from the deliverables module, written into the review as one
   line item when it is marked complete.
 - **Monthly GSRs:** scored from the Goal Setting Reviews inside the review's period. The pillar
-  says how many goals a month requires (two by default). Each month counts that many goals that
-  are not personal, role goals first and then the focus topic's GSR and professional goals, at
-  their agreed completion; an empty slot counts as zero, and any further goals are stretch goals
-  that never lower the score. A month's score is the average of its required goals, the pillar's
-  is the average of its months, and it is written into the review as one line item on sign-off.
-  A company without such a pillar sees none of this. The rule is in `src/lib/gsr/goals.ts`.
+  says how many mandatory GSRs a month carries (two by default): the focus topic's GSR is #1, then
+  role and professional goals, never a personal one. A month adds up the completion of all its
+  goals, mandatory and stretch alike, up to 100% for each mandatory GSR, so two make 200% and a
+  stretch goal adds to the total without ever lowering it: 50% and 30% on the mandatory two and
+  80% on a stretch goal is 160% of 200%, a month score of 80. Either side moves the completion;
+  an admin marking the month complete locks the score in (`reviews.gsr_score`, 0023), and only a
+  locked month counts. The pillar is the average of the locked months in the period, written into
+  the review as one line item on sign-off: a quarter's months are a third of its pillar each, and
+  across a year each month is a twelfth. A company without such a pillar sees none of this. The
+  rule is in `src/lib/gsr/goals.ts`.
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
 an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and

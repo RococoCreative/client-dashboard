@@ -1,7 +1,7 @@
 // The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
 // carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -11,6 +11,7 @@ function goal(over: Partial<Goal>): Goal {
     employee_id: "e",
     cycle_id: "cycle-1",
     kind: "professional",
+    is_focus: false,
     title: "Ship it",
     description: "Done means shipped.",
     status: "in_progress",
@@ -56,15 +57,15 @@ describe("goalOutcome", () => {
 });
 
 describe("rankGoals", () => {
-  it("reads role goals first, then the focus topic, then professional, and personal last", () => {
+  it("reads the focus topic's GSR first, then role goals, then professional, and personal last", () => {
     const list = [
       goal({ id: "personal", kind: "personal", sort_order: 1 }),
       goal({ id: "pro-late", kind: "professional", sort_order: 4 }),
-      goal({ id: "focus", kind: "focus", sort_order: 5 }),
+      goal({ id: "focus", kind: "professional", is_focus: true, sort_order: 5 }),
       goal({ id: "pro-early", kind: "professional", sort_order: 2 }),
       goal({ id: "role", kind: "role", sort_order: 3 }),
     ];
-    expect(rankGoals(list).map((g) => g.id)).toEqual(["role", "focus", "pro-early", "pro-late", "personal"]);
+    expect(rankGoals(list).map((g) => g.id)).toEqual(["focus", "role", "pro-early", "pro-late", "personal"]);
   });
   it("keeps the order goals were filed in within a kind, and leaves the list it was given alone", () => {
     const list = [
@@ -78,8 +79,9 @@ describe("rankGoals", () => {
 
 describe("carryForward", () => {
   it("restates the goal for the next cycle with only the steps not taken", () => {
-    const carried = carryForward(goal({}), "cycle-2");
-    expect(carried).toMatchObject({ title: "Ship it", cycle_id: "cycle-2", scope: "cycle", progress: 0, status: "not_started", carried_from_goal_id: "g" });
+    const carried = carryForward(goal({ is_focus: true }), "cycle-2");
+    // The new month's focus GSR comes from the new month's topic, so a carried goal is not it.
+    expect(carried).toMatchObject({ title: "Ship it", cycle_id: "cycle-2", scope: "cycle", progress: 0, status: "not_started", carried_from_goal_id: "g", is_focus: false });
     expect(carried.action_steps).toEqual([{ text: "Review", done: false }]);
   });
 });
@@ -151,36 +153,41 @@ describe("goalPeriodLabel", () => {
 });
 
 describe("a month's GSRs, for a company that scores them", () => {
-  const g = (id: string, kind: Goal["kind"], progress: number, sortOrder = 1, cycleId = "cycle-1") => goal({ id, kind, progress, sort_order: sortOrder, cycle_id: cycleId });
+  const g = (id: string, kind: Goal["kind"], progress: number, sortOrder = 1, cycleId = "cycle-1", isFocus = false) =>
+    goal({ id, kind, progress, sort_order: sortOrder, cycle_id: cycleId, is_focus: isFocus });
 
-  it("fills the required GSRs from goals that are not personal, role goals first", () => {
-    const split = requiredAndStretch([g("me", "personal", 100, 1), g("pro", "professional", 75, 2), g("role", "role", 100, 3), g("pro-2", "professional", 0, 4)], 2);
-    expect(split.required.map((x) => x.id)).toEqual(["role", "pro"]);
-    expect(split.stretch.map((x) => x.id)).toEqual(["pro-2", "me"]);
-    expect(split.missing).toBe(0);
-  });
-
-  it("scores Justin's October the way the plan works it through: 88", () => {
-    expect(scoreMonth([g("role", "role", 100), g("pro", "professional", 75), g("me", "personal", 50)], 2)).toBe(88);
-  });
-
-  it("counts an empty required slot as zero, and a personal goal never fills one", () => {
-    expect(scoreMonth([g("pro", "professional", 50), g("me", "personal", 40)], 2)).toBe(25);
+  it("makes the focus topic's GSR the #1 mandatory GSR, then role goals, then professional; never a personal one", () => {
+    const split = requiredAndStretch(
+      [g("me", "personal", 100, 1), g("pro", "professional", 75, 2), g("role", "role", 100, 3), g("focus", "professional", 60, 4, "cycle-1", true)],
+      2,
+    );
+    expect(split.required.map((x) => x.id)).toEqual(["focus", "role"]);
+    expect(split.stretch.map((x) => x.id)).toEqual(["pro", "me"]);
     expect(requiredAndStretch([g("me", "personal", 100)], 2).missing).toBe(2);
   });
 
-  it("counts the focus topic's GSR as a working goal", () => {
-    expect(scoreMonth([g("focus", "focus", 100), g("pro", "professional", 100)], 2)).toBe(100);
+  it("adds every goal's completion up to 100 for each mandatory GSR: Justin's 160 of 200 is 80", () => {
+    const month = [g("one", "professional", 50, 1, "cycle-1", true), g("two", "role", 30, 2), g("stretch", "personal", 80, 3)];
+    expect(monthTotal(month, 2)).toEqual({ total: 160, cap: 200 });
+    expect(scoreMonth(month, 2)).toBe(80);
   });
 
-  it("never lowers the month for a stretch goal left undone, and reads completion, not steps", () => {
+  it("caps the month at 200, so a full month with a stretch goal on top is 100", () => {
+    expect(monthTotal([g("role", "role", 100), g("pro", "professional", 75), g("me", "personal", 50)], 2)).toEqual({ total: 200, cap: 200 });
+    expect(scoreMonth([g("role", "role", 100), g("pro", "professional", 75), g("me", "personal", 50)], 2)).toBe(100);
+  });
+
+  it("lets a stretch goal assist a short month, and never lowers one", () => {
+    expect(scoreMonth([g("pro", "professional", 50), g("me", "personal", 40)], 2)).toBe(45);
     const base = [g("role", "role", 80), g("pro", "professional", 60)];
     expect(scoreMonth([...base, g("pro-2", "professional", 0, 9), g("me", "personal", 0, 9)], 2)).toBe(scoreMonth(base, 2));
-    const allSteps = goal({ kind: "professional", progress: 0, action_steps: [{ text: "Done", done: true }] });
-    expect(scoreMonth([allSteps], 1)).toBe(0);
   });
 
-  it("adds up the months inside a period that have started, an empty month scoring zero", () => {
+  it("reads the completion slider, never the action steps", () => {
+    expect(scoreMonth([goal({ kind: "professional", progress: 0, action_steps: [{ text: "Done", done: true }] })], 1)).toBe(0);
+  });
+
+  it("counts a month in a scored review only once its GSR is locked in", () => {
     const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
     const cycles = [
       { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
@@ -188,22 +195,22 @@ describe("a month's GSRs, for a company that scores them", () => {
       { id: "dec", cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
       { id: "q4", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" },
     ];
-    const goals = [g("role", "role", 100, 1, "oct"), g("pro", "professional", 75, 2, "oct"), g("pro-nov", "professional", 50, 1, "nov")];
-    const midQuarter = scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 10, 15) });
-    expect(midQuarter.months.map((m) => [m.cycle.id, m.score, m.set])).toEqual([["oct", 88, 2], ["nov", 25, 1]]);
-    expect([midQuarter.target, midQuarter.actual]).toEqual([200, 113]);
-    // December has started by the 20th and has no goals, so it counts as a zero month.
-    expect(scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 11, 20) }).actual).toBe(113);
-    expect(scoreGsrMonths(quarter, cycles, goals, 2, { today: new Date(2026, 11, 20) }).target).toBe(300);
+    const goals = [g("oct-1", "role", 100, 1, "oct"), g("nov-1", "professional", 90, 1, "nov"), g("nov-2", "role", 60, 2, "nov")];
+    const reviews = [
+      { cycle_id: "oct", status: "complete", gsr_score: 80 },
+      // November is marked complete with no score, the way a company that scores nothing would.
+      { cycle_id: "nov", status: "in_progress", gsr_score: null },
+    ] as Array<{ cycle_id: string; status: "complete" | "in_progress"; gsr_score: number | null }>;
+    const figure = scoreGsrMonths(quarter, cycles, goals, reviews, 2);
+    expect(figure.months.map((m) => [m.cycle.id, m.locked, m.live])).toEqual([["oct", 80, 50], ["nov", null, 75], ["dec", null, 0]]);
+    // Only October is applied: its locked 80, not its live 50, and not November's 75 so far.
+    expect([figure.target, figure.actual]).toEqual([100, 80]);
   });
 
-  it("leaves out the months that ended before the person was hired", () => {
-    const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
-    const cycles = [
-      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
-      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
-    ];
-    const figure = scoreGsrMonths(quarter, cycles, [], 2, { today: new Date(2026, 11, 20), hireDate: "2026-11-10" });
-    expect(figure.months.map((m) => m.cycle.id)).toEqual(["nov"]);
+  it("says when a month is locked in", () => {
+    expect(monthLocked({ status: "complete", gsr_score: 80 })).toBe(true);
+    expect(monthLocked({ status: "complete", gsr_score: null })).toBe(false);
+    expect(monthLocked({ status: "in_progress", gsr_score: null })).toBe(false);
+    expect(monthLocked(null)).toBe(false);
   });
 });

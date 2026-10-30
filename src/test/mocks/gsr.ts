@@ -112,11 +112,11 @@ export async function getReview(id: string): Promise<Review> {
 export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
-  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, created_at: now(), updated_at: now() };
+  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
 }
-export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at">>;
+export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
   const next = patchIn(reviews, id, { ...patch, updated_at: now() });
@@ -130,6 +130,8 @@ export async function updateReview(id: string, patch: ReviewPatch): Promise<Revi
   } else if (next.status !== "complete") {
     next.pillar_snapshot = null;
   }
+  // Only a completed review carries a locked month score; reopening lets it go (0023).
+  if (next.status !== "complete") next.gsr_score = null;
   // The database freezes the person's current impact ratings into the review's rows on the
   // transition to complete (0017); the mock does the same so the page tests see it.
   if (before && before.status !== "complete" && next.status === "complete") {
@@ -167,9 +169,9 @@ export async function deleteScore(id: string): Promise<void> {
 export async function listGoals(companyId: string, employeeId?: string): Promise<Goal[]> {
   return goals.filter((g) => g.company_id === companyId && (!employeeId || g.employee_id === employeeId));
 }
-export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
+export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
 export async function createGoal(input: GoalInput): Promise<Goal> {
-  const created: Goal = { id: nextId("goal"), cycle_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
+  const created: Goal = { id: nextId("goal"), is_focus: false, cycle_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
   goals.push(created);
   return created;
 }

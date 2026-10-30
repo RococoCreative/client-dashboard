@@ -437,13 +437,13 @@ function EmployeeDashboard() {
     const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
     const gsrCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
-    return { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
+    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
+  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
   const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
   const cycle = featured?.cycle ?? null;
   const result = featured?.result ?? null;
@@ -457,11 +457,12 @@ function EmployeeDashboard() {
   const monthGoals = gsrCycle ? rankGoals(goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id)) : [];
   const profileScore = scoreProfile(pillars, criteria, impact);
   const rated = impact.length > 0;
-  // For a company that scores its GSRs: where this quarter's months stand. The impact score above
-  // it stays the ratings, as it always has; the months reach the score of record at sign-off.
+  // For a company that scores its GSRs: where this quarter's locked-in months stand. The impact
+  // score above it stays the ratings, as it always has; the months reach the score of record at
+  // sign-off, and only once an admin has locked each one in.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, gsrPillar.required_goals, { hireDate: profile.hire_date }) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
   const moves = criteria
@@ -542,7 +543,8 @@ function EmployeeDashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-ink">{goal.title}</p>
                       <p className="text-[12px] text-ink-3">
-                        {goal.kind === "focus" ? "Focus topic" : GOAL_KIND_LABELS[goal.kind]}
+                        {goal.is_focus ? "Focus topic GSR · " : ""}
+                        {GOAL_KIND_LABELS[goal.kind]}
                         {steps.total > 0 ? ` · ${steps.done}/${steps.total} steps done` : ""}
                       </p>
                     </div>

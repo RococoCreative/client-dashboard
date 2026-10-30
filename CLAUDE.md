@@ -72,9 +72,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
    module: two points a task, so a Hit on every task lands exactly on target. `src/lib/gsr/goals.ts`
-   is the same deal for a Monthly GSRs pillar (`gsr_goals`): a month counts its required goals that
-   are not personal, role first, at their agreed completion, and stretch goals never lower it.
-   Never duplicate any of them in SQL or in a component.
+   is the same deal for a Monthly GSRs pillar (`gsr_goals`): a month adds up the completion of all
+   its goals, up to 100 for each mandatory GSR (the focus topic's GSR first, then role and
+   professional, never personal), so stretch goals only ever add. Never duplicate any of them in
+   SQL or in a component.
    A completed review is scored with the pillars it was signed off with (`pillarsForReview`;
    `reviews.pillar_snapshot`, 0022). Every screen that puts a number on a review goes through it.
    Careful with the word "deliverable": it names a `gsr_pillars.scoring_type`, where a review
@@ -91,8 +92,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    rows in the database (`freeze_review_ratings`, 0017), and a completed review scores from its
    frozen rows only. A review has no score of record until it is complete: `reviewHistory` and
    every list read "-" for an open review. Never write a rating from the review page.
-   Nobody moves their own score: impact ratings are admin-only, and where a company scores its
-   GSRs, so is a monthly goal's agreed completion (`guard_goal_agreed_completion`, 0022).
+   A month's GSR score is locked in by an admin marking the month complete: the app writes
+   `reviews.gsr_score` from `scoreMonth`, only an admin can write it, and a locked month's goals and
+   notes are frozen until the review is reopened (0023). Only locked months reach a scored review;
+   an open month is shown, never applied.
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
@@ -121,8 +124,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
-    role, focus topic, professional, personal), how a scored month adds up (`requiredAndStretch`,
-    `scoreMonth`), the module set on a person page and a review, and
+    the focus topic's GSR, role, professional, personal), how a scored month adds up
+    (`requiredAndStretch`, `monthTotal`, `scoreMonth`), the module set on a person page and a
+    review, and
     `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms
