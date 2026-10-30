@@ -1,7 +1,10 @@
 # Klasik GSR and Goals changes: implementation plan
 
-Draft for review, October 30, 2026. Source: Justin Fara's list of eight items, walked against the
-code at `6070f93` and the live Klasik data (read only, counts only). Nothing here is built yet.
+October 30, 2026. Source: Justin Fara's list of eight items, walked against the code at
+`6070f93` and the live Klasik data (read only, counts only).
+
+**Status: Phases 1 and 2 are built** on `claude/sharp-meitner-7tpnez`, with migration
+`0021_goal_notes_and_privacy.sql` to apply at deploy (see Rollout). Phase 3 waits on D1 to D4.
 
 ## What the code says today
 
@@ -108,9 +111,10 @@ Migration `0021_goal_notes_and_privacy.sql`, append-only and idempotent.
 
 - `scope` accepts `'bhag'`, with `year` left null. A BHAG never settles: it reads open until it
   reaches 100.
-- Guard trigger: a yearly or BHAG goal's row carries no action steps and no progress notes. A write
-  that tries is refused with a plain message, so private content can never land where an admin can
-  read it.
+- Guard trigger: a yearly or BHAG goal's row carries no action steps, no goal carries
+  `progress_notes`, and no goal crosses between the months and the years (which side a goal is on
+  decides who reads its notes). A write that tries is refused with a plain message, so private
+  content can never land where an admin can read it.
 - `progress_notes` stays as a column for now, emptied and unused, so a tab left open across the
   deploy does not break. A later migration drops it.
 
@@ -146,8 +150,8 @@ redefined from its latest version in `0018`.
   read only.
 - `ReviewPage.tsx`: loads the person's notes once, with the goals, and hands them to the panel.
 - Goals panel: the owner gets steps (from `goal_private`) and progress notes (`GoalNotes`). Anyone
-  else gets title, description, kind, period and completion, plus the line "Action steps and
-  progress notes are private to Chance."
+  else gets title, description, kind, period and completion, plus one line at the top of the
+  panel: "Action steps and progress notes are private to Chance."
 - Period select: "This year (2026)", "Next year (2027)", "BHAG (3 to 5 years)". A goal stamped with
   any other year keeps that year as an extra option, so editing never moves it.
 - My Goals: a notice under the tabs, "Shared with your manager: each goal's title, description,
@@ -256,7 +260,13 @@ Recommended default first. D1 to D4 need Justin. The rest have safe defaults.
 ## Verification
 
 - Every phase: `npm run lint`, `npx vitest run`, `npm run build`. Baseline at `6070f93`: lint
-  clean, 127 tests passing in 16 files.
+  clean, 127 tests passing in 16 files. After Phases 1 and 2: lint clean, 142 tests passing,
+  build clean.
+- 0021 was proven on a scratch PostgreSQL 16 database that replays `0001` to `0021` with
+  Supabase-style stubs: the backfill moves notes and yearly steps with their dates, a second run
+  changes nothing, and access tests pass as an admin (shared fields and GSR notes only), a
+  teammate (nothing), and the owner (everything), including payloads that try to fake an author
+  or a date, a closed month refusing notes, and every route back onto the shared row.
 - `npm run demo` for a visual pass: `/?persona=admin&company=klasik` and
   `/?persona=employee&company=klasik`.
 - Supabase advisors (security and performance) after each migration.

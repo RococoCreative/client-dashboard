@@ -301,8 +301,9 @@ export interface ReviewScore {
 // "focus" is the month's focus topic, seeded from the cycle theme.
 export type GoalKind = "professional" | "personal" | "role" | "focus";
 export type GoalStatus = "not_started" | "in_progress" | "on_track" | "achieved" | "missed";
-// A goal belongs to a review cycle (the month's goals) or to a year (a yearly goal).
-export type GoalScope = "cycle" | "year";
+// A goal belongs to a review cycle (the month's goals), to a year (a yearly goal), or to no
+// fixed period at all: a BHAG, the big goal three to five years out.
+export type GoalScope = "cycle" | "year" | "bhag";
 
 export interface ActionStep {
   text: string;
@@ -318,8 +319,9 @@ export interface Goal {
   title: string;
   description: string | null;
   status: GoalStatus;
+  // A monthly goal's steps, which the review reads. Always empty on a yearly or BHAG goal: their
+  // steps are private to the owner and live in goal_private (0021). Notes live in goal_notes.
   action_steps: ActionStep[];
-  progress_notes: string | null;
   // 0..100; 100 is complete, and a settled period reads anything less as a miss.
   progress: number;
   scope: GoalScope;
@@ -330,6 +332,31 @@ export interface Goal {
   carried_from_goal_id: string | null;
   sort_order: number;
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// One dated entry in a goal's notes log. Information only: nothing scores a note. A monthly goal's
+// notes are read by the person and their admins, the record the meeting works from; a yearly or
+// BHAG goal's notes are the person's alone (RLS, 0021).
+export interface GoalNote {
+  id: string;
+  goal_id: string;
+  company_id: string;
+  employee_id: string;
+  // Who wrote it; null for a note carried over from the old single notes box.
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// The private half of a yearly or BHAG goal: its action steps, readable by its owner only.
+export interface GoalPrivate {
+  goal_id: string;
+  company_id: string;
+  employee_id: string;
+  action_steps: ActionStep[];
   created_at: string;
   updated_at: string;
 }

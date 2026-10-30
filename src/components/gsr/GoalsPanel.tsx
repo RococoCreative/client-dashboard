@@ -1,12 +1,16 @@
-// Goals for one person, grouped by kind: yearly goals and the ones tied to a review cycle,
-// each with action steps to tick and a progress slider where 100 is complete. Employees own
-// their goals (this panel is their My Goals page); admins see and edit the same panel on a
-// person's page. Steps and progress save as they change; text saves on blur.
+// Goals for one person beyond the month: this year's, next year's and their BHAG, grouped by
+// kind, each with a completion slider where 100 is complete. The goal itself (title, description,
+// kind, period, completion) is shared with the person's admins, who see it on the profile and on
+// every quarterly review. Its action steps and progress notes are the person's alone: the
+// database keeps them in tables only the owner can read (0021), so this panel only asks for them,
+// and only shows them, when the owner is the one looking. Employees own their goals (this panel is
+// their My Goals page); admins see and edit the shared part on a person's page. Steps and
+// completion save as they change; text saves on blur.
 import { useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
+import GoalNotes from "./GoalNotes.tsx";
 import Badge from "../ui/Badge.tsx";
-import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import EmptyState from "../ui/EmptyState.tsx";
@@ -19,26 +23,24 @@ import Section from "../ui/Section.tsx";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
+import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { createGoal, deleteGoal, listGoals, updateGoal } from "../../services/gsr.ts";
-import { goalOutcome, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
+import { createGoal, deleteGoal, listGoalNotes, listGoalPrivate, listGoals, saveGoalSteps, updateGoal } from "../../services/gsr.ts";
+import { GOAL_KIND_ORDER, goalOutcome, goalPeriodLabel, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type ReviewCycle } from "../../types/database.ts";
+import { GOAL_KIND_LABELS, type ActionStep, type Goal, type GoalKind, type GoalNote, type GoalPrivate } from "../../types/database.ts";
 
-// The period a goal belongs to, as one select value: "year:2026" or "cycle:<id>".
-type Period = { scope: "year"; year: number } | { scope: "cycle"; cycle_id: string | null };
+const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
-function periodKey(period: Period): string {
-  return period.scope === "year" ? `year:${period.year}` : `cycle:${period.cycle_id ?? ""}`;
+// The period a goal belongs to, as one select value: "year:2026" or "bhag".
+type Period = Pick<Goal, "scope" | "year">;
+
+function periodKey(period: Period, thisYear: number): string {
+  return period.scope === "bhag" ? "bhag" : `year:${period.year ?? thisYear}`;
 }
 
 function parsePeriod(key: string): Period {
-  if (key.startsWith("year:")) return { scope: "year", year: Number(key.slice(5)) };
-  return { scope: "cycle", cycle_id: key.slice(6) || null };
-}
-
-function goalPeriod(goal: Goal): Period {
-  return goal.scope === "year" ? { scope: "year", year: goal.year ?? new Date().getFullYear() } : { scope: "cycle", cycle_id: goal.cycle_id };
+  return key === "bhag" ? { scope: "bhag", year: null } : { scope: "year", year: Number(key.slice(5)) };
 }
 
 function GoalDialog({
@@ -46,7 +48,6 @@ function GoalDialog({
   employeeId,
   goal,
   goals,
-  cycles,
   onClose,
   onSaved,
 }: {
@@ -56,7 +57,6 @@ function GoalDialog({
   // Everything already filed for this person, so a new goal gets a sort_order that puts it at
   // the end of its group instead of defaulting to 0 and jumping to the top on the next load.
   goals: Goal[];
-  cycles: ReviewCycle[];
   onClose: () => void;
   onSaved: (goal: Goal) => void;
 }) {
@@ -64,15 +64,20 @@ function GoalDialog({
   const [title, setTitle] = useState(goal?.title ?? "");
   const [kind, setKind] = useState<GoalKind>(goal?.kind ?? "professional");
   const [description, setDescription] = useState(goal?.description ?? "");
-  const [period, setPeriod] = useState<string>(goal ? periodKey(goalPeriod(goal)) : `year:${thisYear}`);
+  const [period, setPeriod] = useState<string>(periodKey(goal ?? { scope: "year", year: thisYear }, thisYear));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const legacyOngoing = goal !== null && goal.scope === "cycle" && goal.cycle_id === null;
-  // This year and next to set a new one, plus whatever year the goal being edited is actually
-  // stamped with. A yearly goal created from a cycle in another year would otherwise open on a
-  // blank period, and the only way out of blank was to move the goal to a year it does not
-  // belong to, which drops it out of the review that matches on the year.
-  const yearOptions = [...new Set([thisYear, thisYear + 1, ...(goal?.scope === "year" && goal.year ? [goal.year] : [])])].sort((a, b) => a - b);
+  // This year, next year, or a BHAG. A goal being edited keeps the year it is stamped with as an
+  // option when that year is neither, so opening an older goal never moves it to a year it does
+  // not belong to without anyone choosing that.
+  const periods: Period[] = [
+    { scope: "year", year: thisYear },
+    { scope: "year", year: thisYear + 1 },
+    { scope: "bhag", year: null },
+    ...(goal?.scope === "year" && goal.year !== null && goal.year !== thisYear && goal.year !== thisYear + 1 ? [{ scope: "year" as const, year: goal.year }] : []),
+  ];
+  // The focus topic is the month's and is filed from a GSR; an old goal of that kind keeps it.
+  const kinds = GOAL_KIND_ORDER.filter((k) => k !== "focus" || goal?.kind === "focus");
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -87,8 +92,8 @@ function GoalDialog({
         kind,
         description: description.trim() || null,
         scope: where.scope,
-        year: where.scope === "year" ? where.year : null,
-        cycle_id: where.scope === "cycle" ? where.cycle_id : null,
+        year: where.year,
+        cycle_id: null,
       };
       const saved = goal
         ? await updateGoal(goal.id, payload)
@@ -111,30 +116,26 @@ function GoalDialog({
         <h2 id="goal-dialog-title" className="font-display text-lg text-heading">{goal ? "Edit goal" : "New goal"}</h2>
         <div className="mt-5 space-y-4">
           <Field label="Goal" htmlFor="goal-title">
-            <input id="goal-title" type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder="What does success look like?" className={inputClass} />
+            <input id="goal-title" type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder="What is a goal you want to achieve?" className={inputClass} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Kind" htmlFor="goal-kind">
               <select id="goal-kind" value={kind} onChange={(e) => setKind(e.target.value as GoalKind)} className={selectClass}>
-                {keysOf(GOAL_KIND_LABELS).map((k) => (
+                {kinds.map((k) => (
                   <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Period" htmlFor="goal-period" hint="A yearly goal, or one tied to a review cycle so it shows up in that review.">
+            <Field label="Period" htmlFor="goal-period" hint="A BHAG is the big goal, three to five years out.">
               <select id="goal-period" value={period} onChange={(e) => setPeriod(e.target.value)} className={selectClass}>
-                {yearOptions.map((y) => (
-                  <option key={y} value={`year:${y}`}>Yearly goal, {y}</option>
+                {periods.map((p) => (
+                  <option key={periodKey(p, thisYear)} value={periodKey(p, thisYear)}>{goalPeriodLabel(p, thisYear)}</option>
                 ))}
-                {cycles.map((c) => (
-                  <option key={c.id} value={`cycle:${c.id}`}>{c.name}</option>
-                ))}
-                {legacyOngoing ? <option value="cycle:">Ongoing</option> : null}
               </select>
             </Field>
           </div>
           <Field label="Description (optional)" htmlFor="goal-description">
-            <textarea id="goal-description" value={description} onChange={(e) => setDescription(e.target.value)} className={textareaClass} rows={3} />
+            <textarea id="goal-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does success look like?" className={textareaClass} rows={3} />
           </Field>
           {error ? <Notice tone="error">{error}</Notice> : null}
         </div>
@@ -149,19 +150,26 @@ function GoalDialog({
 
 function GoalCard({
   goal,
+  isOwner,
   canEdit,
-  periodLabel,
-  settled,
+  steps,
+  notes,
   onChange,
+  onSteps,
+  onNotes,
   onEdit,
   onDelete,
   onError,
 }: {
   goal: Goal;
+  isOwner: boolean;
   canEdit: boolean;
-  periodLabel: string;
-  settled: boolean;
+  // The owner's private steps for this goal; nobody else is given any.
+  steps: ActionStep[];
+  notes: GoalNote[];
   onChange: (goal: Goal) => void;
+  onSteps: (steps: ActionStep[]) => void;
+  onNotes: (update: (notes: GoalNote[]) => GoalNote[]) => void;
   onEdit: () => void;
   onDelete: () => void;
   onError: (message: string) => void;
@@ -173,18 +181,16 @@ function GoalCard({
       onError(errorMessage(err));
     }
   }
-  const outcome = goalOutcome(goal, settled);
-  const { done, total } = stepsTaken(goal);
+  // A yearly goal settles once its year is behind us and a BHAG never does; neither needs cycles.
+  const outcome = goalOutcome(goal, goalSettled(goal, []));
+  const { done, total } = stepsTaken({ action_steps: steps });
 
   return (
     <li className="rounded-lg border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
-          <p className="mt-0.5 text-[12px] text-ink-3">
-            {periodLabel}
-            {total > 0 ? ` · ${done}/${total} steps done` : ""}
-          </p>
+          <p className="mt-0.5 text-[12px] text-ink-3">{goalPeriodLabel(goal)}</p>
           {goal.description ? <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{goal.description}</p> : null}
         </div>
         <div className="flex items-center gap-1.5">
@@ -202,54 +208,86 @@ function GoalCard({
         </div>
       </div>
 
-      <ProgressSlider className="mt-3" label={`Progress for ${goal.title}`} value={goal.progress} disabled={!canEdit} onCommit={(next) => void save(progressPatch(next, goal.status))} />
-
       <div className="mt-3">
-        <p className="text-[11px] font-medium uppercase tracking-label text-ink-3">Action steps</p>
-        <ActionSteps steps={goal.action_steps} canTick={canEdit} canEdit={canEdit} onChange={(steps) => void save({ action_steps: steps })} />
+        <p className={eyebrowClass}>Completion</p>
+        <ProgressSlider className="mt-1" label={`Completion for ${goal.title}`} value={goal.progress} disabled={!canEdit} onCommit={(next) => void save(progressPatch(next, goal.status))} />
       </div>
 
-      {canEdit || goal.progress_notes ? (
-        <div className="mt-3">
-          <p className="text-[11px] font-medium uppercase tracking-label text-ink-3">Progress notes</p>
-          {canEdit ? (
-            <BlurInput multiline rows={2} value={goal.progress_notes ?? ""} placeholder="Where things stand" ariaLabel={`Progress notes for ${goal.title}`} onSave={(next) => void save({ progress_notes: next.trim() || null })} className={`${textareaClass} mt-1.5 min-h-[56px] text-[13px]`} />
-          ) : (
-            <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-2">{goal.progress_notes}</p>
-          )}
-        </div>
+      {isOwner ? (
+        <>
+          <div className="mt-3">
+            <p className={`${eyebrowClass} flex items-baseline gap-2`}>
+              Action steps
+              {total > 0 ? <span className="tnum text-[12px] normal-case tracking-normal text-ink-3">{done} of {total} done</span> : null}
+            </p>
+            <ActionSteps steps={steps} canTick={canEdit} canEdit={canEdit} onChange={onSteps} />
+          </div>
+          {canEdit || notes.length > 0 ? (
+            <div className="mt-3">
+              <p className={eyebrowClass}>Progress notes</p>
+              <GoalNotes goal={goal} notes={notes} canWrite={canEdit} onNotes={onNotes} onError={onError} />
+            </div>
+          ) : null}
+        </>
       ) : null}
     </li>
   );
+}
+
+interface PanelData {
+  goals: Goal[];
+  // The owner's own; empty for anyone else.
+  privateSteps: GoalPrivate[];
+  notes: GoalNote[];
 }
 
 export default function GoalsPanel({
   companyId,
   employeeId,
   canEdit,
-  cycles = [],
-  scope = "all",
+  ownerName,
 }: {
   companyId: string;
   employeeId: string;
   canEdit: boolean;
-  cycles?: ReviewCycle[];
-  // "year" shows and files yearly goals only: the Goals section and the quarterly and annual
-  // reviews. Monthly goals and focus topics belong to the Goal Setting Review, and a goal must
-  // not be editable in two sections at once.
-  scope?: "all" | "year";
+  // The person's first name, for the line that tells anyone else what stays private.
+  ownerName?: string;
 }) {
-  const state = useAsync(() => listGoals(companyId, employeeId), [companyId, employeeId]);
+  const { profile } = useHub();
+  // Steps and notes are the owner's alone. The database would hand anyone else no rows, so the
+  // panel does not ask, and shows the shared part of each goal instead.
+  const isOwner = profile.id === employeeId;
+  const state = useAsync<PanelData>(async () => {
+    const [goals, privateSteps, notes] = await Promise.all([
+      listGoals(companyId, employeeId),
+      isOwner ? listGoalPrivate(companyId, employeeId) : Promise.resolve([]),
+      isOwner ? listGoalNotes(companyId, employeeId) : Promise.resolve([]),
+    ]);
+    return { goals, privateSteps, notes };
+  }, [companyId, employeeId, isOwner]);
   const [dialog, setDialog] = useState<{ goal: Goal | null } | null>(null);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  function update(change: (data: PanelData) => PanelData) {
+    state.setData((prev) => (prev ? change(prev) : prev));
+  }
+
   function upsert(goal: Goal) {
-    state.setData((prev) => {
-      const list = prev ?? [];
-      return list.some((g) => g.id === goal.id) ? list.map((g) => (g.id === goal.id ? goal : g)) : [...list, goal];
-    });
+    update((data) => ({
+      ...data,
+      goals: data.goals.some((g) => g.id === goal.id) ? data.goals.map((g) => (g.id === goal.id ? goal : g)) : [...data.goals, goal],
+    }));
+  }
+
+  async function saveSteps(goal: Goal, steps: ActionStep[]) {
+    try {
+      const saved = await saveGoalSteps({ goal_id: goal.id, company_id: goal.company_id, employee_id: goal.employee_id, action_steps: steps });
+      update((data) => ({ ...data, privateSteps: [...data.privateSteps.filter((row) => row.goal_id !== saved.goal_id), saved] }));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
   }
 
   async function handleDelete() {
@@ -257,7 +295,8 @@ export default function GoalsPanel({
     setBusy(true);
     try {
       await deleteGoal(deleting.id);
-      state.setData((prev) => (prev ? prev.filter((g) => g.id !== deleting.id) : prev));
+      const id = deleting.id;
+      update((data) => ({ ...data, goals: data.goals.filter((g) => g.id !== id) }));
       setDeleting(null);
     } catch (err) {
       setError(errorMessage(err));
@@ -266,18 +305,14 @@ export default function GoalsPanel({
     }
   }
 
-  // Sorted the way listGoals sorts, so the position a goal is shown in is the position it keeps
-  // through the next load or tab-focus refresh rather than sliding out from under the pointer.
-  const goals = [...(state.data ?? [])]
-    .filter((g) => scope === "all" || g.scope === "year")
+  // The year's goals and BHAGs. A monthly goal belongs to its Goal Setting Review and is never
+  // listed or editable here. Sorted the way listGoals sorts, so the position a goal is shown in is
+  // the position it keeps through the next load rather than sliding out from under the pointer.
+  const goals = (state.data?.goals ?? [])
+    .filter((g) => g.scope !== "cycle")
     .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
-  const periodLabel = (goal: Goal): string => {
-    if (goal.scope === "year") return `${goal.year} goal`;
-    return goal.cycle_id ? (cycles.find((c) => c.id === goal.cycle_id)?.name ?? "Review cycle") : "Ongoing";
-  };
-  // A goal reads as hit or miss once its period is over: a closed or past cycle, or a past year.
-  // The rule is in lib/gsr/goals.ts so the employee dashboard reaches the same verdict.
-  const settled = (goal: Goal): boolean => goalSettled(goal, cycles);
+  const stepsFor = (goal: Goal): ActionStep[] => state.data?.privateSteps.find((row) => row.goal_id === goal.id)?.action_steps ?? [];
+  const notesFor = (goal: Goal): GoalNote[] => (state.data?.notes ?? []).filter((n) => n.goal_id === goal.id);
 
   return (
     <div className="space-y-6">
@@ -289,17 +324,22 @@ export default function GoalsPanel({
         <EmptyState
           eyebrow="Goals"
           title={canEdit ? "Set the first goal" : "No goals yet"}
-          body="Professional, personal, or role goals, each with the action steps that get you there."
+          body="Goals for this year or next, or a BHAG three to five years out, each with the action steps that get there."
           action={canEdit ? <Button onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button> : undefined}
         />
       ) : (
         <>
-          {canEdit ? (
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button>
+          {!isOwner || canEdit ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {!isOwner ? (
+                <p className="flex items-center gap-1.5 text-[12.5px] text-ink-3">
+                  <Lock size={12} aria-hidden /> Action steps and progress notes are private to {ownerName ?? "the person whose goals these are"}.
+                </p>
+              ) : <span />}
+              {canEdit ? <Button size="sm" onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button> : null}
             </div>
           ) : null}
-          {keysOf(GOAL_KIND_LABELS).map((kind) => {
+          {GOAL_KIND_ORDER.map((kind) => {
             const group = goals.filter((g) => g.kind === kind);
             if (group.length === 0) return null;
             return (
@@ -309,10 +349,13 @@ export default function GoalsPanel({
                     <GoalCard
                       key={goal.id}
                       goal={goal}
+                      isOwner={isOwner}
                       canEdit={canEdit}
-                      periodLabel={periodLabel(goal)}
-                      settled={settled(goal)}
+                      steps={stepsFor(goal)}
+                      notes={notesFor(goal)}
                       onChange={upsert}
+                      onSteps={(steps) => void saveSteps(goal, steps)}
+                      onNotes={(change) => update((data) => ({ ...data, notes: change(data.notes) }))}
                       onEdit={() => setDialog({ goal })}
                       onDelete={() => setDeleting(goal)}
                       onError={setError}
@@ -331,8 +374,6 @@ export default function GoalsPanel({
           employeeId={employeeId}
           goal={dialog.goal}
           goals={goals}
-          // With no cycles offered, the period select can only file a yearly goal.
-          cycles={scope === "year" ? [] : cycles}
           onClose={() => setDialog(null)}
           onSaved={(goal) => {
             upsert(goal);
@@ -343,7 +384,7 @@ export default function GoalsPanel({
       {deleting ? (
         <ConfirmDialog
           title={`Delete "${deleting.title}"?`}
-          body="The goal and its action steps are removed. Leave it below 100 instead to keep the miss on record."
+          body="The goal, its action steps and its progress notes are removed. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
           error={error}

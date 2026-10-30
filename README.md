@@ -16,7 +16,7 @@ that orders itself by importance and location. The full specification is in
 | Module | Admins | Employees |
 | --- | --- | --- |
 | Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
-| Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback, goals with action steps and progress |
+| Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback; goals with action steps and progress notes that stay private to them |
 | People | Add staff before inviting them, invite when ready, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
 | SOP library | Create, edit (versioned), publish, attach files | Read published documents |
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0020`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0021`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -186,32 +186,47 @@ completing again freezes again. A review has no score of record until it is comp
 ## Sections
 
 Three sidebar sections, keyed on cadence: GSRs (monthly Goal Setting Reviews: last month at a
-glance, this month's goals and action steps, the focus topic, no scoring), Reviews (quarterly,
-annual and custom cycles: the scored review with the employee snapshot, deliverables, yearly goals
-and feedback) and Goals (the year's personal, professional and role goals across the roster).
-Employees see the same three as My GSR, My Reviews and My Goals.
+glance, this month's goals with their action steps and notes, the focus topic, no scoring),
+Reviews (quarterly, annual and custom cycles: the scored review with the employee snapshot,
+deliverables, yearly goals and feedback) and Goals (personal, professional and role goals for the
+year and each person's BHAG, across the roster). Employees see the same three as My GSR, My
+Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 
 Every review opens with the employee snapshot: position, hire date and tenure, department,
 who they report to, this year's personal KPIs (current against target, hit or not, editable
 by admins in the meeting), and the company goals. A monthly cycle's review then leads with
-goals, not scores. The month's focus topic is a goal seeded from the cycle theme, with its
-own action steps; the manager sets the rest of the month's goals with the person, each with
-action steps and a progress slider from 0 to 100, where 100 marks a goal complete. Last
-month's goals read back as hit or miss with the steps that were taken and a "why" the
-manager writes now, and a missed goal carries into this month in one click (only the steps
-not yet taken come along, linked to the goal it came from). The person's yearly goals sit
-alongside with the same slider. Closing a cycle freezes its goals (a database trigger, not
-just the UI; only the why stays writable), so what a month recorded stays as recorded.
+goals, not scores. The month's focus topic, from the cycle theme, sits at the top with its
+explanation, and the person sets a GSR of their own from it in their own words. The manager sets
+the rest of the month's goals with the person. Each goal carries an agreed completion from 0 to
+100, where 100 marks it complete and which is the one figure that says how it landed; action
+steps, which are checkpoints and count toward nothing; and a notes log, one dated line at a time,
+that both sides add to between meetings and work from in the review (each person edits their own
+entries). Goals read role first, then the focus topic, then professional, and personal last. Last
+month's goals read back as hit or miss with the steps that were taken, their notes, and a "why"
+the manager writes now, and a missed goal carries into this month in one click (only the steps
+not yet taken come along, linked to the goal it came from). Closing a cycle freezes its goals and
+their notes (database triggers, not just the UI; only the why stays writable), so what a month
+recorded stays as recorded.
 
 The person works their own open month the same way, from My GSR: they add and edit goals,
-steps, progress and notes, carry last month's misses forward, and write the why, so the
+steps, completion and notes, carry last month's misses forward, and write the why, so the
 meeting starts from their draft. If nobody has started their review for the month yet, they
 start it themselves (0020 allows exactly that: their own row, in an open monthly cycle, not
 started, with no feedback or sign-off). Status, feedback and sign-off stay with the manager.
 Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
 `src/lib/gsr/goals.ts`.
+
+## Goals beyond the month
+
+A person's goals outside the GSR belong to this year, next year, or their BHAG, the big goal three
+to five years out, which never settles and reads open until it is hit. The goal itself (title,
+description, kind, period and completion) is shared with the company's admins, who see it on the
+profile, on the Goals page and on every quarterly review. Its action steps and progress notes are
+the person's alone, and the database is what keeps them that way: they live in `goal_private`
+and `goal_notes`, which only the owner can read for a yearly or BHAG goal (0021), and a trigger
+refuses them on the shared goal row. My Goals says so in a line at the top.
 
 ## GSR scoring
 

@@ -1,8 +1,8 @@
 // One person's review for one cycle, in one of two shapes.
 //
-// A monthly cycle is a Goal Setting Review and only that: the employee snapshot, then goals
-// set live with action steps, progress and notes, last month read back as hit or miss, and
-// the yearly goals alongside. No pillar scoring and no written feedback, because the meeting
+// A monthly cycle is a Goal Setting Review and only that: goals set live with an agreed
+// completion, action steps and a dated notes log, the month's focus topic at the top, and last
+// month read back as hit or miss. No pillar scoring and no written feedback, because the meeting
 // is the goals and the notes on them.
 //
 // Quarterly, annual and custom cycles are the scoring review: ratings per criterion for rating
@@ -38,7 +38,7 @@ import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/statu
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
-import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
+import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoalNotes, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals } from "../../services/jobRoles.ts";
@@ -100,7 +100,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     ]);
     const year = cycleYear(cycle);
     const person = people.find((p) => p.id === review.employee_id) ?? null;
-    const [kpis, companyGoals, impact, personReviews, roleGoals] = await Promise.all([
+    const [kpis, companyGoals, impact, personReviews, roleGoals, notes] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
@@ -108,14 +108,17 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       listEmployeeReviews(review.employee_id),
       // The goals their job role brings into a Goal Setting Review; nothing for a scored cycle.
       cycle.cadence === "monthly" && person?.job_role_id ? listJobRoleGoals(review.company_id, person.job_role_id) : Promise.resolve([]),
+      // The month's notes logs. The database hands an admin only the notes on monthly goals; the
+      // person gets all of theirs, and the panel shows each goal its own.
+      cycle.cadence === "monthly" ? listGoalNotes(review.company_id, review.employee_id) : Promise.resolve([]),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, year };
   }, [reviewId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -328,7 +331,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {cycle.theme ? (
+      {/* A monthly GSR carries its theme as the focus topic card beside the goals, so the banner
+          is only for the scored cycles, which have no such card. */}
+      {cycle.theme && !monthly ? (
         <Notice tone="info" className="mb-6">
           <b>Theme for this cycle: {cycle.theme}.</b> {cycle.theme_description ?? ""}
         </Notice>
@@ -368,9 +373,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           eyebrow={String(year)}
           title="Yearly goals"
           className="mb-6"
-          description="Personal and professional goals for the year, tracked on the profile and on every quarterly and annual review."
+          description="Goals for this year and next, and the BHAG, tracked on the profile and on every quarterly and annual review."
         >
-          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} cycles={cycles} scope="year" />
+          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} ownerName={displayName(employee).split(" ")[0]} />
         </Section>
       ) : null}
 
@@ -382,10 +387,13 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             previousCycle={lastMonth}
             cycles={cycles}
             goals={goals}
+            notes={notes}
+            people={people}
             roleGoals={roleGoals}
             isAdmin={isAdmin}
             isOwn={isOwn}
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
+            onNotes={(update) => state.setData((prev) => (prev ? { ...prev, notes: update(prev.notes) } : prev))}
             onError={setError}
             onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
           />

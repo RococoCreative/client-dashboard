@@ -32,6 +32,7 @@ import CompanyGoalsPage from "./gsr/CompanyGoalsPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
 import MyReviewsPage from "./gsr/MyReviewsPage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import SopListPage from "./sops/SopListPage.tsx";
@@ -120,6 +121,10 @@ describe("dashboard", () => {
     expect(screen.getByRole("heading", { name: currentCycle.name })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open my GSR/ })).toBeInTheDocument();
     expect(screen.getByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    // A yearly goal's steps are private to Sam and kept apart from the goal, so the open-goals
+    // list reads each goal by its period and completion, BHAG included.
+    expect(screen.getByText("This year (2026) · 40% complete")).toBeInTheDocument();
+    expect(screen.getByText("BHAG (3 to 5 years) · 10% complete")).toBeInTheDocument();
     // Klasik has never rated Sam, so the impact block says so rather than showing a zero.
     expect(screen.getByRole("heading", { name: "Not rated yet" })).toBeInTheDocument();
     // The company goals page promises these show on the dashboard for everyone, so they do.
@@ -225,8 +230,8 @@ describe("GSR", () => {
     // The meeting is the goals and the notes on them.
     expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
-    // The notes box on each goal is the record of the conversation, so it stays.
-    expect(screen.getAllByLabelText(/^Notes for /).length).toBeGreaterThan(0);
+    // The notes log on each goal is the record of the conversation, so it stays.
+    expect(screen.getAllByLabelText(/^New note for /).length).toBeGreaterThan(0);
     // None of the scoring or written-feedback modules belong here. Pillar sections are the ones
     // carrying a weight, which is what tells them apart from the deliverables module below that
     // happens to share Klasik's pillar name.
@@ -540,7 +545,7 @@ describe("monthly goal setting review", () => {
     // The year's goals are not part of the month's meeting.
     expect(screen.queryByRole("heading", { name: "Yearly goals" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Title for Get the OSHA 30 certification")).not.toBeInTheDocument();
-    // The month's focus topic is a goal seeded from the cycle theme, listed first.
+    // Sam's GSR for the month's focus topic reads after any role goals and ahead of the rest.
     expect(screen.getByLabelText("Title for Core value: Integrity")).toBeInTheDocument();
     expect(screen.getAllByText("Focus topic").length).toBeGreaterThan(0);
   });
@@ -557,7 +562,7 @@ describe("monthly goal setting review", () => {
 
   it("marks a goal complete when its progress reaches 100", async () => {
     renderWithHub(<ReviewPage />, admin, at);
-    const slider = await screen.findByLabelText("Progress for Run the weekly client update without prompting");
+    const slider = await screen.findByLabelText("Agreed completion for Run the weekly client update without prompting");
     expect(slider).toHaveValue("65");
     fireEvent.change(slider, { target: { value: "100" } });
     fireEvent.blur(slider);
@@ -568,9 +573,9 @@ describe("monthly goal setting review", () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewPage />, employee, at);
     expect(await screen.findByText(/Fill these in before the meeting/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Progress for Run the weekly client update without prompting")).not.toBeDisabled();
+    expect(screen.getByLabelText("Agreed completion for Run the weekly client update without prompting")).not.toBeDisabled();
     expect(screen.getByLabelText("Title for Run the weekly client update without prompting")).toBeInTheDocument();
-    expect(screen.getByLabelText("Notes for Run the weekly client update without prompting")).toBeInTheDocument();
+    expect(screen.getByLabelText("New note for Run the weekly client update without prompting")).toBeInTheDocument();
     expect(screen.getByLabelText("Why for Send the Friday client update every week")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Add a goal for this month"), "Shadow an estimator for a day{Enter}");
     expect(await screen.findByLabelText("Title for Shadow an estimator for a day")).toBeInTheDocument();
@@ -583,6 +588,101 @@ describe("monthly goal setting review", () => {
     renderWithHub(<ReviewPage />, employee, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
+    // The month's notes stay on record and take no more: the database freezes them with the goals.
+    expect(screen.getByText("Two of four Fridays.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^New note for /)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit note from / })).not.toBeInTheDocument();
+  });
+
+  it("keeps the focus topic and what it means on the month, in place of the banner", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    expect(screen.queryByText(/Theme for this cycle/)).not.toBeInTheDocument();
+    // Sam has a GSR for the topic already, so the card names it and offers no second one.
+    const card = screen.getByText(/Their GSR for this topic/).closest("div") as HTMLElement;
+    expect(within(card).getByText(currentCycle.theme_description!)).toBeInTheDocument();
+    expect(within(card).getAllByText(currentCycle.theme!).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /monthly GSR based on this focus topic/ })).not.toBeInTheDocument();
+  });
+
+  it("sets a GSR of the person's own from the focus topic, in their words", async () => {
+    const user = userEvent.setup();
+    // Riley's September review has no goals yet, so the card offers to set one from the topic.
+    const riley = KLASIK.reviews.find((r) => r.cycle_id === currentCycle.id && r.status === "complete")!;
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${riley.id}`, pattern: "/gsr/reviews/:reviewId" });
+    await user.click(await screen.findByRole("button", { name: "Set their monthly GSR based on this focus topic" }));
+    await user.type(screen.getByLabelText("GSR for this focus topic"), "Own one slipped date out loud each Monday{Enter}");
+    expect(await screen.findByLabelText("Title for Own one slipped date out loud each Monday")).toBeInTheDocument();
+    // The topic's explanation stays on the card rather than being copied into the goal.
+    expect(screen.getByLabelText("Description for Own one slipped date out loud each Monday")).toHaveValue("");
+    expect(screen.getByText(/Their GSR for this topic/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /monthly GSR based on this focus topic/ })).not.toBeInTheDocument();
+  });
+
+  it("reads the month's goals role first, then professional, and personal last", async () => {
+    const user = userEvent.setup();
+    const riley = KLASIK.reviews.find((r) => r.cycle_id === currentCycle.id && r.status === "complete")!;
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${riley.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const add = async (title: string, kind?: string) => {
+      await user.type(await screen.findByLabelText("Add a goal for this month"), `${title}{Enter}`);
+      const select = await screen.findByLabelText(`Kind for ${title}`);
+      if (kind) await user.selectOptions(select, kind);
+    };
+    await add("Run the river 10k", "personal");
+    await add("Call every client back the same day");
+    await add("Walk every site weekly", "role");
+    await waitFor(() => {
+      const order = screen.getAllByLabelText(/^Title for /).map((el) => (el as HTMLInputElement).value);
+      expect(order.indexOf("Walk every site weekly")).toBe(0);
+      expect(order.indexOf("Call every client back the same day")).toBeLessThan(order.indexOf("Run the river 10k"));
+      expect(order.at(-1)).toBe("Run the river 10k");
+    });
+  });
+
+  it("counts a goal's action steps beside their heading, apart from the agreed completion", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    const card = (await screen.findByLabelText("Title for Run the weekly client update without prompting")).closest("li") as HTMLElement;
+    // An earlier test ticks the third step, so the count is read, not fixed.
+    expect(within(card).getByText(/^\d of 3 done$/)).toBeInTheDocument();
+    expect(within(card).getByText("Agreed completion")).toBeInTheDocument();
+    expect(within(card).queryByText(/steps done/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a dated notes log on each goal: add one, correct your own, delete it", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewPage />, admin, at);
+    const card = (await screen.findByLabelText("Title for Run the weekly client update without prompting")).closest("li") as HTMLElement;
+    // Sam's note and the manager's, each dated and named; only your own carries a pencil.
+    expect(within(card).getByText("Two of three done. Third Friday is this week.")).toBeInTheDocument();
+    expect(within(card).getByText("Sep 8, 2026 · Sam")).toBeInTheDocument();
+    expect(within(card).getByText("Sep 12, 2026 · Jordan")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Edit note from Sep 12, 2026" })).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "Edit note from Sep 8, 2026" })).not.toBeInTheDocument();
+    // A new note is stamped with today's date and the field clears for the next one.
+    const field = within(card).getByLabelText("New note for Run the weekly client update without prompting");
+    await user.type(field, "Client asked for site photos in the update{Enter}");
+    expect(await within(card).findByText("Client asked for site photos in the update")).toBeInTheDocument();
+    expect(within(card).getByText("Sep 15, 2026 · Jordan")).toBeInTheDocument();
+    expect(field).toHaveValue("");
+    // Corrected with the pencil: the date stays and the entry says it was edited.
+    await user.click(within(card).getByRole("button", { name: "Edit note from Sep 15, 2026" }));
+    const edit = within(card).getByLabelText("Edit note from Sep 15, 2026");
+    await user.clear(edit);
+    await user.type(edit, "Client asked for site photos every Friday{Enter}");
+    expect(await within(card).findByText("Client asked for site photos every Friday")).toBeInTheDocument();
+    expect(within(card).getByText("Sep 15, 2026 · Jordan · edited")).toBeInTheDocument();
+    // Removed behind a confirm.
+    await user.click(within(card).getByRole("button", { name: "Edit note from Sep 15, 2026" }));
+    await user.click(within(card).getByRole("button", { name: "Delete note from Sep 15, 2026" }));
+    await user.click(await screen.findByRole("button", { name: "Delete note" }));
+    await waitFor(() => expect(within(card).queryByText("Client asked for site photos every Friday")).not.toBeInTheDocument());
+  });
+
+  it("reads last month's notes back with each goal, without a way to add to them", async () => {
+    renderWithHub(<ReviewPage />, admin, at);
+    expect(await screen.findByText("Four days on both closings.")).toBeInTheDocument();
+    expect(screen.getByText("Two of four Fridays.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("New note for Close out the punch list within five days")).not.toBeInTheDocument();
   });
 
   it("opens a scored review with the employee snapshot: tenure, KPIs, and company goals", async () => {
@@ -610,10 +710,18 @@ describe("scored review", () => {
     expect(within(block).getByText("Not started")).toBeInTheDocument();
   });
 
+  it("keeps the theme banner on a scored review, which has no focus card", async () => {
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    expect(await screen.findByText(/Theme for this cycle/)).toBeInTheDocument();
+  });
+
   it("keeps the year's goals on the quarterly review and leaves the month's goals to the GSR", async () => {
     renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     expect(await screen.findByRole("heading", { name: "Yearly goals" })).toBeInTheDocument();
     expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    // The reviewer sees the shared part of each goal; its steps and notes stay with the person.
+    expect(screen.getByText(/Action steps and progress notes are private to Jamie/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Register for the course")).not.toBeInTheDocument();
     // A cycle goal is the Goal Setting Review's, and the yearly panel files nothing but years.
     expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
     expect(screen.queryByText("Goals for this month")).not.toBeInTheDocument();
@@ -736,5 +844,61 @@ describe("connections", () => {
     await userEvent.click(screen.getByRole("button", { name: "Disconnect GoHighLevel" }));
     await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
     expect(screen.getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+  });
+});
+
+// Last of all, because these file and tick goals the earlier tests read.
+describe("goals beyond the month", () => {
+  it("shows the owner their private steps and progress notes, and says what is shared", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<MyGoalsPage />, employee);
+    expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    expect(screen.getByText(/Your action steps and progress notes stay private to you/)).toBeInTheDocument();
+    const card = screen.getByText("Get the OSHA 30 certification").closest("li") as HTMLElement;
+    expect(within(card).getByText("This year (2026)")).toBeInTheDocument();
+    expect(await within(card).findByLabelText("Register for the course")).toBeChecked();
+    expect(within(card).getByText("1 of 2 done")).toBeInTheDocument();
+    expect(within(card).getByText("Booked the exam for November.")).toBeInTheDocument();
+    // Ticking a step saves it to the goal's private half.
+    await user.click(within(card).getByLabelText("Finish modules 1 to 15"));
+    expect(await within(card).findByText("2 of 2 done")).toBeInTheDocument();
+  });
+
+  it("shows an admin the shared part of someone's goals and nothing private", async () => {
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
+    expect(screen.getByText("Action steps and progress notes are private to Sam.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Register for the course")).not.toBeInTheDocument();
+    expect(screen.queryByText("Booked the exam for November.")).not.toBeInTheDocument();
+    // The BHAG sits with the year's goals; the month's goals belong to the GSR.
+    expect(screen.getByText("Lead a project from bid to closeout")).toBeInTheDocument();
+    expect(screen.getByText("BHAG (3 to 5 years)")).toBeInTheDocument();
+    expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
+  });
+
+  it("files a goal for this year, next year or a BHAG, in the words the form asks for", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<MyGoalsPage />, employee);
+    await user.click(await screen.findByRole("button", { name: /New goal/ }));
+    expect(screen.getByLabelText("Goal")).toHaveAttribute("placeholder", "What is a goal you want to achieve?");
+    expect(screen.getByLabelText("Description (optional)")).toHaveAttribute("placeholder", "What does success look like?");
+    const period = screen.getByLabelText("Period");
+    expect(within(period).getAllByRole("option").map((o) => o.textContent)).toEqual(["This year (2026)", "Next year (2027)", "BHAG (3 to 5 years)"]);
+    // The focus topic is the month's and is filed from a GSR, so it is no kind here.
+    expect(within(screen.getByLabelText("Kind")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Role", "Professional", "Personal"]);
+    await user.type(screen.getByLabelText("Goal"), "Open a second office");
+    await user.selectOptions(period, "bhag");
+    await user.click(screen.getByRole("button", { name: "Add goal" }));
+    const card = (await screen.findByText("Open a second office")).closest("li") as HTMLElement;
+    expect(within(card).getByText("BHAG (3 to 5 years)")).toBeInTheDocument();
+  });
+
+  it("lists everyone's goals and BHAGs for admins, without their steps", async () => {
+    renderWithHub(<GoalsPage />, admin);
+    const row = (await screen.findByText("Get the OSHA 30 certification")).closest("li") as HTMLElement;
+    expect(row).toHaveTextContent("Professional · 40%");
+    expect(row).not.toHaveTextContent(/steps/);
+    const bhag = screen.getByText("Lead a project from bid to closeout").closest("li") as HTMLElement;
+    expect(bhag).toHaveTextContent("BHAG · Professional · 10%");
   });
 });

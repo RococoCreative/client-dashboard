@@ -1,6 +1,7 @@
-// The Goal Setting Review rules: progress to status, hit or miss, carry forward, splitting.
+// The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
+// carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, goalSettled, hitCount, progressPatch, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, progressPatch, rankGoals, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -17,7 +18,6 @@ function goal(over: Partial<Goal>): Goal {
       { text: "Draft", done: true },
       { text: "Review", done: false },
     ],
-    progress_notes: null,
     progress: 40,
     scope: "cycle",
     year: null,
@@ -52,6 +52,27 @@ describe("goalOutcome", () => {
   });
   it("counts hits", () => {
     expect(hitCount([goal({ progress: 100 }), goal({ id: "b", progress: 10 })], true)).toEqual({ hit: 1, total: 2 });
+  });
+});
+
+describe("rankGoals", () => {
+  it("reads role goals first, then the focus topic, then professional, and personal last", () => {
+    const list = [
+      goal({ id: "personal", kind: "personal", sort_order: 1 }),
+      goal({ id: "pro-late", kind: "professional", sort_order: 4 }),
+      goal({ id: "focus", kind: "focus", sort_order: 5 }),
+      goal({ id: "pro-early", kind: "professional", sort_order: 2 }),
+      goal({ id: "role", kind: "role", sort_order: 3 }),
+    ];
+    expect(rankGoals(list).map((g) => g.id)).toEqual(["role", "focus", "pro-early", "pro-late", "personal"]);
+  });
+  it("keeps the order goals were filed in within a kind, and leaves the list it was given alone", () => {
+    const list = [
+      goal({ id: "second", sort_order: 1, created_at: "2026-09-02T00:00:00Z" }),
+      goal({ id: "first", sort_order: 1, created_at: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(rankGoals(list).map((g) => g.id)).toEqual(["first", "second"]);
+    expect(list.map((g) => g.id)).toEqual(["second", "first"]);
   });
 });
 
@@ -96,6 +117,12 @@ describe("when a goal's period is over", () => {
     expect(goalSettled(yearly(null), cycles, today)).toBe(false);
   });
 
+  it("never settles a BHAG: it stays open until it is hit", () => {
+    const bhag = { scope: "bhag" as const, year: null, cycle_id: null };
+    expect(goalSettled(bhag, cycles, new Date(2031, 0, 1))).toBe(false);
+    expect(goalOutcome({ progress: 60, status: "in_progress", ...bhag }, goalSettled(bhag, cycles, today))).toBe("open");
+  });
+
   it("settles a cycle goal when its cycle is closed or its period is over", () => {
     expect(goalSettled(onCycle("open-now"), cycles, today)).toBe(false);
     expect(goalSettled(onCycle("over"), cycles, today)).toBe(true);
@@ -111,5 +138,14 @@ describe("when a goal's period is over", () => {
     const stale = { progress: 40, status: "in_progress" as const, ...yearly(2026) };
     expect(goalOutcome(stale, goalSettled(stale, cycles, new Date(2027, 0, 2)))).toBe("miss");
     expect(goalOutcome(stale, goalSettled(stale, cycles, today))).toBe("open");
+  });
+});
+
+describe("goalPeriodLabel", () => {
+  it("names a goal's period the way the Period pulldown does", () => {
+    expect(goalPeriodLabel({ scope: "year", year: 2026 }, 2026)).toBe("This year (2026)");
+    expect(goalPeriodLabel({ scope: "year", year: 2027 }, 2026)).toBe("Next year (2027)");
+    expect(goalPeriodLabel({ scope: "year", year: 2025 }, 2026)).toBe("2025");
+    expect(goalPeriodLabel({ scope: "bhag", year: null }, 2026)).toBe("BHAG (3 to 5 years)");
   });
 });

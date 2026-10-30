@@ -1,16 +1,21 @@
 // The Goal Setting Review for a monthly cycle. The manager and the person set this month's
-// goals together, live: each with action steps and a progress slider where 100 is complete.
+// goals together, live: each with an agreed completion where 100 is complete, action steps as
+// checkpoints along the way, and a dated notes log to discuss in the meeting. Only the completion
+// says how a goal landed; steps and notes are there to get it there.
 // The person works their own month the same way the manager does, so they can fill it in
 // before the meeting and the meeting starts from their draft.
-// The month's focus topic is a goal too, seeded from the cycle theme, and the goals the
-// person's job role brings with it are offered the same way, one click to file. Last month's
-// goals read back as hit or miss with a "why" and a one-click carry forward. Yearly goals are not
-// here: they live on the profile and on the quarterly and annual reviews, because a Goal
+// The month's focus topic sits at the top with its explanation, and the person sets a GSR of
+// their own from it; the goals their job role brings are offered the same way, one click to
+// file. Goals read role first, then the focus topic, then professional, then personal. Last
+// month's goals read back as hit or miss with a "why" and a one-click carry forward. Yearly goals
+// are not here: they live on the profile and on the quarterly and annual reviews, because a Goal
 // Setting Review is the month and nothing else. Every change saves on its own; a closed cycle
 // is read-only except for the why, which is written the month after.
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
+import GoalNotes from "./GoalNotes.tsx";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
@@ -21,33 +26,39 @@ import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { carryForward, goalOutcome, hitCount, progressPatch, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
-import { cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
+import { GOAL_KIND_ORDER, carryForward, goalOutcome, hitCount, progressPatch, rankGoals, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
-import { GOAL_KIND_LABELS, keysOf, type Goal, type GoalKind, type JobRoleGoal, type Review, type ReviewCycle } from "../../types/database.ts";
+import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle } from "../../types/database.ts";
 
 const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 type GoalPatch = Parameters<typeof updateGoal>[1];
+type NotesUpdate = (update: (notes: GoalNote[]) => GoalNote[]) => void;
 
-// One editable goal: title, kind, progress, description, steps, notes. Used for this month's
-// goals and for the yearly ones.
+// One of this month's goals: title, kind, agreed completion, description, steps, notes.
 function GoalEditor({
   goal,
+  notes,
+  people,
   canEdit,
   canTick,
   carriedFrom,
   onChange,
+  onNotes,
   onDelete,
   onError,
   onTouched,
 }: {
   goal: Goal;
+  notes: GoalNote[];
+  people: Profile[];
   canEdit: boolean;
   canTick: boolean;
   carriedFrom: string | null;
   onChange: (goal: Goal) => void;
+  onNotes: NotesUpdate;
   onDelete: () => void;
   onError: (message: string) => void;
   onTouched: () => void;
@@ -76,11 +87,9 @@ function GoalEditor({
               <Badge tone="accent">Focus topic</Badge>
             ) : canEdit ? (
               <select value={goal.kind} aria-label={`Kind for ${goal.title}`} onChange={(e) => void save({ kind: e.target.value as GoalKind })} className={`${selectClass} mt-0 w-auto py-0.5 text-[12px]`}>
-                {keysOf(GOAL_KIND_LABELS)
-                  .filter((k) => k !== "focus")
-                  .map((k) => (
-                    <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
-                  ))}
+                {GOAL_KIND_ORDER.filter((k) => k !== "focus").map((k) => (
+                  <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
+                ))}
               </select>
             ) : (
               <span>{GOAL_KIND_LABELS[goal.kind]}</span>
@@ -90,7 +99,6 @@ function GoalEditor({
                 <ArrowRight size={11} aria-hidden /> Carried from {carriedFrom}
               </Badge>
             ) : null}
-            {total > 0 ? <span>{done}/{total} steps done</span> : null}
           </div>
         </div>
         {canEdit ? (
@@ -100,7 +108,12 @@ function GoalEditor({
         ) : null}
       </div>
 
-      <ProgressSlider className="mt-3" label={`Progress for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+      {/* The completion is agreed in the review and is the one figure that says how the goal
+          landed. Steps below are checkpoints on the way and move nothing. */}
+      <div className="mt-3">
+        <p className={eyebrowClass}>Agreed completion</p>
+        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+      </div>
 
       {canEdit ? (
         <BlurInput multiline rows={1} value={goal.description ?? ""} placeholder="What does success look like?" ariaLabel={`Description for ${goal.title}`} onSave={(next) => void save({ description: next.trim() || null })} className={`${textareaClass} mt-3 min-h-[36px] text-[13px]`} />
@@ -109,42 +122,48 @@ function GoalEditor({
       ) : null}
 
       <div className="mt-3">
-        <p className={eyebrowClass}>Action steps</p>
+        <p className={`${eyebrowClass} flex items-baseline gap-2`}>
+          Action steps
+          {total > 0 ? <span className="tnum text-[12px] normal-case tracking-normal text-ink-3">{done} of {total} done</span> : null}
+        </p>
         <ActionSteps steps={goal.action_steps} canTick={canTick} canEdit={canEdit} onChange={(steps) => void save({ action_steps: steps })} />
       </div>
 
-      {canEdit ? (
+      {canEdit || notes.length > 0 ? (
         <div className="mt-3">
           <p className={eyebrowClass}>Notes</p>
-          <BlurInput multiline rows={1} value={goal.progress_notes ?? ""} placeholder="Where things stand" ariaLabel={`Notes for ${goal.title}`} onSave={(next) => void save({ progress_notes: next.trim() || null })} className={`${textareaClass} mt-1.5 min-h-[36px] text-[13px]`} />
-        </div>
-      ) : goal.progress_notes ? (
-        <div className="mt-3">
-          <p className={eyebrowClass}>Notes</p>
-          <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-2">{goal.progress_notes}</p>
+          <GoalNotes goal={goal} notes={notes} people={people} canWrite={canEdit} onNotes={onNotes} onError={onError} />
         </div>
       ) : null}
     </li>
   );
 }
 
-// Last month's goal, read-only: how it landed and which steps were taken.
+// Last month's goal, read-only: how it landed, which steps were taken, and its notes.
 function LastMonthGoal({
   goal,
+  notes,
+  people,
   settled,
   carriedTitle,
   canCarry,
   canNote,
   onCarry,
   onNote,
+  onNotes,
+  onError,
 }: {
   goal: Goal;
+  notes: GoalNote[];
+  people: Profile[];
   settled: boolean;
   carriedTitle: string | null;
   canCarry: boolean;
   canNote: boolean;
   onCarry: () => void;
   onNote: (note: string | null) => void;
+  onNotes: NotesUpdate;
+  onError: (message: string) => void;
 }) {
   const outcome = goalOutcome(goal, settled);
   const { done, total } = stepsTaken(goal);
@@ -173,7 +192,12 @@ function LastMonthGoal({
           ))}
         </ul>
       ) : null}
-      {goal.progress_notes ? <p className="mt-2 text-[12.5px] text-ink-2">{goal.progress_notes}</p> : null}
+      {notes.length > 0 ? (
+        <div className="mt-2">
+          <p className={eyebrowClass}>Notes</p>
+          <GoalNotes goal={goal} notes={notes} people={people} canWrite={false} onNotes={onNotes} onError={onError} />
+        </div>
+      ) : null}
       {canNote ? (
         <div className="mt-2">
           <p className={eyebrowClass}>Why</p>
@@ -202,6 +226,59 @@ function LastMonthGoal({
   );
 }
 
+// The month's focus topic and what it means, always on the month, with the way to set a GSR of
+// the person's own from it. Their words make the goal; the explanation stays here rather than
+// being copied into a goal titled after the topic.
+function FocusTopicCard({
+  cycle,
+  focusGoal,
+  canEdit,
+  isOwn,
+  onAdd,
+}: {
+  cycle: ReviewCycle;
+  focusGoal: Goal | null;
+  canEdit: boolean;
+  isOwn: boolean;
+  onAdd: (title: string) => void;
+}) {
+  const [composing, setComposing] = useState(false);
+  const [title, setTitle] = useState("");
+  const whose = isOwn ? "your" : "their";
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const text = title.trim();
+    if (!text) return;
+    setTitle("");
+    setComposing(false);
+    onAdd(text);
+  }
+  return (
+    <div className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3">
+      <p className={eyebrowClass}>Focus topic</p>
+      <p className="mt-0.5 text-sm font-medium text-ink">{cycle.theme}</p>
+      {cycle.theme_description ? <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">{cycle.theme_description}</p> : null}
+      {focusGoal ? (
+        <p className="mt-2 text-[12.5px] text-ink-3">
+          {isOwn ? "Your" : "Their"} GSR for this topic: <span className="text-ink">{focusGoal.title}</span>
+        </p>
+      ) : !canEdit ? null : composing ? (
+        <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
+          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={`What will ${isOwn ? "you" : "they"} do this month on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
+          <Button type="submit" variant="secondary" disabled={!title.trim()}>
+            <Plus size={14} aria-hidden /> Add
+          </Button>
+          <Button variant="ghost" onClick={() => { setComposing(false); setTitle(""); }}>Cancel</Button>
+        </form>
+      ) : (
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => setComposing(true)}>
+          <Plus size={13} aria-hidden /> Set {whose} monthly GSR based on this focus topic
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function AddGoalForm({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => void }) {
   const [title, setTitle] = useState("");
   function submit(event: FormEvent) {
@@ -227,10 +304,13 @@ export default function GoalSettingPanel({
   previousCycle,
   cycles,
   goals,
+  notes,
+  people,
   roleGoals = [],
   isAdmin,
   isOwn,
   onGoals,
+  onNotes,
   onError,
   onTouched,
 }: {
@@ -241,12 +321,17 @@ export default function GoalSettingPanel({
   // rather than whichever one happens to be the previous one now.
   cycles: ReviewCycle[];
   goals: Goal[];
+  // The person's goal notes the reader may see, every goal's; each goal shows its own.
+  notes: GoalNote[];
+  // The company's people, to name who wrote each note.
+  people: Profile[];
   // The goals the person's job role brings into every month, set once in Settings. Offered
   // here until each is filed for this month; the template itself is never edited from a review.
   roleGoals?: JobRoleGoal[];
   isAdmin: boolean;
   isOwn: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
+  onNotes: NotesUpdate;
   onError: (message: string) => void;
   onTouched: () => void;
 }) {
@@ -282,9 +367,10 @@ export default function GoalSettingPanel({
   // A role goal is filed once a goal with its title is on this month's list, whoever typed it.
   const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const pendingRoleGoals = roleGoals.filter((template) => !thisCycle.some((g) => sameTitle(g.title, template.title)));
-  // The focus topic leads the month's list; everything else keeps its order.
-  const ordered = [...thisCycle].sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0));
-  const focusGoal = thisCycle.find((g) => g.kind === "focus") ?? null;
+  // Role goals first, then the focus topic, then professional, then personal (lib/gsr/goals.ts).
+  const ordered = rankGoals(thisCycle);
+  const focusGoal = ordered.find((g) => g.kind === "focus") ?? null;
+  const notesFor = (goal: Goal) => notes.filter((n) => n.goal_id === goal.id);
 
   const upsert = (goal: Goal) => onGoals((list) => (list.some((g) => g.id === goal.id) ? list.map((g) => (g.id === goal.id ? goal : g)) : [...list, goal]));
   const carriedTitle = (source: Goal) => thisCycle.find((g) => g.carried_from_goal_id === source.id)?.title ?? null;
@@ -394,7 +480,7 @@ export default function GoalSettingPanel({
           ) : (
             <ul className="divide-y divide-line">
               {lastCycle.map((goal) => (
-                <LastMonthGoal key={goal.id} goal={goal} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin || isOwn} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} />
+                <LastMonthGoal key={goal.id} goal={goal} notes={notesFor(goal)} people={people} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin || isOwn} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} onNotes={onNotes} onError={onError} />
               ))}
             </ul>
           )}
@@ -407,21 +493,17 @@ export default function GoalSettingPanel({
           title="Goals for this month"
           description={
             isOwn && !isAdmin
-              ? "Fill these in before the meeting: the goals you want this month, the steps to get there, and where things stand. You and your manager go through them together in the review. 100 marks a goal complete."
-              : "Set together in the review. The focus topic comes from the cycle theme. Progress is live; 100 marks a goal complete, and next month reads it back as a hit."
+              ? "Fill these in before the meeting: the goals you want this month, the steps to get there, and notes as you go. You and your manager agree each goal's completion in the review, and 100 marks it complete. Action steps are your checkpoints and do not count toward the score."
+              : "Set together in the review. Agreed completion is the number for each goal, and 100 marks it complete; action steps are checkpoints along the way and do not count toward the score. Next month reads each goal back as a hit or a miss."
           }
         >
-          {canEdit && !focusGoal ? (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line-strong px-4 py-3">
-              <div className="min-w-0">
-                <p className={eyebrowClass}>Focus topic</p>
-                <p className="mt-0.5 text-sm text-ink">{cycle.theme ?? "No theme on this cycle yet. Set one in the cycle details, or name the topic here."}</p>
-                {cycle.theme_description ? <p className="mt-0.5 text-[12.5px] text-ink-2">{cycle.theme_description}</p> : null}
-              </div>
-              <Button variant="secondary" size="sm" onClick={() => void add(cycle.theme ?? "Focus topic", "focus", cycle.theme_description)}>
-                <Plus size={13} aria-hidden /> Set as this month's focus topic
-              </Button>
-            </div>
+          {cycle.theme ? (
+            <FocusTopicCard cycle={cycle} focusGoal={focusGoal} canEdit={canEdit} isOwn={isOwn} onAdd={(title) => void add(title, "focus")} />
+          ) : canEdit && isAdmin ? (
+            <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
+              No focus topic for {cycle.name} yet.{" "}
+              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the month</Link>
+            </p>
           ) : null}
           {canEdit && pendingRoleGoals.length > 0 ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line-strong px-4 py-3">
@@ -443,10 +525,13 @@ export default function GoalSettingPanel({
               <GoalEditor
                 key={goal.id}
                 goal={goal}
+                notes={notesFor(goal)}
+                people={people}
                 canEdit={canEdit}
                 canTick={canEdit}
                 carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
+                onNotes={onNotes}
                 onDelete={() => setDeleting(goal)}
                 onError={onError}
                 onTouched={onTouched}
@@ -464,7 +549,7 @@ export default function GoalSettingPanel({
       {deleting ? (
         <ConfirmDialog
           title={`Delete "${deleting.title}"?`}
-          body="The goal and its action steps are removed from this review. Leave it below 100 instead to keep the miss on record."
+          body="The goal, its action steps and its notes are removed from this review. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
           error={error}

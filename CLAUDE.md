@@ -17,7 +17,7 @@ storage), deployed on Vercel.
 
 Read order for context: this file, then README.md, then supabase/migrations/ (the schema
 is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine), src/lib/gsr/goals.ts
-(the Goal Setting Review rules: progress, hit or miss, carry forward), and src/lib/gsr/deliverables.ts
+(the Goal Setting Review rules: progress, the order goals are read in, hit or miss, carry forward), and src/lib/gsr/deliverables.ts
 (the two-points-a-task rule behind the deliverables module).
 
 ## Hard rules
@@ -44,6 +44,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    back: a Rococo admin can read all three companies and the sidebar switcher changes company
    without navigating, so a stale id otherwise keeps another tenant's record on screen, live.
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
+   Private means private in the database, too: a yearly or BHAG goal's action steps live in
+   `goal_private` and its notes in `goal_notes`, which only the owner reads (0021), and a trigger
+   keeps them off the goals row admins read. Never put a person's private content on a row
+   someone else can read and hide it in the UI.
 5. **A profile is a person, not an account.** `profiles.id` is the person and is stable
    forever; `profiles.user_id` is null until they first sign in. Never assume a profile has an
    account, and find the signed-in person with `private.auth_profile_id()`, never by comparing
@@ -109,7 +113,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     systems.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
-    section a cadence belongs to (`sectionOf`), the module set on a person page and a review, and
+    section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
+    role, focus topic, professional, personal), the module set on a person page and a review, and
     `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms

@@ -1,8 +1,20 @@
-// Goal Setting Review logic, pure and tested: what a goal's progress means, how a missed goal
-// carries into the next cycle, and how one person's goals split across last cycle, this
-// cycle, and the year. Scores live in scoring.ts; this never touches them.
+// Goal Setting Review logic, pure and tested: what a goal's progress means, the order a month's
+// goals are read in, how a missed goal carries into the next cycle, and how one person's goals
+// split across last cycle, this cycle, and the year. Scores live in scoring.ts; this never
+// touches them.
 import { cycleSettled } from "./cycles.ts";
 import type { ActionStep, Goal, GoalKind, GoalStatus } from "../../types/database.ts";
+
+// The order goals are read in, on every screen that lists them: the job role's goals first, then
+// the month's focus topic, then professional goals, and personal goals last. Shared in code, so
+// every company reads its goals in the same order.
+export const GOAL_KIND_ORDER: GoalKind[] = ["role", "focus", "professional", "personal"];
+
+// A month's goals in that order; within a kind, the order they were filed in.
+export function rankGoals<T extends Pick<Goal, "kind" | "sort_order" | "created_at">>(goals: T[]): T[] {
+  const rank = (kind: GoalKind) => GOAL_KIND_ORDER.indexOf(kind);
+  return [...goals].sort((a, b) => rank(a.kind) - rank(b.kind) || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+}
 
 export type GoalOutcome = "hit" | "miss" | "open";
 
@@ -15,16 +27,18 @@ export function goalOutcome(goal: Pick<Goal, "progress" | "status">, settled: bo
 
 // Whether a goal's period is over, so goalOutcome can call an unfinished goal a miss.
 //
-// Two shapes of goal, two rules: a cycle goal settles when its cycle closes or its period ends,
-// a yearly goal when the year it belongs to is behind us. A caller that handled only the cycle
-// case treated every yearly goal as never settled, so an unfinished 2026 goal stayed on the
-// employee dashboard's open list through 2027 and beyond while My Goals printed the same goal
-// as a miss. Two screens, one goal, opposite verdicts, which is why the rule lives here now.
+// Three shapes of goal, three rules: a cycle goal settles when its cycle closes or its period
+// ends, a yearly goal when the year it belongs to is behind us, and a BHAG never: it has no year,
+// so it stays open until it is hit. A caller that handled only the cycle case treated every
+// yearly goal as never settled, so an unfinished 2026 goal stayed on the employee dashboard's
+// open list through 2027 and beyond while My Goals printed the same goal as a miss. Two screens,
+// one goal, opposite verdicts, which is why the rule lives here now.
 export function goalSettled(
   goal: Pick<Goal, "scope" | "year" | "cycle_id">,
   cycles: Array<{ id: string; status: string; period_end: string }>,
   today = new Date(),
 ): boolean {
+  if (goal.scope === "bhag") return false;
   if (goal.scope === "year") return (goal.year ?? today.getFullYear()) < today.getFullYear();
   const cycle = goal.cycle_id ? cycles.find((c) => c.id === goal.cycle_id) : undefined;
   return cycle ? cycleSettled(cycle, today) : false;
@@ -42,6 +56,15 @@ export function progressPatch(raw: number, status: GoalStatus): { progress: numb
 
 export function stepsTaken(goal: Pick<Goal, "action_steps">): { done: number; total: number } {
   return { done: goal.action_steps.filter((s) => s.done).length, total: goal.action_steps.length };
+}
+
+// The period a yearly or BHAG goal belongs to, the way the Period pulldown names it.
+export function goalPeriodLabel(goal: Pick<Goal, "scope" | "year">, thisYear = new Date().getFullYear()): string {
+  if (goal.scope === "bhag") return "BHAG (3 to 5 years)";
+  const year = goal.year ?? thisYear;
+  if (year === thisYear) return `This year (${year})`;
+  if (year === thisYear + 1) return `Next year (${year})`;
+  return String(year);
 }
 
 // A missed goal restated for the next cycle: same title, kind, and description; only the

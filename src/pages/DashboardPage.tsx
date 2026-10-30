@@ -29,7 +29,7 @@ import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore, hasScoredItem, scoreProfile } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
-import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
+import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { financialProgress, hasAccount } from "../lib/people.ts";
@@ -450,9 +450,10 @@ function EmployeeDashboard() {
   // Nothing ever writes the 'missed' status, so counting on status alone kept every unfinished
   // goal from every closed cycle on this list for good. goalSettled knows both shapes of
   // period, cycle and year, so this list and My Goals cannot reach opposite verdicts. The
-  // Goals block is the year's goals; the month's live in the GSR block.
-  const openGoals = goals.filter((goal) => goal.scope === "year" && goalOutcome(goal, goalSettled(goal, cycles)) === "open");
-  const monthGoals = gsrCycle ? goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id).sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0)) : [];
+  // Goals block is the year's goals and the BHAG; the month's live in the GSR block, read role
+  // first and personal last, the way the GSR reads them.
+  const openGoals = goals.filter((goal) => goal.scope !== "cycle" && goalOutcome(goal, goalSettled(goal, cycles)) === "open");
+  const monthGoals = gsrCycle ? rankGoals(goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id)) : [];
   const profileScore = scoreProfile(pillars, criteria, impact);
   const rated = impact.length > 0;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
@@ -578,23 +579,20 @@ function EmployeeDashboard() {
           }
         >
           {openGoals.length === 0 ? (
-            <EmptyState eyebrow="Goals" title="Set your first goal" body="Professional, personal, or role goals with the action steps to get there." />
+            <EmptyState eyebrow="Goals" title="Set your first goal" body="Goals for this year or next, or a BHAG three to five years out, with the action steps to get there." />
           ) : (
             <ul className="divide-y divide-line">
-              {openGoals.slice(0, 6).map((goal) => {
-                const steps = stepsTaken(goal);
-                return (
-                  <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-ink">{goal.title}</p>
-                      <p className="text-[12px] text-ink-3">
-                        {steps.total > 0 ? `${steps.done}/${steps.total} steps done` : "No action steps yet"}
-                      </p>
-                    </div>
-                    <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
-                  </li>
-                );
-              })}
+              {/* A yearly goal's steps sit in its private half, so the line reads the period and
+                  the completion, which is what the goal is measured by. */}
+              {openGoals.slice(0, 6).map((goal) => (
+                <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-ink">{goal.title}</p>
+                    <p className="tnum text-[12px] text-ink-3">{goalPeriodLabel(goal)} · {goal.progress}% complete</p>
+                  </div>
+                  <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
+                </li>
+              ))}
             </ul>
           )}
         </Section>

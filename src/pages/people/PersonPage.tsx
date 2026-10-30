@@ -1,7 +1,9 @@
 // One person, for an admin: the profile the review opens with (position, hire date,
 // department, who they report to, their job role), their compensation table, this year's KPIs
-// and their own financial figures, every review with its score, and their goals (editable, so
-// a manager can set goals in a one-on-one).
+// and their own financial figures, every review with its score, and their goals for this year,
+// next year and their BHAG (editable, so a manager can set goals in a one-on-one). A goal's
+// action steps and progress notes are the person's own and never show here; the month's goals
+// live in the GSR.
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -380,7 +382,7 @@ export default function PersonPage() {
           ) : null}
           <div>
             <p className="eyebrow mb-3">Goals</p>
-            <GoalsPanel companyId={companyId} employeeId={person.id} canEdit cycles={cycles} />
+            <GoalsPanel companyId={companyId} employeeId={person.id} canEdit ownerName={displayName(person).split(" ")[0]} />
           </div>
         </div>
       </div>
