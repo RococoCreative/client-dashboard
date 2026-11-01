@@ -13,6 +13,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import ScoreBar from "../components/ui/ScoreBar.tsx";
 import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
+import GsrQuarterLine from "../components/gsr/GsrQuarterLine.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import { SkeletonCard, SkeletonRows } from "../components/ui/Skeleton.tsx";
 import { CAMPAIGN_STATUS_TONE, GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
@@ -27,9 +28,9 @@ import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
-import { averageScore, computeReviewScore, hasScoredItem, scoreProfile } from "../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
-import { goalOutcome, goalSettled, stepsTaken } from "../lib/gsr/goals.ts";
+import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { financialProgress, hasAccount } from "../lib/people.ts";
@@ -180,7 +181,7 @@ function AdminDashboard() {
   const notInvited = activePeople.filter((p) => !hasAccount(p)).length;
   const scored = reviews.map((r) => {
     const own = scores.filter((s) => s.review_id === r.id);
-    return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillars, own).overall : null };
+    return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, pillars), own).overall : null };
   });
   // Every live cycle owes a review for everybody active, so a tile adds the per-cycle fractions
   // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are
@@ -436,13 +437,13 @@ function EmployeeDashboard() {
     const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
     const gsrCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
-    return { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
+    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
+  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
   const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
   const cycle = featured?.cycle ?? null;
   const result = featured?.result ?? null;
@@ -450,11 +451,18 @@ function EmployeeDashboard() {
   // Nothing ever writes the 'missed' status, so counting on status alone kept every unfinished
   // goal from every closed cycle on this list for good. goalSettled knows both shapes of
   // period, cycle and year, so this list and My Goals cannot reach opposite verdicts. The
-  // Goals block is the year's goals; the month's live in the GSR block.
-  const openGoals = goals.filter((goal) => goal.scope === "year" && goalOutcome(goal, goalSettled(goal, cycles)) === "open");
-  const monthGoals = gsrCycle ? goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id).sort((a, b) => (a.kind === "focus" ? -1 : b.kind === "focus" ? 1 : 0)) : [];
+  // Goals block is the year's goals and the BHAG; the month's live in the GSR block, read role
+  // first and personal last, the way the GSR reads them.
+  const openGoals = goals.filter((goal) => goal.scope !== "cycle" && goalOutcome(goal, goalSettled(goal, cycles)) === "open");
+  const monthGoals = gsrCycle ? rankGoals(goals.filter((g) => g.scope === "cycle" && g.cycle_id === gsrCycle.id)) : [];
   const profileScore = scoreProfile(pillars, criteria, impact);
   const rated = impact.length > 0;
+  // For a company that scores its GSRs: where this quarter's locked-in months stand. The impact
+  // score above it stays the ratings, as it always has; the months reach the score of record at
+  // sign-off, and only once an admin has locked each one in.
+  const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
+  const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
   const moves = criteria
@@ -504,6 +512,7 @@ function EmployeeDashboard() {
             ) : (
               <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
             )}
+            {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
           </Section>
         ) : null}
 
@@ -534,7 +543,8 @@ function EmployeeDashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-ink">{goal.title}</p>
                       <p className="text-[12px] text-ink-3">
-                        {goal.kind === "focus" ? "Focus topic" : GOAL_KIND_LABELS[goal.kind]}
+                        {goal.is_focus ? "Focus topic GSR · " : ""}
+                        {GOAL_KIND_LABELS[goal.kind]}
                         {steps.total > 0 ? ` · ${steps.done}/${steps.total} steps done` : ""}
                       </p>
                     </div>
@@ -578,23 +588,20 @@ function EmployeeDashboard() {
           }
         >
           {openGoals.length === 0 ? (
-            <EmptyState eyebrow="Goals" title="Set your first goal" body="Professional, personal, or role goals with the action steps to get there." />
+            <EmptyState eyebrow="Goals" title="Set your first goal" body="Goals for this year or next, or a BHAG three to five years out, with the action steps to get there." />
           ) : (
             <ul className="divide-y divide-line">
-              {openGoals.slice(0, 6).map((goal) => {
-                const steps = stepsTaken(goal);
-                return (
-                  <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-ink">{goal.title}</p>
-                      <p className="text-[12px] text-ink-3">
-                        {steps.total > 0 ? `${steps.done}/${steps.total} steps done` : "No action steps yet"}
-                      </p>
-                    </div>
-                    <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
-                  </li>
-                );
-              })}
+              {/* A yearly goal's steps sit in its private half, so the line reads the period and
+                  the completion, which is what the goal is measured by. */}
+              {openGoals.slice(0, 6).map((goal) => (
+                <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-ink">{goal.title}</p>
+                    <p className="tnum text-[12px] text-ink-3">{goalPeriodLabel(goal)} · {goal.progress}% complete</p>
+                  </div>
+                  <Badge tone={GOAL_STATUS_TONE[goal.status]}>{GOAL_STATUS_LABELS[goal.status]}</Badge>
+                </li>
+              ))}
             </ul>
           )}
         </Section>

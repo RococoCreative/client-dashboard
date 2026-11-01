@@ -69,6 +69,19 @@ describe("review history", () => {
     expect(previousCompletedReview([])).toBeNull();
   });
 
+  it("scores a signed-off review with the pillars it was signed off with, after a re-weight", () => {
+    const signedOff = {
+      ...review("r-signed", "Q3 2026", "complete", "2026-10-01T00:00:00Z"),
+      pillar_snapshot: [{ id: "p1", name: "Deliverables", weight: 100, scoring_type: "rating", rating_scale_max: 5, required_goals: 2 }],
+    } as Review;
+    const reweighted = [
+      { ...pillars[0], weight: 50 },
+      { id: "p2", name: "Monthly GSRs", weight: 50, scoring_type: "gsr_goals", sort_order: 2 } as GsrPillar,
+    ];
+    const [row] = reviewHistory([signedOff], cycles, reweighted, [score("r-signed")]);
+    expect(row.result?.overall).toBe(80);
+  });
+
   it("has no scored review to find when nothing has been scored", () => {
     expect(latestScoredReview(reviewHistory(reviews, cycles, pillars, []))).toBeNull();
     expect(latestScoredReview([])).toBeNull();

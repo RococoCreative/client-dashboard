@@ -1,8 +1,8 @@
 // One person's review for one cycle, in one of two shapes.
 //
-// A monthly cycle is a Goal Setting Review and only that: the employee snapshot, then goals
-// set live with action steps, progress and notes, last month read back as hit or miss, and
-// the yearly goals alongside. No pillar scoring and no written feedback, because the meeting
+// A monthly cycle is a Goal Setting Review and only that: goals set live with an agreed
+// completion, action steps and a dated notes log, the month's focus topic at the top, and last
+// month read back as hit or miss. No pillar scoring and no written feedback, because the meeting
 // is the goals and the notes on them.
 //
 // Quarterly, annual and custom cycles are the scoring review: ratings per criterion for rating
@@ -38,13 +38,13 @@ import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/statu
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
-import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
+import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycles, listEmployeeReviews, listGoalNotes, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals } from "../../services/jobRoles.ts";
-import { computeReviewScore , countCriteria, hasScoredItem, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
+import { computeReviewScore , countCriteria, hasScoredItem, pillarsForReview, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
-import { goalOutcome, hitCount } from "../../lib/gsr/goals.ts";
+import { goalOutcome, hitCount, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
 import {
@@ -54,11 +54,56 @@ import {
   type GsrCriterion,
   type GsrPillar,
   type PreviousStatus,
+  type ReviewCycle,
   type ReviewScore,
 } from "../../types/database.ts";
 
 // Table headers must stay table-cells: the shared label class sets display:block.
 const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
+
+// A Monthly GSRs pillar on a scored review: each Goal Setting Review inside the period, counted at
+// the score an admin locked it in at, and not before; after sign-off, the figure the review was
+// signed off with. The month figures come from lib/gsr/goals.ts and the pillar's score from
+// scoring.ts, like every pillar.
+function GsrPillarBody({
+  figure,
+  signedOff,
+}: {
+  figure: GsrMonthsFigure<ReviewCycle> | null;
+  // Once the review is complete, the line item written at sign-off (null if none was); undefined
+  // while it is open, when the months read live.
+  signedOff: ReviewScore | null | undefined;
+}) {
+  if (signedOff !== undefined) {
+    if (!signedOff?.target) return <p className="text-sm text-ink-2">No month inside this period was locked in when it was signed off, so this pillar scored zero.</p>;
+    const months = Math.round(signedOff.target / 100);
+    return <p className="text-sm text-ink-2">{Math.round(((signedOff.actual ?? 0) / signedOff.target) * 100)}% across {pluralize(months, "locked-in month")} of GSRs, as signed off.</p>;
+  }
+  if (!figure || figure.months.length === 0) {
+    return <p className="text-sm text-ink-2">No Goal Setting Review has run inside this period yet, so there is nothing to score here.</p>;
+  }
+  const lockedCount = figure.months.filter((m) => m.locked !== null).length;
+  return (
+    <div>
+      <ul className="divide-y divide-line">
+        {figure.months.map(({ cycle, locked, live }) => (
+          <li key={cycle.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+            <div className="min-w-0">
+              <p className="text-sm text-ink">{cycle.name}</p>
+              <p className="tnum text-[12px] text-ink-3">{locked !== null ? "Locked in" : `Not locked in yet, ${live}% so far; it counts once its GSR is marked complete`}</p>
+            </div>
+            <span className={`tnum text-sm ${locked !== null ? "text-ink" : "text-ink-3"}`}>{locked !== null ? `${locked}%` : "-"}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">
+        {lockedCount === 0
+          ? "No month in this period is locked in yet. A month counts once an admin marks its GSR complete, and this review signs off whichever are locked by then."
+          : `${Math.round((figure.actual / figure.target) * 100)}% across ${pluralize(lockedCount, "locked-in month")}. Each locked month counts equally; a month that is not locked in yet is not applied. Frozen into this review when it is marked complete.`}
+      </p>
+    </div>
+  );
+}
 
 // Mounted by the router with the id in the URL, and by My GSR with the id as a prop so the
 // employee's own month renders under their own sidebar entry and tabs. Embedded, it has no back
@@ -76,6 +121,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const [removeError, setRemoveError] = useState("");
   // The deliverables module's figure for the year, reported by the panel below once loaded.
   const [rollup, setRollup] = useState<DeliverableScore | null>(null);
+  // Locking a month's GSR in is confirmed first, with the score it will lock in at.
+  const [locking, setLocking] = useState(false);
 
   // A criterion can have two saves in flight at once: blurring a note commits it as the rating
   // beside it is clicked. Both would read the same render-time scores array, both would see
@@ -100,7 +147,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     ]);
     const year = cycleYear(cycle);
     const person = people.find((p) => p.id === review.employee_id) ?? null;
-    const [kpis, companyGoals, impact, personReviews, roleGoals] = await Promise.all([
+    const [kpis, companyGoals, impact, personReviews, roleGoals, notes] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
@@ -108,14 +155,17 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       listEmployeeReviews(review.employee_id),
       // The goals their job role brings into a Goal Setting Review; nothing for a scored cycle.
       cycle.cadence === "monthly" && person?.job_role_id ? listJobRoleGoals(review.company_id, person.job_role_id) : Promise.resolve([]),
+      // The month's notes logs. The database hands an admin only the notes on monthly goals; the
+      // person gets all of theirs, and the panel shows each goal its own.
+      cycle.cadence === "monthly" ? listGoalNotes(review.company_id, review.employee_id) : Promise.resolve([]),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, year };
   }, [reviewId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -128,28 +178,57 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // A scored review reads back the Goal Setting Reviews that ran inside its period: each
   // month's goals, hit or miss, and a link to the month. The reviewer's own previous-period
   // judgment stays where it is; this is the record beside it.
+  // A Monthly GSRs pillar is scored from those same months, each at the score an admin locked it
+  // in at; sign-off writes the period's figure as one line item (lib/gsr/goals.ts).
+  const gsrPillars = pillars.filter((p) => p.scoring_type === "gsr_goals" && p.is_active);
+  const gsrFigures = new Map(monthly ? [] : gsrPillars.map((p) => [p.id, scoreGsrMonths(cycle, cycles, goals, personReviews, p.required_goals)] as const));
   const months = monthly
     ? []
     : monthsWithin(cycle, cycles).map((month) => {
         const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === month.id);
         const gsr = personReviews.find((r) => r.cycle_id === month.id) ?? null;
-        return { month, gsr, tally: hitCount(own, cycleSettled(month)), open: own.filter((g) => goalOutcome(g, cycleSettled(month)) === "open").length };
+        const score = gsrPillars[0] ? (monthLocked(gsr) ? `GSR ${gsr?.gsr_score}%` : `GSR ${scoreMonth(own, gsrPillars[0].required_goals)}% so far, not locked in`) : null;
+        return { month, gsr, score, tally: hitCount(own, cycleSettled(month)), open: own.filter((g) => goalOutcome(g, cycleSettled(month)) === "open").length };
       });
+  // Marking a month's GSR complete locks its score in, where the company scores its GSRs (0023).
+  const monthGoals = monthly ? goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id) : [];
+  const monthScore = monthly && gsrPillars[0] ? { ...monthTotal(monthGoals, gsrPillars[0].required_goals), score: scoreMonth(monthGoals, gsrPillars[0].required_goals) } : null;
   const frozen = review.status === "complete";
   const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
   // What scores this review right now. Frozen rows once it is complete; before that the
   // person's current impact ratings for the rating pillars, the typed line items for a
-  // 'deliverables' pillar, and the module's live rollup for a 'deliverables_module' pillar. The
-  // rollup arrives from the panel above once it has loaded.
+  // 'deliverables' pillar, the module's live rollup for a 'deliverables_module' pillar, and the
+  // months' live figure for a 'gsr_goals' pillar. The rollup arrives from the panel above once it
+  // has loaded. A completed review is scored with the pillars it was signed off with.
   const modulePillars = pillars.filter((p) => p.scoring_type === "deliverables_module" && p.is_active);
+  const signedOffLater = (pillarId: string) => modulePillars.some((p) => p.id === pillarId) || gsrPillars.some((p) => p.id === pillarId);
   const liveScores: ScoreInput[] = frozen
     ? scores
     : [
-        ...scores.filter((s) => !modulePillars.some((p) => p.id === s.pillar_id)),
+        ...scores.filter((s) => !signedOffLater(s.pillar_id)),
         ...(rollup && rollup.target > 0 ? modulePillars.map((p) => ({ pillar_id: p.id, criterion_id: null, target: rollup.target, actual: rollup.actual })) : []),
+        ...gsrPillars.flatMap((p) => {
+          const figure = gsrFigures.get(p.id);
+          return figure && figure.target > 0 ? [{ pillar_id: p.id, criterion_id: null, target: figure.target, actual: figure.actual }] : [];
+        }),
       ];
   const inputs = scoreInputsForReview(review, liveScores, impact, criteria);
-  const result = computeReviewScore(pillars, inputs, countCriteria(criteria));
+  const result = computeReviewScore(pillarsForReview(review, pillars), inputs, countCriteria(criteria));
+  // The sections a completed review shows are the pillars it was signed off with, described the
+  // way the live pillar is where it still exists; an open review shows today's.
+  const shownPillars: GsrPillar[] =
+    frozen && review.pillar_snapshot
+      ? review.pillar_snapshot.map((snap, i) => ({
+          description: null,
+          company_id: review.company_id,
+          sort_order: i,
+          is_active: true,
+          created_at: review.completed_at ?? review.updated_at,
+          updated_at: review.completed_at ?? review.updated_at,
+          ...pillars.find((p) => p.id === snap.id),
+          ...snap,
+        }))
+      : pillars;
   // Sign-off writes the module's figure as a line item, so it needs the figure in hand.
   const awaitingRollup = !frozen && modulePillars.length > 0 && rollup === null;
 
@@ -282,7 +361,20 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         if (existing) await updateScore(existing.id, line);
         else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
       }
-      await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id });
+      // The months' figure, the same way: one line item, so a slider moved after sign-off moves
+      // nothing on the review.
+      for (const pillar of gsrPillars) {
+        const figure = gsrFigures.get(pillar.id);
+        if (!figure || figure.target === 0) continue;
+        const line = { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual };
+        const existing = scores.find((s) => s.pillar_id === pillar.id && !s.criterion_id);
+        if (existing) await updateScore(existing.id, line);
+        else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
+      }
+      // A month's GSR is locked in with its score, worked out from the month's goals as they stand
+      // after the meeting's last adjustments.
+      await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id, ...(monthScore ? { gsr_score: monthScore.score } : {}) });
+      setLocking(false);
       state.reload();
     } catch (err) {
       setError(errorMessage(err));
@@ -318,7 +410,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 <RotateCcw size={14} aria-hidden /> Reopen
               </Button>
             ) : (
-              <Button size="sm" disabled={busy || cycle.status !== "open" || awaitingRollup} onClick={() => void markComplete()}>
+              <Button size="sm" disabled={busy || cycle.status !== "open" || awaitingRollup} onClick={() => (monthScore ? setLocking(true) : void markComplete())}>
                 <CheckCircle2 size={14} aria-hidden /> Mark complete
               </Button>
             )
@@ -328,7 +420,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {cycle.theme ? (
+      {/* A monthly GSR carries its theme as the focus topic card beside the goals, so the banner
+          is only for the scored cycles, which have no such card. */}
+      {cycle.theme && !monthly ? (
         <Notice tone="info" className="mb-6">
           <b>Theme for this cycle: {cycle.theme}.</b> {cycle.theme_description ?? ""}
         </Notice>
@@ -368,9 +462,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           eyebrow={String(year)}
           title="Yearly goals"
           className="mb-6"
-          description="Personal and professional goals for the year, tracked on the profile and on every quarterly and annual review."
+          description="Goals for this year and next, and the BHAG, tracked on the profile and on every quarterly and annual review."
         >
-          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} cycles={cycles} scope="year" />
+          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} ownerName={displayName(employee).split(" ")[0]} />
         </Section>
       ) : null}
 
@@ -382,10 +476,14 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             previousCycle={lastMonth}
             cycles={cycles}
             goals={goals}
+            notes={notes}
+            people={people}
             roleGoals={roleGoals}
             isAdmin={isAdmin}
             isOwn={isOwn}
+            gsrRequired={gsrPillars[0]?.required_goals ?? null}
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
+            onNotes={(update) => state.setData((prev) => (prev ? { ...prev, notes: update(prev.notes) } : prev))}
             onError={setError}
             onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
           />
@@ -406,10 +504,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 {result.pillars.map((p) => (
                   <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
                 ))}
-                {pillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
+                {shownPillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
               </div>
             </div>
-            {result.weightTotal !== 100 && pillars.length > 0 ? (
+            {result.weightTotal !== 100 && shownPillars.length > 0 ? (
               <p className="mt-3 text-[12px] text-warning">Pillar weights total {formatNumber(result.weightTotal)}%, not 100%. Scores are normalized; fix this in GSR settings.</p>
             ) : null}
           </Section>
@@ -419,12 +517,13 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               <p className="text-sm text-ink-2">No Goal Setting Review ran inside this period.</p>
             ) : (
               <ul className="divide-y divide-line">
-                {months.map(({ month, gsr, tally, open }) => (
+                {months.map(({ month, gsr, score, tally, open }) => (
                   <li key={month.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm text-ink">{month.name}</p>
                       <p className="tnum text-[12px] text-ink-3">
                         {tally.total === 0 ? "No goals set" : `${tally.hit} of ${pluralize(tally.total, "goal")} hit${open > 0 ? `, ${open} still open` : ""}`}
+                        {score !== null ? ` · ${score}` : ""}
                       </p>
                     </div>
                     {gsr ? (
@@ -440,7 +539,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           </div>
 
           <div className="space-y-6 lg:col-span-2">
-            {pillars.map((pillar) => {
+            {shownPillars.map((pillar) => {
               const pillarCriteria = criteria.filter((c) => c.pillar_id === pillar.id);
               const lineItems = scores
                 .filter((s) => s.pillar_id === pillar.id && !s.criterion_id)
@@ -458,7 +557,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     </span>
                   }
                 >
-                  {pillar.scoring_type === "rating" ? (
+                  {pillar.scoring_type === "gsr_goals" ? (
+                    <GsrPillarBody figure={gsrFigures.get(pillar.id) ?? null} signedOff={frozen ? (lineItems[0] ?? null) : undefined} />
+                  ) : pillar.scoring_type === "rating" ? (
                     pillarCriteria.length === 0 ? (
                       <p className="text-sm text-ink-2">No criteria defined for this pillar yet. Add them in GSR settings.</p>
                     ) : (
@@ -571,7 +672,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                           </table>
                         </div>
                       )}
-                      {canScore && pillar.scoring_type !== "deliverables_module" ? (
+                      {canScore && pillar.scoring_type === "deliverables" ? (
                         <Button variant="secondary" size="sm" className="mt-3" onClick={() => void addLineItem(pillar)}>
                           <Plus size={14} aria-hidden /> Add deliverable
                         </Button>
@@ -631,6 +732,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         </div>
       )}
 
+      {locking && monthScore ? (
+        <ConfirmDialog
+          title={`Lock in ${employee ? displayName(employee).split(" ")[0] : "this"}'s ${cycle.name} GSR at ${monthScore.score}%?`}
+          body={`The month's goals add up to ${monthScore.total}% of ${monthScore.cap}%. Marking it complete locks that score in, with the month's goals and notes, and it counts in the next scored review. Reopen the review to change it.`}
+          confirmLabel="Mark complete and lock in"
+          tone="primary"
+          busy={busy}
+          error={error}
+          onConfirm={() => void markComplete()}
+          onCancel={() => { setLocking(false); setError(""); }}
+        />
+      ) : null}
       {removing ? (
         <ConfirmDialog
           title={removing.label ? `Remove "${removing.label}"?` : "Remove this deliverable?"}

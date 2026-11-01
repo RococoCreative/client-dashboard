@@ -4,19 +4,19 @@
 // behalf of a chosen company), and child rows are re-stamped by database triggers so a
 // score can never land under the wrong company.
 import { db } from "./supabase.ts";
-import type { ActionStep, CompanyGoal, Goal, GoalKind, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
+import type { ActionStep, CompanyGoal, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
 const PILLAR_COLUMNS =
-  "id, company_id, name, description, weight, scoring_type, rating_scale_max, sort_order, is_active, created_at, updated_at";
+  "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
 const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_order, is_active, created_at, updated_at";
 const CYCLE_COLUMNS =
   "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
-  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, created_at, updated_at";
+  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, created_at, updated_at";
 const SCORE_COLUMNS =
   "id, review_id, company_id, pillar_id, criterion_id, label, rating, target, actual, notes, sort_order, created_at, updated_at";
 const GOAL_COLUMNS =
-  "id, company_id, employee_id, cycle_id, kind, title, description, status, action_steps, progress_notes, progress, scope, year, carried_from_goal_id, outcome_note, sort_order, created_by, created_at, updated_at";
+  "id, company_id, employee_id, cycle_id, kind, is_focus, title, description, status, action_steps, progress, scope, year, carried_from_goal_id, outcome_note, sort_order, created_by, created_at, updated_at";
 const COMPANY_GOAL_COLUMNS =
   "id, company_id, year, name, target_display, current_display, target_numeric, current_numeric, is_hit, sort_order, created_at, updated_at";
 
@@ -31,7 +31,7 @@ export async function listPillars(companyId: string, includeInactive = false): P
 }
 
 export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> &
-  Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "sort_order" | "is_active">>;
+  Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "required_goals" | "sort_order" | "is_active">>;
 
 export async function createPillar(input: PillarInput): Promise<GsrPillar> {
   const { data, error } = await db().from("gsr_pillars").insert(input).select(PILLAR_COLUMNS).single();
@@ -182,6 +182,7 @@ export type ReviewPatch = Partial<
     | "employee_reflection"
     | "reviewer_id"
     | "completed_at"
+    | "gsr_score"
   >
 >;
 
@@ -252,19 +253,25 @@ export async function listGoals(companyId: string, employeeId?: string): Promise
   return ((data as Goal[]) ?? []).map(normalizeGoal);
 }
 
-// action_steps is jsonb; guard against hand-edited rows so the UI never sees a non-array.
+// Action steps are jsonb, on a monthly goal and in a yearly goal's private row alike; guard
+// against hand-edited rows so the UI never sees a non-array.
+function normalizeSteps(raw: unknown): ActionStep[] {
+  const steps = Array.isArray(raw) ? raw : [];
+  return steps
+    .filter((s): s is ActionStep => typeof s === "object" && s !== null && "text" in s)
+    .map((s) => ({ text: String(s.text ?? ""), done: Boolean(s.done) }));
+}
+
 function normalizeGoal(goal: Goal): Goal {
-  const steps = Array.isArray(goal.action_steps) ? goal.action_steps : [];
   return {
     ...goal,
     progress: Math.min(100, Math.max(0, Number(goal.progress ?? 0))),
-    scope: goal.scope === "year" ? "year" : "cycle",
+    scope: goal.scope === "year" || goal.scope === "bhag" ? goal.scope : "cycle",
+    is_focus: Boolean(goal.is_focus),
     year: goal.year ?? null,
     carried_from_goal_id: goal.carried_from_goal_id ?? null,
     outcome_note: goal.outcome_note ?? null,
-    action_steps: steps
-      .filter((s): s is ActionStep => typeof s === "object" && s !== null && "text" in s)
-      .map((s) => ({ text: String(s.text ?? ""), done: Boolean(s.done) })),
+    action_steps: normalizeSteps(goal.action_steps),
   };
 }
 
@@ -273,11 +280,11 @@ export type GoalInput = {
   employee_id: string;
   title: string;
   kind: GoalKind;
+  is_focus?: boolean;
   cycle_id?: string | null;
   description?: string | null;
   status?: GoalStatus;
   action_steps?: ActionStep[];
-  progress_notes?: string | null;
   progress?: number;
   scope?: GoalScope;
   year?: number | null;
@@ -301,6 +308,72 @@ export async function updateGoal(id: string, patch: Partial<Omit<GoalInput, "com
 export async function deleteGoal(id: string): Promise<void> {
   const { error } = await db().from("goals").delete().eq("id", id);
   if (error) throw error;
+}
+
+// Goal notes: dated entries in a goal's log. Who reads which is the database's call (0021): the
+// person reads all of theirs, an admin only those on a monthly GSR goal. The trigger stamps the
+// company, the person, the author and the date from the goal and the session, whatever is sent;
+// the caller passes them anyway, the way every insert here passes company_id.
+const GOAL_NOTE_COLUMNS = "id, goal_id, company_id, employee_id, author_id, body, created_at, updated_at";
+
+export async function listGoalNotes(companyId: string, employeeId: string): Promise<GoalNote[]> {
+  const { data, error } = await db()
+    .from("goal_notes")
+    .select(GOAL_NOTE_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("employee_id", employeeId)
+    .order("created_at")
+    .order("id");
+  if (error) throw error;
+  return (data as GoalNote[]) ?? [];
+}
+
+export type GoalNoteInput = { goal_id: string; company_id: string; employee_id: string; author_id: string; body: string };
+
+export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
+  const { data, error } = await db().from("goal_notes").insert(input).select(GOAL_NOTE_COLUMNS).single();
+  if (error) throw error;
+  return data as GoalNote;
+}
+
+export async function updateGoalNote(id: string, body: string): Promise<GoalNote> {
+  const { data, error } = await db().from("goal_notes").update({ body }).eq("id", id).select(GOAL_NOTE_COLUMNS).single();
+  if (error) throw error;
+  return data as GoalNote;
+}
+
+export async function deleteGoalNote(id: string): Promise<void> {
+  const { error } = await db().from("goal_notes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// A yearly or BHAG goal's private half: its action steps, which only the owner can read or write.
+// Anyone else asking gets no rows back, so callers only ask for the signed-in person's own.
+const GOAL_PRIVATE_COLUMNS = "goal_id, company_id, employee_id, action_steps, created_at, updated_at";
+
+function normalizeGoalPrivate(row: GoalPrivate): GoalPrivate {
+  return { ...row, action_steps: normalizeSteps(row.action_steps) };
+}
+
+export async function listGoalPrivate(companyId: string, employeeId: string): Promise<GoalPrivate[]> {
+  const { data, error } = await db()
+    .from("goal_private")
+    .select(GOAL_PRIVATE_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("employee_id", employeeId);
+  if (error) throw error;
+  return ((data as GoalPrivate[]) ?? []).map(normalizeGoalPrivate);
+}
+
+// One row per goal, written whole, the way a monthly goal's steps are.
+export async function saveGoalSteps(input: { goal_id: string; company_id: string; employee_id: string; action_steps: ActionStep[] }): Promise<GoalPrivate> {
+  const { data, error } = await db()
+    .from("goal_private")
+    .upsert(input, { onConflict: "goal_id" })
+    .select(GOAL_PRIVATE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return normalizeGoalPrivate(data as GoalPrivate);
 }
 
 // Company goals ------------------------------------------------------------------------------

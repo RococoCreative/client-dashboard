@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -135,6 +135,8 @@ export interface CompanyBundle {
   financials: EmployeeFinancial[];
   connections: CompanyConnection[];
   goals: Goal[];
+  goalNotes: GoalNote[];
+  goalPrivate: GoalPrivate[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
   deliverableCategories: DeliverableCategory[];
@@ -211,11 +213,14 @@ function build(company: Company): CompanyBundle {
     weight: pillar.weight,
     scoring_type: pillar.type,
     rating_scale_max: 5,
+    required_goals: 2,
     sort_order: i + 1,
     is_active: true,
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
+  // What a completed review keeps of them, the way the database writes it at sign-off (0022).
+  const signedOffWith = pillars.map(({ id, name, weight, scoring_type, rating_scale_max, required_goals }) => ({ id, name, weight, scoring_type, rating_scale_max, required_goals }));
 
   const criteria: GsrCriterion[] = spec.pillars.flatMap((pillar, i) =>
     pillar.criteria.map((name, j) => ({
@@ -346,6 +351,8 @@ function build(company: Company): CompanyBundle {
       employee_reflection: i === 0 ? "Communication with the trades improved once we moved the huddle to 6:45." : null,
       reviewer_id: profiles[0].id,
       completed_at: i === 1 ? NOW : null,
+      pillar_snapshot: i === 1 ? signedOffWith : null,
+      gsr_score: null,
       created_at: NOW,
       updated_at: NOW,
     };
@@ -364,6 +371,8 @@ function build(company: Company): CompanyBundle {
       client_feedback: null,
       employee_reflection: null,
       completed_at: EARLIER,
+      pillar_snapshot: signedOffWith,
+      gsr_score: null,
       created_at: EARLIER,
       updated_at: EARLIER,
     };
@@ -425,6 +434,7 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
           kind: "professional",
+          is_focus: false,
           title: "Run the weekly client update without prompting",
           description: "Every active client gets a Friday summary: progress, next week, decisions needed.",
           status: "in_progress",
@@ -433,7 +443,6 @@ function build(company: Company): CompanyBundle {
             { text: "Send three Fridays in a row", done: true },
             { text: "Ask two clients how it landed", done: false },
           ],
-          progress_notes: "Two of three done. Third Friday is this week.",
           progress: 65,
           scope: "cycle",
           year: null,
@@ -450,14 +459,11 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: null,
           kind: "professional",
+          is_focus: false,
           title: "Get the OSHA 30 certification",
           description: null,
           status: "in_progress",
-          action_steps: [
-            { text: "Register for the course", done: true },
-            { text: "Finish modules 1 to 15", done: false },
-          ],
-          progress_notes: null,
+          action_steps: [],
           progress: 40,
           scope: "year",
           year: 2026,
@@ -474,11 +480,11 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: null,
           kind: "personal",
+          is_focus: false,
           title: "Coach the kids' fall soccer season",
           description: null,
           status: "not_started",
           action_steps: [],
-          progress_notes: null,
           progress: 0,
           scope: "year",
           year: 2026,
@@ -495,6 +501,7 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
           kind: "professional",
+          is_focus: false,
           title: "Close out the punch list within five days",
           description: null,
           status: "achieved",
@@ -502,7 +509,6 @@ function build(company: Company): CompanyBundle {
             { text: "Walk the list with the client", done: true },
             { text: "Schedule the trades the same day", done: true },
           ],
-          progress_notes: "Four days on both closings.",
           progress: 100,
           scope: "cycle",
           year: null,
@@ -519,6 +525,7 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
           kind: "professional",
+          is_focus: false,
           title: "Send the Friday client update every week",
           description: null,
           status: "in_progress",
@@ -526,7 +533,6 @@ function build(company: Company): CompanyBundle {
             { text: "Draft the summary template", done: true },
             { text: "Send three Fridays in a row", done: false },
           ],
-          progress_notes: "Two of four Fridays.",
           progress: 50,
           scope: "cycle",
           year: null,
@@ -543,6 +549,7 @@ function build(company: Company): CompanyBundle {
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
           kind: "role",
+          is_focus: false,
           title: "Finish OSHA modules 1 to 10",
           description: null,
           status: "in_progress",
@@ -551,7 +558,6 @@ function build(company: Company): CompanyBundle {
             { text: "Modules 1 to 5", done: true },
             { text: "Modules 6 to 10", done: false },
           ],
-          progress_notes: null,
           progress: 30,
           scope: "cycle",
           year: null,
@@ -567,7 +573,8 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
-          kind: "focus",
+          kind: "professional",
+          is_focus: true,
           title: "Core value: Integrity",
           description: "Say what you will do, do what you said, and speak up early when something slips.",
           status: "in_progress",
@@ -575,7 +582,6 @@ function build(company: Company): CompanyBundle {
             { text: "Own one slipped date out loud in the Monday huddle", done: false },
             { text: "Send the revised schedule the same day", done: false },
           ],
-          progress_notes: null,
           progress: 20,
           scope: "cycle",
           year: null,
@@ -591,7 +597,8 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
-          kind: "focus",
+          kind: "professional",
+          is_focus: true,
           title: "Safety documentation",
           description: "Every crew logs the daily walk with photos.",
           status: "achieved",
@@ -599,7 +606,6 @@ function build(company: Company): CompanyBundle {
             { text: "Walk the checklist with each lead", done: true },
             { text: "Spot check two logs a week", done: true },
           ],
-          progress_notes: null,
           progress: 100,
           scope: "cycle",
           year: null,
@@ -607,6 +613,54 @@ function build(company: Company): CompanyBundle {
           outcome_note: "Every crew logged daily. Two misses in week one, none after.",
           sort_order: 0,
           created_by: profiles[0].id,
+          created_at: EARLIER,
+          updated_at: EARLIER,
+        },
+        {
+          id: p("goal-9"),
+          company_id: company.id,
+          employee_id: employees[0].id,
+          cycle_id: null,
+          kind: "professional",
+          is_focus: false,
+          title: "Lead a project from bid to closeout",
+          description: "Own one job end to end: the estimate, the schedule, the client, the punch list.",
+          status: "in_progress",
+          action_steps: [],
+          progress: 10,
+          scope: "bhag",
+          year: null,
+          carried_from_goal_id: null,
+          outcome_note: null,
+          sort_order: 3,
+          created_by: employees[0].id,
+          created_at: EARLIER,
+          updated_at: EARLIER,
+        },
+      ]
+    : [];
+  // The notes logs on those goals: the month's, which the review reads, and one on a yearly goal,
+  // which only its owner reads. The carried note from before 0021 has no author.
+  const goalNotes: GoalNote[] = employees.length
+    ? [
+        { id: p("goal-note-1"), goal_id: p("goal-1"), company_id: company.id, employee_id: employees[0].id, author_id: employees[0].id, body: "Two of three done. Third Friday is this week.", created_at: "2026-09-08T16:00:00.000Z", updated_at: "2026-09-08T16:00:00.000Z" },
+        { id: p("goal-note-2"), goal_id: p("goal-1"), company_id: company.id, employee_id: employees[0].id, author_id: profiles[0].id, body: "Agreed in the meeting: the third update goes to the Hale project.", created_at: "2026-09-12T15:00:00.000Z", updated_at: "2026-09-12T15:00:00.000Z" },
+        { id: p("goal-note-3"), goal_id: p("goal-4"), company_id: company.id, employee_id: employees[0].id, author_id: null, body: "Four days on both closings.", created_at: EARLIER, updated_at: EARLIER },
+        { id: p("goal-note-4"), goal_id: p("goal-5"), company_id: company.id, employee_id: employees[0].id, author_id: profiles[0].id, body: "Two of four Fridays.", created_at: EARLIER, updated_at: EARLIER },
+        { id: p("goal-note-5"), goal_id: p("goal-2"), company_id: company.id, employee_id: employees[0].id, author_id: employees[0].id, body: "Booked the exam for November.", created_at: "2026-09-05T14:00:00.000Z", updated_at: "2026-09-05T14:00:00.000Z" },
+      ]
+    : [];
+  // The private half of the yearly goal: steps only its owner reads.
+  const goalPrivate: GoalPrivate[] = employees.length
+    ? [
+        {
+          goal_id: p("goal-2"),
+          company_id: company.id,
+          employee_id: employees[0].id,
+          action_steps: [
+            { text: "Register for the course", done: true },
+            { text: "Finish modules 1 to 15", done: false },
+          ],
           created_at: EARLIER,
           updated_at: EARLIER,
         },
@@ -867,7 +921,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, goals, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

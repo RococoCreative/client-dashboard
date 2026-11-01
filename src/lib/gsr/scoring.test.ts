@@ -3,6 +3,7 @@ import {
   averageScore,
   computeReviewScore,
   pillarScore,
+  pillarsForReview,
   scoreBand,
   weightTotal,
   type PillarConfig,
@@ -122,5 +123,31 @@ describe("averageScore and scoreBand", () => {
     expect(scoreBand(60)).toBe("solid");
     expect(scoreBand(59)).toBe("developing");
     expect(scoreBand(39)).toBe("needs_attention");
+  });
+});
+
+describe("pillarsForReview", () => {
+  const live: PillarConfig[] = [
+    { id: "brand", name: "Brand Impact", weight: 40, scoring_type: "rating", rating_scale_max: 5 },
+    { id: "gsr", name: "Monthly GSRs", weight: 60, scoring_type: "gsr_goals", rating_scale_max: 5 },
+  ];
+  const signedOffWith: PillarConfig[] = [{ id: "brand", name: "Brand Impact", weight: 100, scoring_type: "rating", rating_scale_max: 5 }];
+  const rows = [{ pillar_id: "brand", criterion_id: "c", rating: 4 }];
+
+  it("scores a completed review with the pillars it was signed off with, whatever changed since", () => {
+    expect(pillarsForReview({ status: "complete", pillar_snapshot: signedOffWith }, live)).toBe(signedOffWith);
+    expect(computeReviewScore(pillarsForReview({ status: "complete", pillar_snapshot: signedOffWith }, live), rows).overall).toBe(80);
+    // Read against today's pillars, the same frozen ratings would have dropped to 32.
+    expect(computeReviewScore(live, rows).overall).toBe(32);
+  });
+
+  it("reads today's pillars for an open review, and for one completed before reviews kept them", () => {
+    expect(pillarsForReview({ status: "in_progress", pillar_snapshot: null }, live)).toBe(live);
+    expect(pillarsForReview({ status: "complete", pillar_snapshot: null }, live)).toBe(live);
+  });
+
+  it("scores a Monthly GSRs pillar from its one line item: the months' average", () => {
+    const gsrOnly: PillarConfig[] = [{ id: "gsr", name: "Monthly GSRs", weight: 100, scoring_type: "gsr_goals", rating_scale_max: 5 }];
+    expect(computeReviewScore(gsrOnly, [{ pillar_id: "gsr", target: 300, actual: 255 }]).overall).toBe(85);
   });
 });

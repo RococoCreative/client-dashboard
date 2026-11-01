@@ -11,16 +11,21 @@
 // An unscored pillar contributes 0 (faithful to the original tool: an incomplete review
 // reads low, never high); `complete` and per-pillar item counts let the UI say so.
 //
-// Two kinds of line-item pillar share that arithmetic and differ only in where the line items
-// come from: 'deliverables' are typed into the review (label, target, actual), and
+// Three kinds of line-item pillar share that arithmetic and differ only in where the line items
+// come from: 'deliverables' are typed into the review (label, target, actual);
 // 'deliverables_module' is one line item the app writes at sign-off from the deliverables module
-// (lib/gsr/deliverables.ts: two points a task), so the two modules stay separate implementations
-// and a task re-rated mid-review moves nothing on the review until it is completed.
+// (lib/gsr/deliverables.ts: two points a task); and 'gsr_goals' is one line item written at
+// sign-off from the Goal Setting Reviews inside the period (lib/gsr/goals.ts: each month's
+// required goals). Each module stays its own implementation, and nothing moved mid-review moves
+// the review until it is completed.
+//
+// A completed review is also scored with the pillars it was signed off with (pillarsForReview),
+// so a weight changed or a pillar added later never moves a score of record.
 //
 // Ratings themselves live on the person (impact_scores) between reviews. An open review scores
 // its rating pillars from that working copy; a completed review scores from the rows frozen into
 // it at sign-off. scoreInputsForReview is the one place that chooses.
-export type ScoringType = "rating" | "deliverables" | "deliverables_module";
+export type ScoringType = "rating" | "deliverables" | "deliverables_module" | "gsr_goals";
 
 // One impact score: a person's current rating on one criterion.
 export interface ImpactInput {
@@ -194,6 +199,13 @@ export function scoreInputsForReview(
     ...reviewScores.filter((s) => !s.criterion_id),
     ...impact.filter((i) => active.has(i.criterion_id)).map((i) => ({ pillar_id: i.pillar_id, criterion_id: i.criterion_id, rating: i.rating })),
   ];
+}
+
+// The pillars a review is scored with. A completed review keeps the pillars and weights it was
+// signed off with (0022); an open review reads today's, as does one completed before reviews
+// kept them. Every screen that puts a number on a review asks this first.
+export function pillarsForReview(review: { status: string; pillar_snapshot?: PillarConfig[] | null }, pillars: PillarConfig[]): PillarConfig[] {
+  return review.status === "complete" && review.pillar_snapshot ? review.pillar_snapshot : pillars;
 }
 
 // Team average over reviews that have any score at all; null for an unscored team.

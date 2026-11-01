@@ -3,6 +3,8 @@ import type {
   CompanyGoal,
   Goal,
   GoalKind,
+  GoalNote,
+  GoalPrivate,
   GoalScope,
   GoalStatus,
   GsrCriterion,
@@ -21,6 +23,8 @@ const reviews = fromAll((b) => b.reviews).map((x) => ({ ...x }));
 const scores = fromAll((b) => b.scores).map((x) => ({ ...x }));
 const impactScores = fromAll((b) => b.impactScores).map((x) => ({ ...x }));
 const goals = fromAll((b) => b.goals).map((x) => ({ ...x, action_steps: x.action_steps.map((s) => ({ ...s })) }));
+const goalNotes = fromAll((b) => b.goalNotes).map((x) => ({ ...x }));
+const goalPrivate = fromAll((b) => b.goalPrivate).map((x) => ({ ...x, action_steps: x.action_steps.map((s) => ({ ...s })) }));
 const companyGoals = fromAll((b) => b.companyGoals).map((x) => ({ ...x }));
 
 let counter = 0;
@@ -42,9 +46,9 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 export async function listPillars(companyId: string, includeInactive = false): Promise<GsrPillar[]> {
   return pillars.filter((p) => p.company_id === companyId && (includeInactive || p.is_active)).sort((a, b) => a.sort_order - b.sort_order);
 }
-export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> & Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "sort_order" | "is_active">>;
+export type PillarInput = Pick<GsrPillar, "company_id" | "name" | "weight" | "scoring_type"> & Partial<Pick<GsrPillar, "description" | "rating_scale_max" | "required_goals" | "sort_order" | "is_active">>;
 export async function createPillar(input: PillarInput): Promise<GsrPillar> {
-  const created: GsrPillar = { id: nextId("pillar"), description: null, rating_scale_max: 5, sort_order: 0, is_active: true, created_at: now(), updated_at: now(), ...input };
+  const created: GsrPillar = { id: nextId("pillar"), description: null, rating_scale_max: 5, required_goals: 2, sort_order: 0, is_active: true, created_at: now(), updated_at: now(), ...input };
   pillars.push(created);
   return created;
 }
@@ -108,14 +112,26 @@ export async function getReview(id: string): Promise<Review> {
 export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
-  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, created_at: now(), updated_at: now() };
+  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
 }
-export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at">>;
+export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
   const next = patchIn(reviews, id, { ...patch, updated_at: now() });
+  // The database keeps the pillars a review was signed off with, and lets them go on reopen
+  // (0022); the mock does the same.
+  if (before && before.status !== "complete" && next.status === "complete") {
+    next.pillar_snapshot = pillars
+      .filter((p) => p.company_id === next.company_id && p.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(({ id: pillarId, name, weight, scoring_type, rating_scale_max, required_goals }) => ({ id: pillarId, name, weight, scoring_type, rating_scale_max, required_goals }));
+  } else if (next.status !== "complete") {
+    next.pillar_snapshot = null;
+  }
+  // Only a completed review carries a locked month score; reopening lets it go (0023).
+  if (next.status !== "complete") next.gsr_score = null;
   // The database freezes the person's current impact ratings into the review's rows on the
   // transition to complete (0017); the mock does the same so the page tests see it.
   if (before && before.status !== "complete" && next.status === "complete") {
@@ -153,9 +169,9 @@ export async function deleteScore(id: string): Promise<void> {
 export async function listGoals(companyId: string, employeeId?: string): Promise<Goal[]> {
   return goals.filter((g) => g.company_id === companyId && (!employeeId || g.employee_id === employeeId));
 }
-export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress_notes?: string | null; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
+export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
 export async function createGoal(input: GoalInput): Promise<Goal> {
-  const created: Goal = { id: nextId("goal"), cycle_id: null, description: null, status: "not_started", action_steps: [], progress_notes: null, progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
+  const created: Goal = { id: nextId("goal"), is_focus: false, cycle_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
   goals.push(created);
   return created;
 }
@@ -164,6 +180,46 @@ export async function updateGoal(id: string, patch: Partial<Omit<GoalInput, "com
 }
 export async function deleteGoal(id: string): Promise<void> {
   removeFrom(goals, id);
+}
+
+export async function listGoalNotes(companyId: string, employeeId: string): Promise<GoalNote[]> {
+  return goalNotes
+    .filter((n) => n.company_id === companyId && n.employee_id === employeeId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+}
+export type GoalNoteInput = { goal_id: string; company_id: string; employee_id: string; author_id: string; body: string };
+// Stamped the way the database stamps it: the goal decides the company and the person, the clock
+// decides the date.
+export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
+  const goal = goals.find((g) => g.id === input.goal_id);
+  if (!goal) throw new Error("That goal does not exist.");
+  const stamp = now();
+  const created: GoalNote = { id: nextId("goal-note"), ...input, company_id: goal.company_id, employee_id: goal.employee_id, created_at: stamp, updated_at: stamp };
+  goalNotes.push(created);
+  return created;
+}
+// The suite's clock stands still, so an edit is stamped a second on to read as later than the
+// note it changes, the way it always is in the database.
+export async function updateGoalNote(id: string, body: string): Promise<GoalNote> {
+  return patchIn(goalNotes, id, { body, updated_at: new Date(Date.now() + 1000).toISOString() });
+}
+export async function deleteGoalNote(id: string): Promise<void> {
+  removeFrom(goalNotes, id);
+}
+
+export async function listGoalPrivate(companyId: string, employeeId: string): Promise<GoalPrivate[]> {
+  return goalPrivate.filter((row) => row.company_id === companyId && row.employee_id === employeeId);
+}
+export async function saveGoalSteps(input: { goal_id: string; company_id: string; employee_id: string; action_steps: ActionStep[] }): Promise<GoalPrivate> {
+  const existing = goalPrivate.find((row) => row.goal_id === input.goal_id);
+  if (existing) {
+    existing.action_steps = input.action_steps.map((step) => ({ ...step }));
+    existing.updated_at = now();
+    return existing;
+  }
+  const created: GoalPrivate = { ...input, action_steps: input.action_steps.map((step) => ({ ...step })), created_at: now(), updated_at: now() };
+  goalPrivate.push(created);
+  return created;
 }
 
 export async function listCompanyGoals(companyId: string, year: number): Promise<CompanyGoal[]> {

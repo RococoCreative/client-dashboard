@@ -17,7 +17,7 @@ storage), deployed on Vercel.
 
 Read order for context: this file, then README.md, then supabase/migrations/ (the schema
 is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring engine), src/lib/gsr/goals.ts
-(the Goal Setting Review rules: progress, hit or miss, carry forward), and src/lib/gsr/deliverables.ts
+(the Goal Setting Review rules: progress, the order goals are read in, hit or miss, carry forward), and src/lib/gsr/deliverables.ts
 (the two-points-a-task rule behind the deliverables module).
 
 ## Hard rules
@@ -44,6 +44,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    back: a Rococo admin can read all three companies and the sidebar switcher changes company
    without navigating, so a stale id otherwise keeps another tenant's record on screen, live.
    Never write a feature that assumes it can see across companies unless it is Rococo-gated.
+   Private means private in the database, too: a yearly or BHAG goal's action steps live in
+   `goal_private` and its notes in `goal_notes`, which only the owner reads (0021), and a trigger
+   keeps them off the goals row admins read. Never put a person's private content on a row
+   someone else can read and hide it in the UI.
 5. **A profile is a person, not an account.** `profiles.id` is the person and is stable
    forever; `profiles.user_id` is null until they first sign in. Never assume a profile has an
    account, and find the signed-in person with `private.auth_profile_id()`, never by comparing
@@ -67,8 +71,13 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
-   module: two points a task, so a Hit on every task lands exactly on target. Never duplicate
-   either in SQL or in a component.
+   module: two points a task, so a Hit on every task lands exactly on target. `src/lib/gsr/goals.ts`
+   is the same deal for a Monthly GSRs pillar (`gsr_goals`): a month adds up the completion of all
+   its goals, up to 100 for each mandatory GSR (the focus topic's GSR first, then role and
+   professional, never personal), so stretch goals only ever add. Never duplicate any of them in
+   SQL or in a component.
+   A completed review is scored with the pillars it was signed off with (`pillarsForReview`;
+   `reviews.pillar_snapshot`, 0022). Every screen that puts a number on a review goes through it.
    Careful with the word "deliverable": it names a `gsr_pillars.scoring_type`, where a review
    line item carries a target and an actual, and it names the standing module a person is
    measured on for the year (category, heading, tasks). They are different things.
@@ -83,6 +92,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    rows in the database (`freeze_review_ratings`, 0017), and a completed review scores from its
    frozen rows only. A review has no score of record until it is complete: `reviewHistory` and
    every list read "-" for an open review. Never write a rating from the review page.
+   A month's GSR score is locked in by an admin marking the month complete: the app writes
+   `reviews.gsr_score` from `scoreMonth`, only an admin can write it, and a locked month's goals and
+   notes are frozen until the review is reopened (0023). Only locked months reach a scored review;
+   an open month is shown, never applied.
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
@@ -105,11 +118,15 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
-    SOPs, resources, financial snapshots, marketing, email domains, connections to outside
+    how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at
+    all), SOPs, resources, financial snapshots, marketing, email domains, connections to outside
     systems.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
-    section a cadence belongs to (`sectionOf`), the module set on a person page and a review, and
+    section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
+    the focus topic's GSR, role, professional, personal), how a scored month adds up
+    (`requiredAndStretch`, `monthTotal`, `scoreMonth`), the module set on a person page and a
+    review, and
     `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms

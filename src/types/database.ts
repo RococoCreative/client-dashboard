@@ -211,10 +211,23 @@ export interface GsrPillar {
   weight: number;
   scoring_type: ScoringType;
   rating_scale_max: number;
+  // How many goals a month must carry for a 'gsr_goals' pillar; read by no other type (0022).
+  required_goals: number;
   sort_order: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+// The pillars a completed review was signed off with, frozen with its ratings (0022). A completed
+// review is scored with these from then on, so re-weighting or adding a pillar never moves it.
+export interface PillarSnapshot {
+  id: string;
+  name: string;
+  weight: number;
+  scoring_type: ScoringType;
+  rating_scale_max: number;
+  required_goals: number;
 }
 
 // A person's current rating on one criterion: the working copy between reviews, set on the
@@ -278,6 +291,11 @@ export interface Review {
   employee_reflection: string | null;
   reviewer_id: string | null;
   completed_at: string | null;
+  // Written by the database when the review is marked complete, cleared on reopen.
+  pillar_snapshot: PillarSnapshot[] | null;
+  // A monthly GSR's score, 0 to 100, locked in by an admin marking the month complete where the
+  // company scores its GSRs; null otherwise, and cleared on reopen (0023).
+  gsr_score: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -298,11 +316,12 @@ export interface ReviewScore {
   updated_at: string;
 }
 
-// "focus" is the month's focus topic, seeded from the cycle theme.
-export type GoalKind = "professional" | "personal" | "role" | "focus";
+// The month's focus topic GSR is a role or professional goal marked is_focus (0023), not a kind.
+export type GoalKind = "professional" | "personal" | "role";
 export type GoalStatus = "not_started" | "in_progress" | "on_track" | "achieved" | "missed";
-// A goal belongs to a review cycle (the month's goals) or to a year (a yearly goal).
-export type GoalScope = "cycle" | "year";
+// A goal belongs to a review cycle (the month's goals), to a year (a yearly goal), or to no
+// fixed period at all: a BHAG, the big goal three to five years out.
+export type GoalScope = "cycle" | "year" | "bhag";
 
 export interface ActionStep {
   text: string;
@@ -315,11 +334,15 @@ export interface Goal {
   employee_id: string;
   cycle_id: string | null;
   kind: GoalKind;
+  // The month's focus topic GSR: the person's #1 GSR, inspired by the cycle's focus topic, always
+  // a role or professional goal, at most one a month (0023).
+  is_focus: boolean;
   title: string;
   description: string | null;
   status: GoalStatus;
+  // A monthly goal's steps, which the review reads. Always empty on a yearly or BHAG goal: their
+  // steps are private to the owner and live in goal_private (0021). Notes live in goal_notes.
   action_steps: ActionStep[];
-  progress_notes: string | null;
   // 0..100; 100 is complete, and a settled period reads anything less as a miss.
   progress: number;
   scope: GoalScope;
@@ -330,6 +353,31 @@ export interface Goal {
   carried_from_goal_id: string | null;
   sort_order: number;
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// One dated entry in a goal's notes log. Information only: nothing scores a note. A monthly goal's
+// notes are read by the person and their admins, the record the meeting works from; a yearly or
+// BHAG goal's notes are the person's alone (RLS, 0021).
+export interface GoalNote {
+  id: string;
+  goal_id: string;
+  company_id: string;
+  employee_id: string;
+  // Who wrote it; null for a note carried over from the old single notes box.
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// The private half of a yearly or BHAG goal: its action steps, readable by its owner only.
+export interface GoalPrivate {
+  goal_id: string;
+  company_id: string;
+  employee_id: string;
+  action_steps: ActionStep[];
   created_at: string;
   updated_at: string;
 }
@@ -419,6 +467,7 @@ export const SCORING_TYPE_LABELS: Record<ScoringType, string> = {
   rating: "Rated criteria",
   deliverables: "Target vs actual",
   deliverables_module: "Deliverables module",
+  gsr_goals: "Monthly GSRs",
 };
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
@@ -438,7 +487,6 @@ export const GOAL_KIND_LABELS: Record<GoalKind, string> = {
   professional: "Professional",
   personal: "Personal",
   role: "Role",
-  focus: "Focus topic",
 };
 
 export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {

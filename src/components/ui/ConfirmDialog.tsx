@@ -1,5 +1,6 @@
 // Confirmation step for destructive actions. The confirm button is the only loud thing in
-// the dialog on purpose.
+// the dialog on purpose. A step that commits rather than destroys (locking a month's GSR in,
+// which reopening undoes) asks for the primary tone instead of the destructive one.
 //
 // A refused delete (a closed cycle, an RLS denial) has to report itself here. The dialog sits
 // over a scrim, so a notice rendered by the page underneath is dimmed and easy to miss, and the
@@ -14,6 +15,7 @@ export default function ConfirmDialog({
   confirmLabel,
   busy = false,
   error = "",
+  tone = "danger",
   onConfirm,
   onCancel,
 }: {
@@ -22,6 +24,7 @@ export default function ConfirmDialog({
   confirmLabel: string;
   busy?: boolean;
   error?: string;
+  tone?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -37,7 +40,7 @@ export default function ConfirmDialog({
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="danger-solid" onClick={onConfirm} disabled={busy}>
+          <Button variant={tone === "primary" ? "primary" : "danger-solid"} onClick={onConfirm} disabled={busy}>
             {busy ? "Working..." : confirmLabel}
           </Button>
         </div>

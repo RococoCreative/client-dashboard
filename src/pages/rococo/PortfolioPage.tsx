@@ -23,7 +23,7 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
-import { averageScore, computeReviewScore, hasScoredItem, weightTotal } from "../../lib/gsr/scoring.ts";
+import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, weightTotal } from "../../lib/gsr/scoring.ts";
 import { cycleProgress, cyclesInPlay } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { THEMES } from "../../lib/theme.ts";
@@ -83,7 +83,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
       .filter((r) => scoredIds.has(r.cycle_id))
       .map((r) => {
         const own = scores.filter((s) => s.review_id === r.id);
-        return r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillars, own).overall : null;
+        return r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, pillars), own).overall : null;
       }),
   );
   const published = sops.filter((s) => s.status === "published");
