@@ -157,7 +157,8 @@ export function scoreMonth(goals: Array<Pick<Goal, "progress">>, required: numbe
 export interface GsrMonthsFigure<C> {
   // Every month in the period. `locked` is the score its GSR was locked in at, or null while the
   // month is still open to change; `live` is where it stands now, for reading, never for scoring.
-  months: Array<{ cycle: C; locked: number | null; live: number }>;
+  // `omitted` is a month an admin left the person out of (0024): shown, never counted.
+  months: Array<{ cycle: C; locked: number | null; live: number; omitted: boolean }>;
   target: number;
   actual: number;
 }
@@ -168,18 +169,22 @@ export interface GsrMonthsFigure<C> {
 // The line item is 100 a locked month as the target and their locked scores as the actual, so the
 // pillar's score is their average. A quarter's three months are a third of its pillar each, and
 // across four quarters each month is a twelfth of the year's, the 1.67 points of 20 Justin set.
+// A month the person was left out of never counts, and with no month locked there is no line
+// item, so scoring leaves the pillar out of the review (scoring.ts, pillarLeftOut).
 export function scoreGsrMonths<C extends { id: string; cadence: string; period_start: string; period_end: string }>(
   period: { period_start: string; period_end: string },
   cycles: C[],
   goals: Array<Pick<Goal, "scope" | "cycle_id" | "progress">>,
   reviews: Array<Pick<Review, "cycle_id" | "status" | "gsr_score">>,
   required: number,
+  omittedCycleIds: string[] = [],
 ): GsrMonthsFigure<C> {
   const months = monthsWithin(period, cycles).map((cycle) => {
     const review = reviews.find((r) => r.cycle_id === cycle.id);
-    const locked = review?.status === "complete" && review.gsr_score !== null ? review.gsr_score : null;
+    const omitted = omittedCycleIds.includes(cycle.id);
+    const locked = !omitted && review?.status === "complete" && review.gsr_score !== null ? review.gsr_score : null;
     const live = scoreMonth(goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id), required);
-    return { cycle, locked, live };
+    return { cycle, locked, live, omitted };
   });
   const counted = months.filter((m) => m.locked !== null);
   return { months, target: counted.length * 100, actual: counted.reduce((sum, m) => sum + (m.locked ?? 0), 0) };

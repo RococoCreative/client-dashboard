@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, cyclesInPlay, defaultCycleName, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
+import { activeCycles, currentCycle, cycleProgress, cycleRoster, cyclesInPlay, defaultCycleName, isOmitted, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -62,6 +62,29 @@ describe("cycle periods", () => {
     const between = cycles.filter((c) => c.id === "sep" || c.id === "nov");
     expect(cyclesInPlay(between, today).map((c) => c.id)).toEqual(["nov", "sep"]);
     expect(cyclesInPlay([], today)).toEqual([]);
+  });
+
+  it("covers everybody active in a cycle, less anyone an admin left out of it", () => {
+    const people = [
+      { id: "ana", is_active: true },
+      { id: "ben", is_active: true },
+      { id: "cy", is_active: true },
+      { id: "dee", is_active: false },
+    ];
+    const omissions = [{ cycle_id: "oct", employee_id: "ben" }, { cycle_id: "nov", employee_id: "cy" }];
+    expect(cycleRoster(people, "oct", omissions).map((p) => p.id)).toEqual(["ana", "cy"]);
+    expect(cycleRoster(people, "nov", omissions).map((p) => p.id)).toEqual(["ana", "ben"]);
+    expect(cycleRoster(people, "dec", omissions).map((p) => p.id)).toEqual(["ana", "ben", "cy"]);
+    expect(isOmitted(omissions, "oct", "ben")).toBe(true);
+    expect(isOmitted(omissions, "nov", "ben")).toBe(false);
+    // Progress counts only the people in the cycle: everyone October covers has signed off, and
+    // the review set aside for the person left out is not owed.
+    const reviews = [
+      { employee_id: "ana", cycle_id: "oct", status: "complete" },
+      { employee_id: "cy", cycle_id: "oct", status: "complete" },
+      { employee_id: "ben", cycle_id: "oct", status: "in_progress" },
+    ];
+    expect(cycleProgress(cycleRoster(people, "oct", omissions), reviews, "oct")).toEqual({ complete: 2, total: 2 });
   });
 
   it("finds the months that ran inside a scored period, oldest first", () => {
