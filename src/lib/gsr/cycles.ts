@@ -145,6 +145,22 @@ export function reviewPath(reviewId: string, cadence: Cadence): string {
   return sectionOf(cadence) === "gsr" ? `/gsr/reviews/${reviewId}` : `/reviews/${reviewId}`;
 }
 
+// Who a cycle covers: everybody active, less anyone an admin has left out of it (0024). Every
+// screen that counts or scores a cycle reads its roster here, so the dashboard, the cycle page,
+// the cycles list and the portfolio never disagree about who is in it.
+export function cycleRoster<P extends { id: string; is_active: boolean }>(
+  people: P[],
+  cycleId: string,
+  omissions: Array<{ cycle_id: string; employee_id: string }>,
+): P[] {
+  return people.filter((person) => person.is_active && !isOmitted(omissions, cycleId, person.id));
+}
+
+// Whether an admin has left this person out of this cycle.
+export function isOmitted(omissions: Array<{ cycle_id: string; employee_id: string }>, cycleId: string, employeeId: string): boolean {
+  return omissions.some((o) => o.cycle_id === cycleId && o.employee_id === employeeId);
+}
+
 // How far one cycle has got, counted over the roster it covers rather than over the review rows
 // that happen to exist.
 //

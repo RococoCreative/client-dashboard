@@ -382,6 +382,18 @@ export interface GoalPrivate {
   updated_at: string;
 }
 
+// A person an admin has left out of one review cycle (0024). Everyone active is in a cycle
+// unless a row here says otherwise; adding them back deletes the row.
+export interface CycleOmission {
+  cycle_id: string;
+  employee_id: string;
+  company_id: string;
+  reason: string | null;
+  // The admin who left them out; null once that profile is gone.
+  omitted_by: string | null;
+  created_at: string;
+}
+
 export interface CompanyGoal {
   id: string;
   company_id: string;

@@ -27,7 +27,7 @@ import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } fro
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { listCriteria, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
+import { listCriteria, listCycleOmissions, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
 import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoles } from "../../services/jobRoles.ts";
@@ -48,7 +48,7 @@ export default function PersonPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles, goals] = await Promise.all([
+    const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles, goals, omissions] = await Promise.all([
       listCompanyProfiles(companyId),
       listEmployeeReviews(profileId),
       listCycles(companyId),
@@ -62,20 +62,23 @@ export default function PersonPage() {
       listJobRoles(companyId, true),
       // Their goals, for where this quarter's GSRs stand when the company scores them.
       listGoals(companyId, profileId),
+      // The months they are omitted from never count toward that (0024).
+      listCycleOmissions(companyId),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals };
+    const omittedCycleIds = omissions.filter((o) => o.employee_id === profileId).map((o) => o.cycle_id);
+    return { people, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals, omittedCycleIds };
   }, [companyId, profileId, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
-  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals } = state.data;
+  const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals, omittedCycleIds } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
   // For a company that scores its GSRs: where the locked-in months inside the open scored review
   // stand.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
   // The role they are in, and whether it puts their figures on their dashboard.
   const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
   const figuresOnDashboard = jobRole?.dashboard_modules.includes("financials") ?? false;

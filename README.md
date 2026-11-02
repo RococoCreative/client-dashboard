@@ -53,7 +53,7 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0023`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through `0024`), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -231,6 +231,18 @@ the person's alone, and the database is what keeps them that way: they live in `
 and `goal_notes`, which only the owner can read for a yearly or BHAG goal (0021), and a trigger
 refuses them on the shared goal row. My Goals says so in a line at the top.
 
+## Who is in a cycle
+
+A cycle covers everybody active on the roster unless an admin omits someone from it, from the
+cycle page, with an optional reason (`cycle_omissions`, 0024). Someone omitted stops counting
+toward that cycle's progress and team score everywhere (`cycleRoster` in
+`src/lib/gsr/cycles.ts`), is not asked for that month's GSR, and sees a line saying so. Omitting
+deletes nothing: a review already started is set aside as it is, and comes back when they are
+added back. The database refuses to open or sign off a review for someone omitted, freezes their
+goals and notes in that month, and refuses to omit anyone whose review is already signed off or
+to change the roster of a closed cycle. Every omission keeps who made it and when, and the
+person can see their own.
+
 ## GSR scoring
 
 Ported from the Klasik Executive Dashboard and made configurable per company. A company
@@ -251,11 +263,14 @@ defines pillars, each with a weight and a scoring type:
   an admin marking the month complete locks the score in (`reviews.gsr_score`, 0023), and only a
   locked month counts. The pillar is the average of the locked months in the period, written into
   the review as one line item on sign-off: a quarter's months are a third of its pillar each, and
-  across a year each month is a twelfth. A company without such a pillar sees none of this. The
-  rule is in `src/lib/gsr/goals.ts`.
+  across a year each month is a twelfth. With no month locked in (none ran, the person was
+  omitted from all of them, or none has been marked complete yet), the pillar sits out of that
+  review and the other pillars carry its weight, since a GSR score is never applied before it is
+  locked in; sign-off says so before it happens. A company without such a pillar sees none of
+  this. The rule is in `src/lib/gsr/goals.ts`.
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
-an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
+an incomplete review reads low, never high; the one exception is the Monthly GSRs pillar above. The math is in `src/lib/gsr/scoring.ts` and
 is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
 Character & Values 25) is seeded as-is.
 

@@ -4,7 +4,7 @@
 // behalf of a chosen company), and child rows are re-stamped by database triggers so a
 // score can never land under the wrong company.
 import { db } from "./supabase.ts";
-import type { ActionStep, CompanyGoal, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
+import type { ActionStep, CompanyGoal, CycleOmission, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
 const PILLAR_COLUMNS =
   "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
@@ -344,6 +344,31 @@ export async function updateGoalNote(id: string, body: string): Promise<GoalNote
 
 export async function deleteGoalNote(id: string): Promise<void> {
   const { error } = await db().from("goal_notes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+const OMISSION_COLUMNS = "cycle_id, employee_id, company_id, reason, omitted_by, created_at";
+
+// Who is left out of which cycle, for one company. An admin reads every row; an employee reads
+// only their own (0024), which is all their own screens need.
+export async function listCycleOmissions(companyId: string): Promise<CycleOmission[]> {
+  const { data, error } = await db().from("cycle_omissions").select(OMISSION_COLUMNS).eq("company_id", companyId);
+  if (error) throw error;
+  return (data as CycleOmission[]) ?? [];
+}
+
+export type OmissionInput = { cycle_id: string; employee_id: string; company_id: string; reason: string | null };
+
+// The database stamps the company from the cycle, and who did it and when from the session; it
+// refuses a closed cycle and a review already signed off.
+export async function omitFromCycle(input: OmissionInput): Promise<CycleOmission> {
+  const { data, error } = await db().from("cycle_omissions").insert(input).select(OMISSION_COLUMNS).single();
+  if (error) throw error;
+  return data as CycleOmission;
+}
+
+export async function addBackToCycle(cycleId: string, employeeId: string): Promise<void> {
+  const { error } = await db().from("cycle_omissions").delete().eq("cycle_id", cycleId).eq("employee_id", employeeId);
   if (error) throw error;
 }
 

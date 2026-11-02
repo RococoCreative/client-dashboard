@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   averageScore,
   computeReviewScore,
+  pillarLeftOut,
   pillarScore,
   pillarsForReview,
   scoreBand,
@@ -67,6 +68,39 @@ describe("computeReviewScore", () => {
     expect(result.weightTotal).toBe(100);
   });
 
+  it("leaves a Monthly GSRs pillar with no locked month out, and the other pillars carry its weight", () => {
+    const pillars: PillarConfig[] = [
+      { id: "deliv", name: "Deliverables", weight: 40, scoring_type: "deliverables_module", rating_scale_max: 5 },
+      { id: "brand", name: "Brand Impact", weight: 20, scoring_type: "rating", rating_scale_max: 5 },
+      { id: "values", name: "Character & Values", weight: 20, scoring_type: "rating", rating_scale_max: 5 },
+      { id: "gsr", name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", rating_scale_max: 5 },
+    ];
+    const rated = [
+      { pillar_id: "deliv", target: 10, actual: 10 },
+      { pillar_id: "brand", rating: 5 },
+      { pillar_id: "values", rating: 2.5 },
+    ];
+    // Deliverables 100, Brand 100, Values 50, over the 80 points still in play:
+    // (4000 + 2000 + 1000) / 80 = 87.5, the same as 50/25/25 would give.
+    const without = computeReviewScore(pillars, rated);
+    expect(without.overall).toBe(88);
+    expect(without.weightTotal).toBe(80);
+    expect(without.complete).toBe(true);
+    expect(without.pillars.find((p) => p.pillarId === "gsr")).toMatchObject({ score: null, leftOut: true });
+    // A locked month brings the pillar in at its full 20: (4000 + 2000 + 1000 + 1600) / 100 = 86.
+    const withMonth = computeReviewScore(pillars, [...rated, { pillar_id: "gsr", target: 100, actual: 80 }]);
+    expect(withMonth.overall).toBe(86);
+    expect(withMonth.weightTotal).toBe(100);
+    expect(withMonth.pillars.find((p) => p.pillarId === "gsr")).toMatchObject({ score: 80, leftOut: false });
+    // Every other pillar keeps the unscored-is-zero rule: no Brand ratings reads as zero.
+    const noBrand = computeReviewScore(pillars, [rated[0], rated[2], { pillar_id: "gsr", target: 100, actual: 80 }]);
+    expect(noBrand.overall).toBe(66);
+    expect(noBrand.complete).toBe(false);
+    expect(noBrand.pillars.find((p) => p.pillarId === "brand")).toMatchObject({ score: null, leftOut: false });
+    expect(pillarLeftOut({ scoring_type: "gsr_goals" }, null)).toBe(true);
+    expect(pillarLeftOut({ scoring_type: "rating" }, null)).toBe(false);
+  });
+
   it("counts an unscored pillar as zero and flags the review incomplete", () => {
     const result = computeReviewScore(KLASIK, [{ pillar_id: "brand", rating: 5 }]);
     expect(result.overall).toBe(25);
@@ -127,9 +161,11 @@ describe("averageScore and scoreBand", () => {
 });
 
 describe("pillarsForReview", () => {
+  // Since sign-off, Brand Impact was re-weighted and a rated pillar was added that this review
+  // never scored. (An unscored Monthly GSRs pillar would sit out on its own; a rated one counts.)
   const live: PillarConfig[] = [
     { id: "brand", name: "Brand Impact", weight: 40, scoring_type: "rating", rating_scale_max: 5 },
-    { id: "gsr", name: "Monthly GSRs", weight: 60, scoring_type: "gsr_goals", rating_scale_max: 5 },
+    { id: "values", name: "Character & Values", weight: 60, scoring_type: "rating", rating_scale_max: 5 },
   ];
   const signedOffWith: PillarConfig[] = [{ id: "brand", name: "Brand Impact", weight: 100, scoring_type: "rating", rating_scale_max: 5 }];
   const rows = [{ pillar_id: "brand", criterion_id: "c", rating: 4 }];

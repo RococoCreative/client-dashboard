@@ -70,7 +70,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    and never calls a provider.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
-   unscored-is-zero rule. `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
+   unscored-is-zero rule and its one exception, a Monthly GSRs pillar with no locked month, which
+   sits out of that review while the other pillars carry its weight (`pillarLeftOut`).
+   `src/lib/gsr/deliverables.ts` is the same deal for the deliverables
    module: two points a task, so a Hit on every task lands exactly on target. `src/lib/gsr/goals.ts`
    is the same deal for a Monthly GSRs pillar (`gsr_goals`): a month adds up the completion of all
    its goals, up to 100 for each mandatory GSR (the focus topic's GSR first, then role and
@@ -116,13 +118,15 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     screen. When a company needs a different shape, the difference becomes a column, a row, or a
     setting every company carries, with the behavior the others have today as its default.
     Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
+    who is in each cycle (`cycle_omissions`, 0024: everyone active unless an admin omits them),
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
     how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at
     all), SOPs, resources, financial snapshots, marketing, email domains, connections to outside
     systems.
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
-    task) and its four-step scale, the pillar weighting math, what a monthly cycle shows, which
+    task) and its four-step scale, the pillar weighting math, who a cycle covers (`cycleRoster`,
+    the one roster every count and score of a cycle reads), what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
     the focus topic's GSR, role, professional, personal), how a scored month adds up
     (`requiredAndStretch`, `monthTotal`, `scoreMonth`), the module set on a person page and a
