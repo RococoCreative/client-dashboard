@@ -11,6 +11,11 @@ Designed but not built: the Project assistant module for Kingdom, a per-company 
 that orders itself by importance and location. The full specification is in
 `docs/project-assistant.md`.
 
+Assessed and planned, not built: the Kingdom dashboard revamp (a four-section switchboard, projects
+with milestones and letters, manual wins, live Google Sheets and QuickBooks sources, a role
+hierarchy). The assessment, build slices, migrations and open inputs are in
+`docs/kingdom-revamp-plan.md`.
+
 ## What is inside
 
 | Module | Admins | Employees |
