@@ -23,7 +23,6 @@
 - **Decision 4: the scheduler is Supabase Cron with pg_net, and the sync runs inside the `connections` function.** An hourly tick calls new `/sync/*` routes on the existing `connections` Edge Function, so that function stays the only reader of `connection_tokens` (rule 6). Each source stores its own weekday, time and timezone. Supabase Cron is the only scheduler that needs no service key in the app or in Vercel.
 - **Decision 5: roles extend, never reinterpret.** Two values are added: `owner` and `manager`. `owner` and `admin` both keep today's full admin meaning. `manager` gets employee-level access until you supply the capability matrix. Manager team scope and restricted-Admin rules wait for that matrix.
 - **Top blockers on your side or Kingdom's:**
-  - who Kingdom's Owner is (neither live admin has an owner title)
   - what a "project" is and where its identity comes from
   - the sheet links and field mappings
   - the sync day, time, timezone and stale threshold
@@ -625,7 +624,7 @@ General rules for every new migration:
 | Manager | `role = 'manager'` (new) | employee-level | team scope through `my_team_ids()` |
 | Employee | `role = 'employee'` | unchanged | unchanged unless the matrix says otherwise |
 
-- **No existing row is rewritten.** You assign Kingdom's owner by hand once confirmed. Klasik's owner can stay `admin` with no difference in behavior.
+- **No existing row is rewritten.** Maddie Cothran and marvin waters become Kingdom's Owners. Their admin rows today are test setups; they are set to `owner` by hand on the People page once 0031 is applied, never by a migration that names them. Klasik's owner can stay `admin` with no difference in behavior.
 - **Manager scope (S13)** adds policies beside the existing ones, of the form `employee_id in (select private.my_team_ids())`. It never widens `goal_private` or the owner-only `goal_notes`.
 - **Built now:** role values, ranking guard, `reports_to` integrity, team helper, audit log, the separate sync predicate.
 - **Waits for the matrix:** capability rows, restricted Admin, view and edit splits, Manager policies, sync and integration permissions, company-admin audit read, the Austin-only tier.
@@ -754,8 +753,8 @@ The last successful sync time is shown on every module and on the Home Freshness
 ## 7. Inputs still needed from Austin or Kingdom
 
 **A. Roster and roles**
-1. Who is Kingdom's Owner? Live admins are Maddie Cothran (Design Lead, not signed in) and marvin waters (Controller), and one admin invitation is pending. *Blocks: assigning `owner` in S9.*
-2. Should Maddie and marvin stay full Admins, or become Managers or Employees once the matrix exists? *Blocks: the role assignment after S13.*
+1. Resolved: Maddie Cothran and marvin waters will be Kingdom's Owners, the tier above Admin and below Rococo. Their admin rows today are test setups. Still open: is anyone else an Owner, and is the pending admin invitation still wanted? *Blocks: assigning `owner` in S9.*
+2. Resolved by item 1. *Nothing blocked.*
 3. Who are Kingdom's PMs, and can they be added to the roster now (no account needed)? *Blocks: PM capacity mapping (S11) and milestone responsible people.*
 4. Is God mode for every `@rocococreative.io` account acceptable, or does Austin need a tier above other Rococo staff? *Blocks: the Austin-only capabilities.*
 
