@@ -1721,4 +1721,46 @@ describe("external links", () => {
     expect(await screen.findByText("Connections")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "External links" })).not.toBeInTheDocument();
   });
+
+  it("keeps the links in Settings", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    await screen.findByRole("heading", { name: "External links" });
+    const panel = card("External links");
+    for (const label of ["Sample sales board", "Sample production board", "Sample owner report", "Sample schedule view"]) {
+      expect(await within(panel).findByLabelText(`Label for ${label}`)).toHaveValue(label);
+    }
+
+    const add = within(panel).getByRole("form", { name: "Add a link" });
+    await user.type(within(add).getByLabelText("Label"), "Sample insecure board");
+    await user.type(within(add).getByLabelText("Link"), "http://example.com/x");
+    await user.click(within(add).getByRole("button", { name: "Add link" }));
+    expect(within(panel).getByText("Links must start with https://.")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Label for Sample insecure board")).not.toBeInTheDocument();
+
+    await user.clear(within(add).getByLabelText("Label"));
+    await user.type(within(add).getByLabelText("Label"), "Sample estimating board");
+    await user.clear(within(add).getByLabelText("Link"));
+    await user.type(within(add).getByLabelText("Link"), "https://example.com/monday/sample-estimating");
+    await user.click(within(add).getByRole("button", { name: "Add link" }));
+    expect(await within(panel).findByLabelText("Label for Sample estimating board")).toHaveValue("Sample estimating board");
+    expect(within(panel).queryByText("Links must start with https://.")).not.toBeInTheDocument();
+
+    const sales = within(panel).getByLabelText("Label for Sample sales board");
+    await user.clear(sales);
+    await user.type(sales, "Sample sales pipeline");
+    await user.tab();
+    expect(await within(panel).findByLabelText("Label for Sample sales pipeline")).toHaveValue("Sample sales pipeline");
+
+    await user.click(within(panel).getByLabelText("Show as a public embed for Sample production board"));
+    expect(within(panel).getByText("Add the share view's embed link first.")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Show as a public embed for Sample production board")).not.toBeChecked();
+
+    await user.click(within(panel).getByRole("button", { name: "Remove Sample owner report" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove this link?" });
+    expect(within(dialog).getByText("People will no longer see it in the hub. The page it points to is not affected.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(within(panel).queryByLabelText("Label for Sample owner report")).not.toBeInTheDocument();
+  });
 });
