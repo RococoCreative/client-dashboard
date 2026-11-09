@@ -7,16 +7,19 @@
 --   1. An invitation's profile_id was trusted. Any company admin could insert an invitation
 --      pointing at any profile (another company's admin, or a Rococo admin) with an address
 --      they control, sign in, and be handed that profile: its role, its company, its private
---      goals, and the real person locked out. handle_new_user now honours profile_id only for an
---      unclaimed person on the same company's roster with the same email, never claims a
---      profile that already has an account, and invitations refuse a profile_id like that when
---      they are written.
+--      goals, and the real person locked out. handle_new_user now finds the person by their
+--      address and never by profile_id, never claims a profile that already has an account, and
+--      invitations refuse a profile_id that is not an unclaimed person on the same company's
+--      roster with the same email when they are written.
 --   2. One company could capture another company's future staff by email: roster the address
 --      first, or send a newer invitation, and the new hire's first sign-in landed in the wrong
 --      hub. An address on a company's email domain can now only be rostered or invited by that
 --      company, and an @rocococreative.io address by Rococo. Rococo admins act across companies
---      on purpose and are not held to it. At sign-in, an invitation from the company that owns
---      the address's domain comes first.
+--      on purpose and are not held to it. At sign-in, a person already on a company's roster
+--      takes only that company's invitation; otherwise the invitation naming them comes first,
+--      then the one from the company that owns the address's domain. The other companies'
+--      pending invitations for the address are withdrawn, since a person is in one company at
+--      a time and nothing could accept them once the account exists.
 --   3. A monthly goal followed its person to a new company on the next edit. The goals trigger
 --      restamped company_id from the person on every update, while moving a person deliberately
 --      leaves their months behind (0021). A goal in a month now belongs to that month's company,
@@ -31,9 +34,22 @@
 -- ---------------------------------------------------------------------------------------
 -- 1 and 2. Claiming a profile at first sign-in
 -- ---------------------------------------------------------------------------------------
--- Same shape as 0014, with three changes: the invitation from the company that owns the
--- address's domain is read first; an invitation's profile_id is checked before it is honoured;
--- and the claim only ever lands on a profile with no account.
+-- Same shape as 0014, with these changes. The roster row is found by its address alone: one
+-- address is one person (profiles_email_key), and an invitation's profile_id never picks the row,
+-- so no invitation can hand anyone a profile at another address. The claim only ever lands on a
+-- profile with no account. The invitation that is settled is chosen after the row, and to fit it:
+-- a row on a company's roster takes only that company's invitation for the address (there is at
+-- most one), so no other company's invitation can move the row or reset its role; a row with no
+-- company yet, or no row at all, takes the invitation that names the row, then the one from the
+-- company that owns the address's domain, then the newest.
+--
+-- Every other pending invitation for the person is withdrawn in the same write. A person is in
+-- one company at a time, and an invitation only acts at the first sign-in: it opens the gate
+-- (0002), and it places someone who has no company yet. Once the account exists neither can
+-- happen again, so a leftover could never be accepted. It used to stay pending for good on the
+-- other company's portfolio card, where nobody could see or cancel it because the person is not
+-- on that company's roster. And when the newest invitation was another company's, the right one
+-- was skipped and stayed pending too.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -46,49 +62,31 @@ declare
   v_domain_company uuid;
   v_inv            public.invitations%rowtype;
   v_profile        uuid;
-  v_company        uuid;
+  v_row_company    uuid;
 begin
   select company_id into v_domain_company
     from public.company_domains
    where lower(domain) = v_domain
    limit 1;
 
-  -- The newest pending invitation, the domain owner's first.
-  select * into v_inv
-    from public.invitations
-   where email = v_email and accepted_at is null
-   order by (company_id is not distinct from v_domain_company) desc, created_at desc
+  -- The person at this address, if they are on file and have no account yet.
+  select p.id, p.company_id into v_profile, v_row_company
+    from public.profiles p
+   where lower(p.email) = v_email
+     and p.user_id is null
    limit 1;
 
-  -- An invitation only claims the roster row it names when that row is this person: no account
-  -- yet, the same address, and the inviting company's roster (or no company yet).
-  if v_inv.id is not null and v_inv.profile_id is not null then
-    select p.id into v_profile
-      from public.profiles p
-     where p.id = v_inv.profile_id
-       and p.user_id is null
-       and lower(p.email) = v_email
-       and (p.company_id is null or p.company_id = v_inv.company_id);
-  end if;
-
-  if v_profile is null then
-    select id into v_profile
-      from public.profiles
-     where lower(email) = v_email and user_id is null
-     limit 1;
-  end if;
-
-  -- An invitation from a different company than the roster row is not this person's
-  -- invitation. Drop it and claim the profile on its own terms.
-  if v_profile is not null and v_inv.id is not null then
-    if not exists (
-      select 1 from public.profiles p
-       where p.id = v_profile
-         and (p.company_id is null or p.company_id = v_inv.company_id)
-    ) then
-      v_inv := null;
-    end if;
-  end if;
+  -- The invitation this sign-in settles. A row on a company's roster takes only that company's.
+  select i.* into v_inv
+    from public.invitations i
+   where i.email = v_email
+     and i.accepted_at is null
+     and (v_row_company is null or i.company_id = v_row_company)
+   order by coalesce(i.profile_id = v_profile, false) desc,
+            (i.company_id is not distinct from v_domain_company) desc,
+            i.created_at desc,
+            i.id
+   limit 1;
 
   if v_profile is not null then
     -- The roster row already says who this person is. Only fill in what is still blank, and
@@ -131,6 +129,11 @@ begin
     update public.invitations set accepted_at = now(), profile_id = v_profile
      where id = v_inv.id;
   end if;
+
+  -- The rest are withdrawn: nothing can accept them now that the person has an account.
+  delete from public.invitations
+   where accepted_at is null
+     and (email = v_email or profile_id = v_profile);
 
   return new;
 end;
