@@ -11,10 +11,11 @@ Designed but not built: the Project assistant module for Kingdom, a per-company 
 that orders itself by importance and location. The full specification is in
 `docs/project-assistant.md`.
 
-Assessed and planned, not built: the Kingdom dashboard revamp (a four-section switchboard, projects
-with milestones and letters, manual wins, live Google Sheets and QuickBooks sources, a role
-hierarchy). The assessment, build slices, migrations and open inputs are in
-`docs/kingdom-revamp-plan.md`.
+Built and waiting to be switched on: the Kingdom dashboard revamp (a four-section switchboard,
+projects with milestones and letters, manual wins, Google Sheets and QuickBooks sources, a role
+hierarchy). A company's modules decide what it sees (see Modules); Klasik and RBA have none and
+see no change. The build plan is `docs/kingdom-build-plan.md` and the assessment, with the
+rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 
 ## What is inside
 
@@ -27,9 +28,15 @@ hierarchy). The assessment, build slices, migrations and open inputs are in
 | Resource library | Add links, files, templates, videos with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
-| Rococo portfolio | Rococo admins only: every company with its health signals, plus companies, themes, sign-in domains, and every user | |
+| Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, mark done, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
+| Wins (`wins`) | Log, edit and archive wins; the five most recent on Home | Read; the five most recent on Home |
+| Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
+| Home cards (`switchboard`, `data_sources`) | Attention items, section shortcuts, data freshness | Shortcuts, wins |
+| External links (`external_links`) | Shortcuts to outside tools such as Monday boards, grouped by section; public share views embedded only when flagged public | Links shared with everyone |
+| Rococo portfolio | Rococo admins only: every company with its health signals, plus companies, themes, sign-in domains, and every user, and the Activity log of configuration and permission changes | |
 
-QuickBooks sync, automated data pulls, and email notifications are the next phase.
+Rows marked with a module key appear only for a company whose modules include it. Email
+notifications are the next phase.
 
 ## Quick start
 
@@ -40,6 +47,7 @@ npm run dev             # http://localhost:5173
 npm run lint            # ESLint: TypeScript, React hooks, Fast Refresh rules
 npx vitest run          # unit and page tests, no network
 npm run build           # type-check plus production build
+npm run test:sql        # migrations against a local PostgreSQL 16 (not in CI)
 ```
 
 With an empty `.env` the app still runs: it renders a setup notice instead of the login
@@ -51,15 +59,18 @@ this; they never touch the network.
 `npm run demo` runs the app against an in-memory sample data set for all three companies
 (the same mocks the page tests use) at http://localhost:4173. Pick who you are with the URL:
 `/?persona=admin&company=klasik`, `/?persona=employee&company=kingdom`,
-`/?persona=rococo` for the portfolio, or `/?signedout=1` for the sign-in screen. Nothing is written anywhere;
-a reload resets the data.
+`/?persona=owner&company=kingdom`, `/?persona=manager&company=kingdom`,
+`/?persona=rococo` for the portfolio, or `/?signedout=1` for the sign-in screen. Kingdom's
+sample data has every module on, while Klasik and RBA have none, so the two side by side show
+what the modules add. Nothing is written anywhere; a reload resets the data.
 
 ## Supabase setup
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0023`), once each, on a fresh
-   project. Each file is idempotent in the sense that it can be applied to a project that
+   `supabase/migrations/` in numeric order (`0001` through `0031`), once each, on a fresh
+   project. Paste `0030` only after the two Vault entries in Data sources and Google setup
+   exist. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
    already-migrated project either errors or reinstates a superseded rule. Go forwards only,
@@ -87,6 +98,26 @@ a reload resets the data.
    themes, domains, and users are managed. Opening a company switches the hub to that
    company's branding and nav, for that session only.
 
+## Modules
+
+Some parts of the hub are modules a company has on or off. The keys:
+
+| Key | Label | What it turns on |
+| --- | --- | --- |
+| `switchboard` | Switchboard | Four-section navigation, the Home heading, and the Attention and Shortcuts cards. |
+| `production` | Production | Projects, milestones and letters, and the Production cards. |
+| `wins` | Wins | The wins page and the Home wins card. |
+| `data_sources` | Data sources | Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness. |
+| `external_links` | External links | Shortcuts to outside tools, including Monday, in each section. |
+
+With `switchboard` on, the sidebar reads in four sections, Home, Sales & Finance, Production and
+People / HR, plus an unlabeled group for SOPs, Resources and Settings.
+
+A module is a key in `companies.modules`, read only through `src/lib/modules.ts` (`hasModule`)
+and changed only by a Rococo admin on Rococo > Companies. A company with no modules on looks
+exactly as it did before modules existed. Turning a module off hides its screens and keeps its
+rows, so turning it back on brings everything back as it was.
+
 ## How people get in
 
 - **Company email:** the login screen recognizes the domain, switches to that company's
@@ -95,8 +126,9 @@ a reload resets the data.
 - **Personal email:** an admin creates an invitation on the People page and sends the
   sign-in link it produces. The gate admits the invited address; on first sign-in the
   profile inherits the invitation's company, role, and title.
-- **First sign-in:** the person gives their name and is in. Roles are `admin` (the whole
-  hub for their company) or `employee` (own GSR data plus the libraries).
+- **First sign-in:** the person gives their name and is in. Roles are `owner` and
+  `admin` (the whole hub for their company), `manager` and `employee` (own GSR data plus the
+  libraries); see Roles.
 - **Deactivating** a person on the People page removes all access immediately; their
   account can be reactivated later.
 
@@ -120,6 +152,20 @@ have ever signed in. That is the state every new company is in on its first day,
 works that way by default; the cycle's team table simply marks who cannot open theirs yet.
 Because all of it hangs off a profile id that survives the sign-in claim, nothing has to be
 redone when they finally arrive.
+
+## Roles
+
+A person in a company is an Owner, an Admin, a Manager or an Employee (0031).
+
+- **Owner and Admin** both see everything for their company: the whole hub, as an admin always
+  has.
+- **Manager** sees what an Employee sees until the capability matrix arrives.
+- **Employee** sees their own GSR data plus the libraries.
+
+Grants are ranked, and the database enforces the ranking. Only an Owner or a Rococo admin makes
+someone an Owner. Nobody grants a role above their own or changes the role or access of someone
+ranked above them. A person cannot report to themselves, to someone in another company, or round
+in a loop, and moving a person to another company clears the reporting lines that would cross it.
 
 ## Personal KPIs and deliverables
 
@@ -169,14 +215,17 @@ read them, and they appear on the person's dashboard when their job role carries
 ## Connections to outside systems
 
 Each company connects its own GoHighLevel and QuickBooks Online accounts from Settings,
-Connections. Connect sends the admin to the provider's own sign-in page; the provider sends
-the browser back to the `connections` Edge Function, which exchanges the code for tokens,
+Connections, and its own Google account for Google Sheets (the Google row shows only for a
+company with `data_sources` on). Connect sends the admin to the provider's own sign-in page;
+the provider sends the browser back to the `connections` Edge Function, which exchanges the code for tokens,
 records the connection on `company_connections` (the status row admins see: which account,
 since when, last sync) and keeps the tokens in `connection_tokens`, a table with row level
 security on and no policies, so only the function's service role can read it. Nothing in the
 browser holds a provider secret or token, and nothing is shared between companies. Disconnect
-revokes at the provider where it can and drops the tokens either way. The figures themselves
-are not synced yet; `docs/integrations.md` maps where each one will come from.
+revokes at the provider where it can and drops the tokens either way. Imported values land
+read-only in `sync_records`, written only by the `connections` function. A failed sync keeps the
+last good values with their time, and a blank shows as "-", never 0. `docs/integrations.md`
+maps where each figure will come from.
 
 ## Impact scores
 
@@ -294,18 +343,6 @@ Instrument Sans from Google Fonts as the design system's approved fallbacks. RBA
 Nova and Helvetica Neue LT Pro are Adobe families as well: add them to the same web project
 and the RBA theme picks them up without a code change.
 
-## Modules
-
-A Rococo admin can switch modules on for a company in Rococo > Companies; the list lives in
-`companies.modules` and the app reads it only through `src/lib/modules.ts`. With no modules on, a
-company sees the standard hub. The keys:
-
-- `switchboard`: Four-section navigation, the Home heading, and the Attention and Shortcuts cards.
-- `production`: Projects, milestones and letters, and the Production cards.
-- `wins`: The wins page and the Home wins card.
-- `data_sources`: Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness.
-- `external_links`: Shortcuts to outside tools, including Monday, in each section.
-
 ## Layout
 
 - `src/App.tsx`: auth gate and router.
@@ -316,14 +353,29 @@ company sees the standard hub. The keys:
 - `src/test/`: fixtures and the mocked services the page tests render against.
 - `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
+- `supabase/functions/`: the `connections` Edge Function and `_shared/` (provider keys and the
+  pure sync modules: parse, keys, schedule, runner, links, Google Sheets, QuickBooks).
+- `supabase/tests/`: the SQL harness and one test file per migration.
 - `docs/`: designs for work that is specified but not built.
 
 ## The connections function
 
 `supabase/functions/connections` is deployed with the gateway's JWT check off, because the
-provider's callback arrives with no session; the function checks the admin's own JWT on
-`start` and `disconnect` and its own signed state on `callback`. It needs these secrets
-(Dashboard, Edge Functions, Secrets):
+provider's callback arrives with no session. Its routes, all under
+`/functions/v1/connections`, and who may call each:
+
+- `POST /start` and `POST /disconnect`: an active Owner or Admin of the company, or a Rococo
+  admin, checked on their own JWT.
+- `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
+- `POST /sync/run`: Sync now, on the JWT of someone allowed to sync the source
+  (`private.can_sync_source`, decided by row level security).
+- `POST /sync/tick`: the hourly cron, with the `x-sync-secret` header checked against
+  `SYNC_CRON_SECRET`.
+- `POST /sync/describe`: an active Owner or Admin of the company, or a Rococo admin; reads a
+  sheet's tabs and first row.
+
+The sync routes live in this function so it stays the only reader of `connection_tokens`. It
+needs these secrets (Dashboard, Edge Functions, Secrets):
 
 - `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
   the company and admin who started it.
@@ -334,10 +386,108 @@ provider's callback arrives with no session; the function checks the admin's own
   with the scopes `opportunities.readonly users.readonly locations.readonly`.
 - `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` (`sandbox` or `production`): from
   an Intuit developer app owned by Rococo with the `com.intuit.quickbooks.accounting` scope.
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: from a Google Cloud OAuth client of type Web
+  application owned by Rococo, with the scopes
+  `openid email https://www.googleapis.com/auth/spreadsheets.readonly`.
+- `SYNC_CRON_SECRET`: a long random string, for example from `openssl rand -hex 32`; the hourly
+  tick sends it, and Vault keeps the same value as `sync_cron_secret`.
 
-Both provider apps must list exactly one redirect URL:
+All three provider apps (HighLevel, Intuit and Google) must list the same single redirect URL:
 `https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until the keys are in
-place, Connect answers with a plain "not set up yet" line and nothing else changes.
+place, Connect answers with a plain "not set up yet" line and nothing else changes. Deploy with
+`supabase functions deploy connections --no-verify-jwt`.
+
+## Data sources and Google setup
+
+A company with `data_sources` on reads figures from its own Google Sheets and QuickBooks
+through sources it configures. The steps, in order:
+
+**Google Cloud (a Rococo-owned project)**
+
+1. Enable the Google Sheets API.
+2. OAuth consent screen: user type External, app name "Company Hub", authorized domain
+   `rocococreative.io`, homepage `https://companyhub.rocococreative.io`, a privacy policy URL,
+   and the scopes `openid`, `email` and `.../auth/spreadsheets.readonly`.
+3. Set the publishing status to In production. Testing mode issues refresh tokens that expire
+   after 7 days.
+4. Create an OAuth client of type Web application with the authorized redirect URI
+   `https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/callback`.
+5. Submit sensitive-scope verification.
+
+**Supabase secrets (Dashboard, Edge Functions, Secrets)**
+
+6. Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET`.
+7. Confirm `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` are set.
+
+**Vault (SQL editor)**
+
+8. Create the two entries the hourly job reads:
+
+   ```sql
+   select vault.create_secret('<same value as SYNC_CRON_SECRET>', 'sync_cron_secret');
+   select vault.create_secret('https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/sync/tick', 'sync_function_url');
+   ```
+
+9. Paste `0030_sync_schedule.sql`. It schedules `hub-sync-tick` at minute 7 of every hour
+   (`7 * * * *`) with pg_cron and pg_net. Check it with `select jobname, schedule from cron.job;`
+   and, after the next hour, with
+   `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
+
+**Intuit**
+
+10. For real books, complete Intuit's production app assessment and set
+    `QBO_ENVIRONMENT=production`.
+
+**In the hub**
+
+11. A company admin connects Google Sheets and QuickBooks from Settings > Connections.
+12. They add sources in Settings > Data sources: paste the sheet link with the tab open, press
+    Read headers, map the fields, pick the record key, set the weekly day, time and zone, and
+    the stale threshold if one is agreed.
+13. They press Sync now once to see the first run land.
+
+Each source keeps its own weekday, time and time zone; the hourly tick works out which are due
+and makes one attempt per weekly slot. A run is all or nothing, and rows that are entirely blank
+are skipped and counted. The QuickBooks reader is GET only and reads Invoice and Payment
+records.
+
+Still pending from Kingdom: the sheet links and field mappings; the sync day, time, zone and
+stale threshold; the QuickBooks fields; and the capability matrix. Until they arrive, the
+Sales & Finance and Production cards read Not configured.
+
+## SQL harness
+
+`npm run test:sql` runs `bash supabase/tests/run.sh`. It starts a throwaway local PostgreSQL 16
+cluster (from `/usr/lib/postgresql/16/bin`, or `PG_BIN`; when run as root the server runs as
+the `postgres` OS user via `runuser`), loads `supabase/tests/stubs.sql` (stand-ins for
+Supabase's roles and the `auth`, `storage`, `vault`, `cron` and `net` schemas), applies every
+migration in order (stripping only the pg_cron and pg_net `create extension` lines), applies
+`0024` and later a second time to prove they are idempotent, loads
+`supabase/tests/helpers.sql`, then runs each `supabase/tests/*.test.sql` in a transaction that
+is rolled back.
+
+It needs a local PostgreSQL 16 and is not part of CI, which has no PostgreSQL; run it by hand for
+any change under `supabase/`. Every migration task adds `supabase/tests/<number>_<name>.test.sql`.
+
+## Applying this release
+
+The Kingdom release is `0024` to `0031` plus the `connections` function. Nothing here is
+applied until someone does it by hand:
+
+1. Back up, then paste `0024` to `0029` and `0031` in order in the SQL editor, once each. Each
+   is idempotent; go forwards only.
+2. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and
+   deploy: `supabase functions deploy connections --no-verify-jwt`.
+3. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0030`.
+4. Open Rococo > Companies and turn on Kingdom's modules (all five, or the ones Kingdom has
+   agreed).
+5. On Kingdom's People page, set Maddie Cothran and marvin waters to Owner by hand.
+6. Check: Klasik and RBA look unchanged; Kingdom Home shows the four sections; Rococo >
+   Activity shows the module change and the role changes; `select jobname, schedule from
+   cron.job;` lists `hub-sync-tick`.
+
+`0031` may go before or after `0030`; `0030` must follow the Vault entries. No migration seeds
+modules or roles.
 
 ## Deploy
 
