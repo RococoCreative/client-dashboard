@@ -1660,3 +1660,65 @@ describe("data sources", () => {
     expect(within(panel).getByText("Sample new tab")).toBeInTheDocument();
   });
 });
+
+describe("external links", () => {
+  // Read-only cases first, then Settings, which adds, renames and removes links in the shared mock store.
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const card = (title: string) => screen.getByRole("heading", { name: title }).closest("section") as HTMLElement;
+
+  it("lists Sales & Finance links with where they go", async () => {
+    renderWithHub(<SalesFinancePage />, kingdomAdmin, { path: "/sales-finance", pattern: "/sales-finance" });
+    const link = await screen.findByRole("link", { name: "Sample sales board, opens in a new tab" });
+    expect(link).toHaveAttribute("href", "https://example.com/monday/sample-sales-board");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    expect(link.getAttribute("rel")).toContain("noreferrer");
+    expect(within(link).getByText("example.com")).toBeInTheDocument();
+    expect(within(link).getByText("Opens in a new tab")).toBeInTheDocument();
+    expect(within(link).getByText("The sales CRM board. Monday asks you to sign in.")).toBeInTheDocument();
+    expect(screen.queryByText("Sample production board")).not.toBeInTheDocument();
+  });
+
+  it("embeds only a view flagged as public, with the direct link beside it", async () => {
+    const { container } = renderWithHub(<ProductionPage />, kingdomEmployee, { path: "/production", pattern: "/production" });
+    expect(await screen.findByText("Sample production board")).toBeInTheDocument();
+    const frames = container.querySelectorAll("iframe");
+    expect(frames).toHaveLength(1);
+    const frame = frames[0];
+    expect(frame).toHaveAttribute("title", "Sample schedule view");
+    expect(frame).toHaveAttribute("src", "https://example.com/embed/sample-schedule");
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-forms");
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(frame).toHaveAttribute("loading", "lazy");
+    const figure = frame.closest("figure") as HTMLElement;
+    expect(within(figure).getByText("Public share view")).toBeInTheDocument();
+    expect(within(figure).getByRole("link", { name: "Sample schedule view, opens in a new tab" })).toHaveAttribute("href", "https://example.com/monday/sample-schedule");
+    expect(screen.getByRole("link", { name: "Sample production board, opens in a new tab" }).closest("figure")).toBeNull();
+  });
+
+  it("groups every readable link under its section on Home", async () => {
+    const { container } = renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Sections" });
+    const shortcuts = card("Sections");
+    const group = async (name: string) => within(shortcuts).findByRole("group", { name });
+    expect(within(await group("Home")).getByText("Sample owner report")).toBeInTheDocument();
+    expect(within(await group("Sales & Finance")).getByText("Sample sales board")).toBeInTheDocument();
+    const production = await group("Production");
+    expect(within(production).getByText("Sample production board")).toBeInTheDocument();
+    expect(within(production).getByText("Sample schedule view")).toBeInTheDocument();
+    expect(within(shortcuts).getAllByRole("group")).toHaveLength(3);
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
+  it("shows no links to a company without the module", async () => {
+    const { unmount } = renderWithHub(<DashboardPage />, admin);
+    expect(await screen.findByText("Closed sales")).toBeInTheDocument();
+    expect(screen.queryByText("Outside tools")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample sales board")).not.toBeInTheDocument();
+    unmount();
+    renderWithHub(<CompanySettingsPage />, admin);
+    expect(await screen.findByText("Connections")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "External links" })).not.toBeInTheDocument();
+  });
+});

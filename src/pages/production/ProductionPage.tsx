@@ -1,10 +1,12 @@
 // The Production section's front page: every live project the company tracks by hand, with how
 // many of its milestones and letters are done and the next date it is aiming at. Members read
-// it; admins add projects here and edit them on the project page. Below the list sit the
-// Production cards whose definitions are still pending, each saying what it waits on.
+// it; admins add projects here and edit them on the project page. Below the list sit the company's
+// links to its own outside tools for Production, then the Production cards whose definitions are
+// still pending, each saying what it waits on.
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
+import ExternalLinksList from "../../components/links/ExternalLinksList.tsx";
 import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
 import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -142,6 +144,8 @@ export default function ProductionPage() {
           </div>
         </Section>
       )}
+
+      {hasModule(company!, "external_links") ? <ExternalLinksList companyId={company!.id} navGroup="production" /> : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ScaffoldCard
