@@ -85,7 +85,11 @@ export default function CompanyGoalsPage() {
   const [dialog, setDialog] = useState<{ goal: CompanyGoal | null } | null>(null);
   const [deleting, setDeleting] = useState<CompanyGoal | null>(null);
   const [busy, setBusy] = useState(false);
+  // The page's notice is for a Hit toggle that did not save, and the next action clears it. The
+  // delete dialog keeps its own, so it never opens showing a toggle that failed earlier as though
+  // the delete had gone wrong before it was confirmed.
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const state = useAsync(() => listCompanyGoals(companyId, year), [companyId, year]);
 
   const goals = state.data ?? [];
@@ -93,18 +97,20 @@ export default function CompanyGoalsPage() {
   async function handleDelete() {
     if (!deleting) return;
     setBusy(true);
+    setDeleteError("");
     try {
       await deleteCompanyGoal(deleting.id);
       state.setData((prev) => (prev ? prev.filter((g) => g.id !== deleting.id) : prev));
       setDeleting(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setDeleteError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   }
 
   async function toggleHit(goal: CompanyGoal) {
+    setError("");
     try {
       const next = await updateCompanyGoal(goal.id, { is_hit: !goal.is_hit });
       state.setData((prev) => (prev ? prev.map((g) => (g.id === next.id ? next : g)) : prev));
@@ -169,12 +175,13 @@ export default function CompanyGoalsPage() {
               const list = prev ?? [];
               return list.some((g) => g.id === saved.id) ? list.map((g) => (g.id === saved.id ? saved : g)) : [...list, saved];
             });
+            setError("");
             setDialog(null);
           }}
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="This removes the goal from the dashboard for everyone." confirmLabel="Delete goal" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete "${deleting.name}"?`} body="This removes the goal from the dashboard for everyone." confirmLabel="Delete goal" busy={busy} error={deleteError} onConfirm={() => void handleDelete()} onCancel={() => { setDeleting(null); setDeleteError(""); }} />
       ) : null}
     </>
   );

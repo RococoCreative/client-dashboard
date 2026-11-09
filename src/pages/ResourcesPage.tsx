@@ -27,6 +27,14 @@ function KindIcon({ kind }: { kind: ResourceKind }) {
   return <Icon size={15} className="text-accent" aria-hidden />;
 }
 
+// Whether the database answered a write with a refusal (a Postgres or PostgREST error code), so
+// the row is known not to have changed. A dropped connection comes back with no code: the write
+// may have landed, and nobody can say.
+function refused(err: unknown): boolean {
+  const code = typeof err === "object" && err !== null ? (err as { code?: unknown }).code : undefined;
+  return typeof code === "string" && code.length > 0;
+}
+
 function ResourceDialog({ companyId, resource, onClose, onSaved }: { companyId: string; resource: Resource | null; onClose: () => void; onSaved: (r: Resource) => void }) {
   const [title, setTitle] = useState(resource?.title ?? "");
   const [kind, setKind] = useState<ResourceKind>(resource?.kind ?? "link");
@@ -49,15 +57,30 @@ function ResourceDialog({ companyId, resource, onClose, onSaved }: { companyId: 
     try {
       let file_path = resource?.file_path ?? null;
       let file_name = resource?.file_name ?? null;
+      let uploaded: string | null = null;
       if (file) {
         const path = buildObjectPath(companyId, "resources", null, file.name);
         await uploadFile(path, file);
-        if (resource?.file_path) await removeFile(resource.file_path).catch(() => undefined);
+        uploaded = path;
         file_path = path;
         file_name = file.name;
       }
       const payload = { title: title.trim(), kind, description: description.trim() || null, url: hasUrl ? url.trim() : null, file_path, file_name, tags: parseTags(tags) };
-      onSaved(resource ? await updateResource(resource.id, payload) : await createResource({ company_id: companyId, ...payload }));
+      // A replaced file is removed only once the row points at the new one. Removing it first
+      // meant a failed save left the resource pointing at a file that was already gone. If the
+      // database refused the save, the row still names the old file, so the new upload is the
+      // one nobody points at. If the connection dropped, the save may have landed, so both stay:
+      // a spare file is only unused storage, a resource pointing at nothing is broken for everyone.
+      let saved: Resource;
+      try {
+        saved = resource ? await updateResource(resource.id, payload) : await createResource({ company_id: companyId, ...payload });
+      } catch (err) {
+        if (uploaded && refused(err)) await removeFile(uploaded).catch(() => undefined);
+        throw err;
+      }
+      const replaced = uploaded ? resource?.file_path : null;
+      if (replaced && replaced !== uploaded) await removeFile(replaced).catch(() => undefined);
+      onSaved(saved);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
@@ -113,6 +136,8 @@ export default function ResourcesPage() {
   const [deleting, setDeleting] = useState<Resource | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The delete dialog reports only its own failure, not a file that would not open earlier.
+  const [deleteError, setDeleteError] = useState("");
   const state = useAsync(() => listResources(companyId), [companyId]);
 
   const resources = useMemo(() => state.data ?? [], [state.data]);
@@ -144,13 +169,14 @@ export default function ResourcesPage() {
   async function handleDelete() {
     if (!deleting) return;
     setBusy(true);
+    setDeleteError("");
     try {
       await deleteResource(deleting.id);
       if (deleting.file_path) await removeFile(deleting.file_path).catch(() => undefined);
       state.setData((prev) => (prev ? prev.filter((r) => r.id !== deleting.id) : prev));
       setDeleting(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setDeleteError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -242,7 +268,7 @@ export default function ResourcesPage() {
         />
       ) : null}
       {deleting ? (
-        <ConfirmDialog title={`Delete "${deleting.title}"?`} body={deleting.file_path ? "The file is removed from storage as well." : "The link is removed from the library."} confirmLabel="Delete resource" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(null)} />
+        <ConfirmDialog title={`Delete "${deleting.title}"?`} body={deleting.file_path ? "The file is removed from storage as well." : "The link is removed from the library."} confirmLabel="Delete resource" busy={busy} error={deleteError} onConfirm={() => void handleDelete()} onCancel={() => { setDeleting(null); setDeleteError(""); }} />
       ) : null}
     </>
   );

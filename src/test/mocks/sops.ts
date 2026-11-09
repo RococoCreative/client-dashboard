@@ -21,7 +21,12 @@ export async function createSop(input: { company_id: string; title: string; cate
   const { body_md, change_note, ...doc } = input;
   const created: Sop = { id: `sop-new-${++counter}`, summary: null, status: "draft", current_version: 0, created_by: null, updated_by: null, created_at: now(), updated_at: now(), ...doc };
   sops.push(created);
-  await addSopVersion(created.id, created.company_id, body_md, change_note ?? "First version");
+  try {
+    await addSopVersion(created.id, created.company_id, body_md, change_note ?? "First version");
+  } catch (err) {
+    await deleteSop(created.id);
+    throw err;
+  }
   return created;
 }
 export async function updateSop(id: string, patch: Partial<Pick<Sop, "title" | "category" | "summary" | "status">>): Promise<Sop> {

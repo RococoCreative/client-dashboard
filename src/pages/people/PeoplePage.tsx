@@ -4,6 +4,12 @@
 // the one action that moves them along. Inviting is still a row plus a link, because the hub
 // holds no mail-sending key, so the admin shares the sign-in link and the signup gate lets that
 // address through.
+//
+// Deactivate is on every row but your own and a Rococo admin's, account or not. An address on one
+// of the company's sign-in domains gets in without any invitation and claims its roster row, so
+// switching the row off is the one thing that keeps a person out before they ever sign in, and it
+// keeps everything set up for them on record, where Remove deletes it. A Rococo admin placed with
+// the company shows on the roster too, but their role and access are Rococo's to manage.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Send, Trash2, UserPlus } from "lucide-react";
@@ -114,6 +120,10 @@ export default function PeoplePage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The cancel and remove dialogs report only their own failure. Sharing `error` with the row
+  // actions meant a dialog could open already showing a role change that failed a minute earlier,
+  // reading as though the cancel or removal had gone wrong before it was confirmed.
+  const [dialogError, setDialogError] = useState("");
 
   const state = useAsync(async () => {
     const [people, invitations] = await Promise.all([listCompanyProfiles(companyId), listInvitations(companyId)]);
@@ -178,13 +188,14 @@ export default function PeoplePage() {
   async function handleCancelInvite() {
     if (!cancelling) return;
     setBusy(true);
+    setDialogError("");
     try {
       await deleteInvitation(cancelling.invitation.id);
       const id = cancelling.invitation.id;
       state.setData((prev) => (prev ? { ...prev, invitations: prev.invitations.filter((i) => i.id !== id) } : prev));
       setCancelling(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setDialogError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -193,13 +204,14 @@ export default function PeoplePage() {
   async function handleRemoveStaff() {
     if (!removing) return;
     setBusy(true);
+    setDialogError("");
     try {
       await deleteStaffProfile(removing.id);
       const id = removing.id;
       state.setData((prev) => (prev ? { ...prev, people: prev.people.filter((p) => p.id !== id) } : prev));
       setRemoving(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setDialogError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -244,6 +256,7 @@ export default function PeoplePage() {
                 <tbody>
                   {people.map((person) => {
                     const self = person.id === profile.id;
+                    const rococo = person.is_rococo_admin;
                     const invitation = pendingFor(person);
                     const account = hasAccount(person);
                     return (
@@ -270,15 +283,21 @@ export default function PeoplePage() {
                           )}
                         </td>
                         <td className={tdClass}>
-                          <select value={person.role} disabled={self} aria-label={`Role for ${displayName(person)}`} onChange={(e) => void patchPerson(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-                            {keysOf(ROLE_LABELS).map((r) => (
-                              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                            ))}
-                          </select>
+                          {rococo ? (
+                            <Badge>Rococo Creative</Badge>
+                          ) : (
+                            <select value={person.role} disabled={self} aria-label={`Role for ${displayName(person)}`} onChange={(e) => void patchPerson(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
+                              {keysOf(ROLE_LABELS).map((r) => (
+                                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td className={tdClass}>
-                          {account ? (
-                            <Badge tone={person.is_active ? "success" : "neutral"}>{person.is_active ? "Active" : "Inactive"}</Badge>
+                          {!person.is_active ? (
+                            <Badge tone="neutral">Inactive</Badge>
+                          ) : account ? (
+                            <Badge tone="success">Active</Badge>
                           ) : invitation ? (
                             <Badge tone="info">Invited</Badge>
                           ) : (
@@ -287,16 +306,18 @@ export default function PeoplePage() {
                         </td>
                         <td className={`${tdClass} text-right`}>
                           <span className="flex items-center justify-end gap-1.5">
-                            {account && !self ? (
-                              <Button variant="ghost" size="sm" onClick={() => void patchPerson(person, { is_active: !person.is_active })}>
+                            {!self && !rococo ? (
+                              <Button variant="ghost" size="sm" aria-label={`${person.is_active ? "Deactivate" : "Reactivate"} ${displayName(person)}`} onClick={() => void patchPerson(person, { is_active: !person.is_active })}>
                                 {person.is_active ? "Deactivate" : "Reactivate"}
                               </Button>
                             ) : null}
                             {!account && invitation ? (
                               <>
-                                <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
-                                  {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
-                                </Button>
+                                {person.is_active ? (
+                                  <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
+                                    {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
+                                  </Button>
+                                ) : null}
                                 <IconButton label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
                                   <Trash2 size={14} aria-hidden />
                                 </IconButton>
@@ -304,9 +325,11 @@ export default function PeoplePage() {
                             ) : null}
                             {!account && !invitation ? (
                               <>
-                                <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
-                                  <Send size={13} aria-hidden /> Send invite
-                                </Button>
+                                {person.is_active ? (
+                                  <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
+                                    <Send size={13} aria-hidden /> Send invite
+                                  </Button>
+                                ) : null}
                                 <IconButton label={`Remove ${displayName(person)}`} onClick={() => setRemoving(person)}>
                                   <Trash2 size={14} aria-hidden />
                                 </IconButton>
@@ -344,23 +367,23 @@ export default function PeoplePage() {
       {cancelling ? (
         <ConfirmDialog
           title={`Cancel the invitation for ${displayName(cancelling.person)}?`}
-          body="They stay on the team here and the link stops working. Send a new invitation whenever you are ready."
+          body="They stay on the team here, and the invitation no longer lets them sign up. An address on one of this company's sign-in domains can still sign in without one, so deactivate them as well if they should not get in. Send a new invitation whenever you are ready."
           confirmLabel="Cancel invitation"
           busy={busy}
-          error={error}
+          error={dialogError}
           onConfirm={() => void handleCancelInvite()}
-          onCancel={() => setCancelling(null)}
+          onCancel={() => { setCancelling(null); setDialogError(""); }}
         />
       ) : null}
       {removing ? (
         <ConfirmDialog
           title={`Remove ${displayName(removing)} from the team?`}
-          body="This deletes their profile along with anything set up for them. They have never signed in, so nothing they did is lost."
+          body="This deletes their profile and everything set up for them, including reviews, goals, KPIs and compensation. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead."
           confirmLabel="Remove"
           busy={busy}
-          error={error}
+          error={dialogError}
           onConfirm={() => void handleRemoveStaff()}
-          onCancel={() => setRemoving(null)}
+          onCancel={() => { setRemoving(null); setDialogError(""); }}
         />
       ) : null}
     </>

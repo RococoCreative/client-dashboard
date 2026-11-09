@@ -4,9 +4,13 @@
 // by the time the promise resolves the click that authorised it is over, and the browser
 // refuses silently, with no exception to catch and nothing on screen. So the tab is opened
 // straight away while the gesture still counts, and the URL is put into it when it arrives.
+// It is opened without the "noopener" feature because browsers return null for that even
+// when the tab opens, which leaves nothing to put the URL into; the opener link is cut by
+// hand instead, so the file's page still cannot reach back into this one.
 // If the browser refused the empty tab too, the caller gets a message it can show.
 export async function openSignedUrl(fetchUrl: () => Promise<string>): Promise<void> {
-  const tab = window.open("", "_blank", "noopener");
+  const tab = window.open("", "_blank");
+  if (tab) tab.opener = null;
   try {
     const url = await fetchUrl();
     if (!tab) {

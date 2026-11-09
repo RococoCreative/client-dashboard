@@ -267,6 +267,10 @@ export default function GoalsPanel({
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The delete dialog reports only its own failure. Sharing `error` with the inline saves meant
+  // it could open already showing a completion that failed a minute earlier, reading as though
+  // the delete had gone wrong before it was confirmed.
+  const [deleteError, setDeleteError] = useState("");
 
   function update(change: (data: PanelData) => PanelData) {
     state.setData((prev) => (prev ? change(prev) : prev));
@@ -291,13 +295,14 @@ export default function GoalsPanel({
   async function handleDelete() {
     if (!deleting) return;
     setBusy(true);
+    setDeleteError("");
     try {
       await deleteGoal(deleting.id);
       const id = deleting.id;
       update((data) => ({ ...data, goals: data.goals.filter((g) => g.id !== id) }));
       setDeleting(null);
     } catch (err) {
-      setError(errorMessage(err));
+      setDeleteError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -385,9 +390,9 @@ export default function GoalsPanel({
           body="The goal, its action steps and its progress notes are removed. Leave it below 100 instead to keep the miss on record."
           confirmLabel="Delete goal"
           busy={busy}
-          error={error}
+          error={deleteError}
           onConfirm={() => void handleDelete()}
-          onCancel={() => setDeleting(null)}
+          onCancel={() => { setDeleting(null); setDeleteError(""); }}
         />
       ) : null}
     </div>
