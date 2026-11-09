@@ -1,5 +1,6 @@
 // Company settings for a company admin: name and logo, the company's job roles with the
-// dashboard modules and goals each one carries, and its own connections to outside systems.
+// dashboard modules and goals each one carries, its data sources when it has that module, and
+// its own connections to outside systems.
 // Theme, slug, and sign-in domains are Rococo's to manage (they affect who can sign in), so
 // they show read-only here.
 import { useState, type FormEvent } from "react";
@@ -9,12 +10,14 @@ import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
+import DataSourcesPanel from "../components/settings/DataSourcesPanel.tsx";
 import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import { inputClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { listCompanyDomains, updateCompany } from "../services/companies.ts";
 import { THEMES } from "../lib/theme.ts";
+import { hasModule } from "../lib/modules.ts";
 import { errorMessage } from "../lib/errors.ts";
 
 export default function CompanySettingsPage() {
@@ -68,6 +71,7 @@ export default function CompanySettingsPage() {
           </Section>
         </form>
         <JobRolesPanel companyId={company!.id} />
+        {hasModule(company!, "data_sources") ? <DataSourcesPanel companyId={company!.id} /> : null}
         </div>
         <div className="space-y-6">
           <Section eyebrow="Managed by Rococo" title="Theme and sign-in">

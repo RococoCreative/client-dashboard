@@ -1634,4 +1634,28 @@ describe("data sources", () => {
     expect(screen.queryByRole("heading", { name: "Data sources" })).not.toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("configures sources and syncs one now from Settings", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    await screen.findByRole("heading", { name: "Data sources" });
+    const panel = card("Data sources");
+    for (const s of KINGDOM.syncSources) expect(await within(panel).findByText(s.name)).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Sync Sample sales tab now" }));
+    expect(await within(panel).findByText("Sample sales tab synced: 2 rows.")).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Add source" }));
+    const dialog = screen.getByRole("dialog", { name: "New data source" });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(within(dialog).getByText("The source needs a name.")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Name"), "Sample new tab");
+    fireEvent.change(within(dialog).getByLabelText("Google Sheets link"), { target: { value: "https://docs.google.com/spreadsheets/d/sample-new-sheet/edit#gid=42" } });
+    expect(within(dialog).getByText("Spreadsheet sample-new-sheet, tab 42")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Column header 1"), "Job");
+    expect(within(dialog).getByLabelText("Key 1")).toHaveValue("job");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(within(panel).getByText("Sample new tab")).toBeInTheDocument();
+  });
 });
