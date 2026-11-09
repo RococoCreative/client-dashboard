@@ -327,7 +327,9 @@ provider's callback arrives with no session; the function checks the admin's own
 (Dashboard, Edge Functions, Secrets):
 
 - `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
-  the company and admin who started it.
+  the company and admin who started it. Each state is good for one callback: `start` records its
+  nonce in `connection_states` and `callback` deletes it as it redeems it, so migration 0029 has
+  to be applied before this version of the function is deployed.
 - `APP_ORIGINS`: comma separated origins the browser may be returned to, such as the
   production domain (`https://companyhub.rocococreative.io`) and the Vercel preview domain.
   Localhost is always allowed.

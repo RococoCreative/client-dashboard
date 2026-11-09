@@ -31,7 +31,8 @@ async function invoke<T>(path: string, body: Record<string, unknown>): Promise<T
 
 // Returns the provider's sign-in URL for this company. The caller sends the browser there; the
 // provider sends it back to the Edge Function, which finishes the connection and returns the
-// browser to the settings page with ?connected=<provider> or ?connect_error=<message>.
+// browser to returnTo (the app's /settings/connections/<company> path, which App.tsx routes on to
+// Settings) with ?connected=<provider> or ?connect_error=<message>.
 export async function startConnection(companyId: string, provider: ConnectionProvider, returnTo: string): Promise<string> {
   const result = await invoke<{ url: string }>("connections/start", { company_id: companyId, provider, return_to: returnTo });
   if (!result?.url) throw new Error("The connection service did not return a sign-in link.");

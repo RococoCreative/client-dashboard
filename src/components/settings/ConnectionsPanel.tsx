@@ -2,7 +2,7 @@
 // provider is a row: connected or not, which account, since when. Connect sends the admin to
 // the provider's own sign-in page and back; Disconnect drops the tokens on the server. Nothing
 // here reads a token or calls a provider: that is the connections Edge Function's job.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
@@ -22,14 +22,63 @@ const PROVIDER_BLURBS: Record<ConnectionProvider, string> = {
   quickbooks: "Revenue, costs, profit and cash for the company; revenue per person where the books tag it.",
 };
 
+// The fixed lines the connections Edge Function puts on connect_error, word for word, kept in step
+// with supabase/functions/connections/index.ts. Anything else on the address was written by
+// someone other than that function, a hand-made link for instance, so it is never shown in the
+// app's own voice.
+const KNOWN_CONNECT_ERRORS = new Set([
+  "The sign-in was cancelled or refused. Nothing changed.",
+  "This sign-in link was already used or has expired. Start the connection again.",
+  "GoHighLevel is not set up yet. Ask Rococo Creative to add the app keys.",
+  "QuickBooks Online is not set up yet. Ask Rococo Creative to add the app keys.",
+  "The GoHighLevel sign-in was refused by the provider.",
+  "The GoHighLevel sign-in returned something unexpected.",
+  "The QuickBooks sign-in was refused by the provider.",
+  "The QuickBooks sign-in returned something unexpected.",
+  "Choose one sub-account when installing; an agency-wide install is not supported.",
+  "QuickBooks did not say which company was connected.",
+  "The connection could not be saved.",
+  "The connection could not be finished. Try again from Settings.",
+]);
+
+interface Outcome {
+  tone: "success" | "error";
+  text: string;
+}
+
+// What the provider round trip reported, read off the address it came back to.
+function readOutcome(params: URLSearchParams): Outcome | null {
+  const connected = params.get("connected");
+  if (connected !== null) {
+    const provider = keysOf(CONNECTION_PROVIDER_LABELS).find((key) => key === connected);
+    return provider ? { tone: "success", text: `${CONNECTION_PROVIDER_LABELS[provider]} is connected.` } : null;
+  }
+  const returned = params.get("connect_error");
+  if (returned === null) return null;
+  return { tone: "error", text: KNOWN_CONNECT_ERRORS.has(returned) ? returned : "The connection did not finish. Try again." };
+}
+
 export default function ConnectionsPanel({ companyId }: { companyId: string }) {
   const state = useAsync(() => listConnections(companyId), [companyId]);
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [busy, setBusy] = useState<ConnectionProvider | null>(null);
   const [error, setError] = useState("");
-  // The provider sends the browser back here with one of these on the URL.
-  const justConnected = params.get("connected") as ConnectionProvider | null;
-  const returnedError = params.get("connect_error");
+  // The provider sends the browser back here with the outcome on the address. It is read once, on
+  // arrival, and then taken off the address, so a reload does not report it again and a later
+  // Disconnect is not contradicted by "is connected" above a row that says otherwise.
+  const [outcome, setOutcome] = useState(() => readOutcome(params));
+  useEffect(() => {
+    if (!params.has("connected") && !params.has("connect_error")) return;
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("connected");
+        next.delete("connect_error");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [params, setParams]);
 
   const rowFor = (provider: ConnectionProvider): CompanyConnection | null => state.data?.find((c) => c.provider === provider) ?? null;
 
@@ -37,8 +86,11 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
     if (busy) return;
     setBusy(provider);
     setError("");
+    setOutcome(null);
     try {
-      const url = await startConnection(companyId, provider, `${window.location.origin}/settings`);
+      // The trip to the provider is a full page load, and the company a Rococo admin stepped into
+      // lives only in this session's memory, so the way back names the company (App.tsx).
+      const url = await startConnection(companyId, provider, `${window.location.origin}/settings/connections/${companyId}`);
       window.location.assign(url);
     } catch (err) {
       setError(errorMessage(err));
@@ -50,6 +102,7 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
     if (busy) return;
     setBusy(provider);
     setError("");
+    setOutcome(null);
     try {
       await disconnectConnection(companyId, provider);
       await state.reload();
@@ -62,8 +115,7 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
 
   return (
     <Section eyebrow="Integrations" title="Connections" description="This company signs in to its own accounts. Tokens stay on the server, and nothing is shared between companies.">
-      {justConnected && CONNECTION_PROVIDER_LABELS[justConnected] ? <Notice tone="success" className="mb-4">{CONNECTION_PROVIDER_LABELS[justConnected]} is connected.</Notice> : null}
-      {returnedError ? <Notice tone="error" className="mb-4">{returnedError}</Notice> : null}
+      {outcome ? <Notice tone={outcome.tone} className="mb-4">{outcome.text}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={2} /> : null}

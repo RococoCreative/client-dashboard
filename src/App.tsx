@@ -7,7 +7,7 @@
 //      company sets the theme and the pages mount. Rococo admins start with no company on
 //      the portfolio (Rococo theme) and step into a company for this session only.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "./services/supabase.ts";
 import { getMyProfile } from "./services/profiles.ts";
@@ -98,6 +98,24 @@ function AdminOnly({ children }: { children: ReactNode }) {
   const { company, isAdmin } = useHub();
   if (!company) return <RedirectTo path="/rococo" />;
   return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// Where the connections Edge Function sends the browser once the provider's sign-in is done, with
+// the outcome on the query string. Connecting is a full page load, and a Rococo admin's company is
+// session-only state that does not survive one, so the path names the company the connection was
+// for. A Rococo admin has that company made active again, from the URL only with nothing stored;
+// anyone else is let through only to their own company. The outcome then lands on Settings.
+function ConnectionReturn() {
+  const { companyId } = useParams();
+  const { companies, company, isRococo, setActiveCompanyId } = useHub();
+  const target = companies.find((c) => c.id === companyId) ?? null;
+  const stepIn = isRococo && target !== null && company?.id !== target.id;
+  useEffect(() => {
+    if (stepIn && target) setActiveCompanyId(target.id);
+  }, [stepIn, target, setActiveCompanyId]);
+  if (!target) return <Navigate to={isRococo ? "/rococo" : "/"} replace />;
+  if (stepIn) return null;
+  return <RedirectTo path="/settings" />;
 }
 
 function RococoOnly({ children }: { children: ReactNode }) {
@@ -321,6 +339,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
+            <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
             <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />

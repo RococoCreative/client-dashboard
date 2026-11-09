@@ -10,7 +10,9 @@
 //
 // start and disconnect need the signed-in admin's JWT. The provider reaches callback with no
 // JWT at all, so this function verifies its own signed state and the gateway's JWT check is
-// off for it. Providers are entries in the registry below, never a branch on the company.
+// off for it. A state is good for one callback: start records its nonce in connection_states
+// (0029) and callback takes it off that table as it redeems it. Providers are entries in the
+// registry below, never a branch on the company.
 //
 // Environment (Supabase secrets): CONNECTIONS_STATE_SECRET, APP_ORIGINS (comma separated
 // origins the browser may be sent back to; localhost is always allowed), GHL_CLIENT_ID,
@@ -271,7 +273,17 @@ async function handleStart(req: Request): Promise<Response> {
   const returnTo = checkReturnTo(body.return_to);
   const profileId = await requireAdmin(req, body.company_id);
   const { clientId } = credentialsFor(def);
-  const state = await signState({ c: body.company_id, p: def.key, u: profileId, r: returnTo, n: crypto.randomUUID(), e: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS });
+  const nonce = crypto.randomUUID();
+  const expires = Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS;
+  const state = await signState({ c: body.company_id, p: def.key, u: profileId, r: returnTo, n: nonce, e: expires });
+  const admin = service();
+  // States nobody came back with are swept here, while we are at the table anyway. Best effort: a
+  // failed sweep leaves rows that are already useless, and must not stop a connection starting.
+  const { error: sweepError } = await admin.from("connection_states").delete().lt("expires_at", new Date().toISOString());
+  if (sweepError) console.error("expired state sweep failed", sweepError.message);
+  // The nonce the callback must find, good until the state itself expires.
+  const { error: nonceError } = await admin.from("connection_states").insert({ nonce, company_id: body.company_id, expires_at: new Date(expires * 1000).toISOString() });
+  if (nonceError) throw new HttpError(500, "The connection could not be started. Try again.");
   return json(200, { url: def.authorizeUrl({ clientId, redirectUri: REDIRECT_URI, state }) });
 }
 
@@ -280,13 +292,29 @@ async function handleCallback(req: Request): Promise<Response> {
   const state = url.searchParams.get("state");
   if (!state) return json(400, { error: "Missing state." });
   const claims = await verifyState(state);
+  // Single use. The signature proves this function wrote the state, not that this is the first
+  // time it has come back: a state read out of browser history or a request log within its ten
+  // minutes would otherwise connect the company to whatever account the code came from. Deleting
+  // the nonce as it is redeemed means a second callback with the same state finds nothing.
+  const admin = service();
+  const { data: redeemed, error: redeemError } = await admin
+    .from("connection_states")
+    .delete()
+    .eq("nonce", claims.n)
+    .eq("company_id", claims.c)
+    .select("nonce")
+    .maybeSingle();
+  if (redeemError) {
+    console.error("state redeem failed", redeemError.message);
+    return backTo(claims.r, { connect_error: "The connection could not be finished. Try again from Settings." });
+  }
+  if (!redeemed) return backTo(claims.r, { connect_error: "This sign-in link was already used or has expired. Start the connection again." });
   const code = url.searchParams.get("code");
   if (!code || url.searchParams.get("error")) return backTo(claims.r, { connect_error: "The sign-in was cancelled or refused. Nothing changed." });
   const def = providerFor(claims.p);
   try {
     const creds = credentialsFor(def);
     const exchanged = await def.exchange({ ...creds, code, redirectUri: REDIRECT_URI, query: url.searchParams });
-    const admin = service();
     const now = new Date().toISOString();
     const { data: row, error: rowError } = await admin
       .from("company_connections")
@@ -333,9 +361,13 @@ async function handleDisconnect(req: Request): Promise<Response> {
   const def = providerFor(body.provider);
   await requireAdmin(req, body.company_id);
   const admin = service();
-  const { data: row } = await admin.from("company_connections").select("id").eq("company_id", body.company_id).eq("provider", def.key).maybeSingle();
+  // A failed read is not "nothing to disconnect": answering ok then would leave the grant and the
+  // tokens in place while the panel reloads and still reads Connected, with nothing said.
+  const { data: row, error: lookupError } = await admin.from("company_connections").select("id").eq("company_id", body.company_id).eq("provider", def.key).maybeSingle();
+  if (lookupError) throw new HttpError(500, "The connection could not be removed.");
   if (!row) return json(200, { ok: true });
-  const { data: tokens } = await admin.from("connection_tokens").select("access_token, refresh_token").eq("connection_id", row.id).maybeSingle();
+  const { data: tokens, error: tokensError } = await admin.from("connection_tokens").select("access_token, refresh_token").eq("connection_id", row.id).maybeSingle();
+  if (tokensError) throw new HttpError(500, "The connection could not be removed.");
   if (tokens && def.revoke) {
     // Best effort: the provider may already have dropped the grant. Ours goes either way.
     try {
