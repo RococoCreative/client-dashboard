@@ -1,7 +1,7 @@
 // Pins the cycle rules every GSR screen shares: periods, cadences, which cycles are in play,
 // default names, and the months inside a quarter.
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, cycleColumns, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart } from "./cycles.ts";
+import { activeCycles, currentCycle, cycleColumns, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart, scoredCycleInPlay } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -86,6 +86,55 @@ describe("cycle periods", () => {
     const novClosed = months.map((c) => (c.id === "nov" ? { ...c, status: "closed" } : c));
     expect(gsrCycleInPlay(novClosed, dec1)?.id).toBe("jan");
     expect(gsrCycleInPlay([...novClosed, q4], dec1)?.id).toBe("jan");
+  });
+
+  it("opens the earliest month opened early when no open month has begun", () => {
+    // October 25: October is closed, and November and December have both been opened early.
+    // Nothing begun is owed, so the next month is the one to work in, not the furthest.
+    const months = [
+      { id: "oct", cadence: "monthly" as const, period_start: "2026-10-01", period_end: "2026-10-31", status: "closed" },
+      { id: "nov", cadence: "monthly" as const, period_start: "2026-11-01", period_end: "2026-11-30", status: "open" },
+      { id: "dec", cadence: "monthly" as const, period_start: "2026-12-01", period_end: "2026-12-31", status: "open" },
+    ];
+    const oct25 = new Date(2026, 9, 25, 12);
+    expect(gsrCycleInPlay(months, oct25)?.id).toBe("nov");
+    expect(gsrCycleInPlay([...months].reverse(), oct25)?.id).toBe("nov");
+    // A quarter covering today changes nothing.
+    const q4 = { id: "q4", cadence: "quarterly" as const, period_start: "2026-10-01", period_end: "2026-12-31", status: "open" };
+    expect(gsrCycleInPlay([q4, ...months], oct25)?.id).toBe("nov");
+    // Two months starting together (a twin the dialogs now refuse) still give one stable answer.
+    const twin = { id: "nov-b", cadence: "monthly" as const, period_start: "2026-11-01", period_end: "2026-11-30", status: "open" };
+    expect(gsrCycleInPlay([twin, ...months], oct25)?.id).toBe("nov");
+    expect(gsrCycleInPlay([...months, twin].reverse(), oct25)?.id).toBe("nov");
+  });
+
+  it("finds the scored cycle in play by cadence first, so a month never hides the quarter", () => {
+    // January 5: January's GSR covers today, Q4 is over but still open, and no Q1 exists. Read
+    // across every cadence, the month covering today was all there was, and the quarter whose
+    // months the person is being scored on went missing.
+    const cycles = [
+      { id: "jan", cadence: "monthly" as const, period_start: "2027-01-01", period_end: "2027-01-31", status: "open" },
+      { id: "q4", cadence: "quarterly" as const, period_start: "2026-10-01", period_end: "2026-12-31", status: "open" },
+      { id: "q3", cadence: "quarterly" as const, period_start: "2026-07-01", period_end: "2026-09-30", status: "closed" },
+    ];
+    const jan5 = new Date(2027, 0, 5, 12);
+    expect(scoredCycleInPlay(cycles, jan5)?.id).toBe("q4");
+    expect(scoredCycleInPlay([...cycles].reverse(), jan5)?.id).toBe("q4");
+    // Nothing covers today and the most recently started open cycle is a month opened early.
+    const between = [
+      { id: "feb", cadence: "monthly" as const, period_start: "2027-02-01", period_end: "2027-02-28", status: "open" },
+      { id: "q4", cadence: "quarterly" as const, period_start: "2026-10-01", period_end: "2026-12-31", status: "open" },
+    ];
+    expect(scoredCycleInPlay(between, jan5)?.id).toBe("q4");
+    // A quarter covering today leads, ahead of the year it sits in and the quarter still owed.
+    const year = { id: "fy", cadence: "annual" as const, period_start: "2027-01-01", period_end: "2027-12-31", status: "open" };
+    const q1 = { id: "q1", cadence: "quarterly" as const, period_start: "2027-01-01", period_end: "2027-03-31", status: "open" };
+    expect(scoredCycleInPlay([...cycles, year, q1], jan5)?.id).toBe("q1");
+    // A quarter opened early comes back when nothing begun is open, the earliest first.
+    const q2 = { id: "q2", cadence: "quarterly" as const, period_start: "2027-04-01", period_end: "2027-06-30", status: "open" };
+    const q3next = { id: "q3-27", cadence: "quarterly" as const, period_start: "2027-07-01", period_end: "2027-09-30", status: "open" };
+    expect(scoredCycleInPlay([q3next, q2], jan5)?.id).toBe("q2");
+    expect(scoredCycleInPlay(cycles.filter((c) => c.cadence === "monthly"), jan5)).toBeNull();
   });
 
   it("gives a month no pillar columns, and the locked GSR score only where the company scores GSRs", () => {

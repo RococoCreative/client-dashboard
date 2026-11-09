@@ -18,7 +18,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
-import { signedOffBarDetail } from "../../lib/gsr/scoring.ts";
+import { pillarsForReview, signedOffBarDetail } from "../../lib/gsr/scoring.ts";
 import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
@@ -46,6 +46,13 @@ export default function MyReviewsPage() {
   // empty ring and "Not scored" bars with a finished, rated review one line down in the table.
   // The whole card comes from one review so the status and the feedback match the number.
   const featured = latestScoredReview(rows) ?? rows[0] ?? null;
+  // A review with no score of record yet still draws a bar per pillar: the pillars it was signed
+  // off with, if it was, and each one's scoring type, so a signed-off Monthly GSRs pillar with no
+  // month locked in reads as the zero it counted for, the way the review page reads it.
+  const bars = featured
+    ? (featured.result?.pillars ??
+      pillarsForReview(featured.review, pillars).map((p) => ({ pillarId: p.id, name: p.name, weight: p.weight, scoringType: p.scoring_type, score: null })))
+    : [];
 
   return (
     <>
@@ -69,7 +76,7 @@ export default function MyReviewsPage() {
                   </div>
                 </div>
                 <div className="space-y-3 md:col-span-2">
-                  {(featured.result?.pillars ?? pillars.map((p) => ({ pillarId: p.id, name: p.name, weight: p.weight, score: null }))).map((p) => (
+                  {bars.map((p) => (
                     <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p)} />
                   ))}
                 </div>

@@ -117,24 +117,53 @@ export function cyclesInPlay<T extends { id: string; period_start: string; perio
   return [...current, ...ended];
 }
 
-// The month a person's own Goal Setting Review is worked in: the open monthly cycle covering
-// today, else the most recently ended month nobody has closed yet. Read from cyclesInPlay, never
-// activeCycles alone: on December 1, with November still open and December not opened yet, the
-// quarter covering today was all activeCycles returned, and the employee lost the month they still
-// had to finish. My GSR and the employee dashboard both read it here, so they agree.
+// The one cycle of a section that a person's own screens work in: the open cycle covering today
+// (the one ending soonest, when several do), else the most recently ended one nobody has closed
+// yet, else the next one to begin. Read from cyclesInPlay, never activeCycles alone: on December
+// 1, with November still open and December not opened yet, the quarter covering today was all
+// activeCycles returned, and the employee lost the month they still had to finish.
 //
-// The month is chosen among months only, so a quarter or any other cadence never changes the
-// answer. And a month that has begun always wins over one opened early: when no month covers
-// today, cyclesInPlay leads with its stand-in, the most recently started open month, which can be
-// one that has not begun yet. Taking it hid the ended month still owed. A month opened early
-// still comes back when it is the only open month.
+// The cycle is chosen among its own section only, so a cycle of the other cadence never changes
+// the answer. And a cycle that has begun always wins over one opened early: when nothing covers
+// today, cyclesInPlay leads with its stand-in, the most recently started open cycle, which can be
+// one that has not begun yet. Taking it hid the ended cycle still owed. When nothing open has
+// begun, the earliest to begin is next, not the furthest: on October 25, with November and
+// December both opened early, November is the one to work in. Ties break on the id, so the answer
+// never depends on the order the rows arrived in.
+function sectionCycleInPlay<T extends { id: string; cadence: Cadence; period_start: string; period_end: string; status: string }>(
+  cycles: T[],
+  section: HubSection,
+  today: Date,
+): T | null {
+  const todayIso = toDateOnly(today);
+  const own = cycles.filter((c) => sectionOf(c.cadence) === section);
+  const begun = cyclesInPlay(own, today).find((c) => c.period_start <= todayIso);
+  if (begun) return begun;
+  return (
+    own
+      .filter((c) => c.status === "open")
+      .sort((a, b) => a.period_start.localeCompare(b.period_start) || a.id.localeCompare(b.id))[0] ?? null
+  );
+}
+
+// The month a person's own Goal Setting Review is worked in. My GSR and the employee dashboard
+// both read it here, so they agree.
 export function gsrCycleInPlay<T extends { id: string; cadence: Cadence; period_start: string; period_end: string; status: string }>(
   cycles: T[],
   today = new Date(),
 ): T | null {
-  const todayIso = toDateOnly(today);
-  const months = cyclesInPlay(cycles.filter((c) => sectionOf(c.cadence) === "gsr"), today);
-  return months.find((c) => c.period_start <= todayIso) ?? months[0] ?? null;
+  return sectionCycleInPlay(cycles, "gsr", today);
+}
+
+// The scored cycle a person's months are adding up toward, for the Monthly GSRs line on the
+// dashboard and the person page. Chosen among scored cycles first: read off every cadence, a month
+// covering today (or a month standing in between periods) was the only cycle in the list, and the
+// quarter still open after its period ended went missing with the line.
+export function scoredCycleInPlay<T extends { id: string; cadence: Cadence; period_start: string; period_end: string; status: string }>(
+  cycles: T[],
+  today = new Date(),
+): T | null {
+  return sectionCycleInPlay(cycles, "reviews", today);
 }
 
 // The most pressing open cycle, for a caller that can genuinely only show one. Prefer

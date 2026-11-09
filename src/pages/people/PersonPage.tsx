@@ -33,7 +33,7 @@ import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../.
 import { listJobRoles } from "../../services/jobRoles.ts";
 import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
-import { activeCycles, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
+import { reviewPath, scoredCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
@@ -72,9 +72,9 @@ export default function PersonPage() {
   const { people, person, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals } = state.data;
   if (!person) return <Notice tone="error">That person is not in this company.</Notice>;
   // For a company that scores its GSRs: where the locked-in months inside the open scored review
-  // stand.
+  // stand. The same scored cycle the person's own dashboard reads, found among scored cycles first.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
-  const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
+  const scoredCycle = scoredCycleInPlay(cycles);
   const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
   // The role they are in, and whether it puts their figures on their dashboard. A retired role
   // stays on their record but carries nothing, which is how the dashboard reads it too.
@@ -130,6 +130,10 @@ export default function PersonPage() {
   }
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
+  // A Rococo admin placed on a company roster keeps their role and access with Rococo: the
+  // database refuses a company admin's change to their row (0029), so no role control is offered,
+  // the same as their row on the People list.
+  const rococo = person.is_rococo_admin;
   const tenure = formatTenure(person.hire_date);
   const manager = person.reports_to ? people.find((p) => p.id === person.reports_to) ?? null : null;
 
@@ -225,14 +229,23 @@ export default function PersonPage() {
                 <label htmlFor="person-phone" className={labelClass}>Phone</label>
                 <BlurInput id="person-phone" value={person.phone ?? ""} placeholder="(555) 010-0000" onSave={(next) => void patch({ phone: next.trim() || null })} />
               </div>
-              <div>
-                <label htmlFor="person-role" className={labelClass}>Role</label>
-                <select id="person-role" value={person.role} disabled={self} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
-                  {keysOf(ROLE_LABELS).map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                  ))}
-                </select>
-              </div>
+              {rococo ? (
+                <div>
+                  <p className={labelClass}>Role</p>
+                  <div className="mt-1.5">
+                    <Badge>Rococo Creative</Badge>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="person-role" className={labelClass}>Role</label>
+                  <select id="person-role" value={person.role} disabled={self} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
+                    {keysOf(ROLE_LABELS).map((r) => (
+                      <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </Section>
           <div className="grid gap-4">
