@@ -313,10 +313,12 @@ third decimal place, an impossible date (`2026-04-31`), a year outside 1900 to 2
 and a `period_type` that is not a month, quarter or year (`qtr`, `yr` and `mo` are fine, a
 phrase such as `Year to date` is not) or that the period contradicts (`month` beside
 `Q3 2026`) are each reported by line, and that period is left out rather than saved as a zero
-or a blank. A column headed just `Type` is the period type only when its cells say month,
-quarter or year; otherwise it means something else (a job type, or actual against budget) and
-is left out like any column the import does not read, except that a file naming one period on
-two lines beside it is refused, since that column may be what tells the lines apart. A file
+or a blank. A column headed just `Type` is left out like any column the import does not read
+when none of its cells is about the period (a job type, or actual against budget), except that
+a file naming one period on two lines beside it is refused, since that column may be what tells
+the lines apart. When any cell mentions a period (`Quarter-end`, `Year-end`, `Annual
+maintenance`), the column is the period type and each cell that is not a month, quarter or year
+is reported by line, so a quarterly figure is never filed as a month. A file
 separated by semicolons or tabs, a file with two columns that read as the same thing under any
 of its names (`Revenue (Actual)` beside `Revenue (Budget)`, or `Income (Actual)` beside
 `Revenue (Budget)`), and a file whose quotes are out of place (one that never closes, one that
