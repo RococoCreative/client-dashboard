@@ -45,6 +45,7 @@ import MarketingPage from "./pages/MarketingPage.tsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
+import WinsPage from "./pages/WinsPage.tsx";
 import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
@@ -302,6 +303,7 @@ function SignedIn({ session }: { session: Session }) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
+            <Route path="wins" element={<ModuleOnly module="wins"><WinsPage /></ModuleOnly>} />
             {/* Three sections keyed on cadence: GSRs (monthly), Reviews (every scored cadence), Goals
                 (the year's). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}

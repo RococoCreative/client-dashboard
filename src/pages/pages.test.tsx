@@ -22,10 +22,12 @@ vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
+import * as winsService from "../services/wins.ts";
 import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
@@ -53,6 +55,7 @@ import FinancialsPage from "./FinancialsPage.tsx";
 import MarketingPage from "./MarketingPage.tsx";
 import ProductionPage from "./production/ProductionPage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
+import WinsPage from "./WinsPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -1242,6 +1245,79 @@ describe("production", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add project" }));
     const row = (await screen.findByRole("link", { name: "Sample job 103" })).closest("tr") as HTMLElement;
     expect(within(row).getByText("0 of 0 done")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("wins", () => {
+  // Read-only cases first, then the mutations, because the mock store is shared.
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const winsRoute = { path: "/wins", pattern: "/wins" };
+
+  it("shows a member the wins read-only, newest first, with a win's project", async () => {
+    renderWithHub(<WinsPage />, kingdomEmployee, winsRoute);
+    expect(await screen.findByRole("heading", { name: "Wins" })).toBeInTheDocument();
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    const fourth = screen.getByText("Sample win 4").closest("li") as HTMLElement;
+    expect(within(fourth).getByText("Sample job 101")).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 5")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New win" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Archive / })).not.toBeInTheDocument();
+  });
+
+  it("gives an admin every field to edit in place", async () => {
+    renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    expect(await screen.findByDisplayValue("Sample win 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual").length).toBe(6);
+    expect(screen.getByLabelText("Project for Sample win 4")).toHaveDisplayValue("Sample job 101");
+    expect(screen.getByLabelText("Won on for Sample win 1")).toHaveValue("2026-09-12");
+    expect(screen.getByRole("button", { name: "New win" })).toBeInTheDocument();
+  });
+
+  it("creates a win by hand", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    await user.click(await screen.findByRole("button", { name: "New win" }));
+    const dialog = screen.getByRole("dialog", { name: "New win" });
+    await user.click(within(dialog).getByRole("button", { name: "Add win" }));
+    expect(within(dialog).getByText("Give the win a title.")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Title"), "Sample win 8");
+    fireEvent.change(within(dialog).getByLabelText("Won on"), { target: { value: "" } });
+    await user.click(within(dialog).getByRole("button", { name: "Add win" }));
+    expect(within(dialog).getByText("Pick the date it was won.")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Won on"), { target: { value: "2026-06-01" } });
+    await user.click(within(dialog).getByRole("button", { name: "Add win" }));
+    const row = (await screen.findByDisplayValue("Sample win 8")).closest("li") as HTMLElement;
+    expect(within(row).getByText("Manual")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Oldest, so it sits last.
+    const titles = screen.getAllByLabelText(/^Title of /).map((input) => (input as HTMLInputElement).value);
+    expect(titles.at(-1)).toBe("Sample win 8");
+  });
+
+  it("saves a description on blur", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    const description = await screen.findByLabelText("Description of Sample win 2");
+    await user.type(description, "Closed on the first walkthrough.");
+    await user.tab();
+    await waitFor(async () => {
+      const saved = (await winsService.listWins(KINGDOM.company.id)).find((w) => w.title === "Sample win 2");
+      expect(saved?.description).toBe("Closed on the first walkthrough.");
+    });
+    expect(screen.getByLabelText("Description of Sample win 2")).toHaveValue("Closed on the first walkthrough.");
+  });
+
+  it("archives a win after confirming", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    await user.click(await screen.findByRole("button", { name: "Archive Sample win 7" }));
+    const dialog = screen.getByRole("dialog", { name: "Archive this win?" });
+    expect(within(dialog).getByText("It leaves this list and the Home card. It is kept, not deleted.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(screen.queryByDisplayValue("Sample win 7")).not.toBeInTheDocument());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

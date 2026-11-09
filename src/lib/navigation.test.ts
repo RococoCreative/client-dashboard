@@ -101,6 +101,16 @@ describe("navFor without the switchboard module", () => {
     expect(employee.filter((label) => label !== "Projects")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
   });
 
+  it("puts Wins right after Dashboard for admins and employees with wins on", () => {
+    const wins = { ...klasik, modules: ["wins"] };
+    const admin = flatItems(navFor(wins, true, false)).map((i) => i.label);
+    expect(admin.slice(0, 2)).toEqual(["Dashboard", "Wins"]);
+    expect(admin.filter((label) => label !== "Wins")).toEqual(TODAY_ADMIN.map((i) => i.label));
+    const employee = flatItems(navFor(wins, false, false)).map((i) => i.label);
+    expect(employee.slice(0, 2)).toEqual(["Dashboard", "Wins"]);
+    expect(employee.filter((label) => label !== "Wins")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
+  });
+
   it("ignores an unknown key entirely", () => {
     const future = { ...klasik, modules: ["future"] };
     expect(shape(flatItems(navFor(future, true, false)))).toEqual(shape(TODAY_ADMIN));
@@ -119,7 +129,7 @@ describe("navFor with the switchboard module", () => {
   it("groups a Kingdom admin's sidebar into sections", () => {
     const layout = navFor(kingdom, true, false);
     expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
-    expect(labelsOf(layout, "Home")).toEqual(["Home"]);
+    expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People", "My GSR"]);
@@ -129,6 +139,7 @@ describe("navFor with the switchboard module", () => {
   it("groups a Kingdom employee's sidebar without Sales & Finance", () => {
     const layout = navFor(kingdom, false, false);
     expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Production", "People / HR", null]);
+    expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["My GSR", "My Reviews", "My Goals"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources"]);
@@ -137,7 +148,7 @@ describe("navFor with the switchboard module", () => {
   it("drops My GSR for a Rococo admin inside Kingdom", () => {
     const layout = navFor(kingdom, true, true);
     expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
-    expect(labelsOf(layout, "Home")).toEqual(["Home"]);
+    expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People"]);

@@ -668,3 +668,16 @@ export interface ProjectMilestone {
   responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
   created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
 }
+
+// Wins
+// Wins a company records by hand (0027). Members read them and admins write them. A write from
+// the browser is always manual: the database forces source_type and clears source_ref, so a
+// later import can be told apart. Nothing is deleted; a win is archived.
+export type WinSourceType = "manual";
+export const WIN_SOURCE_LABELS: Record<WinSourceType, string> = { manual: "Manual" };
+export interface Win {
+  id: string; company_id: string; title: string; description: string | null; won_on: string;
+  project_id: string | null; source_type: WinSourceType; source_ref: Record<string, unknown> | null;
+  archived_at: string | null; created_by: string | null; updated_by: string | null;
+  created_at: string; updated_at: string;
+}

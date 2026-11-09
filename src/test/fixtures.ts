@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, Win } from "../types/database.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
@@ -34,6 +34,7 @@ interface CompanySpec {
   resources: ResourceSpec[];
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
   projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
+  wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
 }
 
 const SPECS: Record<string, CompanySpec> = {
@@ -118,6 +119,15 @@ const SPECS: Record<string, CompanySpec> = {
         ],
       },
     ],
+    wins: [
+      { title: "Sample win 1", won_on: "2026-09-12" },
+      { title: "Sample win 2", won_on: "2026-09-05" },
+      { title: "Sample win 3", won_on: "2026-08-28" },
+      { title: "Sample win 4", won_on: "2026-08-20", project: 0 },
+      { title: "Sample win 5", won_on: "2026-08-11", archived: true },
+      { title: "Sample win 6", won_on: "2026-07-30" },
+      { title: "Sample win 7", won_on: "2026-07-15" },
+    ],
   },
   "co-rba": {
     domain: "rbaprojects.com",
@@ -160,6 +170,7 @@ export interface CompanyBundle {
   connections: CompanyConnection[];
   projects: Project[];
   milestones: ProjectMilestone[];
+  wins: Win[];
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
@@ -489,6 +500,23 @@ function build(company: Company): CompanyBundle {
       });
     });
   });
+
+  // Wins entered by hand (Kingdom only); the first carries a line, the fourth a project.
+  const wins: Win[] = (spec.wins ?? []).map((ws, i) => ({
+    id: p(`win-${i + 1}`),
+    company_id: company.id,
+    title: ws.title,
+    description: i === 0 ? "Illustrative sample win." : null,
+    won_on: ws.won_on,
+    project_id: ws.project === undefined ? null : projects[ws.project].id,
+    source_type: "manual",
+    source_ref: null,
+    archived_at: ws.archived ? EARLIER : null,
+    created_by: profiles[0].id,
+    updated_by: profiles[0].id,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -987,7 +1015,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

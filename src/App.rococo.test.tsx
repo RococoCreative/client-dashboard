@@ -24,6 +24,7 @@ vi.mock("./services/jobRoles.ts", () => import("./test/mocks/jobRoles.ts"));
 vi.mock("./services/connections.ts", () => import("./test/mocks/connections.ts"));
 vi.mock("./services/audit.ts", () => import("./test/mocks/audit.ts"));
 vi.mock("./services/projects.ts", () => import("./test/mocks/projects.ts"));
+vi.mock("./services/wins.ts", () => import("./test/mocks/wins.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";
@@ -154,6 +155,10 @@ describe("routes land the same with modules on", () => {
     ["/production", "admin", "klasik", "/"],
     ["/production/projects/kingdom-project-1", "employee", "kingdom", "/production/projects/kingdom-project-1"],
     ["/production/projects/kingdom-project-1", "employee", "klasik", "/"],
+    ["/wins", "admin", "kingdom", "/wins"],
+    ["/wins", "admin", "klasik", "/"],
+    ["/wins", "employee", "kingdom", "/wins"],
+    ["/wins", "employee", "klasik", "/"],
   ];
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
     const landed = await landing(path, persona, slug);

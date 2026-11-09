@@ -3,7 +3,7 @@
 // its data differs: without the switchboard module a company gets the flat sidebar it always had,
 // with it the same items grouped into four sections plus an unlabeled utility group.
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, Trophy, UserRound, Users } from "lucide-react";
 import type { Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
@@ -37,6 +37,7 @@ export const NAV_GROUP_LABELS: Record<NavGroup, string | null> = {
 // Registry order is the flat sidebar's order and each section's order.
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: "dashboard", to: "/", label: "Dashboard", groupedLabel: "Home", icon: LayoutDashboard, end: true, audience: "both", group: "home" },
+  { id: "wins", to: "/wins", label: "Wins", icon: Trophy, audience: "both", group: "home", requires: "wins" },
   { id: "gsr", to: "/gsr", label: "GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
   { id: "reviews", to: "/reviews", label: "Reviews", icon: ClipboardCheck, audience: "admin", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
