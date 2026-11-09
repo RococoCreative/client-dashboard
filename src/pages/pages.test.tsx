@@ -1890,6 +1890,44 @@ describe("roles", () => {
     expect(optionsOf(await screen.findByLabelText("Role for Dana Whitfield"))).toEqual(["Owner", "Admin", "Manager", "Employee"]);
   });
 
+  it("leaves the row actions for someone ranked above an admin to an owner or Rococo", async () => {
+    // An owner set up on the roster who has not signed in yet, the state owners usually start in.
+    const rosterOwner = {
+      ...KINGDOM.profiles[0],
+      id: "kingdom-roster-owner",
+      user_id: null,
+      email: "sample.owner@kingdomcustomconstruction.com",
+      full_name: "Sample Roster Owner",
+    };
+    const original = profilesService.listCompanyProfiles;
+    const spy = vi
+      .spyOn(profilesService, "listCompanyProfiles")
+      .mockImplementation(async (id) => [...(await original(id)), ...(id === KINGDOM.company.id ? [rosterOwner] : [])]);
+    onTestFinished(() => spy.mockRestore());
+    const rowOf = (name: string) => screen.getByText(name).closest("tr")!;
+
+    const first = renderWithHub(<PeoplePage />, kingdomAdmin);
+    expect(await screen.findByText("Sample Roster Owner")).toBeInTheDocument();
+    expect(rowOf("Sample Roster Owner")).toHaveTextContent("Not invited");
+    expect(screen.queryByRole("button", { name: "Send the invitation to Sample Roster Owner" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Sample Roster Owner" })).not.toBeInTheDocument();
+    expect(within(rowOf("Marcus Lee")).queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
+    // Everyone the admin does not rank below keeps their actions.
+    expect(within(rowOf("Dana Whitfield")).getByRole("button", { name: "Deactivate" })).toBeInTheDocument();
+    first.unmount();
+
+    for (const hub of [kingdomOwner, makeHub("rococo", KINGDOM.company)]) {
+      const view = renderWithHub(<PeoplePage />, hub);
+      expect(await screen.findByRole("button", { name: "Send the invitation to Sample Roster Owner" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Remove Sample Roster Owner" })).toBeInTheDocument();
+      view.unmount();
+    }
+    const rococoView = renderWithHub(<PeoplePage />, makeHub("rococo", KINGDOM.company));
+    await screen.findByText("Sample Roster Owner");
+    expect(within(rowOf("Marcus Lee")).getByRole("button", { name: "Deactivate" })).toBeInTheDocument();
+    rococoView.unmount();
+  });
+
   it("explains each role when adding staff", async () => {
     const user = userEvent.setup();
     renderWithHub(<PeoplePage />, kingdomAdmin);

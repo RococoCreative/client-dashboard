@@ -3,7 +3,8 @@
 // company is ready for them. Each row says which of the three states they are in, and carries
 // the one action that moves them along. Inviting is still a row plus a link, because the hub
 // holds no mail-sending key, so the admin shares the sign-in link and the signup gate lets that
-// address through.
+// address through. Deactivating, inviting and removing someone ranked above you is refused by
+// the database (0031), so those rows offer none of the three.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Send, Trash2, UserPlus } from "lucide-react";
@@ -305,7 +306,7 @@ export default function PeoplePage() {
                         </td>
                         <td className={`${tdClass} text-right`}>
                           <span className="flex items-center justify-end gap-1.5">
-                            {account && !self ? (
+                            {account && !self && canChange ? (
                               <Button variant="ghost" size="sm" onClick={() => void patchPerson(person, { is_active: !person.is_active })}>
                                 {person.is_active ? "Deactivate" : "Reactivate"}
                               </Button>
@@ -320,7 +321,7 @@ export default function PeoplePage() {
                                 </IconButton>
                               </>
                             ) : null}
-                            {!account && !invitation ? (
+                            {!account && !invitation && canChange ? (
                               <>
                                 <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
                                   <Send size={13} aria-hidden /> Send invite
