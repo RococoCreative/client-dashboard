@@ -122,11 +122,19 @@ export function cyclesInPlay<T extends { id: string; period_start: string; perio
 // activeCycles alone: on December 1, with November still open and December not opened yet, the
 // quarter covering today was all activeCycles returned, and the employee lost the month they still
 // had to finish. My GSR and the employee dashboard both read it here, so they agree.
+//
+// The month is chosen among months only, so a quarter or any other cadence never changes the
+// answer. And a month that has begun always wins over one opened early: when no month covers
+// today, cyclesInPlay leads with its stand-in, the most recently started open month, which can be
+// one that has not begun yet. Taking it hid the ended month still owed. A month opened early
+// still comes back when it is the only open month.
 export function gsrCycleInPlay<T extends { id: string; cadence: Cadence; period_start: string; period_end: string; status: string }>(
   cycles: T[],
   today = new Date(),
 ): T | null {
-  return cyclesInPlay(cycles, today).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
+  const todayIso = toDateOnly(today);
+  const months = cyclesInPlay(cycles.filter((c) => sectionOf(c.cadence) === "gsr"), today);
+  return months.find((c) => c.period_start <= todayIso) ?? months[0] ?? null;
 }
 
 // The most pressing open cycle, for a caller that can genuinely only show one. Prefer

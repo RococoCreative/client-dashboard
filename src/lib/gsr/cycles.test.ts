@@ -67,6 +67,25 @@ describe("cycle periods", () => {
     expect(gsrCycleInPlay(cycles.map((c) => ({ ...c, status: c.cadence === "monthly" ? "closed" : c.status })), new Date(2026, 11, 1))).toBeNull();
   });
 
+  it("keeps the ended month still owed ahead of a month opened early, with or without a quarter", () => {
+    // December 1: November is over but still open, December is not opened, and January has been
+    // opened early. Nothing covers today, so activeCycles' stand-in is January, which has not
+    // begun. The employee still owes November, and a quarter existing or not cannot change that.
+    const months = [
+      { id: "nov", cadence: "monthly" as const, period_start: "2026-11-01", period_end: "2026-11-30", status: "open" },
+      { id: "jan", cadence: "monthly" as const, period_start: "2027-01-01", period_end: "2027-01-31", status: "open" },
+    ];
+    const dec1 = new Date(2026, 11, 1, 12);
+    expect(gsrCycleInPlay(months, dec1)?.id).toBe("nov");
+    expect(gsrCycleInPlay([...months].reverse(), dec1)?.id).toBe("nov");
+    const q4 = { id: "q4", cadence: "quarterly" as const, period_start: "2026-10-01", period_end: "2026-12-31", status: "open" };
+    expect(gsrCycleInPlay([...months, q4], dec1)?.id).toBe("nov");
+    // A month opened early still comes back when it is the only open month, quarter or not.
+    const novClosed = months.map((c) => (c.id === "nov" ? { ...c, status: "closed" } : c));
+    expect(gsrCycleInPlay(novClosed, dec1)?.id).toBe("jan");
+    expect(gsrCycleInPlay([...novClosed, q4], dec1)?.id).toBe("jan");
+  });
+
   it("gives a month no pillar columns, and the locked GSR score only where the company scores GSRs", () => {
     const rating = { scoring_type: "rating", is_active: true };
     const gsr = { scoring_type: "gsr_goals", is_active: true };
