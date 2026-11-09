@@ -41,17 +41,15 @@ const KNOWN_CONNECT_ERRORS = new Set([
   "The connection could not be finished. Try again from Settings.",
 ]);
 
-interface Outcome {
-  tone: "success" | "error";
-  text: string;
-}
+// A success names the provider it is about, so it can be checked against that provider's row.
+type Outcome = { tone: "success"; text: string; provider: ConnectionProvider } | { tone: "error"; text: string };
 
 // What the provider round trip reported, read off the address it came back to.
 function readOutcome(params: URLSearchParams): Outcome | null {
   const connected = params.get("connected");
   if (connected !== null) {
     const provider = keysOf(CONNECTION_PROVIDER_LABELS).find((key) => key === connected);
-    return provider ? { tone: "success", text: `${CONNECTION_PROVIDER_LABELS[provider]} is connected.` } : null;
+    return provider ? { tone: "success", text: `${CONNECTION_PROVIDER_LABELS[provider]} is connected.`, provider } : null;
   }
   const returned = params.get("connect_error");
   if (returned === null) return null;
@@ -81,6 +79,10 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
   }, [params, setParams]);
 
   const rowFor = (provider: ConnectionProvider): CompanyConnection | null => state.data?.find((c) => c.provider === provider) ?? null;
+  // Anyone can put ?connected= on a link, so "is connected" is said only once the loaded row for
+  // that provider reads connected too. Until the rows load, and over a row that says otherwise, it
+  // says nothing: the row itself is the truth.
+  const shown = outcome && (outcome.tone === "error" || rowFor(outcome.provider)?.status === "connected") ? outcome : null;
 
   async function connect(provider: ConnectionProvider) {
     if (busy) return;
@@ -115,7 +117,7 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
 
   return (
     <Section eyebrow="Integrations" title="Connections" description="This company signs in to its own accounts. Tokens stay on the server, and nothing is shared between companies.">
-      {outcome ? <Notice tone={outcome.tone} className="mb-4">{outcome.text}</Notice> : null}
+      {shown ? <Notice tone={shown.tone} className="mb-4">{shown.text}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={2} /> : null}

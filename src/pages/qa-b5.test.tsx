@@ -160,9 +160,11 @@ describe("connection outcome on settings", () => {
 
 describe("connection return trip", () => {
   it("puts a Rococo admin back in the company they connected, with the outcome", async () => {
-    window.history.pushState({}, "", `/settings/connections/${RBA.company.id}?persona=rococo&connected=quickbooks`);
+    // The outcome names a provider whose row reads connected for this company: the panel says
+    // "is connected" only over such a row.
+    window.history.pushState({}, "", `/settings/connections/${RBA.company.id}?persona=rococo&connected=gohighlevel`);
     render(<App />);
-    expect(await screen.findByText("QuickBooks Online is connected.")).toBeInTheDocument();
+    expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getAllByText(RBA.company.name).length).toBeGreaterThan(0);
     expect(document.documentElement.dataset.theme).toBe(RBA.company.theme_key);

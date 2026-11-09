@@ -227,7 +227,7 @@ describe("deleting a pillar or criterion", () => {
     const dialog = screen.getByRole("dialog");
     const behind = within(screen.getByDisplayValue("Curiosity").closest("li") as HTMLElement).getByRole("button", { name: "Delete criterion" });
 
-    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    // Modal keeps Tab inside the dialog; this puts focus on a Delete button under the scrim directly.
     // It opens nothing, before the delete is sent or while it runs.
     behind.focus();
     await user.keyboard("{Enter}");
@@ -379,7 +379,7 @@ describe("deliverable categories", () => {
     vi.mocked(deleteDeliverableCategory).mockImplementationOnce(() => call.promise);
     await user.click(within(dialog).getByRole("button", { name: "Delete category" }));
 
-    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    // Modal keeps Tab inside the dialog; this puts focus on a Delete button under the scrim directly.
     screen.getByRole("button", { name: "Delete Estimating" }).focus();
     await user.keyboard("{Enter}");
     expect(dialog).toHaveTextContent('Delete "BD & Sales"?');
@@ -489,7 +489,7 @@ describe("deleting a company", () => {
     await user.type(within(dialog).getByLabelText("Type the identifier to confirm"), "kb1");
     await user.click(within(dialog).getByRole("button", { name: "Delete company" }));
 
-    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    // Modal keeps Tab inside the dialog; this puts focus on a Delete button under the scrim directly.
     screen.getByRole("button", { name: "Delete Keyboard Two" }).focus();
     await user.keyboard("{Enter}");
     expect(dialog).toHaveTextContent("Delete Keyboard One?");

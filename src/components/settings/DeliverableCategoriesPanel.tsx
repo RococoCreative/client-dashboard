@@ -65,9 +65,9 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
     }
   }
 
-  // The dialog has no focus trap, so a key press can still reach another Delete button under the
-  // scrim. While a delete runs that opens nothing, or the running one's failure would land in the
-  // other category's dialog.
+  // Modal keeps Tab inside the dialog, but focus can still be put on another Delete button under
+  // the scrim some other way. While a delete runs that opens nothing, or the running one's failure
+  // would land in the other category's dialog.
   function openDelete(category: DeliverableCategory) {
     if (busy) return;
     setDialogError("");

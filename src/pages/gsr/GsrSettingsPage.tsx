@@ -45,6 +45,8 @@ export default function GsrSettingsPage() {
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState("");
   // A weight outside 0 to 100 is refused where it was typed, and the box shows the stored weight.
+  // The message stays until that box is used again, and focus clears it. Without that it sat under
+  // a valid number: a box left at the stored weight never saves (BlurInput), so nothing else did.
   const [weightError, setWeightError] = useState<{ pillarId: string; message: string } | null>(null);
   const [newCriterion, setNewCriterion] = useState<Record<string, string>>({});
 
@@ -117,9 +119,13 @@ export default function GsrSettingsPage() {
     void patchPillar(pillar, { weight: value });
   }
 
-  // One dialog at a time. The dialog has no focus trap, so a key press can still reach a Delete
-  // button under the scrim; while a dialog is open, its delete running included, that opens
-  // nothing, because the two dialogs share one error and a second would show the first's refusal.
+  function clearWeightError(pillar: GsrPillar) {
+    setWeightError((prev) => (prev?.pillarId === pillar.id ? null : prev));
+  }
+
+  // One dialog at a time. Modal keeps Tab inside the dialog, but focus can still be put on a Delete
+  // button under the scrim some other way; while a dialog is open, its delete running included, that
+  // opens nothing, because the two dialogs share one error and a second would show the first's refusal.
   function openDeletePillar(pillar: GsrPillar) {
     if (busy || deletingPillar || deletingCriterion) return;
     setDialogError("");
@@ -240,7 +246,7 @@ export default function GsrSettingsPage() {
                   <label htmlFor={`pillar-name-${pillar.id}`} className={labelClass}>Name</label>
                   <BlurInput id={`pillar-name-${pillar.id}`} value={pillar.name} required onSave={(next) => void patchPillar(pillar, { name: next.trim() })} />
                 </div>
-                <div className="md:col-span-2">
+                <div className="md:col-span-2" onFocus={() => clearWeightError(pillar)}>
                   <label htmlFor={`pillar-weight-${pillar.id}`} className={labelClass}>Weight %</label>
                   <BlurInput id={`pillar-weight-${pillar.id}`} type="number" value={String(pillar.weight)} className={`${inputClass} tnum`} onSave={(next) => saveWeight(pillar, next)} />
                   {weightError?.pillarId === pillar.id ? <p className="mt-1.5 text-[12px] text-danger" role="alert">{weightError.message}</p> : null}

@@ -85,9 +85,10 @@ export default function CompanyGoalsPage() {
   const [dialog, setDialog] = useState<{ goal: CompanyGoal | null } | null>(null);
   const [deleting, setDeleting] = useState<CompanyGoal | null>(null);
   const [busy, setBusy] = useState(false);
-  // The page's notice is for a Hit toggle that did not save, and the next action clears it. The
-  // delete dialog keeps its own, so it never opens showing a toggle that failed earlier as though
-  // the delete had gone wrong before it was confirmed.
+  // The page's notice is for a Hit toggle that did not save, and the next action clears it: another
+  // toggle, a dialog save, a delete, or a move to another year, where it would sit over goals it is
+  // not about. The delete dialog keeps its own, so it never opens showing a toggle that failed
+  // earlier as though the delete had gone wrong before it was confirmed.
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const state = useAsync(() => listCompanyGoals(companyId, year), [companyId, year]);
@@ -97,6 +98,7 @@ export default function CompanyGoalsPage() {
   async function handleDelete() {
     if (!deleting) return;
     setBusy(true);
+    setError("");
     setDeleteError("");
     try {
       await deleteCompanyGoal(deleting.id);
@@ -129,7 +131,7 @@ export default function CompanyGoalsPage() {
         description="The shared numbers the whole team is chasing. They show on the dashboard for everyone."
         actions={
           <>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>
+            <select value={year} onChange={(e) => { setError(""); setYear(Number(e.target.value)); }} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>
               {yearOptions.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
