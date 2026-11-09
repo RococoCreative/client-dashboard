@@ -232,6 +232,9 @@ function SignedIn({ session }: { session: Session }) {
     );
   }
 
+  // An invitation is read once, when the account is created (handle_new_user), so it cannot
+  // place an account that already exists: someone whose company was deleted, or who was set to
+  // No company. Only a Rococo admin can, from Users, so that is who the screen points to.
   if (!profile.is_rococo_admin && !profile.company_id) {
     const hint = readLoginHint();
     return (
@@ -240,9 +243,9 @@ function SignedIn({ session }: { session: Session }) {
         title="Your account is ready"
         body={
           <>
-            {profile.email} is signed in but not yet placed with a company.{" "}
-            {hint ? `Ask a ${hint} admin` : "Ask your company admin"} to send you an invitation, then sign in again
-            and you are in.
+            {profile.email} is signed in but not yet placed with a company. Rococo Creative places an account
+            like this one by hand, so {hint ? `ask a ${hint} admin` : "ask your company admin"} to have Rococo
+            Creative add you. Once that is done, reload this page and you are in.
           </>
         }
       />

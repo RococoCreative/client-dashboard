@@ -31,6 +31,9 @@ export default function SopPage() {
   const companyId = company!.id;
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // The delete dialog reports only its own failure, inside the dialog, rather than sharing the
+  // page's notice and opening on an upload or status change that failed earlier.
+  const [deleteError, setDeleteError] = useState("");
   // Removing an attachment deletes the stored file too, so it is confirmed like the SOP itself.
   const [removingAttachment, setRemovingAttachment] = useState<SopAttachment | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
@@ -65,17 +68,22 @@ export default function SopPage() {
     }
   }
 
+  // The row goes first and its attachment rows cascade with it; the stored files are removed
+  // after, best effort. The other way round, a refused or dropped delete left the SOP in the
+  // library with attachments pointing at files that no longer exist. A file left behind by a
+  // failed removal is only unused storage.
   async function handleDelete() {
     setBusy(true);
+    setDeleteError("");
     try {
-      await Promise.all(attachments.map((a) => removeFile(a.file_path).catch(() => undefined)));
       await deleteSop(sop.id);
-      navigate("/sops");
     } catch (err) {
-      setError(errorMessage(err));
+      setDeleteError(errorMessage(err));
       setBusy(false);
-      setDeleting(false);
+      return;
     }
+    await Promise.all(attachments.map((a) => removeFile(a.file_path).catch(() => undefined)));
+    navigate("/sops");
   }
 
   async function handleUpload(file: File) {
@@ -232,7 +240,7 @@ export default function SopPage() {
       </div>
 
       {deleting ? (
-        <ConfirmDialog title={`Delete "${sop.title}"?`} body="Every version and attachment is deleted with it. Archive instead to keep it out of the way but on record." confirmLabel="Delete SOP" busy={busy} error={error} onConfirm={() => void handleDelete()} onCancel={() => setDeleting(false)} />
+        <ConfirmDialog title={`Delete "${sop.title}"?`} body="Every version and attachment is deleted with it. Archive instead to keep it out of the way but on record." confirmLabel="Delete SOP" busy={busy} error={deleteError} onConfirm={() => void handleDelete()} onCancel={() => { setDeleting(false); setDeleteError(""); }} />
       ) : null}
       {removingAttachment ? (
         <ConfirmDialog

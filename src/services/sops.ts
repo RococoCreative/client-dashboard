@@ -40,7 +40,16 @@ export async function createSop(input: {
   const { data, error } = await db().from("sops").insert(doc).select(SOP_COLUMNS).single();
   if (error) throw error;
   const sop = data as Sop;
-  await addSopVersion(sop.id, sop.company_id, body_md, change_note ?? "First version");
+  // The document and its first version are two writes. If the version does not save, the
+  // document goes again, so the library is not left holding a copy with no text that a retry
+  // would then sit a second copy beside. Taking it back is best effort: on a connection that
+  // has dropped outright it can fail too, and the original error is the one worth showing.
+  try {
+    await addSopVersion(sop.id, sop.company_id, body_md, change_note ?? "First version");
+  } catch (err) {
+    await deleteSop(sop.id).catch(() => undefined);
+    throw err;
+  }
   return { ...sop, current_version: 1 };
 }
 
