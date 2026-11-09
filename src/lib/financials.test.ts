@@ -222,6 +222,12 @@ describe("financial CSV import, strict", () => {
       rows: [],
       errors: [swallowedAt(3, "Feb 2026")],
     });
+    // The same ditto close on a line that ends in an inch mark: that line's own quotes pair up
+    // differently on their own, and it is still a period taken in.
+    expect(parseSnapshotsCsv('period,notes,revenue,memo\nJan 2026,ok,100,a\nFeb 2026,",200,b\nMar 2026,",300,6"\nApr 2026,ok,400,c\n')).toEqual({
+      rows: [],
+      errors: [swallowedAt(3, "Mar 2026")],
+    });
     // A row whose own period cell is blank or impossible holds no period that will save, so the
     // one period its quote takes in is lost, not kept as the row's own.
     for (const own of ["", "2026-04-31"]) {
@@ -288,12 +294,22 @@ describe("financial CSV import, strict", () => {
     // A Type column with nothing in it names nothing, so a period on two lines beside it is read
     // as in a file without it: the later line wins.
     expect(parseSnapshotsCsv("period,type,revenue\n2026-03,,100\n2026-03,,150\n")).toMatchObject({ errors: [], rows: [{ period_start: "2026-03-01", revenue: 150 }] });
-    // Left out, it may still be what tells two lines of one period apart (an actual and a budget,
-    // or one line per job), so the import never picks one of them and drops the other.
-    expect(parseSnapshotsCsv("period,Type,revenue\nJan 2026,Actual,100\nJan 2026,Budget,200\nFeb 2026,Actual,300\n")).toEqual({
+    // Left out, it may still be what tells two lines of one period apart (one line per job), so
+    // the import never picks one of them and drops the other.
+    expect(parseSnapshotsCsv("period,Type,revenue\nJan 2026,Remodel,100\nJan 2026,Service,200\nFeb 2026,Remodel,300\n")).toEqual({
       rows: [],
       errors: ['Jan 2026 is on more than one line, and the "Type" column, which the import does not read, may be what tells them apart. Keep one line per period, then import again.'],
     });
+    // A Type column that says which set of figures a line is (actual, budget, forecast) is never
+    // left out: a budget line read as actuals is a wrong number with nothing said. Every line is
+    // refused instead, even when each period is on one line only.
+    expect(parseSnapshotsCsv("period,Type,revenue\n2026-01,Actual,100\n2026-02,Budget,200\n")).toEqual({
+      rows: [],
+      errors: [typeError(2, "Actual"), typeError(3, "Budget")],
+    });
+    for (const type of ["Forecast", "Plan", "Projected", "Actuals"]) {
+      expect(parseSnapshotsCsv(`period,Type,revenue\n2026-01,${type},100\n`)).toEqual({ rows: [], errors: [typeError(2, type)] });
+    }
     // Beside a period_type column it is not a second period type either.
     expect(parseSnapshotsCsv("period,period_type,type,revenue\n2026-07,quarter,Remodel,100\n")).toMatchObject({ errors: [], rows: [{ period_type: "quarter", period_start: "2026-07-01" }] });
     // A Type column that holds period types is read as one, and a cell in it that does not read is

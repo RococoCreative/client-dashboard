@@ -9,8 +9,9 @@
 --      they control, sign in, and be handed that profile: its role, its company, its private
 --      goals, and the real person locked out. handle_new_user now finds the person by their
 --      address and never by profile_id, never claims a profile that already has an account, and
---      invitations refuse a profile_id that is not an unclaimed person on the same company's
---      roster with the same email when they are written.
+--      invitations refuse a profile_id that is not an unclaimed person with the same email on
+--      the same company's roster (or, for a Rococo admin only, parked in No company) when they
+--      are written.
 --   2. One company could capture another company's future staff by email: roster the address
 --      first, or send a newer invitation, and the new hire's first sign-in landed in the wrong
 --      hub. An address on a company's email domain can now only be rostered or invited by that

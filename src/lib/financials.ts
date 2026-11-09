@@ -265,7 +265,13 @@ function swallowedPeriods(table: CsvTable, text: string): string[] {
     if (row.endLine === row.line) return [];
     const periods = lines
       .slice(row.line - 1, row.endLine)
-      .map((line) => linePeriod(lineCells(line), table.columns.length, periodColumns, revenueColumns))
+      // Read as the parser would first, then with every quote as a plain character: a stray-quote
+      // run that closes on a ditto mark can leave a line whose own quotes pair up differently
+      // (`Mar 2026,",300,6"`), and that line is still a period taken in.
+      .map((line) => {
+        const read = (cells: string[]) => linePeriod(cells, table.columns.length, periodColumns, revenueColumns);
+        return read(lineCells(line)) ?? read(line.split(","));
+      })
       .filter((period): period is string => period !== null);
     // The row's own period cell, read by form as linePeriod reads a line: "2026-04-31" or "0000"
     // is still the row's own (its line error names it), while a blank cell is none.
@@ -288,18 +294,25 @@ function mentionsPeriod(raw: string): boolean {
   return normalizeType(text) !== null || /\b(month|mth|quarter|qtr|year|yr|annual|fy\b|ytd\b)/.test(text);
 }
 
+// Whether a cell says which set of figures a line is (actual, budget, forecast, plan). A Type
+// column like that changes what every figure beside it means, so it is never left out: reading
+// a budget line as actuals would be a silent wrong number.
+function namesScenario(raw: string): boolean {
+  return /\b(actuals?|budget(ed)?|forecast(ed)?|plan(ned)?|projected|projection|estimated?|target)\b/.test(raw.trim().toLowerCase());
+}
+
 // A column headed just "Type" is the period type unless none of its cells is about the period:
-// then it means something else (a job type, or actual against budget), and the import leaves it
-// out like any other column it does not read, rather than refuse every line over it. One cell
-// that mentions a period keeps the column, and any cell in it that is not a plain month, quarter
-// or year is then refused on its line. A column with every cell blank names nothing and is kept
+// then it means something else (a job type), and the import leaves it out like any other column
+// it does not read, rather than refuse every line over it. One cell that mentions a period, or
+// that names a set of figures (actual against budget), keeps the column, and any cell in it that
+// is not a plain month, quarter or year is then refused on its line. A column with every cell blank names nothing and is kept
 // too, so a period on two lines beside it is handled as in a file without it. A column headed
 // "Period type" is always the period type. Returns the header of a column left out, or null.
 function foreignTypeColumn(table: CsvTable): string | null {
   const typeColumns = table.columns.flatMap((c, index) => (c.key === "type" ? [index] : []));
   if (typeColumns.length === 0) return null;
   const cells = table.rows.flatMap((row) => typeColumns.map((index) => row.cells[index] ?? ""));
-  if (cells.every((cell) => cell.trim() === "") || cells.some(mentionsPeriod)) return null;
+  if (cells.every((cell) => cell.trim() === "") || cells.some((cell) => mentionsPeriod(cell) || namesScenario(cell))) return null;
   return table.columns[typeColumns[0]].header;
 }
 

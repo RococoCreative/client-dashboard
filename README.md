@@ -89,8 +89,9 @@ a reload resets the data.
   theme, and sends a one-time link. The signup gate admits the address and the profile is
   placed in the company automatically.
 - **Personal email:** an admin creates an invitation on the People page and sends the
-  sign-in link it produces. The gate admits the invited address; on first sign-in the
-  profile inherits the invitation's company, role, and title.
+  sign-in link it produces. The gate admits the invited address. On first sign-in a person
+  who is not on any roster yet gets the invitation's company, role, and title; a person
+  already on a roster keeps that roster row's role, and its title unless the row has none.
 - **Invited by more than one company:** a person already on a company's roster takes that
   company's invitation; otherwise the invitation naming them comes first, then the one from
   the company that owns the email domain, then the newest. The rest are withdrawn at that
@@ -314,10 +315,10 @@ and a `period_type` that is not a month, quarter or year (`qtr`, `yr` and `mo` a
 phrase such as `Year to date` is not) or that the period contradicts (`month` beside
 `Q3 2026`) are each reported by line, and that period is left out rather than saved as a zero
 or a blank. A column headed just `Type` is left out like any column the import does not read
-when none of its cells is about the period (a job type, or actual against budget), except that
-a file naming one period on two lines beside it is refused, since that column may be what tells
-the lines apart. When any cell mentions a period (`Quarter-end`, `Year-end`, `Annual
-maintenance`), the column is the period type and each cell that is not a month, quarter or year
+when none of its cells is about the period (a job type, say), except that a file naming one
+period on two lines beside it is refused, since that column may be what tells the lines apart.
+When any cell mentions a period (`Quarter-end`, `Year-end`, `Annual maintenance`) or says which
+set of figures a line is (`Actual`, `Budget`, `Forecast`, `Plan`), the column is the period type and each cell that is not a month, quarter or year
 is reported by line, so a quarterly figure is never filed as a month. A file
 separated by semicolons or tabs, a file with two columns that read as the same thing under any
 of its names (`Revenue (Actual)` beside `Revenue (Budget)`, or `Income (Actual)` beside

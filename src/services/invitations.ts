@@ -1,8 +1,9 @@
 // Data layer for invitations. An invitation is a row, not an email: no server here holds
 // the service-role key that Supabase's invite mailer needs, so the admin sends the person
 // the sign-in link (inviteLink) and the signup gate lets that address through. When the
-// person signs in, handle_new_user claims the roster profile this invitation points at and
-// stamps accepted_at.
+// person signs in, handle_new_user claims the unclaimed roster profile at that address (an
+// invitation's profile_id only ranks which invitation is settled, never picks the row), stamps
+// accepted_at, and withdraws other companies' pending invitations for the address.
 import { db } from "./supabase.ts";
 import { appOrigin } from "../lib/appUrl.ts";
 import type { Invitation, Role } from "../types/database.ts";
