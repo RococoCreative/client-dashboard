@@ -4,14 +4,15 @@
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
 import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import { MODULE_KEYS } from "../lib/modules.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, created_at: NOW, updated_at: NOW },
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -959,6 +960,8 @@ export const KLASIK: CompanyBundle = bundleFor("co-klasik")!;
 // RBA runs quarterly cycles, so it is where the scoring shape of a review is exercised:
 // Klasik's cycles are monthly, and a monthly review is goals only.
 export const RBA: CompanyBundle = bundleFor("co-rba")!;
+// Kingdom is the company with every module on, used by the module page tests and the demo.
+export const KINGDOM: CompanyBundle = bundleFor("co-kingdom")!;
 
 export function fakeSession(profile: Profile): Session {
   return {

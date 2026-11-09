@@ -14,9 +14,14 @@ export interface Company {
   name: string;
   theme_key: ThemeKey;
   logo_url: string | null;
+  // Module keys a Rococo admin switched on (0024). Raw text[]: unknown keys are allowed and ignored; read only through lib/modules.ts.
+  modules: string[];
   created_at: string;
   updated_at: string;
 }
+
+// The four nav sections. 0029's external_links.nav_group check uses the same four values.
+export type LinkNavGroup = "home" | "sales_finance" | "production" | "people_hr";
 
 // What the anonymous login screen may see of a company.
 export interface PublicCompany {

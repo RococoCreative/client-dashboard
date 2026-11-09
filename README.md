@@ -294,6 +294,18 @@ Instrument Sans from Google Fonts as the design system's approved fallbacks. RBA
 Nova and Helvetica Neue LT Pro are Adobe families as well: add them to the same web project
 and the RBA theme picks them up without a code change.
 
+## Modules
+
+A Rococo admin can switch modules on for a company in Rococo > Companies; the list lives in
+`companies.modules` and the app reads it only through `src/lib/modules.ts`. With no modules on, a
+company sees the standard hub. The keys:
+
+- `switchboard`: Four-section navigation, the Home heading, and the Attention and Shortcuts cards.
+- `production`: Projects, milestones and letters, and the Production cards.
+- `wins`: The wins page and the Home wins card.
+- `data_sources`: Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness.
+- `external_links`: Shortcuts to outside tools, including Monday, in each section.
+
 ## Layout
 
 - `src/App.tsx`: auth gate and router.

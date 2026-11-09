@@ -508,6 +508,27 @@ describe("admin", () => {
   });
 });
 
+describe("navigation and modules", () => {
+  it("switches modules per company on the Companies tab", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });
+    const kingdom = await screen.findByRole("group", { name: "Modules for Kingdom Custom Construction" });
+    const klasik = screen.getByRole("group", { name: "Modules for Klasik Construction" });
+    const kingdomBoxes = within(kingdom).getAllByRole("checkbox");
+    expect(kingdomBoxes).toHaveLength(5);
+    for (const box of kingdomBoxes) expect(box).toBeChecked();
+    const klasikBoxes = within(klasik).getAllByRole("checkbox");
+    expect(klasikBoxes).toHaveLength(5);
+    for (const box of klasikBoxes) expect(box).not.toBeChecked();
+
+    // Checked and unchecked again, so the shared mock store is back to [] for later tests.
+    await user.click(within(klasik).getByRole("checkbox", { name: "Wins" }));
+    await waitFor(() => expect(within(klasik).getByRole("checkbox", { name: "Wins" })).toBeChecked());
+    await user.click(within(klasik).getByRole("checkbox", { name: "Wins" }));
+    await waitFor(() => expect(within(klasik).getByRole("checkbox", { name: "Wins" })).not.toBeChecked());
+  });
+});
+
 describe("phase 2 modules", () => {
   it("shows financial periods with derived margins and a CSV preview", async () => {
     const user = userEvent.setup();
