@@ -163,9 +163,14 @@ A person in a company is an Owner, an Admin, a Manager or an Employee (0031).
 - **Employee** sees their own GSR data plus the libraries.
 
 Grants are ranked, and the database enforces the ranking. Only an Owner or a Rococo admin makes
-someone an Owner. Nobody grants a role above their own or changes the role or access of someone
-ranked above them. A person cannot report to themselves, to someone in another company, or round
-in a loop, and moving a person to another company clears the reporting lines that would cross it.
+someone an Owner. Nobody grants a role above their own. Nobody changes the role or access of
+someone ranked above them, invites them or removes them, whether or not they have signed in yet,
+and the People page offers none of those actions on their row. Signing in with an invitation that
+names a person claims their profile, so an invitation only ever names someone on that company's
+roster who has not signed in yet. A person cannot report to themselves, to someone in another
+company, or round in a loop, and moving a person to another company clears the reporting lines
+that would cross it. A reporting line is checked when it changes, so one saved before 0031 never
+stops anyone signing in.
 
 ## Personal KPIs and deliverables
 
@@ -476,18 +481,51 @@ applied until someone does it by hand:
 
 1. Back up, then paste `0024` to `0029` and `0031` in order in the SQL editor, once each. Each
    is idempotent; go forwards only.
-2. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and
+2. Merge to `main` (Vercel deploys the app) only after `0024` to `0029` and `0031` are applied.
+   The new app selects `companies.modules` every time it loads a company, so until `0024` is in
+   it cannot load any company, Klasik and RBA included.
+3. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and
    deploy: `supabase functions deploy connections --no-verify-jwt`.
-3. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0030`.
-4. Open Rococo > Companies and turn on Kingdom's modules (all five, or the ones Kingdom has
+4. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0030`.
+
+Steps 5 and 6 happen only once the new app (step 2) and the `connections` function (step 3) are
+live.
+
+5. Open Rococo > Companies and turn on Kingdom's modules (all five, or the ones Kingdom has
    agreed).
-5. On Kingdom's People page, set Maddie Cothran and marvin waters to Owner by hand.
-6. Check: Klasik and RBA look unchanged; Kingdom Home shows the four sections; Rococo >
+6. As a Rococo admin, on Kingdom's People page (or Rococo > People), set Maddie Cothran and
+   marvin waters to Owner by hand. A Kingdom admin's role select does not offer Owner, and the
+   old app counts only `admin` as an admin, so an owner set while it is still live loses every
+   admin screen.
+7. Run the reporting-line check below. It lists anyone whose Reports to crosses companies or
+   runs in a loop, the same lines `0031`'s pre-check prints as notices. `0031` judges a line
+   only when it changes, so these never stop anyone signing in, but clear each one: on that
+   person's page, set Reports to to someone in their own company, or to nobody. No rows means
+   nothing to do.
+
+   ```sql
+   with recursive up (start_id, id, depth) as (
+     select id, reports_to, 1 from public.profiles where reports_to is not null
+     union
+     select up.start_id, p.reports_to, up.depth + 1
+       from up join public.profiles p on p.id = up.id
+      where p.reports_to is not null and up.depth < 50
+   )
+   select p.full_name, p.email, 'crosses companies' as problem
+     from public.profiles p join public.profiles m on m.id = p.reports_to
+    where m.company_id is distinct from p.company_id
+   union all
+   select p.full_name, p.email, 'loops'
+     from public.profiles p
+    where p.id in (select start_id from up where id = start_id);
+   ```
+
+8. Check: Klasik and RBA look unchanged; Kingdom Home shows the four sections; Rococo >
    Activity shows the module change and the role changes; `select jobname, schedule from
    cron.job;` lists `hub-sync-tick`.
 
-`0031` may go before or after `0030`; `0030` must follow the Vault entries. No migration seeds
-modules or roles.
+`0031` does not depend on `0030`, so either order works; its header says the same, and step 1
+pastes it first. `0030` must follow the Vault entries. No migration seeds modules or roles.
 
 ## Deploy
 
