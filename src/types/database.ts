@@ -648,3 +648,23 @@ export interface AuditEvent {
   actor_kind: AuditActorKind;
   created_at: string;
 }
+
+// Production
+// Projects a company enters by hand (0026), each with an ordered list of milestones and letters.
+// Members read them and admins write them; a milestone takes its company from its project by
+// trigger. There is no status: a milestone is complete when completed_on is set. Nothing is
+// deleted; both are archived.
+export type ProjectSource = "manual";
+export interface Project {
+  id: string; company_id: string; name: string; reference: string | null; notes: string | null;
+  source: ProjectSource; source_key: string | null; archived_at: string | null;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
+export type MilestoneKind = "milestone" | "letter";
+export const MILESTONE_KIND_LABELS: Record<MilestoneKind, string> = { milestone: "Milestone", letter: "Letter" };
+export interface ProjectMilestone {
+  id: string; company_id: string; project_id: string; title: string; description: string | null;
+  kind: MilestoneKind; sort_order: number; target_date: string | null;
+  responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
