@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -38,6 +38,7 @@ interface CompanySpec {
   projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
   wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
   sync?: SyncSpec[];
+  links?: Array<Omit<ExternalLink, "id" | "company_id" | "created_by" | "updated_by" | "created_at" | "updated_at">>;
 }
 // A data source and how its last sync went: never run, running now, failed after a good run, or
 // succeeded. Records belong to the last good run.
@@ -147,6 +148,14 @@ const SPECS: Record<string, CompanySpec> = {
       { title: "Sample win 5", won_on: "2026-08-11", archived: true },
       { title: "Sample win 6", won_on: "2026-07-30" },
       { title: "Sample win 7", won_on: "2026-07-15" },
+    ],
+    // Links to the company's own outside tools, all plainly samples on example.com. The third is
+    // for admins only; the fourth is a view flagged as a public share, so it may be embedded.
+    links: [
+      { nav_group: "sales_finance", label: "Sample sales board", url: "https://example.com/monday/sample-sales-board", provider: "monday", audience: "everyone", destination_note: "The sales CRM board. Monday asks you to sign in.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "production", label: "Sample production board", url: "https://example.com/monday/sample-production-board", provider: "monday", audience: "everyone", destination_note: "Open tasks for active jobs.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "home", label: "Sample owner report", url: "https://example.com/reports/sample-owner", provider: "other", audience: "admins", destination_note: "For admins only.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "production", label: "Sample schedule view", url: "https://example.com/monday/sample-schedule", provider: "monday", audience: "everyone", destination_note: null, embed_url: "https://example.com/embed/sample-schedule", embed_is_public: true, sort_order: 2 },
     ],
     // One source in each state a source can show, all plainly samples.
     sync: [
@@ -284,6 +293,7 @@ export interface CompanyBundle {
   syncSources: SyncSource[];
   syncRuns: SyncRun[];
   syncRecords: SyncRecord[];
+  externalLinks: ExternalLink[];
 }
 
 // Small deterministic generator so every run produces the same numbers.
@@ -616,6 +626,17 @@ function build(company: Company): CompanyBundle {
     source_type: "manual",
     source_ref: null,
     archived_at: ws.archived ? EARLIER : null,
+    created_by: profiles[0].id,
+    updated_by: profiles[0].id,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
+
+  // Links to outside tools (Kingdom only).
+  const externalLinks: ExternalLink[] = (spec.links ?? []).map((link, i) => ({
+    ...link,
+    id: p(`link-${i + 1}`),
+    company_id: company.id,
     created_by: profiles[0].id,
     updated_by: profiles[0].id,
     created_at: EARLIER,
@@ -1190,7 +1211,7 @@ function build(company: Company): CompanyBundle {
     });
   });
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

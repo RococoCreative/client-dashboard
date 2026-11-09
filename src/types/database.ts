@@ -25,6 +25,18 @@ export interface Company {
 // The four nav sections. 0029's external_links.nav_group check uses the same four values.
 export type LinkNavGroup = "home" | "sales_finance" | "production" | "people_hr";
 
+// A company's links to its own outside tools (0029). The audience is enforced by RLS, never by a screen.
+export type LinkProvider = "monday" | "quickbooks" | "google_sheets" | "other";
+export type LinkAudience = "admins" | "everyone";
+export const LINK_PROVIDER_LABELS: Record<LinkProvider, string> = { monday: "Monday", quickbooks: "QuickBooks", google_sheets: "Google Sheets", other: "Other" };
+export const LINK_AUDIENCE_LABELS: Record<LinkAudience, string> = { admins: "Admins only", everyone: "Everyone" };
+export interface ExternalLink {
+  id: string; company_id: string; nav_group: LinkNavGroup; label: string; destination_note: string | null;
+  url: string; provider: LinkProvider; embed_url: string | null; embed_is_public: boolean;
+  audience: LinkAudience; sort_order: number;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
+
 // What the anonymous login screen may see of a company.
 export interface PublicCompany {
   id: string;
