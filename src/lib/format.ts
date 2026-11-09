@@ -22,27 +22,72 @@ export function formatMoney(value: number | null | undefined, compact = false): 
   return compact ? moneyCompact.format(value) : money.format(value);
 }
 
-// The inverse of formatMoney, for anything a person types into a money or number field:
-// "$1,240,000.50" -> 1240000.5; "(500)" -> -500; "1 200" -> 1200; "" and "n/a" -> null.
-// One implementation, because a copy that forgets one of these shapes silently saves null and
-// the figure disappears from the screen it was typed into.
-export function parseMoney(value: string | undefined): number | null {
-  if (value === undefined) return null;
-  let text = value.trim();
+// Typed money text reduced to a sign and plain digits, or null when it is not a number.
+function readMoneyText(value: string): { negative: boolean; digits: string } | null {
+  // A unicode minus is what some spreadsheets and word processors put in place of a hyphen.
+  let text = value.trim().replace(/\u2212/g, "-").replace(/[$,\s]/g, "");
   if (text === "") return null;
   let negative = false;
   if (/^\(.*\)$/.test(text)) {
     negative = true;
     text = text.slice(1, -1);
   }
-  text = text.replace(/[$,\s]/g, "");
   if (text.startsWith("-")) {
     negative = !negative;
     text = text.slice(1);
   }
   if (!/^\d*\.?\d+$/.test(text)) return null;
-  const number = Number(text);
-  return negative ? -number : number;
+  return { negative, digits: text };
+}
+
+// The inverse of formatMoney, for anything a person types into a money or number field:
+// "$1,240,000.50" -> 1240000.5; "(500)" and "$(500)" -> -500; "1 200" -> 1200; "" and "n/a"
+// -> null. One implementation, because a copy that forgets one of these shapes silently saves
+// null and the figure disappears from the screen it was typed into.
+export function parseMoney(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const read = readMoneyText(value);
+  if (!read) return null;
+  const number = Number(read.digits);
+  return read.negative ? -number : number;
+}
+
+// Every money column is numeric(14,2): twelve digits before the point and two after. A larger
+// figure fails the whole save with a database error, and a third decimal is rounded away
+// without a word, so a field or an import line checks typed text against both first. Text
+// parseMoney cannot read at all is the third problem: saved as is, it becomes a blank or a zero
+// nobody typed.
+const MONEY_LIMIT = 1e12;
+
+export type MoneyProblem = "not_a_number" | "too_large" | "too_precise";
+
+// The import's phrasing: 'direct costs "6O000" is not a number.'
+export const MONEY_PROBLEM_TEXT: Record<MoneyProblem, string> = {
+  not_a_number: "is not a number",
+  too_large: "is too large to save",
+  too_precise: "has more than two decimal places",
+};
+
+// Why typed text will not save as a money figure, or null when it will. A blank is not a
+// problem here: whether a field may be left empty is the caller's call.
+export function moneyProblem(value: string | undefined): MoneyProblem | null {
+  if (value === undefined || value.trim() === "") return null;
+  const read = readMoneyText(value);
+  if (!read) return "not_a_number";
+  if (Number(read.digits) >= MONEY_LIMIT) return "too_large";
+  const decimals = (read.digits.split(".")[1] ?? "").replace(/0+$/, "");
+  if (decimals.length > 2) return "too_precise";
+  return null;
+}
+
+// The message under a money field in a dialog, saying what to type: "Enter the budget as a
+// number, like 12000." Null when the text will save.
+export function moneyFieldError(label: string, value: string, example: string): string | null {
+  const problem = moneyProblem(value);
+  if (problem === "not_a_number") return `Enter ${label} as a number, like ${example}.`;
+  if (problem === "too_large") return `Check ${label}: the figure is too large to save.`;
+  if (problem === "too_precise") return `Enter ${label} with at most two decimal places.`;
+  return null;
 }
 
 export function formatNumber(value: number | null | undefined): string {

@@ -1,8 +1,9 @@
-// People tab of the Rococo portfolio: every account across every company, with company
-// assignment, role, Rococo access, and active flag. Filter by company or search by name
-// and email.
+// People tab of the Rococo portfolio: everyone on every company's roster, signed in or not,
+// with company assignment, role, Rococo access, and active flag. Filter by company or search
+// by name and email. A person who has never signed in is marked, never left out.
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import Badge from "../../components/ui/Badge.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
@@ -14,6 +15,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
+import { hasAccount } from "../../lib/people.ts";
 import { ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
@@ -49,7 +51,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Rococo Creative" title="People" description="Every account in the hub. Move people between companies, set roles, grant Rococo access, or deactivate." />
+      <PageHeader eyebrow="Rococo Creative" title="People" description="Everyone in the hub, signed in or not. Move people between companies, set roles, grant Rococo access, or deactivate." />
       <Tabs items={PORTFOLIO_TABS} />
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] max-w-sm flex-1">
@@ -88,7 +90,10 @@ export default function UsersPage() {
                   return (
                     <tr key={person.id} className={`hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}>
                       <td className={tdClass}>
-                        <p className="text-sm text-ink">{displayName(person)}{self ? " (you)" : ""}</p>
+                        <p className="flex flex-wrap items-center gap-1.5 text-sm text-ink">
+                          {displayName(person)}{self ? " (you)" : ""}
+                          {hasAccount(person) ? null : <Badge tone="warning">Not signed in yet</Badge>}
+                        </p>
                         <p className="text-[12px] text-ink-3">{person.email}{person.title ? ` · ${person.title}` : ""}</p>
                       </td>
                       <td className={tdClass}>

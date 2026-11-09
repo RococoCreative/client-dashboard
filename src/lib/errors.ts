@@ -23,6 +23,11 @@ function friendly(message: string): string {
   if (/JSON object requested|multiple \(or no\) rows|PGRST116/i.test(message)) {
     return "That is not here any more, or it is not yours to open.";
   }
+  // Every money column is numeric(14,2). A figure past it fails the whole save, a CSV import
+  // included, with a sentence that names neither the field nor the fix.
+  if (/numeric field overflow|is out of range for type/i.test(message)) {
+    return "One of the figures is too large to save. Check for extra digits.";
+  }
   // A constraint the database rejected: the name is for us, not for the person reading it.
   if (/violates check constraint|violates not-null constraint/i.test(message)) {
     return "Some of that will not save as entered. Check the values and try again.";

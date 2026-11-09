@@ -20,8 +20,18 @@ import { useAsync } from "../hooks/useAsync.ts";
 import { createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "../services/marketing.ts";
 import { CAMPAIGN_STATUS_TONE } from "../components/status.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatDate, formatMoney, formatNumber, formatPercent, parseMoney, pluralize } from "../lib/format.ts";
+import { formatDate, formatMoney, formatNumber, formatPercent, moneyFieldError, parseMoney, pluralize } from "../lib/format.ts";
+import { liveCampaignTotals } from "../lib/marketing.ts";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUS_LABELS, keysOf, type CampaignStatus, type MarketingCampaign } from "../types/database.ts";
+
+type NumberField = "budget" | "spend" | "metricValue";
+
+// How a field message names each number, and the example it offers to type.
+const NUMBER_COPY: Record<NumberField, { label: string; example: string }> = {
+  budget: { label: "the budget", example: "12000" },
+  spend: { label: "the actual spend", example: "7400" },
+  metricValue: { label: "the key metric value", example: "27" },
+};
 
 function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { companyId: string; campaign: MarketingCampaign | null; count: number; onClose: () => void; onSaved: (c: MarketingCampaign) => void }) {
   const [name, setName] = useState(campaign?.name ?? "");
@@ -38,12 +48,26 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
   const [notes, setNotes] = useState(campaign?.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<NumberField, string>>>({});
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     if (!name.trim()) return setError("Name the campaign.");
     if (start && end && end < start) return setError("The end date must be on or after the start date.");
+    // A number that is filled in but will not save is named under its field. Saved as typed it
+    // became a blank, and the campaign dropped out of the budget totals with nothing said.
+    const values: Record<NumberField, string> = { budget, spend, metricValue };
+    const problems: Partial<Record<NumberField, string>> = {};
+    for (const key of keysOf(values)) {
+      const message = moneyFieldError(NUMBER_COPY[key].label, values[key], NUMBER_COPY[key].example);
+      if (message) problems[key] = message;
+    }
+    setFieldErrors(problems);
+    if (Object.keys(problems).length > 0) {
+      setError("");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -97,10 +121,10 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
           <Field label="Ends" htmlFor="mc-end">
             <input id="mc-end" type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
           </Field>
-          <Field label="Budget" htmlFor="mc-budget">
+          <Field label="Budget" htmlFor="mc-budget" error={fieldErrors.budget}>
             <input id="mc-budget" type="text" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="12000" className={`${inputClass} tnum`} />
           </Field>
-          <Field label="Actual spend" htmlFor="mc-spend">
+          <Field label="Actual spend" htmlFor="mc-spend" error={fieldErrors.spend}>
             <input id="mc-spend" type="text" inputMode="decimal" value={spend} onChange={(e) => setSpend(e.target.value)} placeholder="7400" className={`${inputClass} tnum`} />
           </Field>
           <Field label="Goal" htmlFor="mc-goal" className="sm:col-span-2">
@@ -109,7 +133,7 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
           <Field label="Key metric" htmlFor="mc-metric-label">
             <input id="mc-metric-label" type="text" value={metricLabel} onChange={(e) => setMetricLabel(e.target.value)} placeholder="Qualified leads" className={inputClass} />
           </Field>
-          <Field label="Key metric value" htmlFor="mc-metric-value">
+          <Field label="Key metric value" htmlFor="mc-metric-value" error={fieldErrors.metricValue}>
             <input id="mc-metric-value" type="text" inputMode="decimal" value={metricValue} onChange={(e) => setMetricValue(e.target.value)} placeholder="27" className={`${inputClass} tnum`} />
           </Field>
           <Field label="Results so far" htmlFor="mc-results" className="sm:col-span-2">
@@ -191,15 +215,9 @@ export default function MarketingPage() {
   const state = useAsync(() => listCampaigns(companyId), [companyId]);
 
   const campaigns = state.data ?? [];
-  const live = campaigns.filter((c) => c.status === "active" || c.status === "paused");
-  // Spend against budget only means something when both sides cover the same campaigns. A
-  // campaign with no budget recorded was counted as zero budget with its spend in full, which
-  // pushed the figure over 100% of a total that did not include it. Left out of both instead,
-  // and said so, because a campaign with no budget is real data and not a zero.
-  const budgeted = live.filter((c) => c.budget !== null);
-  const unbudgeted = live.length - budgeted.length;
-  const totalBudget = budgeted.reduce((sum, c) => sum + (c.budget ?? 0), 0);
-  const totalSpend = budgeted.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
+  // Budget and spend over the same live campaigns, with the unbudgeted counted apart: the one
+  // reading the dashboard and the Rococo portfolio share.
+  const { live, unbudgeted, budget: totalBudget, spend: totalSpend } = liveCampaignTotals(campaigns);
 
   function upsert(saved: MarketingCampaign) {
     state.setData((prev) => {
