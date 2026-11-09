@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
+    "test:sql": "bash supabase/tests/run.sh",
     "demo": "vite --config demo/vite.config.ts"
   },
   "dependencies": {
