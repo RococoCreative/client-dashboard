@@ -209,6 +209,71 @@ describe("financial CSV import, strict", () => {
     expect(inch.rows.map((r) => r.notes)).toEqual(['6" pipe', "ok"]);
   });
 
+  it("refuses a swallowed period wherever the stray quote closes and whatever the row's own line holds", () => {
+    const swallowedAt = (line: number, period: string) =>
+      `Line ${line}: a quoted cell here runs on over several lines and takes in the period "${period}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`;
+    // A ditto mark that opens a run and a ditto mark that closes it, on a line that also holds a
+    // quoted comma. Read on, Mar vanishes and its figures land on Feb (or Feb vanishes, notes first).
+    expect(parseSnapshotsCsv('period,notes,revenue,memo\nJan 2026,ok,100,a\nFeb 2026,",200,b\nMar 2026,",300,"Smith, J"\nApr 2026,ok,400,c\n')).toEqual({
+      rows: [],
+      errors: [swallowedAt(3, "Mar 2026")],
+    });
+    expect(parseSnapshotsCsv('notes,period,revenue,memo\nok,Jan 2026,100,a\n",Feb 2026,200,b\n",Mar 2026,300,"Smith, J"\nok,Apr 2026,400,c\n')).toEqual({
+      rows: [],
+      errors: [swallowedAt(3, "Feb 2026")],
+    });
+    // A row whose own period cell is blank or impossible holds no period, so the one period its
+    // quote takes in is lost, not kept as the row's own.
+    for (const own of ["", "2026-04-31"]) {
+      expect(parseSnapshotsCsv(`period,revenue,notes\n${own},100,"draw\nMar 2026,200,6"\nApr 2026,300,ok\n`)).toEqual({ rows: [], errors: [swallowedAt(2, "Mar 2026")] });
+    }
+    // The row's own line is short of its revenue, so only the swallowed line reads as a period:
+    // a period that is not the row's own is refused all the same.
+    expect(parseSnapshotsCsv('period,notes,revenue\nFeb 2026,"draw\nMar 2026,pipe 6",200\nApr 2026,ok,300\n')).toEqual({ rows: [], errors: [swallowedAt(2, "Mar 2026")] });
+    // The row's own period does not read ("Mar-2026"), and its quote takes in April.
+    expect(parseSnapshotsCsv('period,revenue,cogs,opex,notes\nMar-2026,100,1,1,"draw pending\nApr 2026,200,2,2,pipe 6"\nMay 2026,300,3,3,ok\n')).toEqual({
+      rows: [],
+      errors: [swallowedAt(2, "Apr 2026")],
+    });
+  });
+
+  it("refuses a year outside 1900 to 2100 by line, which the database would refuse or which is a typo", () => {
+    for (const text of ["0000", "1899", "2101", "Jan 0000", "Q1 2101", "12/1899", "0000-01-01", "2101-01"]) {
+      expect(parsePeriod(text)).toBeNull();
+    }
+    expect(parsePeriod("1900")).toEqual({ type: "year", start: "1900-01-01" });
+    expect(parsePeriod("Dec 2100")).toEqual({ type: "month", start: "2100-12-01" });
+    const result = parseSnapshotsCsv("period_type,period,revenue\n,0000,100\n,2026,200\nquarter,Q1 2101,300\nmonth,0000,400\n");
+    expect(result.errors).toEqual([
+      'Line 2: the year in "0000" is not between 1900 and 2100.',
+      'Line 4: the year in "Q1 2101" is not between 1900 and 2100.',
+      'Line 5: the year in "0000" is not between 1900 and 2100.',
+    ]);
+    expect(result.rows.map((r) => `${r.period_type}:${r.period_start}`)).toEqual(["year:2026-01-01"]);
+  });
+
+  it("reads a bare Type column as the period type only when its cells say month, quarter or year", () => {
+    // A Type column that means something else is left out, like any column the import does not read.
+    const jobs = parseSnapshotsCsv("period,Type,revenue\nJan 2026,Remodel,100\nFeb 2026,New build,200\nQ1 2026,Annual maintenance,300\n");
+    expect(jobs.errors).toEqual([]);
+    expect(jobs.rows.map((r) => `${r.period_type}:${r.period_start}:${r.revenue}`)).toEqual(["month:2026-01-01:100", "quarter:2026-01-01:300", "month:2026-02-01:200"]);
+    // Left out, it may still be what tells two lines of one period apart (an actual and a budget,
+    // or one line per job), so the import never picks one of them and drops the other.
+    expect(parseSnapshotsCsv("period,Type,revenue\nJan 2026,Actual,100\nJan 2026,Budget,200\nFeb 2026,Actual,300\n")).toEqual({
+      rows: [],
+      errors: ['Jan 2026 is on more than one line, and the "Type" column, which the import does not read, may be what tells them apart. Keep one line per period, then import again.'],
+    });
+    // Beside a period_type column it is not a second period type either.
+    expect(parseSnapshotsCsv("period,period_type,type,revenue\n2026-07,quarter,Remodel,100\n")).toMatchObject({ errors: [], rows: [{ period_type: "quarter", period_start: "2026-07-01" }] });
+    // A Type column that holds period types is read as one, and a cell in it that does not read is
+    // reported on its line rather than guessed at.
+    const periods = parseSnapshotsCsv("period,Type,revenue\n2026-07,Quarter,1\n2026-08,Weekly,2\n2026-09,,3\n");
+    expect(periods.rows.map((r) => `${r.period_type}:${r.period_start}`)).toEqual(["quarter:2026-07-01", "month:2026-09-01"]);
+    expect(periods.errors).toEqual(['Line 3: the period type "Weekly" is not month, quarter or year.']);
+    // A phrase that only starts with a period word is not a period type, in either column.
+    expect(parseSnapshotsCsv("period,period_type,revenue\n2026-07,Year to date,1\n").errors).toEqual(['Line 2: the period type "Year to date" is not month, quarter or year.']);
+  });
+
   it("reads the period type people write and refuses one it cannot, or one the period contradicts", () => {
     const result = parseSnapshotsCsv(
       "period_type,period,revenue\n" +

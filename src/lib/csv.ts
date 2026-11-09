@@ -133,12 +133,20 @@ export function lineCells(line: string): string[] {
   return cells;
 }
 
-// Where the quoted cell that opens just before `from` closes on this line, or -1.
+// Where the quoted cell that opens just before `from` closes on this line, or -1. The rule is the
+// reader's own: the first quote that is not doubled closes the cell only when nothing but spaces
+// or tabs sits between it and the next comma or the line end. A quote with text after it is no
+// close, so the opening quote reads as a character, the same line parseCsvRows would refuse.
 function closingQuote(line: string, from: number): number {
   for (let i = from; i < line.length; i += 1) {
     if (line[i] !== '"') continue;
-    if (line[i + 1] !== '"') return i;
-    i += 1;
+    if (line[i + 1] === '"') {
+      i += 1;
+      continue;
+    }
+    let next = i + 1;
+    while (line[next] === " " || line[next] === "\t") next += 1;
+    return next >= line.length || line[next] === "," ? i : -1;
   }
   return -1;
 }

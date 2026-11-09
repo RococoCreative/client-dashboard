@@ -91,6 +91,15 @@ describe("physical lines", () => {
     expect(lineCells('pipe 6",Mar 2026,200')).toEqual(['pipe 6"', "Mar 2026", "200"]);
     expect(lineCells("")).toEqual([""]);
   });
+
+  it("closes a quoted cell only where the reader would: before a comma or the line end, past spaces", () => {
+    // A ditto mark opens nothing here. The quote that ends "Smith, J" later on is not its close,
+    // because text follows that quote, so the line keeps all four of its cells.
+    expect(lineCells('",Mar 2026,300,"Smith, J"')).toEqual(['"', "Mar 2026", "300", "Smith, J"]);
+    expect(lineCells('"abc"def,x')).toEqual(['"abc"def', "x"]);
+    expect(lineCells('"a" ,"b"\t')).toEqual(["a ", "b\t"]);
+    expect(lineCells('"say ""hi""",x')).toEqual(['say "hi"', "x"]);
+  });
 });
 
 describe("csvToObjects", () => {
