@@ -182,6 +182,21 @@ describe("company goals notice", () => {
     expect(await screen.findByRole("heading", { name: "Company goals 2025" })).toBeInTheDocument();
     expect(screen.queryByText("The hit did not save.")).not.toBeInTheDocument();
   });
+
+  it("stays away when a toggle from the year before fails after the move", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanyGoalsPage />, admin);
+    const row = (await screen.findByText("Closed sales")).closest("li") as HTMLElement;
+    let fail: (err: Error) => void = () => undefined;
+    vi.mocked(updateCompanyGoal).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+    await user.click(within(row).getByRole("button", { name: "Mark hit" }));
+
+    await user.selectOptions(screen.getByLabelText("Year"), "2025");
+    expect(await screen.findByRole("heading", { name: "Company goals 2025" })).toBeInTheDocument();
+    fail(new Error("The hit did not save."));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText("The hit did not save.")).not.toBeInTheDocument();
+  });
 });
 
 describe("connection outcome", () => {

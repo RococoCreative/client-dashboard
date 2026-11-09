@@ -1,6 +1,6 @@
 // The handful of shared numbers leadership tracks for the year (revenue, closed sales,
 // jobs delivered). Display strings carry the units people say; numerics are optional.
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -78,6 +78,8 @@ export default function CompanyGoalsPage() {
   const companyId = company!.id;
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
+  // The year on screen, for a toggle that fails after the user has moved to another year.
+  const shownYear = useRef(currentYear);
   // Next year for planning, and four years back so past goals stay reachable. The old
   // one-year-back window locked a year out of being opened, edited, or marked hit as soon as it
   // was eighteen months old, while reviews and the employee snapshot went on rendering it.
@@ -87,8 +89,9 @@ export default function CompanyGoalsPage() {
   const [busy, setBusy] = useState(false);
   // The page's notice is for a Hit toggle that did not save, and the next action clears it: another
   // toggle, a dialog save, a delete, or a move to another year, where it would sit over goals it is
-  // not about. The delete dialog keeps its own, so it never opens showing a toggle that failed
-  // earlier as though the delete had gone wrong before it was confirmed.
+  // not about (so a toggle still in flight when the year changes says nothing if it then fails).
+  // The delete dialog keeps its own, so it never opens showing a toggle that failed earlier as
+  // though the delete had gone wrong before it was confirmed.
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const state = useAsync(() => listCompanyGoals(companyId, year), [companyId, year]);
@@ -117,7 +120,7 @@ export default function CompanyGoalsPage() {
       const next = await updateCompanyGoal(goal.id, { is_hit: !goal.is_hit });
       state.setData((prev) => (prev ? prev.map((g) => (g.id === next.id ? next : g)) : prev));
     } catch (err) {
-      setError(errorMessage(err));
+      if (shownYear.current === goal.year) setError(errorMessage(err));
     }
   }
 
@@ -131,7 +134,7 @@ export default function CompanyGoalsPage() {
         description="The shared numbers the whole team is chasing. They show on the dashboard for everyone."
         actions={
           <>
-            <select value={year} onChange={(e) => { setError(""); setYear(Number(e.target.value)); }} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>
+            <select value={year} onChange={(e) => { setError(""); shownYear.current = Number(e.target.value); setYear(shownYear.current); }} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>
               {yearOptions.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
