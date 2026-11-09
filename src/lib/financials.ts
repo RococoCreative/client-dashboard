@@ -45,25 +45,33 @@ export function deriveSnapshot(s: Pick<FinancialSnapshot, "revenue" | "cogs" | "
 
 const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-// The period_type cell: the words, their -ly forms, and the abbreviations exports use.
-const TYPE_ABBREVIATIONS = new Map<string, PeriodType>([
+// The period_type cell: the words, their plural and -ly forms, and the abbreviations exports use.
+// The whole cell has to be one of them. A phrase that only starts with one ("Year to date",
+// "Annual maintenance") is no period type, and reading it as one files the figures under the
+// wrong period.
+const TYPE_WORDS = new Map<string, PeriodType>([
   ["m", "month"],
   ["mo", "month"],
   ["mth", "month"],
+  ["month", "month"],
+  ["months", "month"],
+  ["monthly", "month"],
   ["q", "quarter"],
   ["qtr", "quarter"],
+  ["quarter", "quarter"],
+  ["quarters", "quarter"],
+  ["quarterly", "quarter"],
   ["y", "year"],
   ["yr", "year"],
+  ["year", "year"],
+  ["years", "year"],
+  ["yearly", "year"],
+  ["annual", "year"],
+  ["annually", "year"],
 ]);
 
 function normalizeType(raw: string): PeriodType | null {
-  const text = raw.trim().toLowerCase().replace(/\.$/, "");
-  const abbreviated = TYPE_ABBREVIATIONS.get(text);
-  if (abbreviated) return abbreviated;
-  if (text.startsWith("month")) return "month";
-  if (text.startsWith("quarter")) return "quarter";
-  if (text.startsWith("year") || text.startsWith("annual")) return "year";
-  return null;
+  return TYPE_WORDS.get(raw.trim().toLowerCase().replace(/\.$/, "")) ?? null;
 }
 
 // The date the numbers name, or null when they name none. Built without a check, April 31 or
@@ -74,45 +82,73 @@ function calendarDate(year: number, month: number, day = 1): Date | null {
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
 }
 
-function snapped(type: PeriodType, date: Date | null): { type: PeriodType; start: string } | null {
-  return date ? { type, start: snapPeriodStart(type, date) } : null;
+// The years a period may name. Postgres has no year 0000 and refuses that date outright, and a
+// year far from the present is a typo, not a period to write figures over.
+const PERIOD_YEARS = { first: 1900, last: 2100 } as const;
+
+function saneYear(year: number): boolean {
+  return year >= PERIOD_YEARS.first && year <= PERIOD_YEARS.last;
+}
+
+// What a period cell says, as written and before any check on the date: its type, and the year,
+// month and day it names. Null when it is none of the forms parsePeriod reads.
+interface PeriodParts {
+  type: PeriodType;
+  year: number;
+  month: number;
+  day: number;
+}
+
+function periodParts(raw: string, typeHint: PeriodType | null): PeriodParts | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const dated = typeHint ?? "month";
+  let match: RegExpExecArray | null;
+
+  if ((match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text))) {
+    return { type: dated, year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  }
+  if ((match = /^(\d{4})[-/](\d{1,2})$/.exec(text))) {
+    return { type: dated, year: Number(match[1]), month: Number(match[2]), day: 1 };
+  }
+  if ((match = /^(\d{1,2})[-/](\d{4})$/.exec(text))) {
+    return { type: dated, year: Number(match[2]), month: Number(match[1]), day: 1 };
+  }
+  if ((match = /^q([1-4])\s*[-\s]?\s*(\d{4})$/i.exec(text)) || (match = /^(\d{4})\s*[-\s]?\s*q([1-4])$/i.exec(text))) {
+    if (typeHint && typeHint !== "quarter") return null;
+    const quarter = Number(match[1].length === 4 ? match[2] : match[1]);
+    const year = Number(match[1].length === 4 ? match[1] : match[2]);
+    return { type: "quarter", year, month: (quarter - 1) * 3 + 1, day: 1 };
+  }
+  if ((match = /^([a-z]{3,9})\.?\s+(\d{4})$/i.exec(text))) {
+    const index = MONTH_NAMES.indexOf(match[1].slice(0, 3).toLowerCase());
+    if (index === -1) return null;
+    return { type: dated, year: Number(match[2]), month: index + 1, day: 1 };
+  }
+  if ((match = /^(\d{4})$/.exec(text))) {
+    if (typeHint && typeHint !== "year") return null;
+    return { type: "year", year: Number(match[1]), month: 1, day: 1 };
+  }
+  return null;
 }
 
 // Reads the period cell of a spreadsheet export in the forms people actually type:
 // 2026-09-01, 2026-09, 9/2026, Sep 2026, September 2026, Q3 2026, 2026-Q3, 2026.
 // A date or a month takes its period type from the hint (a month by default). A quarter or a
 // bare year names its own type, so a hint that says otherwise reads as nothing at all rather
-// than one of the two quietly winning.
+// than one of the two quietly winning. A year outside PERIOD_YEARS reads as nothing too.
 export function parsePeriod(raw: string, typeHint: PeriodType | null = null): { type: PeriodType; start: string } | null {
-  const text = raw.trim();
-  if (!text) return null;
-  let match: RegExpExecArray | null;
+  const parts = periodParts(raw, typeHint);
+  if (!parts || !saneYear(parts.year)) return null;
+  const date = calendarDate(parts.year, parts.month, parts.day);
+  return date ? { type: parts.type, start: snapPeriodStart(parts.type, date) } : null;
+}
 
-  if ((match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text))) {
-    return snapped(typeHint ?? "month", calendarDate(Number(match[1]), Number(match[2]), Number(match[3])));
-  }
-  if ((match = /^(\d{4})[-/](\d{1,2})$/.exec(text))) {
-    return snapped(typeHint ?? "month", calendarDate(Number(match[1]), Number(match[2])));
-  }
-  if ((match = /^(\d{1,2})[-/](\d{4})$/.exec(text))) {
-    return snapped(typeHint ?? "month", calendarDate(Number(match[2]), Number(match[1])));
-  }
-  if ((match = /^q([1-4])\s*[-\s]?\s*(\d{4})$/i.exec(text)) || (match = /^(\d{4})\s*[-\s]?\s*q([1-4])$/i.exec(text))) {
-    if (typeHint && typeHint !== "quarter") return null;
-    const quarter = Number(match[1].length === 4 ? match[2] : match[1]);
-    const year = Number(match[1].length === 4 ? match[1] : match[2]);
-    return snapped("quarter", calendarDate(year, (quarter - 1) * 3 + 1));
-  }
-  if ((match = /^([a-z]{3,9})\.?\s+(\d{4})$/i.exec(text))) {
-    const index = MONTH_NAMES.indexOf(match[1].slice(0, 3).toLowerCase());
-    if (index === -1) return null;
-    return snapped(typeHint ?? "month", calendarDate(Number(match[2]), index + 1));
-  }
-  if ((match = /^(\d{4})$/.exec(text))) {
-    if (typeHint && typeHint !== "year") return null;
-    return { type: "year", start: `${match[1]}-01-01` };
-  }
-  return null;
+// Whether a period cell is in a form parsePeriod reads but names a year outside PERIOD_YEARS.
+// Read without the hint, so a year typed wrong is the thing a line error names first.
+function yearOutOfRange(raw: string): boolean {
+  const parts = periodParts(raw, null);
+  return parts !== null && !saneYear(parts.year);
 }
 
 interface CsvImportRow {
@@ -210,11 +246,14 @@ function samePeriod(a: string, b: string): boolean {
   return left !== null && right !== null && left.type === right.type && left.start === right.start;
 }
 
-// A row whose physical lines read as more periods than the row holds: the header row holds
-// none, and a line of the import holds one. A quote out of place has run those lines together
-// into one cell, and closed on a quote that happened to end a cell, so the reader cannot tell.
-// Read on, a period vanishes into a note or a column name, or its figures land on another
-// period. The lines are checked as written, so the columns can come in any order.
+// A row whose physical lines read as a period the row does not keep, or as more periods than it
+// holds: the header row holds none, and a line of the import holds one, its own period, and only
+// when its period cell reads as one. A quote out of place has run those lines together into one
+// cell, and closed on a quote that happened to end a cell, so the reader cannot tell. Read on, a
+// period vanishes into a note or a column name, or its figures land on another period. The lines
+// are checked as written, so the columns can come in any order, and the row's own period is
+// worked out first: a row whose own line is malformed (no readable period, or short of its
+// revenue) still loses whatever other period its quote took in.
 function swallowedPeriods(table: CsvTable, text: string): string[] {
   const lines = physicalLines(text);
   const indexes = (keys: string[]) => table.columns.flatMap((c, index) => (keys.includes(c.key) ? [index] : []));
@@ -227,12 +266,34 @@ function swallowedPeriods(table: CsvTable, text: string): string[] {
       .slice(row.line - 1, row.endLine)
       .map((line) => linePeriod(lineCells(line), table.columns.length, periodColumns, revenueColumns))
       .filter((period): period is string => period !== null);
-    if (periods.length <= holds) return [];
-    // Name a period the row does not keep as its own: the one lost, not the one that survives.
     const own = holds === 0 ? undefined : periodColumns.map((index) => row.cells[index] ?? "").find((cell) => parsePeriod(cell) !== null);
-    const lost = periods.find((period) => own === undefined || !samePeriod(period, own)) ?? periods[holds];
+    const foreign = periods.filter((period) => own === undefined || !samePeriod(period, own));
+    if (periods.length <= holds && foreign.length === 0) return [];
+    // Name a period the row does not keep as its own: the one lost, not the one that survives.
+    const lost = foreign[0] ?? periods[holds];
     return [`Line ${row.line}: a quoted cell here runs on over several lines and takes in the period "${lost}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`];
   });
+}
+
+// A column headed just "Type" is the period type only when its cells say so: at least one of them
+// reads as month, quarter or year. Otherwise it means something else (a job type, or actual
+// against budget), and the import leaves it out like any other column it does not read, rather
+// than refuse every line over it. A column headed "Period type" is always the period type.
+// Returns the header of such a column, or null when there is none.
+function foreignTypeColumn(table: CsvTable): string | null {
+  const typeColumns = table.columns.flatMap((c, index) => (c.key === "type" ? [index] : []));
+  if (typeColumns.length === 0) return null;
+  if (table.rows.some((row) => typeColumns.some((index) => normalizeType(row.cells[index] ?? "") !== null))) return null;
+  return table.columns[typeColumns[0]].header;
+}
+
+// The table with the columns that read as `key` left out, as if their header named nothing.
+function withoutKey(table: CsvTable, key: string): CsvTable {
+  return {
+    ...table,
+    columns: table.columns.map((c) => (c.key === key ? { ...c, key: "" } : c)),
+    records: table.records.map((record) => Object.fromEntries(Object.entries(record).filter(([k]) => k !== key))),
+  };
 }
 
 // Columns that read as the same thing, by what they read as rather than by header key:
@@ -274,6 +335,8 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
     errors.push("No rows found. The first line must be the header row.");
     return { rows, errors };
   }
+  const foreignType = foreignTypeColumn(table);
+  if (foreignType !== null) table = withoutKey(table, "type");
   // Two columns that read as the same figure (a budget beside an actual, or a percentage beside
   // an amount), or lines lost inside a note. Whichever the import took, it would be a guess
   // written over a real period.
@@ -294,6 +357,10 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
       return;
     }
     const period = periodText ? parsePeriod(periodText, typeHint) : null;
+    if (periodText && !period && yearOutOfRange(periodText)) {
+      errors.push(`Line ${line}: the year in "${periodText.trim()}" is not between ${PERIOD_YEARS.first} and ${PERIOD_YEARS.last}.`);
+      return;
+    }
     if (!period) {
       const unhinted = periodText && typeHint ? parsePeriod(periodText, null) : null;
       errors.push(
@@ -333,8 +400,19 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
       notes: pick(record, NOTES_KEYS) ?? null,
     });
   });
-  // The same period twice in one file: the later line wins.
+  // The same period twice in one file: the later line wins. Not beside a Type column the import
+  // left out, which may be what tells those lines apart (an actual and a budget, or one line per
+  // job): keeping the later one would drop the other with nothing said.
   const byKey = new Map<string, CsvImportRow>();
-  rows.forEach((row) => byKey.set(`${row.period_type}:${row.period_start}`, row));
+  for (const row of rows) {
+    const key = `${row.period_type}:${row.period_start}`;
+    if (foreignType !== null && byKey.has(key)) {
+      errors.push(
+        `${periodLabel(row.period_type, row.period_start)} is on more than one line, and the "${foreignType}" column, which the import does not read, may be what tells them apart. Keep one line per period, then import again.`,
+      );
+      return { rows: [], errors };
+    }
+    byKey.set(key, row);
+  }
   return { rows: [...byKey.values()].sort((a, b) => a.period_start.localeCompare(b.period_start)), errors };
 }
