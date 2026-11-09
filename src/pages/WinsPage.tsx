@@ -80,7 +80,7 @@ function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: 
           <IconButton label={`Archive ${title}`} onClick={onArchive}><Archive size={14} aria-hidden /></IconButton>
         </div>
       </div>
-      <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-[12rem_minmax(0,20rem)]">
         <div>
           <label htmlFor={`${id}-won`} className={labelClass}>Won on</label>
           <BlurInput id={`${id}-won`} type="date" required value={win.won_on} ariaLabel={`Won on for ${title}`} onSave={(next) => onSave({ won_on: next })} className={inputClass} />

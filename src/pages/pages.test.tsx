@@ -27,6 +27,7 @@ vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
+import * as connectionsService from "../services/connections.ts";
 import * as winsService from "../services/wins.ts";
 import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import AppLayout from "../components/AppLayout.tsx";
@@ -1246,6 +1247,62 @@ describe("production", () => {
     const row = (await screen.findByRole("link", { name: "Sample job 103" })).closest("tr") as HTMLElement;
     expect(within(row).getByText("0 of 0 done")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("home cards", () => {
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const card = (title: string) => screen.getByRole("heading", { name: title }).closest("section") as HTMLElement;
+
+  it("gives a Kingdom admin Attention, Shortcuts and the five most recent wins", async () => {
+    renderWithHub(<DashboardPage />, kingdomAdmin);
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(await screen.findByText("People not signed in")).toBeInTheDocument();
+    const attention = card("Needs attention");
+    expect(within(attention).getByText("1 person has not signed in yet.")).toBeInTheDocument();
+    expect(within(attention).getByRole("link", { name: "Open: People not signed in" })).toHaveAttribute("href", "/people");
+    const shortcuts = card("Sections");
+    expect(within(shortcuts).getByRole("link", { name: "Production" })).toHaveAttribute("href", "/production");
+    expect(within(shortcuts).getByRole("link", { name: "People / HR" })).toHaveAttribute("href", "/gsr");
+    expect(within(shortcuts).getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/financials");
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    const wins = card("Recent wins");
+    expect(within(wins).getByText("Sample win 6")).toBeInTheDocument();
+    expect(within(wins).queryByText("Sample win 5")).not.toBeInTheDocument();
+    expect(within(wins).queryByText("Sample win 7")).not.toBeInTheDocument();
+    expect(within(wins).getAllByText("Manual").length).toBeGreaterThan(0);
+    expect(within(wins).getByRole("link", { name: "All wins" })).toHaveAttribute("href", "/wins");
+  });
+
+  it("gives a Kingdom employee wins and shortcuts, never Attention", async () => {
+    renderWithHub(<DashboardPage />, kingdomEmployee);
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent wins" })).toBeInTheDocument();
+    const shortcuts = card("Sections");
+    expect(within(shortcuts).getByRole("link", { name: "Production" })).toHaveAttribute("href", "/production");
+    expect(within(shortcuts).getByRole("link", { name: "People / HR" })).toHaveAttribute("href", "/my/gsr");
+    expect(within(shortcuts).queryByRole("link", { name: "Sales & Finance" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Needs attention" })).not.toBeInTheDocument();
+  });
+
+  it("leaves Klasik's dashboard as it was, with no card and no extra call", async () => {
+    const winsSpy = vi.spyOn(winsService, "listWins");
+    const connectionsSpy = vi.spyOn(connectionsService, "listConnections");
+    onTestFinished(() => {
+      winsSpy.mockRestore();
+      connectionsSpy.mockRestore();
+    });
+    for (const hub of [admin, employee]) {
+      const { unmount } = renderWithHub(<DashboardPage />, hub);
+      expect(await screen.findByText("Closed sales")).toBeInTheDocument();
+      for (const name of ["Needs attention", "Recent wins", "Sections"]) {
+        expect(screen.queryByRole("heading", { name })).not.toBeInTheDocument();
+      }
+      unmount();
+    }
+    expect(winsSpy).not.toHaveBeenCalled();
+    expect(connectionsSpy).not.toHaveBeenCalled();
   });
 });
 
