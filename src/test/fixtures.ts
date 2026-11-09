@@ -7,6 +7,7 @@ import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
+import { isCompanyAdminRole } from "../lib/people.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -94,10 +95,13 @@ const SPECS: Record<string, CompanySpec> = {
     domain: "kingdomcustomconstruction.com",
     cadence: "monthly",
     people: [
-      { name: "Marcus Lee", title: "Owner", role: "admin" },
+      { name: "Marcus Lee", title: "Owner", role: "owner" },
       { name: "Dana Whitfield", title: "Superintendent", role: "employee" },
       { name: "Theo Brandt", title: "Estimator", role: "employee" },
       { name: "Priya Natarajan", title: "Project Coordinator", role: "employee" },
+      // Added last so every earlier id (kingdom-user-1 to 4) and everything built on them holds.
+      { name: "Avery Stone", title: "Office Manager", role: "admin" },
+      { name: "Jules Carter", title: "Field Manager", role: "manager" },
     ],
     pillars: [
       { name: "Field Execution", weight: 25, type: "rating", description: "Quality and pace of work on site.", criteria: ["Field Execution"] },
@@ -342,7 +346,7 @@ function build(company: Company): CompanyBundle {
     is_active: true,
     hire_date: i === 0 ? "2018-03-12" : i === 1 ? "2026-05-26" : "2024-09-02",
     phone: i === 1 ? "(555) 010-2201" : null,
-    department: person.role === "admin" ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
+    department: isCompanyAdminRole(person.role) ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
     reports_to: i === 0 ? null : p("user-1"),
     job_role_id: null,
     created_at: EARLIER,
@@ -1310,11 +1314,17 @@ export function fakeSession(profile: Profile): Session {
   } as unknown as Session;
 }
 
-export type Persona = "admin" | "employee" | "rococo";
+export type Persona = "admin" | "employee" | "rococo" | "owner" | "manager";
 
+// Each persona is the first person holding that role. At Klasik and RBA the admin is still the
+// first person; at Kingdom the owner is Marcus Lee and the admin is Avery Stone.
 function personaProfile(persona: Persona, bundle: CompanyBundle): Profile {
   if (persona === "rococo") return ROCOCO;
-  return persona === "admin" ? bundle.profiles[0] : bundle.profiles[1];
+  const first = (role: Role) => bundle.profiles.find((p) => p.role === role);
+  if (persona === "owner") return first("owner") ?? bundle.profiles[0];
+  if (persona === "manager") return first("manager") ?? bundle.profiles[1];
+  if (persona === "admin") return first("admin") ?? bundle.profiles[0];
+  return bundle.profiles[1];
 }
 
 // A Rococo admin with company null is on the portfolio.
@@ -1328,7 +1338,7 @@ export function makeHub(persona: Persona, company: Company | null = KLASIK.compa
     company,
     companies: isRococo ? COMPANIES : company ? [company] : [],
     isRococo,
-    isAdmin: isRococo || persona === "admin",
+    isAdmin: isRococo || isCompanyAdminRole(profile.role),
     setActiveCompanyId: () => undefined,
     refreshProfile: async () => undefined,
     refreshCompanies: async () => undefined,

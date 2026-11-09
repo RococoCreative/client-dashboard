@@ -30,6 +30,7 @@ import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
 import * as companiesService from "../services/companies.ts";
+import * as profilesService from "../services/profiles.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as winsService from "../services/wins.ts";
 import * as syncService from "../services/sync.ts";
@@ -1837,5 +1838,85 @@ describe("external links", () => {
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(within(panel).queryByLabelText("Label for Sample owner report")).not.toBeInTheDocument();
+  });
+});
+
+describe("roles", () => {
+  const kingdomOwner = makeHub("owner", KINGDOM.company);
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomManager = makeHub("manager", KINGDOM.company);
+  const optionsOf = (select: HTMLElement) => within(select).getAllByRole("option").map((o) => o.textContent);
+
+  it("gives an owner what an admin gets", async () => {
+    expect(kingdomOwner.isAdmin).toBe(true);
+    expect(kingdomOwner.profile.full_name).toBe("Marcus Lee");
+    renderWithHub(<DashboardPage />, kingdomOwner);
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    const people = (await screen.findAllByText("People")).map((el) => el.parentElement!).find((el) => el.textContent?.includes("not signed in yet"));
+    expect(people).toBeDefined();
+    expect(within(people!).getByText("1 not signed in yet")).toBeInTheDocument();
+  });
+
+  it("counts an owner as the company's admin on the portfolio", async () => {
+    const original = profilesService.listCompanyProfiles;
+    const spy = vi
+      .spyOn(profilesService, "listCompanyProfiles")
+      .mockImplementation(async (id) => (await original(id)).filter((p) => id !== KINGDOM.company.id || p.role !== "admin"));
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<PortfolioPage />, rococo, { path: "/rococo", pattern: "/rococo" });
+    expect(await screen.findByRole("heading", { name: KINGDOM.company.name })).toBeInTheDocument();
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(KINGDOM.company.id));
+    expect((await screen.findAllByText(/invitations? pending/)).length).toBe(3);
+    expect(screen.queryByText("No admin yet")).not.toBeInTheDocument();
+  });
+
+  it("gives a manager the employee dashboard", async () => {
+    expect(kingdomManager.isAdmin).toBe(false);
+    renderWithHub(<DashboardPage />, kingdomManager);
+    expect(await screen.findByRole("heading", { name: /Welcome back, Jules/ })).toBeInTheDocument();
+    expect(screen.queryByText("People")).not.toBeInTheDocument();
+  });
+
+  it("offers Owner only to an owner", async () => {
+    const first = renderWithHub(<PeoplePage />, kingdomAdmin);
+    const dana = await screen.findByLabelText("Role for Dana Whitfield");
+    expect(optionsOf(dana)).toEqual(["Admin", "Manager", "Employee"]);
+    const marcus = screen.getByLabelText("Role for Marcus Lee");
+    expect(marcus).toBeDisabled();
+    expect(marcus).toHaveDisplayValue("Owner");
+    expect(marcus).toHaveAttribute("title", "Only an owner or Rococo can change this person's role.");
+    first.unmount();
+    renderWithHub(<PeoplePage />, kingdomOwner);
+    expect(optionsOf(await screen.findByLabelText("Role for Dana Whitfield"))).toEqual(["Owner", "Admin", "Manager", "Employee"]);
+  });
+
+  it("explains each role when adding staff", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, kingdomAdmin);
+    await user.click(await screen.findByRole("button", { name: /Add staff/ }));
+    const role = screen.getByLabelText("Role");
+    expect(optionsOf(role)).not.toContain("Owner");
+    await user.selectOptions(role, "manager");
+    expect(screen.getByText("Managers see what employees see for now. Team access comes later.")).toBeInTheDocument();
+  });
+
+  it("keeps an owner's role out of an admin's hands on the person page", async () => {
+    renderWithHub(<PersonPage />, kingdomAdmin, { path: "/people/kingdom-user-1", pattern: "/people/:profileId" });
+    const role = await screen.findByLabelText("Role");
+    expect(role).toBeDisabled();
+    expect(role).toHaveValue("owner");
+    expect(screen.getByText("Only an owner or Rococo can change this person's role.")).toBeInTheDocument();
+  });
+
+  it("lets Rococo grant any role", async () => {
+    renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
+    const marcus = await screen.findByLabelText(`Role for ${KINGDOM.profiles[0].email}`);
+    expect(optionsOf(marcus)).toEqual(["Owner", "Admin", "Manager", "Employee"]);
+    expect(marcus).toHaveDisplayValue("Owner");
+  });
+
+  it("leaves Klasik's roster as it was, plus the Manager value", async () => {
+    renderWithHub(<PeoplePage />, admin);
+    expect(optionsOf(await screen.findByLabelText("Role for Sam Ortega"))).toEqual(["Admin", "Manager", "Employee"]);
   });
 });
