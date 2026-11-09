@@ -6,8 +6,9 @@
 -- now owns this configuration and edits it in Settings.
 --
 -- What it copies: the shape of Klasik's review (four pillars, their scoring types and weights,
--- five rated criteria a pillar, two required GSRs a month), the deliverable categories and the
--- job roles. What it leaves out on purpose: Klasik's own words (brand pillar and core value
+-- two required GSRs a month), the deliverable categories and the job roles. Brand Impact gets
+-- Klasik's five criterion slots; Character & Values keeps RBA's three seeded placeholder values
+-- until RBA names its own. What it leaves out on purpose: Klasik's own words (brand pillar and core value
 -- text), its company goal figures, its review cycles and its people. Those belong to Klasik.
 --
 -- Guard: it refuses to touch RBA if any review, impact score or person already exists there.

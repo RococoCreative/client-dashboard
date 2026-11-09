@@ -53,7 +53,8 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0023`), once each, on a fresh
+   `supabase/migrations/` in numeric order (`0001` through the highest number present; a gap
+   is not a missing file, as `0028` follows `0023` here), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -256,8 +257,9 @@ defines pillars, each with a weight and a scoring type:
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
 an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
-is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
-Character & Values 25) is seeded as-is. RBA was brought level with Klasik's live shape on
+is fully unit tested. Klasik was seeded at Deliverables 50, Brand Impact 25 and Character &
+Values 25; live it now runs Deliverables 40 (scored from the deliverables module), Brand Impact
+20, Character & Values 20 and Monthly GSRs 20. RBA was brought level with Klasik's live shape on
 2026-11-09 (Deliverables 40, Brand Impact 20, Character & Values 20, Monthly GSRs 20, the same
 deliverable categories and job roles), without Klasik's own wording, goals, cycles or people;
 `docs/rba-klasik-parity.sql` is the record.

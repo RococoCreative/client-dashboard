@@ -229,8 +229,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           ...snap,
         }))
       : pillars;
-  // Sign-off writes the module's figure as a line item, so it needs the figure in hand.
-  const awaitingRollup = !frozen && modulePillars.length > 0 && rollup === null;
+  // Sign-off writes the module's figure as a line item, so it needs the figure in hand. Only a
+  // scored cycle does: a monthly GSR never renders the deliverables panel that reports the
+  // figure, and it locks a month's score in, not a module line item. Waiting on it there kept
+  // Mark complete disabled for good wherever a company scores deliverables from the module.
+  const awaitingRollup = !monthly && !frozen && modulePillars.length > 0 && rollup === null;
 
   // A row that came back from a write we started: it replaces what is in state, and it is
   // dropped if the row is no longer there. Removing a line item blurs the Notes box beside the
@@ -347,29 +350,45 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     return patch;
   };
 
+  // One signed-off figure as a pillar's single line item. A figure with nothing behind it (no
+  // tasks, no locked month) removes the line item a previous sign-off left, so re-signing a
+  // reopened review never keeps a figure the period no longer has.
+  async function writeSignedOffLine(pillarId: string, line: { label: string; target: number; actual: number } | null) {
+    const existing = scores.filter((s) => s.pillar_id === pillarId && !s.criterion_id);
+    if (!line) {
+      for (const stale of existing) await deleteScore(stale.id);
+      return;
+    }
+    const [first, ...extra] = existing;
+    if (first) await updateScore(first.id, line);
+    else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillarId, ...line });
+    for (const stale of extra) await deleteScore(stale.id);
+  }
+
   // Sign-off. The module's figure is written as this review's line item first, one row per
   // module pillar, so the status flip that follows has everything it freezes. The database then
   // copies the person's current ratings into the review (0017); the reload reads them back.
+  // A monthly GSR writes neither figure: it locks the month's score in and nothing else.
   async function markComplete() {
     setBusy(true);
     setError("");
     try {
-      for (const pillar of modulePillars) {
-        if (!rollup || rollup.target === 0) continue;
-        const line = { label: `Deliverables ${year}`, target: rollup.target, actual: rollup.actual };
-        const existing = scores.find((s) => s.pillar_id === pillar.id && !s.criterion_id);
-        if (existing) await updateScore(existing.id, line);
-        else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
-      }
-      // The months' figure, the same way: one line item, so a slider moved after sign-off moves
-      // nothing on the review.
-      for (const pillar of gsrPillars) {
-        const figure = gsrFigures.get(pillar.id);
-        if (!figure || figure.target === 0) continue;
-        const line = { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual };
-        const existing = scores.find((s) => s.pillar_id === pillar.id && !s.criterion_id);
-        if (existing) await updateScore(existing.id, line);
-        else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillar.id, ...line });
+      if (!monthly) {
+        for (const pillar of modulePillars) {
+          await writeSignedOffLine(
+            pillar.id,
+            rollup && rollup.target > 0 ? { label: `Deliverables ${year}`, target: rollup.target, actual: rollup.actual } : null,
+          );
+        }
+        // The months' figure, the same way: one line item, so a slider moved after sign-off moves
+        // nothing on the review.
+        for (const pillar of gsrPillars) {
+          const figure = gsrFigures.get(pillar.id);
+          await writeSignedOffLine(
+            pillar.id,
+            figure && figure.target > 0 ? { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual } : null,
+          );
+        }
       }
       // A month's GSR is locked in with its score, worked out from the month's goals as they stand
       // after the meeting's last adjustments.

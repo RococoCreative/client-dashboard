@@ -47,6 +47,19 @@ describe("review history", () => {
     expect(latestScoredReview(rows)).toBeNull();
   });
 
+  it("never scores a locked month on the ratings the database froze into it", () => {
+    // Locking a month in flips its review to complete, and 0017 copies the person's ratings into
+    // it like any sign-off. The month's number is its GSR score, so it is not a scored review and
+    // never becomes the latest score over the quarter it sits in.
+    const locked = [
+      review("r-quarter", "Q3 2026", "complete", "2026-09-30T17:00:00Z"),
+      review("r-july", "July 2026", "complete", "2026-10-02T17:00:00Z"),
+    ];
+    const rows = reviewHistory(locked, cycles, pillars, [score("r-quarter"), score("r-july")]);
+    expect(rows.find((r) => r.review.id === "r-july")?.result).toBeNull();
+    expect(latestScoredReview(rows)?.review.id).toBe("r-quarter");
+  });
+
   it("does not count a completed review whose rows carry only notes", () => {
     const notesOnly = { id: "r-quarter-n", review_id: "r-quarter", pillar_id: "p1", criterion_id: "c1", rating: null, notes: "Talked it through." } as unknown as ReviewScore;
     const rows = reviewHistory([review("r-quarter", "Q3 2026", "complete", "2026-09-30T17:00:00Z")], cycles, pillars, [notesOnly]);

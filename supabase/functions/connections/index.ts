@@ -241,16 +241,19 @@ function checkReturnTo(value: unknown): string {
   return `${url.origin}${url.pathname}`;
 }
 
-// The signed-in person, checked as an admin of the company through their own JWT and the same
-// row level security the app lives under. Returns their profile id.
+// The signed-in person, checked as an active admin of the company through their own JWT and the
+// same row level security the app lives under. Returns their profile id. A person's own profile
+// row reads back even after they are deactivated, so is_active is checked here the way every
+// database helper checks it (0013's kill switch): a departed admin's session cannot connect or
+// disconnect the company's accounts.
 async function requireAdmin(req: Request, companyId: string): Promise<string> {
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!jwt) throw new HttpError(401, "Sign in first.");
   const asUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false, autoRefreshToken: false } });
   const { data: userData, error: userError } = await asUser.auth.getUser(jwt);
   if (userError || !userData.user) throw new HttpError(401, "Sign in first.");
-  const { data: profile } = await asUser.from("profiles").select("id, role, company_id, is_rococo_admin").eq("user_id", userData.user.id).maybeSingle();
-  const allowed = Boolean(profile) && (profile!.is_rococo_admin || (profile!.role === "admin" && profile!.company_id === companyId));
+  const { data: profile } = await asUser.from("profiles").select("id, role, company_id, is_rococo_admin, is_active").eq("user_id", userData.user.id).maybeSingle();
+  const allowed = Boolean(profile) && profile!.is_active === true && (profile!.is_rococo_admin || (profile!.role === "admin" && profile!.company_id === companyId));
   if (!allowed) throw new HttpError(403, "Only a company admin can manage connections.");
   return profile!.id as string;
 }

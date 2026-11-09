@@ -104,7 +104,10 @@ export function pillarScore(pillar: PillarConfig, scores: ScoreInput[]): number 
   const scale = isFiniteNumber(pillar.rating_scale_max) && pillar.rating_scale_max > 0 ? pillar.rating_scale_max : 5;
   const rated = own.filter((s) => isFiniteNumber(s.rating));
   if (rated.length === 0) return null;
-  const average = rated.reduce((sum, s) => sum + (s.rating as number), 0) / rated.length;
+  // Each rating is held to the scale before averaging. A company that lowers a pillar's scale
+  // keeps the ratings given on the old one, and an unclamped 8 on a 1 to 5 scale would cover for
+  // a 2 beside it, reading 100% on the pillar.
+  const average = rated.reduce((sum, s) => sum + clamp(s.rating as number, 0, scale), 0) / rated.length;
   return clamp((average / scale) * 100, 0, 100);
 }
 

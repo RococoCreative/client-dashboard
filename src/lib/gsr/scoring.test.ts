@@ -40,6 +40,11 @@ describe("pillarScore", () => {
     expect(pillarScore(tenPoint, [{ pillar_id: "brand", rating: 7 }])).toBe(70);
   });
 
+  it("holds each rating to the scale, so one over-scale rating cannot hide a low one", () => {
+    // Rated 8 and 2 on a 1 to 10 scale, then the pillar moved to 1 to 5: the 8 counts as a 5.
+    expect(pillarScore(KLASIK[1], [{ pillar_id: "brand", rating: 8 }, { pillar_id: "brand", rating: 2 }])).toBe(70);
+  });
+
   it("returns null when nothing is scored", () => {
     expect(pillarScore(KLASIK[1], [])).toBeNull();
     expect(pillarScore(KLASIK[1], [{ pillar_id: "brand", rating: null }])).toBeNull();

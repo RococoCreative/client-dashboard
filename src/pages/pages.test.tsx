@@ -1017,4 +1017,32 @@ describe("monthly GSRs, scored", () => {
     expect(within(impact).getByText("88%")).toBeInTheDocument();
     expect(within(impact).getByText(/1 month locked in so far/)).toBeInTheDocument();
   });
+
+  // Reopening the quarter and the month it counted, then signing the quarter off again, must not
+  // keep the 88% the first sign-off wrote: only a locked month reaches a scored review.
+  it("drops the signed-off GSR figure when a reopened review is signed off with no month locked in", async () => {
+    const user = userEvent.setup();
+    const september = RBA.cycles[2];
+    const month = await ensureReview(september.id, RBA.company.id, rbaReview.employee_id);
+    await updateReview(month.id, { status: "in_progress", completed_at: null });
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${rbaReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    await user.click(await screen.findByRole("button", { name: /Reopen/ }));
+    expect(await screen.findByText(/No month in this period is locked in yet/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Mark complete/ }));
+    expect(await screen.findByText(/No month inside this period was locked in when it was signed off/)).toBeInTheDocument();
+    expect(screen.queryByText(/locked-in month of GSRs, as signed off/)).not.toBeInTheDocument();
+  });
+
+  // The live shape at Klasik and RBA: Deliverables scored from the module beside Monthly GSRs. A
+  // monthly GSR has no deliverables panel to report the module's figure, and must not wait on it.
+  it("locks a month in where the company also scores deliverables from the module", async () => {
+    const user = userEvent.setup();
+    await createPillar({ company_id: KLASIK.company.id, name: "Deliverables module", weight: 40, scoring_type: "deliverables_module", required_goals: 2, sort_order: 1 });
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const markComplete = await screen.findByRole("button", { name: /Mark complete/ });
+    expect(markComplete).toBeEnabled();
+    await user.click(markComplete);
+    await user.click(await screen.findByRole("button", { name: "Mark complete and lock in" }));
+    expect(await screen.findByText(/^Locked in at \d+%$/)).toBeInTheDocument();
+  });
 });
