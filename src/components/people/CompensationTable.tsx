@@ -98,7 +98,7 @@ export default function CompensationTable({
               {items.map((item) => (
                 <tr key={item.id}>
                   <td className={tdClass}>
-                    {canEdit ? <BlurInput value={item.name} ariaLabel={`Line ${item.name}`} onSave={(next) => void save(item, { name: next.trim() || item.name })} className={`${inputClass} mt-0 text-[13px]`} /> : item.name}
+                    {canEdit ? <BlurInput value={item.name} required ariaLabel={`Line ${item.name}`} onSave={(next) => void save(item, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} /> : item.name}
                   </td>
                   <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(item.annual_amount / 12)}</td>
                   <td className={`${tdClass} tnum text-right`}>

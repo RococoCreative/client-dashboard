@@ -6,6 +6,10 @@
 // decline the empty draft itself, and because declining leaves the value prop untouched the
 // box then sits there blank for the rest of the session while the database still holds the old
 // text. Here an empty draft simply restores what is stored, and onSave is never called.
+//
+// A field with a rule of its own (a weight from 0 to 100) declines a draft by returning false
+// from onSave, for the same reason: the box goes back to the stored value instead of showing a
+// number the database never took. The caller says why.
 import { useState } from "react";
 import { inputClass, textareaClass } from "./forms.ts";
 
@@ -24,7 +28,7 @@ export default function BlurInput({
 }: {
   id?: string;
   value: string;
-  onSave: (next: string) => void;
+  onSave: (next: string) => void | false;
   disabled?: boolean;
   multiline?: boolean;
   placeholder?: string;
@@ -45,7 +49,7 @@ export default function BlurInput({
       setDraft(value);
       return;
     }
-    if (draft !== value) onSave(draft);
+    if (draft !== value && onSave(draft) === false) setDraft(value);
   };
   if (multiline) {
     return (

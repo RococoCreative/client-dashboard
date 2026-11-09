@@ -1,6 +1,7 @@
 // Companies tab of the Rococo portfolio: each company's name, theme, logo, and the sign-in
 // domains that decide who can self-serve an account. Convenience over RLS, which already
-// lets Rococo admins do all of this.
+// lets Rococo admins do all of this. Deleting a company also tidies what the database cannot
+// reach on its own: the grant each connected provider holds, and the company's stored files.
 import { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
@@ -18,7 +19,9 @@ import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { addCompanyDomain, deleteCompany, listAllDomains, listCompanies, removeCompanyDomain, updateCompany } from "../../services/companies.ts";
+import { disconnectConnection, listConnections } from "../../services/connections.ts";
 import { listAllProfiles } from "../../services/profiles.ts";
+import { removeCompanyFiles } from "../../services/storage.ts";
 import { THEMES, THEME_KEYS } from "../../lib/theme.ts";
 import { normalizeDomain } from "../../lib/email.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -34,6 +37,10 @@ export default function CompaniesPage() {
   const [newDomain, setNewDomain] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The delete dialog sits over a scrim, so its failure is reported inside it, not on the page.
+  const [deleteError, setDeleteError] = useState("");
+  // A company already deleted whose stored files did not all go, kept so the removal can be retried.
+  const [strandedFiles, setStrandedFiles] = useState<{ company: Company; reason: string } | null>(null);
 
   const state = useAsync(async () => {
     const [companies, domains, profiles] = await Promise.all([listCompanies(), listAllDomains(), listAllProfiles()]);
@@ -74,17 +81,48 @@ export default function CompaniesPage() {
     });
   }
 
+  // Stored files are not rows, so nothing cascades to them. They go once the company row is gone,
+  // the way an SOP's or a resource's file goes after its row, and a failure is reported with a way
+  // to retry rather than swallowed, because no screen would ever show those files again.
+  async function clearFiles(company: Company) {
+    setStrandedFiles(null);
+    try {
+      await removeCompanyFiles(company.id);
+    } catch (err) {
+      setStrandedFiles({ company, reason: errorMessage(err) });
+    }
+  }
+
   async function handleDeleteCompany() {
     if (!deleting) return;
+    const company = deleting;
     setBusy(true);
-    await run(async () => {
-      await deleteCompany(deleting.id);
-      state.setData((prev) => (prev ? { ...prev, companies: prev.companies.filter((c) => c.id !== deleting.id) } : prev));
-      setDeleting(null);
-      setConfirmText("");
-      await refreshCompanies();
-    });
+    setDeleteError("");
+    try {
+      // Each connected provider is told to drop its grant first. The connection rows and their
+      // tokens cascade away with the company, and after that nothing could ask the provider.
+      const connections = await listConnections(company.id);
+      for (const connection of connections) {
+        if (connection.status !== "not_connected") await disconnectConnection(company.id, connection.provider);
+      }
+      await deleteCompany(company.id);
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+      setBusy(false);
+      return;
+    }
+    state.setData((prev) => (prev ? { ...prev, companies: prev.companies.filter((c) => c.id !== company.id) } : prev));
+    setDeleting(null);
+    setConfirmText("");
     setBusy(false);
+    await clearFiles(company);
+    await run(refreshCompanies);
+  }
+
+  function closeDelete() {
+    setDeleting(null);
+    setConfirmText("");
+    setDeleteError("");
   }
 
   const companies = state.data?.companies ?? [];
@@ -101,6 +139,12 @@ export default function CompaniesPage() {
       />
       <Tabs items={PORTFOLIO_TABS} />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
+      {strandedFiles ? (
+        <Notice tone="error" className="mb-4">
+          <p>{strandedFiles.company.name} is deleted, but some of its stored files were not removed. {strandedFiles.reason}</p>
+          <Button variant="secondary" size="sm" className="mt-2" onClick={() => void clearFiles(strandedFiles.company)}>Remove the files</Button>
+        </Notice>
+      ) : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
 
       {!state.data && !state.error ? (
@@ -141,7 +185,7 @@ export default function CompaniesPage() {
                       {ownDomains.map((d) => (
                         <Badge key={d.domain} tone="accent" className="pr-1">
                           {d.domain}
-                          <button type="button" aria-label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)} className="ml-0.5 rounded-full p-0.5 hover:bg-accent/20"><X size={11} aria-hidden /></button>
+                          <IconButton size="sm" label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)}><X size={11} aria-hidden /></IconButton>
                         </Badge>
                       ))}
                       <form
@@ -176,15 +220,19 @@ export default function CompaniesPage() {
         />
       ) : null}
       {deleting ? (
-        <Modal onClose={() => { setDeleting(null); setConfirmText(""); }} labelledBy="delete-company-title">
+        <Modal onClose={closeDelete} labelledBy="delete-company-title">
           <div className="p-6">
             <h2 id="delete-company-title" className="font-display text-lg text-heading">Delete {deleting.name}?</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-2">
-              This deletes every review, goal, SOP, resource, financial period, campaign, and invitation for {deleting.name}. Its people stay as accounts with no company. There is no undo. Type <b>{deleting.slug}</b> to confirm.
+              This deletes everything {deleting.name} holds: review cycles, reviews and scores, goals, pillars and criteria, job roles, deliverable categories, SOPs, resources and their stored files, financial periods, campaigns, invitations and sign-in domains, along with each person's KPIs, compensation, figures, deliverables and ratings there. Any connected accounts are disconnected first.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">
+              The people themselves stay on record, including anyone not signed in yet, listed under No company on the People tab and ready to move. There is no undo. Type <b>{deleting.slug}</b> to confirm.
             </p>
             <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Type the identifier to confirm" className={`${inputClass} mt-4 font-mono`} />
+            {deleteError ? <Notice tone="error" className="mt-4">{deleteError}</Notice> : null}
             <div className="mt-6 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => { setDeleting(null); setConfirmText(""); }}>Cancel</Button>
+              <Button variant="secondary" onClick={closeDelete}>Cancel</Button>
               <Button variant="danger-solid" disabled={busy || confirmText !== deleting.slug} onClick={() => void handleDeleteCompany()}>{busy ? "Deleting..." : "Delete company"}</Button>
             </div>
           </div>
