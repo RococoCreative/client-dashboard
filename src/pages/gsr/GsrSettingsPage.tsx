@@ -117,12 +117,17 @@ export default function GsrSettingsPage() {
     void patchPillar(pillar, { weight: value });
   }
 
+  // One dialog at a time. The dialog has no focus trap, so a key press can still reach a Delete
+  // button under the scrim; while a dialog is open, its delete running included, that opens
+  // nothing, because the two dialogs share one error and a second would show the first's refusal.
   function openDeletePillar(pillar: GsrPillar) {
+    if (busy || deletingPillar || deletingCriterion) return;
     setDialogError("");
     setDeletingPillar(pillar);
   }
 
   function openDeleteCriterion(criterion: GsrCriterion) {
+    if (busy || deletingPillar || deletingCriterion) return;
     setDialogError("");
     setDeletingCriterion(criterion);
   }

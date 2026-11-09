@@ -5,6 +5,8 @@
 // nobody could correct, a remove control built by hand, and a Retire button that never said what
 // it does. Round two adds the races a reviewer found: a delete dialog cancelled while its delete
 // was still running, and a second company delete that wiped the first one's stranded-files notice.
+// Round three: a Delete button behind the scrim, reached from the keyboard while a delete ran,
+// opened a second dialog that then showed the running delete's failure as its own.
 //
 // The mocks are the usual in-memory data layer, with the calls these defects get wrong watched so
 // a test can make one fail or read the order they ran in. The company deletes run last, because
@@ -46,7 +48,7 @@ vi.mock("../services/connections.ts", async () => {
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCompany, deleteCompany } from "../services/companies.ts";
-import { deleteDeliverableCategory } from "../services/deliverables.ts";
+import { createDeliverableCategory, deleteDeliverableCategory } from "../services/deliverables.ts";
 import { deleteCriterion, deletePillar, updatePillar } from "../services/gsr.ts";
 import { removeCompanyFiles } from "../services/storage.ts";
 import { disconnectConnection } from "../services/connections.ts";
@@ -216,6 +218,37 @@ describe("deleting a pillar or criterion", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(screen.getByDisplayValue("Brand Impact")).toBeInTheDocument();
   });
+
+  it("opens no second dialog from the page behind, so a refusal shows only in its own dialog", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<GsrSettingsPage />, admin);
+    const section = (await screen.findByDisplayValue("Brand Impact")).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("button", { name: "Delete pillar" }));
+    const dialog = screen.getByRole("dialog");
+    const behind = within(screen.getByDisplayValue("Curiosity").closest("li") as HTMLElement).getByRole("button", { name: "Delete criterion" });
+
+    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    // It opens nothing, before the delete is sent or while it runs.
+    behind.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    const call = pending();
+    vi.mocked(deletePillar).mockImplementationOnce(() => call.promise);
+    await user.click(within(dialog).getByRole("button", { name: "Delete pillar" }));
+    behind.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(dialog).toHaveTextContent('Delete "Brand Impact"?');
+
+    const refusal = "This pillar is part of a signed-off review, so it cannot be deleted. Untick Active to retire it instead.";
+    call.reject(new Error(refusal));
+    expect(await within(dialog).findByText(refusal)).toBeInTheDocument();
+    expect(screen.getAllByText(refusal)).toHaveLength(1);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(dialog).toHaveTextContent('Delete "Brand Impact"?');
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
 
 describe("retiring a job role", () => {
@@ -334,6 +367,38 @@ describe("deliverable categories", () => {
     expect(screen.getByRole("dialog")).not.toHaveTextContent("The connection dropped");
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
   });
+
+  it("opens no other category's dialog while a delete runs, so its failure stays in its own dialog", async () => {
+    const user = userEvent.setup();
+    await createDeliverableCategory({ company_id: KLASIK.company.id, name: "Estimating", sort_order: 9 });
+    renderWithHub(<CompanySettingsPage />, admin);
+    await screen.findByLabelText("Category name Estimating");
+    await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
+    const dialog = screen.getByRole("dialog");
+    const call = pending();
+    vi.mocked(deleteDeliverableCategory).mockImplementationOnce(() => call.promise);
+    await user.click(within(dialog).getByRole("button", { name: "Delete category" }));
+
+    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    screen.getByRole("button", { name: "Delete Estimating" }).focus();
+    await user.keyboard("{Enter}");
+    expect(dialog).toHaveTextContent('Delete "BD & Sales"?');
+
+    call.reject(new Error("Failed to fetch"));
+    expect(await within(dialog).findByText("The connection dropped. Check your signal and try again.")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent('Delete "BD & Sales"?');
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Once that dialog is closed, the other category's opens and deletes as usual.
+    await user.click(screen.getByRole("button", { name: "Delete Estimating" }));
+    const next = screen.getByRole("dialog");
+    expect(next).toHaveTextContent('Delete "Estimating"?');
+    expect(next).not.toHaveTextContent("The connection dropped");
+    await user.click(within(next).getByRole("button", { name: "Delete category" }));
+    await waitFor(() => expect(screen.queryByLabelText("Category name Estimating")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Category name BD & Sales")).toBeInTheDocument();
+  });
 });
 
 describe("deleting a company", () => {
@@ -410,6 +475,40 @@ describe("deleting a company", () => {
     expect(await within(dialog).findByText("The connection dropped. Check your signal and try again.")).toBeInTheDocument();
     expect(screen.getAllByText("The connection dropped. Check your signal and try again.")).toHaveLength(1);
     expect(within(dialog).getByRole("button", { name: "Delete company" })).not.toBeDisabled();
+  });
+
+  it("opens no other company's dialog while a delete runs, so its failure stays in its own dialog", async () => {
+    const user = userEvent.setup();
+    await createCompany({ slug: "kb1", name: "Keyboard One", theme_key: "kingdom" });
+    await createCompany({ slug: "kb2", name: "Keyboard Two", theme_key: "kingdom" });
+    renderCompanies();
+    await user.click(await screen.findByRole("button", { name: "Delete Keyboard One" }));
+    const dialog = screen.getByRole("dialog");
+    const call = pending();
+    vi.mocked(deleteCompany).mockImplementationOnce(() => call.promise);
+    await user.type(within(dialog).getByLabelText("Type the identifier to confirm"), "kb1");
+    await user.click(within(dialog).getByRole("button", { name: "Delete company" }));
+
+    // The dialog has no focus trap, so a key press can reach a Delete button under the scrim.
+    screen.getByRole("button", { name: "Delete Keyboard Two" }).focus();
+    await user.keyboard("{Enter}");
+    expect(dialog).toHaveTextContent("Delete Keyboard One?");
+    expect(within(dialog).getByRole("button", { name: "Deleting..." })).toBeDisabled();
+
+    call.reject(new Error("Failed to fetch"));
+    expect(await within(dialog).findByText("The connection dropped. Check your signal and try again.")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Delete Keyboard One?");
+    expect(within(dialog).getByLabelText("Type the identifier to confirm")).toHaveValue("kb1");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keyboard One" })).toBeInTheDocument();
+
+    // Once that dialog is closed, the other company's opens clean.
+    await user.click(screen.getByRole("button", { name: "Delete Keyboard Two" }));
+    const next = screen.getByRole("dialog");
+    expect(next).toHaveTextContent("Delete Keyboard Two?");
+    expect(next).not.toHaveTextContent("The connection dropped");
+    await user.click(within(next).getByRole("button", { name: "Cancel" }));
   });
 
   it("revokes the company's connections, deletes it, then clears its stored files", async () => {
