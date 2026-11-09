@@ -158,6 +158,9 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<JobRole | null>(null);
   const [busy, setBusy] = useState(false);
+  // The delete dialog reports only its own failure, never an inline save's or an earlier
+  // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
+  // back, so the dialog waits for the answer rather than closing on Cancel mid-flight.
   const [dialogError, setDialogError] = useState("");
 
   async function add(name: string) {
@@ -170,12 +173,27 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
     }
   }
 
+  // Modal keeps Tab inside the dialog, but focus can still be put on another role's Delete under
+  // the scrim some other way. While a delete runs that opens nothing, or the running one's failure
+  // would land in the other role's dialog.
+  function openDelete(role: JobRole) {
+    if (busy) return;
+    setDialogError("");
+    setDeleting(role);
+  }
+
+  function closeDelete() {
+    if (busy) return;
+    setDeleting(null);
+    setDialogError("");
+  }
+
   async function remove() {
     if (!deleting) return;
+    const id = deleting.id;
     setBusy(true);
     setDialogError("");
     try {
-      const id = deleting.id;
       await deleteJobRole(id);
       state.setData((prev) => (prev ? { roles: prev.roles.filter((r) => r.id !== id), goals: prev.goals.filter((g) => g.job_role_id !== id) } : prev));
       setDeleting(null);
@@ -212,7 +230,7 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
                   goals={goals.filter((g) => g.job_role_id === role.id)}
                   onRole={(next) => state.setData((prev) => (prev ? { ...prev, roles: prev.roles.map((r) => (r.id === next.id ? next : r)) } : prev))}
                   onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
-                  onDelete={() => setDeleting(role)}
+                  onDelete={() => openDelete(role)}
                   onError={setError}
                 />
               ))}
@@ -228,7 +246,7 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
           busy={busy}
           error={dialogError}
           onConfirm={() => void remove()}
-          onCancel={() => { setDeleting(null); setDialogError(""); }}
+          onCancel={closeDelete}
         />
       ) : null}
     </Section>

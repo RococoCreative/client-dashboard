@@ -102,9 +102,9 @@ export default function CompaniesPage() {
     }
   }
 
-  // The dialog has no focus trap, so a key press can still reach another company's Delete button
-  // under the scrim. While a delete runs that opens nothing, or the running one's failure would be
-  // reported under the other company's name.
+  // Modal keeps Tab inside the dialog, but focus can still be put on another company's Delete
+  // button under the scrim some other way. While a delete runs that opens nothing, or the running
+  // one's failure would be reported under the other company's name.
   function openDelete(company: Company) {
     if (busy) return;
     setDeleteError("");
