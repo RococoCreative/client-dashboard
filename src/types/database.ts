@@ -627,3 +627,24 @@ export interface CompanyConnection {
   created_at: string;
   updated_at: string;
 }
+
+// Audit
+// One recorded change to a role, access, company setting, domain, connection, pillar weight or
+// job-role module (0025). The database writes these by trigger and only Rococo admins read them.
+// changed holds each watched column that moved, with its value before and after; an insert has
+// old null throughout and a delete has new null throughout.
+export type AuditAction = "insert" | "update" | "delete";
+export type AuditActorKind = "user" | "rococo" | "system";
+export const AUDIT_ACTOR_KIND_LABELS: Record<AuditActorKind, string> = { user: "Company user", rococo: "Rococo", system: "System" };
+export interface AuditEvent {
+  id: string;
+  company_id: string | null;
+  table_name: string;
+  row_id: string;
+  action: AuditAction;
+  changed: Record<string, { old: unknown; new: unknown }>;
+  actor_user_id: string | null;
+  actor_profile_id: string | null;
+  actor_kind: AuditActorKind;
+  created_at: string;
+}
