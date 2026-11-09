@@ -13,16 +13,21 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection, listConnections, startConnection } from "../../services/connections.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate } from "../../lib/format.ts";
-import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type ConnectionProvider } from "../../types/database.ts";
+import { CONNECTION_PROVIDER_LABELS, type CompanyConnection, type ConnectionProvider } from "../../types/database.ts";
 
 // What each provider feeds, in the company's terms. Industry neutral; the figures themselves
 // are the company's own rows.
 const PROVIDER_BLURBS: Record<ConnectionProvider, string> = {
   gohighlevel: "Closed sales, for the company and for each person, from won opportunities.",
   quickbooks: "Revenue, costs, profit and cash for the company; revenue per person where the books tag it.",
+  google_sheets: "Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule.",
 };
 
-export default function ConnectionsPanel({ companyId }: { companyId: string }) {
+// The providers Settings lists unless a page names its own; Google Sheets appears only where a
+// page that uses data sources asks for it.
+const DEFAULT_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks"];
+
+export default function ConnectionsPanel({ companyId, providers = DEFAULT_PROVIDERS }: { companyId: string; providers?: ConnectionProvider[] }) {
   const state = useAsync(() => listConnections(companyId), [companyId]);
   const [params] = useSearchParams();
   const [busy, setBusy] = useState<ConnectionProvider | null>(null);
@@ -69,7 +74,7 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
       {!state.data && !state.error ? <SkeletonRows rows={2} /> : null}
       {state.data ? (
         <ul className="divide-y divide-line">
-          {keysOf(CONNECTION_PROVIDER_LABELS).map((provider) => {
+          {providers.map((provider) => {
             const row = rowFor(provider);
             const connected = row?.status === "connected";
             const label = CONNECTION_PROVIDER_LABELS[provider];

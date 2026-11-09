@@ -607,10 +607,11 @@ export const CAMPAIGN_CHANNELS = [
 // from Company Hub. The status row is all the browser sees; tokens live in connection_tokens,
 // which only the connections Edge Function reads. A new provider is a new key here and a new
 // entry in that function's registry.
-export type ConnectionProvider = "gohighlevel" | "quickbooks";
+export type ConnectionProvider = "gohighlevel" | "quickbooks" | "google_sheets";
 export const CONNECTION_PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   gohighlevel: "GoHighLevel",
   quickbooks: "QuickBooks Online",
+  google_sheets: "Google Sheets",
 };
 export type ConnectionStatus = "not_connected" | "connected" | "error";
 export interface CompanyConnection {

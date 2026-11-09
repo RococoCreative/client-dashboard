@@ -60,6 +60,7 @@ import ProjectPage from "./production/ProjectPage.tsx";
 import WinsPage from "./WinsPage.tsx";
 import SalesFinancePage from "./salesFinance/SalesFinancePage.tsx";
 import ControlsPage from "./salesFinance/ControlsPage.tsx";
+import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -1040,6 +1041,18 @@ describe("connections", () => {
     await userEvent.click(screen.getByRole("button", { name: "Disconnect GoHighLevel" }));
     await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
     expect(screen.getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+  });
+
+  it("keeps Google Sheets off the Connections card until a page asks for it", async () => {
+    const { unmount } = renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} />, admin);
+    expect(await screen.findByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
+    expect(screen.queryByText("Google Sheets")).not.toBeInTheDocument();
+    unmount();
+
+    renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} providers={["gohighlevel", "quickbooks", "google_sheets"]} />, admin);
+    expect(await screen.findByText("Google Sheets")).toBeInTheDocument();
+    expect(screen.getByText("Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect Google Sheets" })).toBeInTheDocument();
   });
 });
 
