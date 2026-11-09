@@ -1,9 +1,12 @@
 -- 0031_role_hierarchy.test.sql
 -- Proves the role hierarchy (0031): owner and manager are role values, an owner is an admin
 -- everywhere and a manager is employee-level, grants are ranked (only an owner or Rococo grants
--- owner, nobody grants above their own rank or changes someone ranked above them), the insert
--- guards on profiles and invitations keep sign-up working, and reports_to never points at
--- oneself, another company or round in a loop, and is cleared when a person changes company.
+-- owner, nobody grants above their own rank or changes, invites or removes someone ranked above
+-- them, signed in or not), an invitation only names someone on its own company's roster who has
+-- not signed in yet, the insert guards on profiles and invitations keep sign-up working, and
+-- reports_to never points at oneself, another company or round in a loop, is cleared when a
+-- person changes company, and is judged only when it changes, so a line saved before 0031 never
+-- blocks a first sign-in.
 --
 -- Runs inside one transaction the harness opens and rolls back; never begin or commit here.
 -- State carries from case to case, so each case puts back, as system, what it changed.
@@ -292,6 +295,195 @@ select tests.assert(
   'invitation_guard: an owner invitation from an owner or Rococo is missing'
 );
 
+-- case: invitation_to_owner_row
+-- Signing in with an invitation that names a roster row claims that row, role and all, so naming
+-- an owner who has not signed in yet hands over an owner whatever role the invitation carries.
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.roster.owner@example.com', 'Sample Roster Owner', tests.company('kingdom'), 'owner')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_roster_owner', id from p;
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format(
+    $q$insert into public.invitations (company_id, email, role, profile_id)
+       values (%L, 'sample.taker1@example.com', 'employee', %L)$q$,
+    tests.company('kingdom'), tests.id('k_roster_owner')
+  ),
+  'You cannot invite someone ranked above you.'
+);
+select tests.act_as(tests.id('k_owner'));
+insert into public.invitations (company_id, email, role, profile_id)
+values (tests.company('kingdom'), 'sample.roster.owner@example.com', 'owner', tests.id('k_roster_owner'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+delete from public.invitations where email = 'sample.roster.owner@example.com';
+select tests.act_as(tests.id('rococo'));
+insert into public.invitations (company_id, email, role, profile_id)
+values (tests.company('kingdom'), 'sample.roster.owner@example.com', 'employee', tests.id('k_roster_owner'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.invitations where email = 'sample.taker1@example.com'),
+  'invitation_to_owner_row: an admin pointed an invitation at an owner'
+);
+select tests.assert(
+  (select count(*) from public.invitations where profile_id = tests.id('k_roster_owner')) = 1,
+  'invitation_to_owner_row: an owner or Rococo could not invite an owner who has not signed in'
+);
+
+-- case: invitation_update_guarded
+-- Every update is checked, not just a change of role, so moving an owner's invitation to another
+-- address is judged like a new invitation. The roster-bound one is Rococo's from the case above.
+insert into public.invitations (company_id, email, role)
+values (tests.company('kingdom'), 'sample.offer.owner@example.com', 'owner');
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  $q$update public.invitations set email = 'sample.taker2@example.com'
+      where email = 'sample.offer.owner@example.com'$q$,
+  'Only an owner or Rococo can make someone an owner.'
+);
+select tests.assert_raises(
+  $q$update public.invitations set email = 'sample.taker3@example.com'
+      where email = 'sample.roster.owner@example.com'$q$,
+  'You cannot invite someone ranked above you.'
+);
+select tests.assert_raises(
+  $q$update public.invitations set role = 'employee', email = 'sample.taker4@example.com'
+      where email = 'sample.offer.owner@example.com'$q$,
+  'You cannot change an invitation for someone ranked above you.'
+);
+-- An admin still corrects an invitation they could have sent.
+update public.invitations set email = 'sample.invite1.fixed@example.com' where email = 'sample.invite1@example.com';
+select tests.act_as(tests.id('k_owner'));
+update public.invitations set email = 'sample.offer.owner2@example.com' where email = 'sample.offer.owner@example.com';
+select tests.act_as(tests.id('rococo'));
+update public.invitations set email = 'sample.roster.owner2@example.com' where email = 'sample.roster.owner@example.com';
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.invitations where email like 'sample.taker%'),
+  'invitation_update_guarded: an admin moved an owner invitation to another address'
+);
+select tests.assert(
+  (select count(*) from public.invitations
+    where email in ('sample.offer.owner2@example.com', 'sample.roster.owner2@example.com')) = 2,
+  'invitation_update_guarded: an owner or Rococo could not change an owner invitation'
+);
+select tests.assert(
+  exists (select 1 from public.invitations where email = 'sample.invite1.fixed@example.com' and role = 'admin'),
+  'invitation_update_guarded: an admin could not correct an admin invitation'
+);
+update public.invitations set email = 'sample.invite1@example.com' where email = 'sample.invite1.fixed@example.com';
+delete from public.invitations
+ where email in ('sample.offer.owner2@example.com', 'sample.roster.owner2@example.com');
+
+-- case: invitation_names_an_unclaimed_roster_row
+-- The same claim makes an invitation that names someone already signed in, or someone in
+-- another company, a way into their account, so an admin can only name a person on their own
+-- company's roster who has not signed in yet.
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.roster.emp@example.com', 'Sample Roster Employee', tests.company('kingdom'), 'employee')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_roster_emp', id from p;
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.roster.klasik@example.com', 'Sample Klasik Roster', tests.company('klasik'), 'employee')
+  returning id
+)
+insert into tests.fixture (name, id) select 'l_roster_emp', id from p;
+insert into public.invitations (company_id, email, role, profile_id, accepted_at)
+values (tests.company('kingdom'), 'sample.accepted@example.com', 'employee', tests.id('k_emp'), now());
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format(
+    $q$insert into public.invitations (company_id, email, role, profile_id)
+       values (%L, 'sample.taker5@example.com', 'employee', %L)$q$,
+    tests.company('kingdom'), tests.id('k_emp')
+  ),
+  'That person has already signed in.'
+);
+select tests.assert_raises(
+  format(
+    $q$insert into public.invitations (company_id, email, role, profile_id)
+       values (%L, 'sample.taker6@example.com', 'employee', %L)$q$,
+    tests.company('kingdom'), tests.id('l_roster_emp')
+  ),
+  'That person is in another company.'
+);
+select tests.assert_raises(
+  $q$update public.invitations set accepted_at = null, email = 'sample.taker7@example.com'
+      where email = 'sample.accepted@example.com'$q$,
+  'That person has already signed in.'
+);
+-- An accepted invitation is history and can still be tidied; the roster row gets its invite.
+update public.invitations set title = 'Carpenter' where email = 'sample.accepted@example.com';
+insert into public.invitations (company_id, email, role, profile_id)
+values (tests.company('kingdom'), 'sample.roster.emp@example.com', 'employee', tests.id('k_roster_emp'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into auth.users (id, email, raw_user_meta_data)
+values (gen_random_uuid(), 'sample.roster.emp@example.com', '{}'::jsonb);
+select tests.assert(
+  not exists (select 1 from public.invitations where email like 'sample.taker%'),
+  'invitation_names_an_unclaimed_roster_row: an admin named someone signed in or in another company'
+);
+select tests.assert(
+  (select user_id is not null and company_id = tests.company('kingdom')
+     from public.profiles where id = tests.id('k_roster_emp')),
+  'invitation_names_an_unclaimed_roster_row: the invited roster row was not claimed at sign-in'
+);
+select tests.assert(
+  (select user_id = id from public.profiles where id = tests.id('k_emp')),
+  'invitation_names_an_unclaimed_roster_row: a signed-in person changed account'
+);
+delete from public.invitations
+ where email in ('sample.accepted@example.com', 'sample.roster.emp@example.com');
+
+-- case: delete_guard
+-- An admin may remove anyone who has never signed in, which cascades their reviews, goals, KPIs
+-- and compensation, so the rank rule covers removal too.
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.roster.owner3@example.com', 'Sample Roster Owner Three', tests.company('kingdom'), 'owner')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_roster_owner3', id from p;
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.roster.admin@example.com', 'Sample Roster Admin', tests.company('kingdom'), 'admin')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_roster_admin', id from p;
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$delete from public.profiles where id = %L$q$, tests.id('k_roster_owner')),
+  'You cannot remove someone ranked above you.'
+);
+delete from public.profiles where id = tests.id('k_roster_admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  exists (select 1 from public.profiles where id = tests.id('k_roster_owner')),
+  'delete_guard: an admin removed an owner who has not signed in'
+);
+select tests.act_as(tests.id('k_owner'));
+delete from public.profiles where id = tests.id('k_roster_owner');
+select tests.act_as(tests.id('rococo'));
+delete from public.profiles where id = tests.id('k_roster_owner3');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (
+    select 1 from public.profiles
+     where id in (tests.id('k_roster_owner'), tests.id('k_roster_owner3'), tests.id('k_roster_admin'))
+  ),
+  'delete_guard: an owner, Rococo or an admin could not remove someone they outrank or match'
+);
+
 -- case: signup_still_creates_profiles
 insert into public.invitations (company_id, email, role)
 values (tests.company('kingdom'), 'sample.newowner@example.com', 'owner');
@@ -387,6 +579,80 @@ select tests.assert(
   'move_clears_reporting_lines: someone in the old company still reports to the moved person'
 );
 update public.profiles set company_id = tests.company('kingdom') where id = tests.id('k_emp');
+
+-- case: legacy_line_does_not_block_sign_in
+-- A line saved before 0031 that crosses companies or loops is what the pre-check lists. Signing
+-- in claims a roster row with an update that names company_id, so if an unchanged line were
+-- judged again those people could never sign in. Set up with the guard off, as 0031 finds them.
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.legacy.cross@example.com', 'Sample Legacy Cross', tests.company('kingdom'), 'employee')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_legacy_cross', id from p;
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.legacy.loop1@example.com', 'Sample Legacy Loop One', tests.company('kingdom'), 'employee')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_legacy_loop1', id from p;
+with p as (
+  insert into public.profiles (id, email, full_name, company_id, role)
+  values (gen_random_uuid(), 'sample.legacy.loop2@example.com', 'Sample Legacy Loop Two', tests.company('kingdom'), 'employee')
+  returning id
+)
+insert into tests.fixture (name, id) select 'k_legacy_loop2', id from p;
+alter table public.profiles disable trigger profiles_guard_reports_to;
+update public.profiles set reports_to = tests.id('l_emp') where id = tests.id('k_legacy_cross');
+update public.profiles set reports_to = tests.id('k_legacy_loop2') where id = tests.id('k_legacy_loop1');
+update public.profiles set reports_to = tests.id('k_legacy_loop1') where id = tests.id('k_legacy_loop2');
+alter table public.profiles enable trigger profiles_guard_reports_to;
+insert into auth.users (id, email, raw_user_meta_data)
+values (gen_random_uuid(), 'sample.legacy.cross@example.com', '{}'::jsonb);
+insert into auth.users (id, email, raw_user_meta_data)
+values (gen_random_uuid(), 'sample.legacy.loop1@example.com', '{}'::jsonb);
+select tests.assert(
+  (select user_id is not null and reports_to = tests.id('l_emp')
+     from public.profiles where id = tests.id('k_legacy_cross')),
+  'legacy_line_does_not_block_sign_in: a cross-company line stopped a first sign-in'
+);
+select tests.assert(
+  (select user_id is not null and reports_to = tests.id('k_legacy_loop2')
+     from public.profiles where id = tests.id('k_legacy_loop1')),
+  'legacy_line_does_not_block_sign_in: a reporting loop stopped a first sign-in'
+);
+-- Saving the same line again is not a change; a new broken line is still refused, Rococo
+-- included; clearing one always works.
+select tests.act_as(tests.id('rococo'));
+update public.profiles set reports_to = tests.id('l_emp') where id = tests.id('k_legacy_cross');
+update public.profiles set reports_to = tests.id('k_legacy_loop1') where id = tests.id('k_legacy_loop2');
+select tests.assert_raises(
+  format(
+    $q$update public.profiles set reports_to = %L where id = %L$q$,
+    tests.id('l_admin'), tests.id('k_legacy_cross')
+  ),
+  'That person is in another company.'
+);
+update public.profiles set reports_to = null where id = tests.id('k_legacy_loop1');
+select tests.assert_raises(
+  format(
+    $q$update public.profiles set reports_to = %L where id = %L$q$,
+    tests.id('k_legacy_loop2'), tests.id('k_legacy_loop1')
+  ),
+  'That would make a reporting loop.'
+);
+update public.profiles set reports_to = null
+ where id in (tests.id('k_legacy_cross'), tests.id('k_legacy_loop1'), tests.id('k_legacy_loop2'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (
+    select 1 from public.profiles
+     where id in (tests.id('k_legacy_cross'), tests.id('k_legacy_loop1'), tests.id('k_legacy_loop2'))
+       and reports_to is not null
+  ),
+  'legacy_line_does_not_block_sign_in: a legacy line could not be cleared'
+);
 
 -- case: audit_still_records_roles
 select set_config('audit.before', (
