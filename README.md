@@ -287,8 +287,9 @@ than saved as a zero or a blank. A file separated by semicolons or tabs, a file 
 columns that read as the same thing under any of its names (`Revenue (Actual)` beside
 `Revenue (Budget)`, or `Income (Actual)` beside `Revenue (Budget)`), and a file whose quotes
 are out of place (one that never closes, one that closes partway through a cell, or a quoted
-note that takes in a line reading as a period) or with a line holding more cells than the
-header row are refused whole, with the reason and the line.
+cell that takes in a line reading as a period of its own, whatever order the columns come in)
+or with a line holding more cells than the header row are refused whole, with the reason and
+the line.
 
 ## Branding
 

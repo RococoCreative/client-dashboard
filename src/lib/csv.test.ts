@@ -1,7 +1,7 @@
 // The CSV reader under the financial import: what it reads, and the files it refuses rather
 // than guess at.
 import { describe, expect, it } from "vitest";
-import { CsvError, csvToObjects, normalizeHeader, otherDelimiter, parseCsv, parseCsvRows, readCsv } from "./csv.ts";
+import { CsvError, csvToObjects, lineCells, normalizeHeader, otherDelimiter, parseCsv, parseCsvRows, physicalLines, readCsv } from "./csv.ts";
 
 function thrown(read: () => unknown): CsvError {
   try {
@@ -71,7 +71,25 @@ describe("parseCsv", () => {
   it("names the line each row starts on, past blank lines and quoted line breaks", () => {
     const rows = parseCsvRows('period,notes\r\n\r\n2026-01,"two\r\nlines"\r\n2026-02,ok\n');
     expect(rows.map((r) => r.line)).toEqual([1, 3, 5]);
+    expect(rows.map((r) => r.endLine)).toEqual([1, 4, 5]);
     expect(rows[1].cells).toEqual(["2026-01", "two\r\nlines"]);
+    expect(parseCsvRows('a\r"b\nc"').map((r) => [r.line, r.endLine])).toEqual([
+      [1, 1],
+      [2, 3],
+    ]);
+  });
+});
+
+describe("physical lines", () => {
+  it("numbers lines as the reader does", () => {
+    expect(physicalLines('\uFEFFa\r\nb\rc\n"d')).toEqual(["a", "b", "c", '"d']);
+  });
+
+  it("splits one line as if it stood alone, reading a quote that does not close on it as a character", () => {
+    expect(lineCells('"Smith, J",Feb 2026,"say ""hi""", "1,000"')).toEqual(["Smith, J", "Feb 2026", 'say "hi"', " 1,000"]);
+    expect(lineCells('"draw pending,Feb 2026,100')).toEqual(['"draw pending', "Feb 2026", "100"]);
+    expect(lineCells('pipe 6",Mar 2026,200')).toEqual(['pipe 6"', "Mar 2026", "200"]);
+    expect(lineCells("")).toEqual([""]);
   });
 });
 
@@ -87,6 +105,8 @@ describe("csvToObjects", () => {
     const table = readCsv("Period,Revenue (Actual),Revenue (Budget)\n2026-01,100,250");
     expect(table.records).toEqual([{ period: "2026-01", revenue: "100" }]);
     expect(table.columns.filter((c) => c.key === "revenue").map((c) => c.header)).toEqual(["Revenue (Actual)", "Revenue (Budget)"]);
+    expect(table.header).toEqual({ line: 1, endLine: 1, cells: ["Period", "Revenue (Actual)", "Revenue (Budget)"] });
+    expect(readCsv("\n\n").header).toBeNull();
   });
 
   it("refuses a line with more filled cells than the header has columns, and names its line", () => {

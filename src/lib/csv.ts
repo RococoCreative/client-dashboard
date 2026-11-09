@@ -29,10 +29,12 @@ export class CsvError extends Error {
   }
 }
 
-// One parsed line of cells and the physical line it starts on, counting from 1. A quoted cell
-// can hold line breaks, so the two drift apart and a message has to name the physical line.
+// One parsed line of cells and the physical lines it starts and ends on, counting from 1. A
+// quoted cell can hold line breaks, so the two drift apart and a message has to name the
+// physical line.
 export interface CsvRow {
   line: number;
+  endLine: number;
   cells: string[];
 }
 
@@ -82,7 +84,7 @@ export function parseCsvRows(text: string): CsvRow[] {
     } else if (char === "\n" || char === "\r") {
       if (char === "\r" && source[i + 1] === "\n") i += 1;
       row.push(field);
-      rows.push({ line: rowLine, cells: row });
+      rows.push({ line: rowLine, endLine: line - 1, cells: row });
       row = [];
       field = "";
       rowLine = line;
@@ -93,7 +95,7 @@ export function parseCsvRows(text: string): CsvRow[] {
   if (inQuotes) throw new CsvError("A quote opens here and never closes.", "unclosed_quote", quoteLine);
   if (field.length > 0 || row.length > 0) {
     row.push(field);
-    rows.push({ line: rowLine, cells: row });
+    rows.push({ line: rowLine, endLine: line, cells: row });
   }
   // A trailing newline produces one empty row; drop fully empty rows anywhere.
   return rows.filter((r) => r.cells.some((cell) => cell.trim() !== ""));
@@ -101,6 +103,44 @@ export function parseCsvRows(text: string): CsvRow[] {
 
 export function parseCsv(text: string): string[][] {
   return parseCsvRows(text).map((r) => r.cells);
+}
+
+// The text's physical lines, numbered as parseCsvRows numbers them: line n is index n - 1.
+export function physicalLines(text: string): string[] {
+  return text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/);
+}
+
+// One physical line split into cells as if it stood alone, which is what it said before a quote
+// out of place ran it together with the lines around it. A quoted cell that closes on the line
+// reads as one cell, commas and all; a quote that does not close on the line is a character.
+export function lineCells(line: string): string[] {
+  const cells: string[] = [];
+  let field = "";
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const close = char === '"' && field.trim() === "" ? closingQuote(line, i + 1) : -1;
+    if (close !== -1) {
+      field += line.slice(i + 1, close).replace(/""/g, '"');
+      i = close;
+    } else if (char === ",") {
+      cells.push(field);
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  cells.push(field);
+  return cells;
+}
+
+// Where the quoted cell that opens just before `from` closes on this line, or -1.
+function closingQuote(line: string, from: number): number {
+  for (let i = from; i < line.length; i += 1) {
+    if (line[i] !== '"') continue;
+    if (line[i + 1] !== '"') return i;
+    i += 1;
+  }
+  return -1;
 }
 
 // Header keys are lowercased with spaces and punctuation collapsed to underscores, so
@@ -122,6 +162,8 @@ export interface CsvTable {
   // One record per line under the header. Where two columns share a key the first one's value
   // stands, never a later one written over it.
   records: Record<string, string>[];
+  // The header row as read, or null when the file has no rows at all.
+  header: CsvRow | null;
   // The lines under the header as read, in the same order as `records`.
   rows: CsvRow[];
 }
@@ -131,7 +173,7 @@ export interface CsvTable {
 // dropped with nothing said (a stray comma in 1,000, or a quote that closed partway through).
 export function readCsv(text: string): CsvTable {
   const parsed = parseCsvRows(text);
-  if (parsed.length === 0) return { columns: [], records: [], rows: [] };
+  if (parsed.length === 0) return { columns: [], records: [], header: null, rows: [] };
   const columns = parsed[0].cells.map((header) => ({ header: header.trim(), key: normalizeHeader(header) }));
   const rows = parsed.slice(1);
   const overfull = rows.find((r) => r.cells.slice(columns.length).some((cell) => cell.trim() !== ""));
@@ -146,7 +188,7 @@ export function readCsv(text: string): CsvTable {
     });
     return record;
   });
-  return { columns, records, rows };
+  return { columns, records, header: parsed[0], rows };
 }
 
 export function csvToObjects(text: string): Record<string, string>[] {
@@ -157,7 +199,7 @@ export function csvToObjects(text: string): Record<string, string>[] {
 // "CSV" with semicolons, and cells copied out of a spreadsheet arrive separated by tabs. Read
 // as commas, either one is a single column and every line reports an empty period.
 export function otherDelimiter(text: string): ";" | "\t" | null {
-  const header = text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/).find((l) => l.trim() !== "") ?? "";
+  const header = physicalLines(text).find((l) => l.trim() !== "") ?? "";
   if (header.includes(",")) return null;
   const tabs = header.split("\t").length - 1;
   const semicolons = header.split(";").length - 1;

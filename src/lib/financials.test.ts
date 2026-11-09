@@ -165,6 +165,33 @@ describe("financial CSV import, strict", () => {
     expect(inchMark.errors).toEqual([
       'Line 2: a quoted cell here runs on over several lines and takes in the period "Mar 2026" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.',
     ]);
+    // The columns come in any order, so the lines a quote ran together are read as written: a
+    // notes column before the period, after it, or between the figures loses a period all the same.
+    const swallowed = (period: string) =>
+      `Line 2: a quoted cell here runs on over several lines and takes in the period "${period}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`;
+    for (const text of [
+      'notes,period,revenue,cogs,opex\n"draw pending,Feb 2026,100,1,1\npipe 6",Mar 2026,200,2,2\nok,Apr 2026,300,3,3\n',
+      'revenue,cogs,opex,notes,period\n100,1,1,"draw pending,Feb 2026\n200,2,2,pipe 6",Mar 2026\n300,3,3,ok,Apr 2026\n',
+      'revenue,notes,cogs,period\n100,"draw,1,Feb 2026\n200,6",2,Mar 2026\n',
+    ]) {
+      expect(parseSnapshotsCsv(text)).toEqual({ rows: [], errors: [swallowed("Feb 2026")] });
+    }
+    // A quoted comma earlier on the line, a line short of its trailing cells, and a stray quote in
+    // the header row, which would turn the line under it into part of a column name.
+    expect(parseSnapshotsCsv('notes,period,revenue,memo\n"Smith, J",Feb 2026,100,"x\nok,Mar 2026,200,y"\n')).toEqual({ rows: [], errors: [swallowed("Mar 2026")] });
+    expect(parseSnapshotsCsv('period,revenue,cogs,opex,cash,notes\nFeb 2026,100,1,1,5,"draw\nMar 2026,200,2,2,6"\n')).toEqual({ rows: [], errors: [swallowed("Mar 2026")] });
+    expect(parseSnapshotsCsv('period,revenue,"notes\n2026-01,100,x"\n2026-02,200,y\n')).toEqual({
+      rows: [],
+      errors: [swallowed("2026-01").replace("Line 2", "Line 1")],
+    });
+    // A note that only mentions a month is a note, in any column, and so is a header over two lines.
+    const dated = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"Paid.\nMar 2026, on time"\n2026-02,200,"Invoiced\nApr 2026"\n');
+    expect(dated.errors).toEqual([]);
+    expect(dated.rows.map((r) => r.notes)).toEqual(["Paid.\nMar 2026, on time", "Invoiced\nApr 2026"]);
+    const notesFirst = parseSnapshotsCsv('notes,period,revenue\n"Draw pending.\nPaid in full",2026-01,100\nok,2026-02,200\n');
+    expect(notesFirst.errors).toEqual([]);
+    expect(notesFirst.rows.map((r) => r.revenue)).toEqual([100, 200]);
+    expect(parseSnapshotsCsv('period,"Revenue\n(Actual)"\n2026-01,100\n')).toMatchObject({ errors: [], rows: [{ revenue: 100 }] });
     expect(parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"Paid" in full\n').errors).toEqual([
       'Line 2: a quoted cell has more text after its closing quote. Remove the stray quote, or double a quote meant to be inside the cell (""), then import again.',
     ]);

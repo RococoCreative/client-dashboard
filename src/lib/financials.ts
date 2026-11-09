@@ -1,7 +1,7 @@
 // Financial snapshot math and the CSV import mapping. Pure and tested. Margins derive from
 // the stored figures; periods snap to the first day of their month, quarter, or year so
 // two uploads of the same month land on the same row.
-import { CsvError, otherDelimiter, readCsv, type CsvTable } from "./csv.ts";
+import { CsvError, lineCells, otherDelimiter, physicalLines, readCsv, type CsvTable } from "./csv.ts";
 import { periodEnd, periodStart } from "./gsr/cycles.ts";
 import { MONEY_PROBLEM_TEXT, moneyProblem, parseDate, parseMoney } from "./format.ts";
 import type { Cadence, FinancialSnapshot, PeriodType } from "../types/database.ts";
@@ -148,12 +148,13 @@ export const CSV_SAMPLE = "period,revenue,cogs,opex,net_profit,cash_on_hand\n202
 const PERIOD_KEYS = ["period_start", "period", "month", "quarter", "year", "date", "start"];
 const TYPE_KEYS = ["period_type", "type"];
 const NOTES_KEYS = ["notes", "note"];
+const REVENUE_KEYS = ["revenue", "sales", "income", "total_revenue"];
 
 type Figure = "revenue" | "cogs" | "opex" | "net_profit" | "cash_on_hand";
 
 // Each figure, the header names it answers to, and how a line error names it.
 const FIGURES: Array<{ figure: Figure; label: string; keys: string[] }> = [
-  { figure: "revenue", label: "revenue", keys: ["revenue", "sales", "income", "total_revenue"] },
+  { figure: "revenue", label: "revenue", keys: REVENUE_KEYS },
   { figure: "cogs", label: "direct costs", keys: ["cogs", "cost_of_goods_sold", "direct_costs", "job_costs", "cost_of_sales"] },
   { figure: "opex", label: "overhead", keys: ["opex", "operating_expenses", "overhead", "expenses"] },
   { figure: "net_profit", label: "net profit", keys: ["net_profit", "net_income", "net"] },
@@ -190,20 +191,47 @@ function csvProblemText(err: CsvError): string {
   return `Line ${err.line}: a quote opens here and never closes, so every line after it would be read as one cell. Close or remove it, then import again.`;
 }
 
-// A cell that runs over several lines and takes in a line that starts out as a period of its
-// own. A stray quote has swallowed the lines after it and closed on a quote that happened to
-// end a cell, so the reader cannot tell. Read on, those periods would vanish into one note.
-function swallowedPeriods(table: CsvTable): string[] {
-  const periodColumns = table.columns.flatMap((c, index) => (PERIOD_KEYS.includes(c.key) ? [index] : []));
-  return table.rows.flatMap(({ line, cells }) => {
-    const swallowed = cells
-      .flatMap((cell) => cell.split(/\r\n|\n|\r/).slice(1))
-      .map((inner) => inner.split(","))
-      .flatMap((pieces) => (pieces.length > 1 ? periodColumns.map((index) => pieces[index] ?? "") : []))
-      .find((piece) => parsePeriod(piece) !== null);
-    return swallowed === undefined
-      ? []
-      : [`Line ${line}: a quoted cell here runs on over several lines and takes in the period "${swallowed.trim()}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`];
+// The period a physical line reads as when it stands alone as a line of the import, or null.
+// It does when its period cell reads as a period and it either fills every column or reaches a
+// revenue that is blank or a number. A note that only mentions a month ("Paid\nMar 2026, on
+// time") does neither.
+function linePeriod(cells: string[], width: number, periodColumns: number[], revenueColumns: number[]): string | null {
+  const bare = (index: number) => (cells[index] ?? "").trim().replace(/^"|"$/g, "").trim();
+  const period = periodColumns.map(bare).find((text) => parsePeriod(text) !== null);
+  if (period === undefined) return null;
+  if (cells.length >= width || revenueColumns.length === 0) return period;
+  const revenue = revenueColumns.find((index) => index < cells.length);
+  return revenue !== undefined && (bare(revenue) === "" || parseMoney(bare(revenue)) !== null) ? period : null;
+}
+
+function samePeriod(a: string, b: string): boolean {
+  const left = parsePeriod(a);
+  const right = parsePeriod(b);
+  return left !== null && right !== null && left.type === right.type && left.start === right.start;
+}
+
+// A row whose physical lines read as more periods than the row holds: the header row holds
+// none, and a line of the import holds one. A quote out of place has run those lines together
+// into one cell, and closed on a quote that happened to end a cell, so the reader cannot tell.
+// Read on, a period vanishes into a note or a column name, or its figures land on another
+// period. The lines are checked as written, so the columns can come in any order.
+function swallowedPeriods(table: CsvTable, text: string): string[] {
+  const lines = physicalLines(text);
+  const indexes = (keys: string[]) => table.columns.flatMap((c, index) => (keys.includes(c.key) ? [index] : []));
+  const periodColumns = indexes(PERIOD_KEYS);
+  const revenueColumns = indexes(REVENUE_KEYS);
+  const rows = table.header ? [{ row: table.header, holds: 0 }, ...table.rows.map((row) => ({ row, holds: 1 }))] : [];
+  return rows.flatMap(({ row, holds }) => {
+    if (row.endLine === row.line) return [];
+    const periods = lines
+      .slice(row.line - 1, row.endLine)
+      .map((line) => linePeriod(lineCells(line), table.columns.length, periodColumns, revenueColumns))
+      .filter((period): period is string => period !== null);
+    if (periods.length <= holds) return [];
+    // Name a period the row does not keep as its own: the one lost, not the one that survives.
+    const own = holds === 0 ? undefined : periodColumns.map((index) => row.cells[index] ?? "").find((cell) => parsePeriod(cell) !== null);
+    const lost = periods.find((period) => own === undefined || !samePeriod(period, own)) ?? periods[holds];
+    return [`Line ${row.line}: a quoted cell here runs on over several lines and takes in the period "${lost}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`];
   });
 }
 
@@ -249,7 +277,7 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
   // Two columns that read as the same figure (a budget beside an actual, or a percentage beside
   // an amount), or lines lost inside a note. Whichever the import took, it would be a guess
   // written over a real period.
-  errors.push(...duplicateColumns(table), ...swallowedPeriods(table));
+  errors.push(...duplicateColumns(table), ...swallowedPeriods(table, text));
   if (errors.length > 0) return { rows, errors };
   if (table.records.length === 0) {
     errors.push("The file has a header row but no periods under it.");
