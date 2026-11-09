@@ -111,8 +111,18 @@ describe("financials", () => {
     expect(await screen.findByText(/Line 2: a quote opens here and never closes/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import 0 periods" })).toBeDisabled();
 
+    fireEvent.change(box, {
+      target: { value: 'period,revenue,cogs,opex,notes\nFeb 2026,100,1,1,"draw pending\nMar 2026,210000,100000,50000,ok\nApr 2026,300,3,3,"Paid, on time"\n' },
+    });
+    expect(await screen.findByText(/Line 2: a quote opens here and does not close until partway through a cell on line 4/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import 0 periods" })).toBeDisabled();
+
     fireEvent.change(box, { target: { value: "Period,Revenue (Actual),Revenue (Budget)\nJan 2026,100000,250000\n" } });
     expect(await screen.findByText(/both read as revenue/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import 0 periods" })).toBeDisabled();
+
+    fireEvent.change(box, { target: { value: "Period,Income (Actual),Revenue (Budget)\nJan 2026,100000,250000\n" } });
+    expect(await screen.findByText('The columns "Income (Actual)" and "Revenue (Budget)" both read as revenue. Rename or remove one, then import again.')).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import 0 periods" })).toBeDisabled();
 
     fireEvent.change(box, { target: { value: "period,revenue,cogs,opex\nSep 2026,100000,6O000,20000\n" } });

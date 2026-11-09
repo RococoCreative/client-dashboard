@@ -1,7 +1,7 @@
 // Financial snapshot math and the CSV import mapping. Pure and tested. Margins derive from
 // the stored figures; periods snap to the first day of their month, quarter, or year so
 // two uploads of the same month land on the same row.
-import { CsvError, otherDelimiter, readCsv } from "./csv.ts";
+import { CsvError, otherDelimiter, readCsv, type CsvTable } from "./csv.ts";
 import { periodEnd, periodStart } from "./gsr/cycles.ts";
 import { MONEY_PROBLEM_TEXT, moneyProblem, parseDate, parseMoney } from "./format.ts";
 import type { Cadence, FinancialSnapshot, PeriodType } from "../types/database.ts";
@@ -177,6 +177,50 @@ function headerList(headers: string[]): string {
   return `${quoted.join(", ")} and ${last} ${headers.length === 2 ? "both" : "all"}`;
 }
 
+// How a file the CSV reader will not guess at is reported, by what is wrong with it.
+function csvProblemText(err: CsvError): string {
+  if (err.problem === "extra_cells") {
+    return `Line ${err.line}: this line has more cells than the header row has columns, so some of it would be left out. Check it for a stray comma or quote, then import again.`;
+  }
+  if (err.problem === "text_after_quote") {
+    return err.endLine === err.line
+      ? `Line ${err.line}: a quoted cell has more text after its closing quote. Remove the stray quote, or double a quote meant to be inside the cell (""), then import again.`
+      : `Line ${err.line}: a quote opens here and does not close until partway through a cell on line ${err.endLine}, so every line between would be read as one cell. Close or remove it, then import again.`;
+  }
+  return `Line ${err.line}: a quote opens here and never closes, so every line after it would be read as one cell. Close or remove it, then import again.`;
+}
+
+// A cell that runs over several lines and takes in a line that starts out as a period of its
+// own. A stray quote has swallowed the lines after it and closed on a quote that happened to
+// end a cell, so the reader cannot tell. Read on, those periods would vanish into one note.
+function swallowedPeriods(table: CsvTable): string[] {
+  const periodColumns = table.columns.flatMap((c, index) => (PERIOD_KEYS.includes(c.key) ? [index] : []));
+  return table.rows.flatMap(({ line, cells }) => {
+    const swallowed = cells
+      .flatMap((cell) => cell.split(/\r\n|\n|\r/).slice(1))
+      .map((inner) => inner.split(","))
+      .flatMap((pieces) => (pieces.length > 1 ? periodColumns.map((index) => pieces[index] ?? "") : []))
+      .find((piece) => parsePeriod(piece) !== null);
+    return swallowed === undefined
+      ? []
+      : [`Line ${line}: a quoted cell here runs on over several lines and takes in the period "${swallowed.trim()}" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.`];
+  });
+}
+
+// Columns that read as the same thing, by what they read as rather than by header key:
+// "Income (Actual)" beside "Revenue (Budget)" is two revenue columns, and taking either is a
+// guess, as is falling back to the other on a line where the first is blank.
+function duplicateColumns(table: CsvTable): string[] {
+  const byLabel = new Map<string, string[]>();
+  for (const { header, key } of table.columns) {
+    const label = READ_KEYS.get(key);
+    if (label) byLabel.set(label, [...(byLabel.get(label) ?? []), header]);
+  }
+  return [...byLabel]
+    .filter(([, headers]) => headers.length > 1)
+    .map(([label, headers]) => `The columns ${headerList(headers)} read as ${label}. Rename or remove one, then import again.`);
+}
+
 // The file-level reasons to refuse an import outright: every line would otherwise be misread
 // in the same way, or the import would pick between two columns without saying so.
 function fileProblems(text: string): string[] {
@@ -190,24 +234,22 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
   const rows: CsvImportRow[] = [];
   const errors: string[] = fileProblems(text);
   if (errors.length > 0) return { rows, errors };
-  let table: ReturnType<typeof readCsv>;
+  let table: CsvTable;
   try {
     table = readCsv(text);
   } catch (err) {
     if (!(err instanceof CsvError)) throw err;
-    errors.push(`Line ${err.line}: a quote opens here and never closes, so every line after it would be read as one cell. Close or remove it, then import again.`);
+    errors.push(csvProblemText(err));
     return { rows, errors };
   }
   if (table.columns.length === 0) {
     errors.push("No rows found. The first line must be the header row.");
     return { rows, errors };
   }
-  // Two columns that read as the same figure: a budget beside an actual, or a percentage beside
-  // an amount. Whichever the import took, it would be a guess written over a real period.
-  for (const [key, label] of READ_KEYS) {
-    const headers = table.columns.filter((c) => c.key === key).map((c) => c.header);
-    if (headers.length > 1) errors.push(`The columns ${headerList(headers)} read as ${label}. Rename or remove one, then import again.`);
-  }
+  // Two columns that read as the same figure (a budget beside an actual, or a percentage beside
+  // an amount), or lines lost inside a note. Whichever the import took, it would be a guess
+  // written over a real period.
+  errors.push(...duplicateColumns(table), ...swallowedPeriods(table));
   if (errors.length > 0) return { rows, errors };
   if (table.records.length === 0) {
     errors.push("The file has a header row but no periods under it.");
@@ -215,7 +257,7 @@ export function parseSnapshotsCsv(text: string): CsvImportResult {
   }
 
   table.records.forEach((record, index) => {
-    const line = index + 2;
+    const { line } = table.rows[index];
     const periodText = pick(record, PERIOD_KEYS);
     const typeText = pick(record, TYPE_KEYS);
     const typeHint = typeText === undefined ? null : normalizeType(typeText);

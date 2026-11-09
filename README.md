@@ -284,8 +284,11 @@ third decimal place, an impossible date (`2026-04-31`), and a `period_type` that
 month, quarter or year (`qtr`, `yr` and `mo` are fine) or that the period contradicts
 (`month` beside `Q3 2026`) are each reported by line, and that period is left out rather
 than saved as a zero or a blank. A file separated by semicolons or tabs, a file with two
-columns that read as the same figure (`Revenue (Actual)` and `Revenue (Budget)`), and a file
-with a quote that never closes are refused whole, with the reason.
+columns that read as the same thing under any of its names (`Revenue (Actual)` beside
+`Revenue (Budget)`, or `Income (Actual)` beside `Revenue (Budget)`), and a file whose quotes
+are out of place (one that never closes, one that closes partway through a cell, or a quoted
+note that takes in a line reading as a period) or with a line holding more cells than the
+header row are refused whole, with the reason and the line.
 
 ## Branding
 

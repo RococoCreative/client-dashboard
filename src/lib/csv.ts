@@ -4,24 +4,45 @@
 
 // A file the parser will not guess at. Thrown rather than read leniently, because a lenient
 // read here writes the wrong figures over real periods with nothing said.
+export type CsvProblem =
+  // A quote opens a cell and nothing ever closes it.
+  | "unclosed_quote"
+  // A quote closes partway through a cell, so it was not the quote that closes the cell it
+  // opened: a stray quote earlier on, usually, that has taken in every line since.
+  | "text_after_quote"
+  // A line with more filled cells than the header row has columns.
+  | "extra_cells";
+
 export class CsvError extends Error {
+  readonly problem: CsvProblem;
   // The line of the text the problem starts on, counting from 1.
   readonly line: number;
+  // The line it shows itself on, which is later than `line` when a quoted run spans lines.
+  readonly endLine: number;
 
-  constructor(message: string, line: number) {
+  constructor(message: string, problem: CsvProblem, line: number, endLine = line) {
     super(message);
     this.name = "CsvError";
+    this.problem = problem;
     this.line = line;
+    this.endLine = endLine;
   }
 }
 
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
+// One parsed line of cells and the physical line it starts on, counting from 1. A quoted cell
+// can hold line breaks, so the two drift apart and a message has to name the physical line.
+export interface CsvRow {
+  line: number;
+  cells: string[];
+}
+
+export function parseCsvRows(text: string): CsvRow[] {
+  const rows: CsvRow[] = [];
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
-  // Physical lines, so a quote that never closes can be named by the line it opened on.
   let line = 1;
+  let rowLine = 1;
   let quoteLine = 1;
   const source = text.replace(/^\uFEFF/, "");
 
@@ -35,6 +56,15 @@ export function parseCsv(text: string): string[][] {
           i += 1;
         } else {
           inQuotes = false;
+          // A closing quote ends its cell, so only spaces may sit between it and the next comma
+          // or line end. Anything else means it closed a different quote than the one that
+          // opened this cell, and reading on would put every line between into one cell.
+          let next = i + 1;
+          while (source[next] === " " || source[next] === "\t") next += 1;
+          const after = source[next];
+          if (after !== undefined && after !== "," && after !== "\n" && after !== "\r") {
+            throw new CsvError("A quoted cell has text after its closing quote.", "text_after_quote", quoteLine, line);
+          }
         }
       } else {
         field += char;
@@ -52,20 +82,25 @@ export function parseCsv(text: string): string[][] {
     } else if (char === "\n" || char === "\r") {
       if (char === "\r" && source[i + 1] === "\n") i += 1;
       row.push(field);
-      rows.push(row);
+      rows.push({ line: rowLine, cells: row });
       row = [];
       field = "";
+      rowLine = line;
     } else {
       field += char;
     }
   }
-  if (inQuotes) throw new CsvError("A quote opens here and never closes.", quoteLine);
+  if (inQuotes) throw new CsvError("A quote opens here and never closes.", "unclosed_quote", quoteLine);
   if (field.length > 0 || row.length > 0) {
     row.push(field);
-    rows.push(row);
+    rows.push({ line: rowLine, cells: row });
   }
   // A trailing newline produces one empty row; drop fully empty rows anywhere.
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+  return rows.filter((r) => r.cells.some((cell) => cell.trim() !== ""));
+}
+
+export function parseCsv(text: string): string[][] {
+  return parseCsvRows(text).map((r) => r.cells);
 }
 
 // Header keys are lowercased with spaces and punctuation collapsed to underscores, so
@@ -87,13 +122,21 @@ export interface CsvTable {
   // One record per line under the header. Where two columns share a key the first one's value
   // stands, never a later one written over it.
   records: Record<string, string>[];
+  // The lines under the header as read, in the same order as `records`.
+  rows: CsvRow[];
 }
 
+// Throws a CsvError for a file it cannot read as written: a quote out of place, or a line with
+// more filled cells than the header row has columns, whose extra cells would otherwise be
+// dropped with nothing said (a stray comma in 1,000, or a quote that closed partway through).
 export function readCsv(text: string): CsvTable {
-  const rows = parseCsv(text);
-  if (rows.length === 0) return { columns: [], records: [] };
-  const columns = rows[0].map((header) => ({ header: header.trim(), key: normalizeHeader(header) }));
-  const records = rows.slice(1).map((cells) => {
+  const parsed = parseCsvRows(text);
+  if (parsed.length === 0) return { columns: [], records: [], rows: [] };
+  const columns = parsed[0].cells.map((header) => ({ header: header.trim(), key: normalizeHeader(header) }));
+  const rows = parsed.slice(1);
+  const overfull = rows.find((r) => r.cells.slice(columns.length).some((cell) => cell.trim() !== ""));
+  if (overfull) throw new CsvError("A line has more cells than the header row has columns.", "extra_cells", overfull.line);
+  const records = rows.map(({ cells }) => {
     const record: Record<string, string> = {};
     const seen = new Set<string>();
     columns.forEach(({ key }, index) => {
@@ -103,7 +146,7 @@ export function readCsv(text: string): CsvTable {
     });
     return record;
   });
-  return { columns, records };
+  return { columns, records, rows };
 }
 
 export function csvToObjects(text: string): Record<string, string>[] {

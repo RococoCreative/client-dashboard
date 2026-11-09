@@ -1,7 +1,17 @@
 // The CSV reader under the financial import: what it reads, and the files it refuses rather
 // than guess at.
 import { describe, expect, it } from "vitest";
-import { CsvError, csvToObjects, normalizeHeader, otherDelimiter, parseCsv, readCsv } from "./csv.ts";
+import { CsvError, csvToObjects, normalizeHeader, otherDelimiter, parseCsv, parseCsvRows, readCsv } from "./csv.ts";
+
+function thrown(read: () => unknown): CsvError {
+  try {
+    read();
+  } catch (err) {
+    if (err instanceof CsvError) return err;
+    throw err;
+  }
+  throw new Error("expected a CsvError");
+}
 
 describe("parseCsv", () => {
   it("handles quotes, escaped quotes, and CRLF", () => {
@@ -41,6 +51,28 @@ describe("parseCsv", () => {
   it("still opens a quoted cell after a space", () => {
     expect(parseCsv('a, "1,000",b')).toEqual([["a", " 1,000", "b"]]);
   });
+
+  it("refuses a stray quote that a later quoted cell would otherwise close", () => {
+    // Read leniently, Feb's note takes in Mar and the start of Apr, and both periods vanish.
+    const paid = 'period,revenue,cogs,opex,notes\nFeb 2026,100,1,1,"draw pending\nMar 2026,210000,100000,50000,ok\nApr 2026,300,3,3,"Paid, on time"\n';
+    expect(thrown(() => parseCsv(paid))).toMatchObject({ problem: "text_after_quote", line: 2, endLine: 4 });
+    const fine = 'period,revenue,cogs,opex,notes\nFeb 2026,100,1,1,"draw pending\nMar 2026,2,2,2,a\nApr 2026,3,3,3,b\nMay 2026,4,4,4,c\nJun 2026,5,5,5,"fine"\n';
+    expect(thrown(() => parseCsv(fine))).toMatchObject({ problem: "text_after_quote", line: 2, endLine: 6 });
+    expect(thrown(() => parseCsv('a,"abc"def,b\n'))).toMatchObject({ problem: "text_after_quote", line: 1, endLine: 1 });
+  });
+
+  it("allows spaces between a closing quote and the comma or line end", () => {
+    expect(parseCsv('"a" ,"b"\t\r\n"c",d')).toEqual([
+      ["a ", "b\t"],
+      ["c", "d"],
+    ]);
+  });
+
+  it("names the line each row starts on, past blank lines and quoted line breaks", () => {
+    const rows = parseCsvRows('period,notes\r\n\r\n2026-01,"two\r\nlines"\r\n2026-02,ok\n');
+    expect(rows.map((r) => r.line)).toEqual([1, 3, 5]);
+    expect(rows[1].cells).toEqual(["2026-01", "two\r\nlines"]);
+  });
 });
 
 describe("csvToObjects", () => {
@@ -55,6 +87,14 @@ describe("csvToObjects", () => {
     const table = readCsv("Period,Revenue (Actual),Revenue (Budget)\n2026-01,100,250");
     expect(table.records).toEqual([{ period: "2026-01", revenue: "100" }]);
     expect(table.columns.filter((c) => c.key === "revenue").map((c) => c.header)).toEqual(["Revenue (Actual)", "Revenue (Budget)"]);
+  });
+
+  it("refuses a line with more filled cells than the header has columns, and names its line", () => {
+    // An unquoted 1,000 pushes every figure after it one column along.
+    const err = thrown(() => readCsv('period,notes\n2026-01,"a\nb"\n2026-02,1,000\n'));
+    expect(err).toMatchObject({ problem: "extra_cells", line: 4 });
+    // Empty cells past the header are only trailing commas.
+    expect(readCsv("period,revenue\n2026-01,100,,\n").records).toEqual([{ period: "2026-01", revenue: "100" }]);
   });
 
   it("does not trip over a header that names an object property", () => {

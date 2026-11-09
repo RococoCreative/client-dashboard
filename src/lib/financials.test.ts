@@ -118,6 +118,23 @@ describe("financial CSV import, strict", () => {
       'The columns "Revenue (Actual)" and "Revenue (Budget)" both read as revenue. Rename or remove one, then import again.',
       'The columns "COGS" and "COGS (%)" both read as direct costs. Rename or remove one, then import again.',
     ]);
+    // Different header names for the same figure are two columns all the same: a budget beside
+    // an actual is refused, never read as the revenue or used where the actual is blank.
+    const synonyms = parseSnapshotsCsv(
+      "Period,Income (Actual),Revenue (Budget),Cost of Sales (Actual),COGS (Budget),Opex\nJan 2026,100000,250000,60000,90000,20000\nFeb 2026,,250000,,90000,20000\n",
+    );
+    expect(synonyms.rows).toEqual([]);
+    expect(synonyms.errors).toEqual([
+      'The columns "Income (Actual)" and "Revenue (Budget)" both read as revenue. Rename or remove one, then import again.',
+      'The columns "Cost of Sales (Actual)" and "COGS (Budget)" both read as direct costs. Rename or remove one, then import again.',
+    ]);
+    expect(parseSnapshotsCsv("Period,Sales (Actual),Revenue (Budget),Opex\nJan 2026,100000,250000,1\n").errors).toEqual([
+      'The columns "Sales (Actual)" and "Revenue (Budget)" both read as revenue. Rename or remove one, then import again.',
+    ]);
+    expect(parseSnapshotsCsv("Month,Date,Revenue,Net,Net Income\nJan 2026,2026-01-31,1,1,1\n").errors).toEqual([
+      'The columns "Month" and "Date" both read as the period. Rename or remove one, then import again.',
+      'The columns "Net" and "Net Income" both read as net profit. Rename or remove one, then import again.',
+    ]);
     // A repeated column the import does not read is no reason to refuse it.
     expect(parseSnapshotsCsv("period,revenue,memo (a),memo (b)\n2026-01,100,x,y\n").errors).toEqual([]);
   });
@@ -126,6 +143,39 @@ describe("financial CSV import, strict", () => {
     const result = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"draw pending\n2026-02,200,ok\n');
     expect(result.rows).toEqual([]);
     expect(result.errors).toEqual(["Line 2: a quote opens here and never closes, so every line after it would be read as one cell. Close or remove it, then import again."]);
+    // A stray quote that a later quoted cell, or a later inch mark, would otherwise close.
+    const paid = parseSnapshotsCsv(
+      'period,revenue,cogs,opex,notes\nFeb 2026,100,1,1,"draw pending\nMar 2026,210000,100000,50000,ok\nApr 2026,300,3,3,"Paid, on time"\n',
+    );
+    expect(paid).toEqual({
+      rows: [],
+      errors: [
+        "Line 2: a quote opens here and does not close until partway through a cell on line 4, so every line between would be read as one cell. Close or remove it, then import again.",
+      ],
+    });
+    const fine = parseSnapshotsCsv(
+      'period,revenue,cogs,opex,notes\nJan 2026,1,1,1,a\nFeb 2026,100,1,1,"draw pending\nMar 2026,2,2,2,a\nApr 2026,3,3,3,b\nMay 2026,4,4,4,c\nJun 2026,5,5,5,"fine"\n',
+    );
+    expect(fine.rows).toEqual([]);
+    expect(fine.errors).toEqual([
+      "Line 3: a quote opens here and does not close until partway through a cell on line 7, so every line between would be read as one cell. Close or remove it, then import again.",
+    ]);
+    const inchMark = parseSnapshotsCsv('period,revenue,cogs,opex,notes\nFeb 2026,100,1,1,"draw pending\nMar 2026,210000,100000,50000,ok\nApr 2026,300,3,3,6"\nMay 2026,4,4,4,c\n');
+    expect(inchMark.rows).toEqual([]);
+    expect(inchMark.errors).toEqual([
+      'Line 2: a quoted cell here runs on over several lines and takes in the period "Mar 2026" as text, so that period would be lost. A quote is probably out of place. Close or remove it, then import again.',
+    ]);
+    expect(parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"Paid" in full\n').errors).toEqual([
+      'Line 2: a quoted cell has more text after its closing quote. Remove the stray quote, or double a quote meant to be inside the cell (""), then import again.',
+    ]);
+    // A stray comma in an unquoted figure pushes the rest of the line along a column.
+    expect(parseSnapshotsCsv("period,revenue,cogs,opex\n2026-01,1,000,500,200\n").errors).toEqual([
+      "Line 2: this line has more cells than the header row has columns, so some of it would be left out. Check it for a stray comma or quote, then import again.",
+    ]);
+    // A note that really does run over two lines still imports, and later lines keep their numbers.
+    const twoLines = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"Draw pending.\nPaid in full, on time"\n2026-02,x,ok\n');
+    expect(twoLines.rows.map((r) => r.notes)).toEqual(["Draw pending.\nPaid in full, on time"]);
+    expect(twoLines.errors).toEqual(['Line 4: revenue "x" is not a number.']);
     // A quote inside a note is just a character.
     const inch = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,6" pipe\n2026-02,200,ok\n');
     expect(inch.errors).toEqual([]);
