@@ -31,7 +31,7 @@ import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { liveCampaignTotals } from "../lib/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, gsrCycleInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, gsrCycleInPlay, reviewPath, scoredCycleInPlay, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -134,10 +134,11 @@ function CycleProgress({
 }
 
 // The person's own figures, when their job role carries the module. One block for both
-// dashboards, so an admin in a role and an employee in it see the same thing.
+// dashboards, so an admin in a role and an employee in it see the same thing, and its copy has to
+// be true for both: an owner reading their own figures has no manager keeping them.
 function YourFigures({ jobRole, financials, year, className = "" }: { jobRole: JobRole; financials: EmployeeFinancial[]; year: number; className?: string }) {
   return (
-    <Section eyebrow={`Financials ${year}`} title="Your figures" description={`What ${jobRole.name} owns this year, against target. Your manager keeps these on your profile.`} className={className}>
+    <Section eyebrow={`Financials ${year}`} title="Your figures" description={`What ${jobRole.name} owns this year, against target, as recorded on your profile.`} className={className}>
       {financials.length === 0 ? (
         <p className="text-sm text-ink-2">No figures set for {year} yet.</p>
       ) : (
@@ -498,9 +499,10 @@ function EmployeeDashboard() {
   const rated = impact.length > 0;
   // For a company that scores its GSRs: where this quarter's locked-in months stand. The impact
   // score above it stays the ratings, as it always has; the months reach the score of record at
-  // sign-off, and only once an admin has locked each one in.
+  // sign-off, and only once an admin has locked each one in. The quarter is found among scored
+  // cycles first, so a month covering today never hides one that is over but still open.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
-  const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
+  const scoredCycle = scoredCycleInPlay(cycles);
   const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.

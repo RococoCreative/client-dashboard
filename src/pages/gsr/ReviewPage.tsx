@@ -13,7 +13,7 @@
 // GSR is theirs to work in full so they can prefill it before the meeting; a scored review is
 // read-only apart from their reflection. Every change saves on its own, so there is no save
 // button to forget.
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
@@ -44,7 +44,7 @@ import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals, listJobRoles } from "../../services/jobRoles.ts";
 import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pillarsForReview, scoreInputsForReview, signedOffBarDetail, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
-import { goalOutcome, hitCount, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
+import { goalOutcome, hitCount, lockedMonthsIn, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
 import {
@@ -76,7 +76,7 @@ function GsrPillarBody({
 }) {
   if (signedOff !== undefined) {
     if (!signedOff?.target) return <p className="text-sm text-ink-2">No month inside this period was locked in when it was signed off, so this pillar scored zero.</p>;
-    const months = Math.round(signedOff.target / 100);
+    const months = lockedMonthsIn(signedOff.target);
     return <p className="text-sm text-ink-2">{lineItemPercent({ target: signedOff.target, actual: signedOff.actual ?? 0 })}% across {pluralize(months, "locked-in month")} of GSRs, as signed off.</p>;
   }
   if (!figure || figure.months.length === 0) {
@@ -119,8 +119,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // pillar's score, so it is confirmed rather than deleted on a single icon click.
   const [removing, setRemoving] = useState<ReviewScore | null>(null);
   const [removeError, setRemoveError] = useState("");
-  // The deliverables module's figure for the year, reported by the panel below once loaded.
-  const [rollup, setRollup] = useState<DeliverableScore | null>(null);
+  // The deliverables module's figure for the year, reported by the panel below once loaded, with
+  // the person and year it was read for. Moving to another review in place keeps this state, so
+  // a bare figure would score the next review, and freeze into it at sign-off, with the previous
+  // person's deliverables until the panel reported again. Stamped, it only counts for its own.
+  const [rollupFor, setRollupFor] = useState<{ employeeId: string; year: number; score: DeliverableScore | null } | null>(null);
   // Locking a month's GSR in is confirmed first, with the score it will lock in at.
   const [locking, setLocking] = useState(false);
 
@@ -171,6 +174,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, year };
   }, [reviewId, companyId]);
 
+  // The panel is handed the person and year of the review on screen, so every figure it reports
+  // is stamped with the same two. Stable between renders, because the panel reports again
+  // whenever the callback changes.
+  const rollupEmployee = state.data?.review.employee_id ?? null;
+  const rollupYear = state.data?.year ?? null;
+  const reportRollup = useCallback(
+    (score: DeliverableScore | null) => {
+      if (rollupEmployee !== null && rollupYear !== null) setRollupFor({ employeeId: rollupEmployee, year: rollupYear, score });
+    },
+    [rollupEmployee, rollupYear],
+  );
+
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
@@ -209,6 +224,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const monthGoals = monthly ? goals.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id) : [];
   const monthScore = monthly && gsrPillars[0] ? { ...monthTotal(monthGoals, gsrPillars[0].required_goals), score: scoreMonth(monthGoals, gsrPillars[0].required_goals) } : null;
   const impactByCriterion = new Map(impact.map((i) => [i.criterion_id, i]));
+  // The module's figure for this review's person and year, or nothing while theirs has not come in.
+  const rollup = rollupFor && rollupFor.employeeId === review.employee_id && rollupFor.year === year ? rollupFor.score : null;
   // What scores this review right now. Frozen rows once it is complete; before that the
   // person's current impact ratings for the rating pillars, the typed line items for a
   // 'deliverables' pillar, the module's live rollup for a 'deliverables_module' pillar, and the
@@ -486,7 +503,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           className="mb-6"
           description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
         >
-          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} onRollup={setRollup} />
+          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} onRollup={reportRollup} />
         </Section>
       ) : null}
 

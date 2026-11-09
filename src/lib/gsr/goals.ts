@@ -154,6 +154,17 @@ export function scoreMonth(goals: Array<Pick<Goal, "progress">>, required: numbe
   return cap === 0 ? 0 : Math.round((total / cap) * 100);
 }
 
+// What one locked-in month puts on the target of a Monthly GSRs pillar's line item: 100, so the
+// line item's actual over its target is the average of the locked months' scores.
+export const LOCKED_MONTH_TARGET = 100;
+
+// How many locked-in months a Monthly GSRs line item counts, read back from its target. A
+// signed-off review keeps only that line item, so this is how its page says how many months it
+// was signed off with, by the same rule scoreGsrMonths wrote it with.
+export function lockedMonthsIn(target: number): number {
+  return Math.round(target / LOCKED_MONTH_TARGET);
+}
+
 export interface GsrMonthsFigure<C> {
   // Every month in the period. `locked` is the score its GSR was locked in at, or null while the
   // month is still open to change; `live` is where it stands now, for reading, never for scoring.
@@ -182,7 +193,7 @@ export function scoreGsrMonths<C extends { id: string; cadence: string; period_s
     return { cycle, locked, live };
   });
   const counted = months.filter((m) => m.locked !== null);
-  return { months, target: counted.length * 100, actual: counted.reduce((sum, m) => sum + (m.locked ?? 0), 0) };
+  return { months, target: counted.length * LOCKED_MONTH_TARGET, actual: counted.reduce((sum, m) => sum + (m.locked ?? 0), 0) };
 }
 
 // Whether a person's month is locked in: their GSR for it marked complete with its score.

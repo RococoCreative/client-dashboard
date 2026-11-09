@@ -1,7 +1,7 @@
 // The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
 // carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
+import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, lockedMonthsIn, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -205,6 +205,18 @@ describe("a month's GSRs, for a company that scores them", () => {
     expect(figure.months.map((m) => [m.cycle.id, m.locked, m.live])).toEqual([["oct", 80, 50], ["nov", null, 75], ["dec", null, 0]]);
     // Only October is applied: its locked 80, not its live 50, and not November's 75 so far.
     expect([figure.target, figure.actual]).toEqual([100, 80]);
+    // A signed-off review keeps only the line item, and reads its month count back from it.
+    expect(lockedMonthsIn(figure.target)).toBe(1);
+  });
+
+  it("reads the locked-in month count back from a signed-off line item's target", () => {
+    const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
+    const cycles = ["10", "11", "12"].map((m) => ({ id: m, cadence: "monthly", period_start: `2026-${m}-01`, period_end: `2026-${m}-28` }));
+    const locked = (ids: string[]) => ids.map((id) => ({ cycle_id: id, status: "complete" as const, gsr_score: 70 }));
+    for (const ids of [[], ["10"], ["10", "11"], ["10", "11", "12"]]) {
+      const figure = scoreGsrMonths(quarter, cycles, [], locked(ids), 2);
+      expect(lockedMonthsIn(figure.target)).toBe(ids.length);
+    }
   });
 
   it("says when a month is locked in", () => {
