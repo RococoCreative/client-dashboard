@@ -170,6 +170,29 @@ describe("an employee's month", () => {
       await deleteCycle(q4.id);
     }
   });
+
+  it("keeps the still-open month ahead of a month opened early", async () => {
+    // October 5: nothing covers today, September is over but still open, and November has been
+    // opened early. November is the most recently started open cycle, but Sam still owes
+    // September, so that is the month My GSR and the dashboard open.
+    const november = await createCycle({ company_id: KLASIK.company.id, name: "November 2026", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" });
+    vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
+    try {
+      const gsr = renderWithHub(<MyGsrPage />, employee);
+      expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`Goal Setting Review · ${september.name}`))).toBeInTheDocument();
+      expect(screen.queryByText(/November 2026/)).not.toBeInTheDocument();
+      gsr.unmount();
+
+      renderWithHub(<DashboardPage />, employee);
+      expect(await screen.findByRole("button", { name: "Open my GSR" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: september.name })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "November 2026" })).not.toBeInTheDocument();
+    } finally {
+      vi.setSystemTime(FIXTURE_NOW);
+      await deleteCycle(november.id);
+    }
+  });
 });
 
 describe("job role modules", () => {
