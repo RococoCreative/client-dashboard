@@ -126,6 +126,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const [rollupFor, setRollupFor] = useState<{ employeeId: string; year: number; score: DeliverableScore | null } | null>(null);
   // Locking a month's GSR in is confirmed first, with the score it will lock in at.
   const [locking, setLocking] = useState(false);
+  // The lock dialog's own failure line, so a goal save that failed earlier on the page never
+  // shows inside it, and cancelling it never clears the page's notice.
+  const [lockError, setLockError] = useState("");
 
   // A criterion can have two saves in flight at once: blurring a note commits it as the rating
   // beside it is clicked. Both would read the same render-time scores array, both would see
@@ -402,7 +405,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // A monthly GSR writes neither figure: it locks the month's score in and nothing else.
   async function markComplete() {
     setBusy(true);
-    setError("");
+    if (locking) setLockError("");
+    else setError("");
     try {
       if (!monthly) {
         for (const pillar of modulePillars) {
@@ -427,7 +431,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       setLocking(false);
       state.reload();
     } catch (err) {
-      setError(errorMessage(err));
+      if (locking) setLockError(errorMessage(err));
+      else setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -460,7 +465,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 <RotateCcw size={14} aria-hidden /> Reopen
               </Button>
             ) : (
-              <Button size="sm" disabled={busy || cycle.status !== "open" || awaitingRollup} onClick={() => (monthScore ? setLocking(true) : void markComplete())}>
+              <Button size="sm" disabled={busy || cycle.status !== "open" || awaitingRollup} onClick={() => { if (monthScore) { setLockError(""); setLocking(true); } else void markComplete(); }}>
                 <CheckCircle2 size={14} aria-hidden /> Mark complete
               </Button>
             )
@@ -801,9 +806,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           confirmLabel="Mark complete and lock in"
           tone="primary"
           busy={busy}
-          error={error}
+          error={lockError}
           onConfirm={() => void markComplete()}
-          onCancel={() => { setLocking(false); setError(""); }}
+          onCancel={() => setLocking(false)}
         />
       ) : null}
       {removing ? (

@@ -242,6 +242,20 @@ export function overlapMessage(existing: { name: string; cadence: string; period
 // read "0 of 0 complete" and a cycle with three rows all signed off read "3 of 3" while a fourth
 // person had no row at all. Starting the missing reviews then moved the denominator instead of
 // the progress, which is backwards.
+// Who a cycle covers: everyone active on the roster, signed in or not, plus anyone deactivated
+// since whose review in it was signed off. A signed-off review is the record, so deactivating a
+// person later never changes a closed cycle's counts or team score; a review they still owed
+// simply drops out with them.
+export function cycleRoster<P extends { id: string; is_active: boolean }>(
+  people: P[],
+  reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,
+  cycleId: string,
+): P[] {
+  return people.filter(
+    (p) => p.is_active || reviews.some((r) => r.cycle_id === cycleId && r.employee_id === p.id && r.status === "complete"),
+  );
+}
+
 export function cycleProgress(
   roster: Array<{ id: string }>,
   reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,

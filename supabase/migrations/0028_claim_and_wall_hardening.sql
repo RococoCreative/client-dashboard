@@ -200,7 +200,10 @@ create trigger profiles_guard_address
 
 -- An invitation names the person it is for, or nobody. If it names someone, it is an unclaimed
 -- person on the inviting company's roster with the same address. And it follows the same
--- address rule as the roster.
+-- address rule as the roster, except for a person it names: only Rococo can put an address on
+-- another company's domain on a roster, so a person Rococo placed here can be invited from here.
+-- Only signing in accepts an invitation: a signed-in caller can neither write one as accepted
+-- nor reopen an accepted one, so no row can skip these checks and come back pending.
 create or replace function public.guard_invitation_target()
 returns trigger
 language plpgsql
@@ -210,9 +213,16 @@ as $$
 declare
   v_owner record;
 begin
-  -- An accepted invitation is spent: the sign-in gate and handle_new_user only read pending
-  -- ones, and accepting is handle_new_user's own write.
-  if (select auth.uid()) is null or new.accepted_at is not null then
+  -- Accepting is handle_new_user's own write, which runs with nobody signed in.
+  if (select auth.uid()) is null then
+    return new;
+  end if;
+  if new.accepted_at is distinct from (case when tg_op = 'UPDATE' then old.accepted_at end) then
+    raise exception 'An invitation is accepted by signing in, so it cannot be marked or unmarked by hand.'
+      using errcode = 'check_violation';
+  end if;
+  -- An accepted invitation is spent: the sign-in gate and handle_new_user only read pending ones.
+  if new.accepted_at is not null then
     return new;
   end if;
   if tg_op = 'UPDATE'
@@ -237,7 +247,8 @@ begin
       raise exception 'An @rocococreative.io address belongs to Rococo staff, so it cannot be invited to a company.'
         using errcode = 'check_violation';
     end if;
-    if v_owner.company_id is not null and v_owner.company_id is distinct from new.company_id then
+    if v_owner.company_id is not null and v_owner.company_id is distinct from new.company_id
+       and new.profile_id is null then
       raise exception 'That address is on another company''s email domain, so only that company can invite it.'
         using errcode = 'check_violation';
     end if;

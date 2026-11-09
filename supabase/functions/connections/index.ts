@@ -346,7 +346,24 @@ async function handleCallback(req: Request): Promise<Response> {
       },
       { onConflict: "connection_id" },
     );
-    if (tokenError) throw new HttpError(500, "The connection could not be saved.");
+    if (tokenError) {
+      // A row must never read Connected without its own tokens. Put it back to not connected,
+      // which also fires clear_connection_tokens for any earlier account's tokens, and hand the
+      // grant back to the provider so nothing is left authorised that the hub cannot use.
+      const { error: undoError } = await admin
+        .from("company_connections")
+        .update({ status: "not_connected", external_account_id: null, external_account_name: null, scopes: null, connected_at: null, last_error: null })
+        .eq("id", row.id);
+      if (undoError) console.error("undo after failed token save", undoError.message);
+      if (def.revoke) {
+        try {
+          await def.revoke({ ...creds, accessToken: exchanged.accessToken, refreshToken: exchanged.refreshToken });
+        } catch (err) {
+          console.error("revoke after failed token save", err instanceof Error ? err.message : err);
+        }
+      }
+      throw new HttpError(500, "The connection could not be saved.");
+    }
     return backTo(claims.r, { connected: claims.p });
   } catch (err) {
     const message = err instanceof HttpError ? err.message : "The connection could not be finished. Try again from Settings.";

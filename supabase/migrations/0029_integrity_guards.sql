@@ -47,8 +47,12 @@ end $$;
 
 -- A goal in the months names its month, so nothing can make one cycle-less again by hand. Added
 -- NOT VALID, so it holds for every write from here on without failing the paste on a goal an
--- earlier cycle delete already orphaned (such a goal can be deleted, not edited), and validated
--- straight away when there is none, as there was none live when this was written.
+-- earlier cycle delete already orphaned, and validated straight away when there is none. An
+-- orphan shows on no screen and can be deleted but not edited; this migration never deletes one
+-- on its own. To see any before pasting:
+--   select id, company_id, title from public.goals where scope = 'cycle' and cycle_id is null;
+-- Delete them first (they would have gone with their cycle under the cascade above) if the
+-- constraint should validate on this paste; otherwise it validates on a later one.
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'goals_cycle_scope_check') then

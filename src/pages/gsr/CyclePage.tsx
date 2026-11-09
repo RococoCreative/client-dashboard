@@ -41,6 +41,7 @@ import {
   SECTION_HOME,
   SECTION_LABEL,
   cycleColumns,
+  cycleRoster,
   overlapMessage,
   overlappingCycle,
   periodEnd,
@@ -178,8 +179,9 @@ export default function CyclePage() {
   const gsr = sectionOf(cycle.cadence) === "gsr";
   // Everyone active on the roster, whether or not they have signed in yet. A company sets its
   // reviews up before anyone has an account, which is exactly the state it is in on the day it
-  // starts, so a cycle covers the whole team. The row says who cannot see theirs yet.
-  const team = people.filter((p) => p.is_active);
+  // starts, so a cycle covers the whole team. The row says who cannot see theirs yet. Someone
+  // deactivated since keeps their row when their review here was signed off (cycleRoster).
+  const team = cycleRoster(people, reviews, cycle.id);
   const rows = team.map((person) => {
     const review = reviews.find((r) => r.employee_id === person.id) ?? null;
     const own = review ? scores.filter((s) => s.review_id === review.id) : [];

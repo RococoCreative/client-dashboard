@@ -26,6 +26,7 @@ import {
   SECTION_LABEL,
   cycleProgress,
   cyclePath,
+  cycleRoster,
   defaultCycleName,
   overlapMessage,
   overlappingCycle,
@@ -249,7 +250,7 @@ export default function CyclesPage({ section }: { section: HubSection }) {
             // Counted the way the cycle page and the dashboard count it: over everybody active on
             // the roster, so a person with no review row yet is a review still owed. Counting the
             // rows that exist read "1/2 complete" here while the dashboard read "1 of 5".
-            const roster = state.data!.people.filter((p) => p.is_active);
+            const roster = cycleRoster(state.data!.people, state.data!.reviews, cycle.id);
             const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id && roster.some((p) => p.id === r.employee_id));
             const progress = cycleProgress(roster, reviews, cycle.id);
             const team = averageScore(

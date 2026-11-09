@@ -78,6 +78,16 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
     );
   }, [params, setParams]);
 
+  // Connect leaves busy set while the browser goes to the provider. Back from there can restore
+  // this page from the back-forward cache with that state intact, so a restored page lets go.
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setBusy(null);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   const rowFor = (provider: ConnectionProvider): CompanyConnection | null => state.data?.find((c) => c.provider === provider) ?? null;
   // Anyone can put ?connected= on a link, so "is connected" is said only once the loaded row for
   // that provider reads connected too. Until the rows load, and over a row that says otherwise, it

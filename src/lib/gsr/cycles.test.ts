@@ -1,7 +1,7 @@
 // Pins the cycle rules every GSR screen shares: periods, cadences, which cycles are in play,
 // default names, and the months inside a quarter.
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, cycleColumns, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart, scoredCycleInPlay } from "./cycles.ts";
+import { activeCycles, currentCycle, cycleColumns, cycleRoster, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart, scoredCycleInPlay } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -209,5 +209,25 @@ describe("cycle periods", () => {
     expect(currentCycle(cycles, new Date(2026, 8, 15))?.id).toBe("b");
     expect(currentCycle(cycles, new Date(2026, 11, 1))?.id).toBe("b");
     expect(currentCycle([], new Date())).toBeNull();
+  });
+});
+
+describe("cycleRoster", () => {
+  const people = [
+    { id: "a", is_active: true },
+    { id: "b", is_active: false },
+    { id: "c", is_active: false },
+    { id: "d", is_active: true },
+  ];
+  const reviews = [
+    { employee_id: "a", cycle_id: "q3", status: "complete" },
+    { employee_id: "b", cycle_id: "q3", status: "complete" },
+    { employee_id: "c", cycle_id: "q3", status: "in_progress" },
+    { employee_id: "c", cycle_id: "q2", status: "complete" },
+  ];
+  it("keeps a deactivated person whose review in this cycle was signed off, and only them", () => {
+    expect(cycleRoster(people, reviews, "q3").map((p) => p.id)).toEqual(["a", "b", "d"]);
+    expect(cycleRoster(people, reviews, "q2").map((p) => p.id)).toEqual(["a", "c", "d"]);
+    expect(cycleRoster(people, reviews, "q4").map((p) => p.id)).toEqual(["a", "d"]);
   });
 });

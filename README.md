@@ -103,7 +103,9 @@ a reload resets the data.
   editing their own profile; their account can be reactivated later. A Rococo admin's profile
   is Rococo's to change, even when it sits on a company's roster.
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
-  compensation and deliverables with them and leaves their months with the old company. A
+  compensation and deliverables with them and leaves their months with the old company. Their
+  ratings start over in the new company, since criteria are each company's own, and their
+  deliverable headings land in Uncategorized there, keeping their tasks. A
   pending invitation moves with them while they still need it to sign in, and manager links
   across the two companies are cleared (0029). Setting someone to No company withdraws their
   pending invitations, since there is no company for one to wait in; the company that places
@@ -118,8 +120,10 @@ People and fills in their whole profile (title, department, hire date, who they 
 compensation, KPIs) before anybody sends them anything. `profiles.user_id` is null until they
 first sign in, and every row shows which of three states it is in: Not invited, Invited, or
 Active. Any row except your own and a Rococo admin's can also be deactivated, signed in or not,
-and then reads Inactive; an inactive person is left out of new review cycles until reactivated. Sending an invitation creates the invitation row, points it at that profile, and copies
-a sign-in link to the clipboard; the hub sends no email.
+and then reads Inactive. An inactive person drops out of review cycles until reactivated, except
+where their review was already signed off: a cycle keeps that row, so its counts and team score
+never change after the fact. Sending an invitation creates the invitation row, points it at that
+profile, and copies a sign-in link to the clipboard; the hub sends no email.
 
 Signing in claims the profile that is already there rather than creating a second one, whether
 the person arrives through an invitation or through a company sign-in domain. Policies find the
@@ -211,7 +215,9 @@ completing again freezes again. A review has no score of record until it is comp
 ## Sections
 
 Three sidebar sections, keyed on cadence: GSRs (monthly Goal Setting Reviews: last month at a
-glance, this month's goals with their action steps and notes, the focus topic, no scoring),
+glance, this month's goals with their action steps and notes, the focus topic, and no pillar
+scores; where the company has a Monthly GSRs pillar, the month's score shows as it builds and an
+admin locks it in),
 Reviews (quarterly, annual and custom cycles: the scored review with the employee snapshot,
 deliverables, yearly goals and feedback) and Goals (personal, professional and role goals for the
 year and each person's BHAG, across the roster). Employees see the same three as My GSR, My

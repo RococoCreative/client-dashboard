@@ -2,7 +2,7 @@
 // it reports. Each one pins a behaviour a person relies on: two quick ticks both stick, the remove
 // control is the shared icon button, the provider sends a Rococo admin back into the company they
 // connected, and only the connection service's own words are shown as its outcome.
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
@@ -133,6 +133,23 @@ describe("connection outcome on settings", () => {
     renderSettings("/settings");
     await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
     expect(vi.mocked(startConnection)).toHaveBeenCalledWith(KLASIK.company.id, "quickbooks", `${window.location.origin}/settings/connections/${KLASIK.company.id}`);
+  });
+
+  it("lets go of Opening... when Back restores the page from the browser's cache", async () => {
+    const user = userEvent.setup();
+    // The browser is on its way to the provider: startConnection's answer never comes back here.
+    vi.mocked(startConnection).mockImplementationOnce(() => new Promise<string>(() => {}));
+    renderSettings("/settings");
+    await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
+    expect(await screen.findByText("Opening...")).toBeInTheDocument();
+    // Back from the provider restores this page as it was left.
+    const restored = new Event("pageshow");
+    Object.defineProperty(restored, "persisted", { value: true });
+    act(() => {
+      window.dispatchEvent(restored);
+    });
+    await waitFor(() => expect(screen.queryByText("Opening...")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Connect QuickBooks Online" })).not.toBeDisabled();
   });
 
   it("shows a known outcome and clears it from the address", async () => {
