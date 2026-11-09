@@ -268,6 +268,16 @@ describe("attentionItems", () => {
       expect(attentionItems(input({ connections: [sheets], sources: [silent], now })).map((i) => i.detail)).toEqual(["The last attempt did not finish."]);
     });
 
+    it("flags a sync that was cut off mid-run, rather than leaving it Syncing", () => {
+      const lastAttempt = new Date(now.getTime() - 2 * 3600000).toISOString();
+      const cut = source({ name: "Cut tab", last_status: "running", last_attempt_at: lastAttempt, last_success_at: hoursAgo(170), last_error: "An older problem." });
+      expect(attentionItems(input({ connections: [sheets], sources: [cut], now }))).toEqual([
+        { kind: "sync_failed", title: "Cut tab: sync failed", detail: "The last sync did not finish.", to: "/settings", severity: "danger" },
+      ]);
+      const running = source({ name: "Live tab", last_status: "running", last_attempt_at: new Date(now.getTime() - 60000).toISOString() });
+      expect(attentionItems(input({ connections: [sheets], sources: [running], now }))).toEqual([]);
+    });
+
     it("flags a stale enabled source with its last success time", () => {
       const lastSuccess = hoursAgo(30);
       const stale = source({ name: "Stale tab", last_status: "succeeded", last_success_at: lastSuccess, stale_after_hours: 24 });

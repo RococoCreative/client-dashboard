@@ -6,8 +6,14 @@
 import { mapRows } from "./parse.ts";
 import type { AdapterRegistry, ConnectionRef, ParsedRow, SyncSourceSpec, ValidationError } from "./types.ts";
 
-// A run still marked running after this long was cut off, and no longer holds the lock.
+// A run still marked running after this long was cut off, and no longer holds the lock. The one
+// stale window: the runner, the hourly tick's sweep and the app's sync state all read it here.
 export const STALE_RUN_MINUTES = 15;
+
+// The instant before which a run still marked running counts as cut off.
+export function staleRunCutoff(now: Date): Date {
+  return new Date(now.getTime() - STALE_RUN_MINUTES * 60000);
+}
 
 // The database side of a sync. The Edge Function implements it with the service role.
 export interface SyncStore {
@@ -48,7 +54,7 @@ export async function runSync(args: {
   const { source, connection, trigger, requestedBy, store, adapters } = args;
   const now = args.now ?? (() => new Date());
 
-  await store.abandonStaleRuns(connection.id, new Date(now().getTime() - STALE_RUN_MINUTES * 60000));
+  await store.abandonStaleRuns(connection.id, staleRunCutoff(now()));
   const started = await store.startRun({ source, trigger, requestedBy, now: now() });
   if ("locked" in started) {
     return { status: "locked", runId: null, rowsRead: 0, rowsApplied: 0, rowsBlank: 0, errors: [], message: "A sync is already running for this connection." };

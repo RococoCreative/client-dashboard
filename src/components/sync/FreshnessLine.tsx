@@ -4,7 +4,7 @@
 import { Link } from "react-router-dom";
 import { formatDateTime } from "../../lib/format.ts";
 import { formatAge } from "../../lib/sync/format.ts";
-import { ageHours, syncState } from "../../lib/sync/state.ts";
+import { ageHours, failureDetail, syncState } from "../../lib/sync/state.ts";
 import { CONNECTION_PROVIDER_LABELS, type CompanyConnection, type SyncSource } from "../../types/database.ts";
 
 function lastGood(source: SyncSource): string {
@@ -27,7 +27,7 @@ export default function FreshnessLine({ source, connection, now = new Date() }: 
       ) : state === "syncing" ? (
         `Syncing now.${lastGood(source)}`
       ) : state === "failed" ? (
-        `Sync failed. ${source.last_error ?? connection?.last_error ?? "The last attempt did not finish."}${lastGood(source) || " No data yet."}`
+        `Sync failed. ${failureDetail(source, now, connection)}${lastGood(source) || " No data yet."}`
       ) : state === "stale" ? (
         `Stale: last synced ${when}, ${age} ago.`
       ) : (

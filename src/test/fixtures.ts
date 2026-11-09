@@ -11,6 +11,9 @@ import { isCompanyAdminRole } from "../lib/people.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
+// A sync that is running now started a moment before the clock the suite runs at
+// (src/test/setup.ts); one marked running for longer than the stale window reads as cut off.
+const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
   { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], created_at: NOW, updated_at: NOW },
@@ -1171,7 +1174,7 @@ function build(company: Company): CompanyBundle {
     const synced = ss.outcome !== "never";
     if (synced) syncRuns.push(run(1, "succeeded", EARLIER, null));
     if (ss.outcome === "failed") syncRuns.push(run(2, "failed", NOW, ss.last_error ?? null));
-    if (ss.outcome === "running") syncRuns.push(run(2, "running", NOW, null));
+    if (ss.outcome === "running") syncRuns.push(run(2, "running", RUN_STARTED, null));
     const currentRunId = synced ? p(`run-${i}-1`) : null;
     syncSources.push({
       id: sourceId,
@@ -1189,7 +1192,7 @@ function build(company: Company): CompanyBundle {
       stale_after_hours: ss.stale_after_hours,
       enabled: true,
       current_run_id: currentRunId,
-      last_attempt_at: !synced ? null : ss.outcome === "succeeded" ? EARLIER : NOW,
+      last_attempt_at: !synced ? null : ss.outcome === "succeeded" ? EARLIER : ss.outcome === "running" ? RUN_STARTED : NOW,
       last_success_at: synced ? EARLIER : null,
       last_status: ss.outcome === "never" ? null : ss.outcome,
       last_error: ss.outcome === "failed" ? (ss.last_error ?? null) : null,

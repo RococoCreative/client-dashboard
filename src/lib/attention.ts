@@ -7,7 +7,7 @@ import { CONNECTION_PROVIDER_LABELS, type CompanyConnection, type MarketingCampa
 import { formatDate, formatDateTime } from "./format.ts";
 import { cyclePath } from "./gsr/cycles.ts";
 import { hasAccount } from "./people.ts";
-import { syncState } from "./sync/state.ts";
+import { failureDetail, syncState } from "./sync/state.ts";
 
 export type AttentionKind = "not_signed_in" | "cycle_overdue" | "campaign_no_budget" | "connection_error" | "sync_failed" | "sync_stale";
 
@@ -86,7 +86,7 @@ function troubledSources(sources: SyncSource[], connections: CompanyConnection[]
     if (!source.enabled) continue;
     const state = syncState(source, connections.find((c) => c.id === source.connection_id) ?? null, now);
     if (state === "failed") {
-      items.push({ kind: "sync_failed", title: `${source.name}: sync failed`, detail: source.last_error ?? "The last attempt did not finish.", to: "/settings", severity: "danger" });
+      items.push({ kind: "sync_failed", title: `${source.name}: sync failed`, detail: failureDetail(source, now), to: "/settings", severity: "danger" });
     } else if (state === "stale") {
       items.push({ kind: "sync_stale", title: `${source.name}: stale data`, detail: `Last synced ${formatDateTime(source.last_success_at)}.`, to: "/settings", severity: "warning" });
     }
