@@ -1,5 +1,5 @@
 // The one place Company Hub talks to an outside system's sign-in. A company's admin connects
-// that company's own GoHighLevel or QuickBooks account from Settings; the tokens land in
+// that company's own GoHighLevel, QuickBooks or Google account from Settings; the tokens land in
 // connection_tokens, which only this function (holding the service role) can read. The browser
 // never sees a provider secret or token, and nothing is shared between companies.
 //
@@ -14,12 +14,15 @@
 //
 // Environment (Supabase secrets): CONNECTIONS_STATE_SECRET, APP_ORIGINS (comma separated
 // origins the browser may be sent back to; localhost is always allowed), GHL_CLIENT_ID,
-// GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production).
+// GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production),
+// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { PROVIDER_KEYS, type ProviderKey } from "../_shared/providers.ts";
+import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl } from "../_shared/sync/googleSheets.ts";
 import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, sameBytes, service } from "./http.ts";
 
-type Provider = "gohighlevel" | "quickbooks";
+type Provider = ProviderKey;
 
 interface Exchanged {
   accessToken: string;
@@ -141,10 +144,48 @@ const quickbooks: ProviderDef = {
   },
 };
 
-const PROVIDERS: Record<Provider, ProviderDef> = { gohighlevel, quickbooks };
+// Google Sheets: the company's own Google account, read-only. The account is the verified email
+// in the id token, which comes straight from Google's token endpoint over TLS, so its payload is
+// read, not verified (Google documents this as safe for tokens received directly).
+const google_sheets: ProviderDef = {
+  label: "Google Sheets",
+  env: { id: "GOOGLE_CLIENT_ID", secret: "GOOGLE_CLIENT_SECRET" },
+  authorizeUrl: ({ clientId, redirectUri, state }) => googleAuthorizeUrl({ clientId, redirectUri, state }),
+  exchange: async ({ clientId, clientSecret, code, redirectUri }) => {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+    });
+    const token = await readJson<{ access_token: string; refresh_token?: string; expires_in?: number; scope?: string; id_token?: string }>(response, "The Google sign-in");
+    const email = token.id_token ? emailFromIdToken(token.id_token) : null;
+    if (!email) throw new HttpError(400, "Google did not say which account was connected. Try again from Settings.");
+    return {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? null,
+      accessExpiresAt: secondsFromNow(token.expires_in),
+      refreshExpiresAt: null,
+      externalAccountId: email,
+      externalAccountName: email,
+      scopes: token.scope ?? GOOGLE_SCOPES,
+    };
+  },
+  revoke: async ({ accessToken, refreshToken }) => {
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: refreshToken ?? accessToken }),
+    });
+  },
+};
+
+const PROVIDERS: Record<Provider, ProviderDef> = { gohighlevel, quickbooks, google_sheets };
 
 function providerFor(value: unknown): ProviderDef & { key: Provider } {
-  if (value === "gohighlevel" || value === "quickbooks") return { ...PROVIDERS[value], key: value };
+  if (typeof value === "string" && (PROVIDER_KEYS as readonly string[]).includes(value)) {
+    const key = value as Provider;
+    return { ...PROVIDERS[key], key };
+  }
   throw new HttpError(400, "Unknown provider.");
 }
 
