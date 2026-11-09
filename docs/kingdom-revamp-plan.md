@@ -1,6 +1,6 @@
 # Kingdom dashboard revamp: assessment and plan
 
-**Status: assessed and planned, not built.** Prepared for Austin, Rococo Creative, on 2026-11-04, in answer to the Kingdom Dashboard Revamp specification. This is the developer handoff the spec asks for in section 18: it maps what exists, classifies every ask, and sets the build order. Nothing here is implemented, and no migration in it has been applied. Read `CLAUDE.md` and `README.md` first; this document does not override them.
+**Status: S1 to S9 built and verified on branch `claude/elegant-cray-bnb85m`, not yet applied to the live project or deployed. S10 to S14 wait on Kingdom's inputs (section 7). The build plan is `docs/kingdom-build-plan.md`; where the two differ on scope, the rulings below and the build plan win.** Prepared for Austin, Rococo Creative, on 2026-11-04, in answer to the Kingdom Dashboard Revamp specification. This is the developer handoff the spec asks for in section 18: it maps what exists, classifies every ask, and sets the build order. Read `CLAUDE.md` and `README.md` first; this document does not override them.
 
 ---
 
@@ -27,6 +27,34 @@
   - the sheet links and field mappings
   - the sync day, time, timezone and stale threshold
   - the capability matrix, including how a Manager's team is defined
+
+---
+
+## Rulings
+
+These were ruled during the build (`docs/kingdom-build-plan.md`). Where this plan and a ruling differ, the ruling wins. Each one records its cost if it turns out wrong.
+
+- **R1.** `companies.modules` is approved. The CLAUDE.md wording for it is proposed and applied only on Austin's explicit approval; the README documents the modules meanwhile. *Cost if wrong: reword two lines, plus a pending guardrails update.*
+- **R2.** The utility group (SOPs, Resources, Settings) is unlabeled. *Cost if wrong: one label later.*
+- **R3.** Five module keys, not seven: `sectioned_nav` and `home_snapshot` became `switchboard`, and `qbo_controls` folded into `data_sources`. *Cost if wrong: split a key later.*
+- **R4.** `external_people` is deferred to the PM capacity slice. *Cost if wrong: one small migration later.*
+- **R5.** `private.my_team_ids()` is deferred to the capability-matrix slice. *Cost if wrong: none.*
+- **R6.** `wins.team` is deferred; wins carry an optional project. *Cost if wrong: one column later.*
+- **R7.** Members read Production and Wins; Sales & Finance stays admin-only. *Cost if wrong: one policy and route guard each.*
+- **R8.** The QuickBooks adapter is read-only and unconfigured, with no aging, escalation, "not sent", partial-payment or cash-basis logic. *Cost if wrong: none if never configured.*
+- **R9.** The SQL harness is committed and not in CI. *Cost if wrong: remove a folder and a script.*
+- **R10.** Kingdom's modules are switched on by a Rococo admin after the migrations; no migration seeds modules or roles. Maddie Cothran and marvin waters are set to Owner by hand after 0031. *Cost if wrong: none.*
+- **R11.** Field types are `text`, `number`, `currency`, `percent` and `date` only. *Cost if wrong: add a type later.*
+- **R12.** A sync is all-or-nothing; all-blank rows are skipped and counted. *Cost if wrong: a stricter-than-needed first run.*
+- **R13.** One attempt per weekly slot. *Cost if wrong: a transient failure waits a week unless someone presses Sync now.*
+- **R14.** `target_module` values are `sales_reporting`, `financial_reporting`, `controls` and `pm_capacity`. *Cost if wrong: none recorded.*
+- **R15.** Projects are created by hand (`source = 'manual'`, `reference` holds the job number); the master list will not be Buildertrend. *Cost if wrong: an import path later.*
+- **R16.** The Home wins card shows the five most recent non-archived wins. *Cost if wrong: none recorded.*
+- **R17.** `audit_events` has no foreign keys, so history outlives the company. *Cost if wrong: none.*
+- **R18.** Projects, milestones and wins are content and carry no audit trigger. *Cost if wrong: one trigger each later.*
+- **R19.** `people_hr` and `home` links show only on Home's Shortcuts card. *Cost if wrong: one ExternalLinksList on PeoplePage later.*
+- **R20.** The known limitations are accepted as built: a moved profile's audit row is filed under its new company; a sync-only select path is added with the capability matrix; `providers.test.ts` reads SQL through a dynamic `node:fs` import; Read headers reads row 1 only. *Cost if wrong: none now.*
+- **R21.** From Task 12 on, Kingdom's `admin` persona is Avery Stone and its `owner` persona Marcus Lee. *Cost if wrong: a few assertion edits.*
 
 ---
 
@@ -312,6 +340,8 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 ### Infrastructure that needs no business input
 
 #### S1. Module gate and four-group nav
+- **Status.** Built.
+- **As built.** Module keys are five, not seven (R3): `switchboard`, `production`, `wins`, `data_sources` and `external_links`. The Home heading follows `switchboard`.
 - **Purpose.** A per-company switch for Kingdom's shape, and grouped nav, with Klasik and RBA unchanged item for item.
 - **Migration.** `0024_company_modules.sql`.
 - **New files.**
@@ -338,6 +368,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** move any route, rename "Dashboard" for Klasik or RBA, or touch roles.
 
 #### S2. Audit log
+- **Status.** Built.
 - **Purpose.** Record privileged configuration and permission changes from here on.
 - **Migration.** `0025_audit_log.sql`.
 - **Files.**
@@ -350,6 +381,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** add company-admin read access, in RLS or in the UI (pending the capability matrix), or log ordinary content edits.
 
 #### S3. Projects, milestones and letters
+- **Status.** Built.
 - **Purpose.** Dashboard-owned project checkpoints.
 - **Migration.** `0026_projects_milestones.sql`.
 - **New files.**
@@ -369,6 +401,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** add a milestone status column (waits on input 8), project status, start or completion dates, health, a milestone template or a fixed count, deletes, or automation from milestone completion.
 
 #### S4. Manual wins and Home cards
+- **Status.** Built.
 - **Purpose.** Wins, attention items and shortcuts on Home.
 - **Migration.** `0027_wins.sql`.
 - **New files.**
@@ -381,6 +414,8 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** pull wins from reviews, Slack or milestones, or decide display duration or archival rules.
 
 #### S5. Scaffolds and placeholders
+- **Status.** Built.
+- **As built.** `ScaffoldCard` lives at `src/components/scaffold/ScaffoldCard.tsx`, and both Sales & Finance pages sit behind `data_sources` (R3).
 - **Purpose.** Show honest "Not configured" states for client score, cleanliness, job health, warranty, PM capacity, Sales & Finance reporting and Controls.
 - **Migration.** None.
 - **New files.**
@@ -398,6 +433,8 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** create score tables, scales, averages, rankings, colour bands or NPS.
 
 #### S6. Sync engine and honest UI states
+- **Status.** Built.
+- **As built.** The sync routes live in `supabase/functions/connections/sync.ts`, with the pure modules in `supabase/functions/_shared/sync/`. `external_people` is deferred (R4).
 - **Purpose.** Everything a live source needs except the provider adapters.
 - **Migration.** `0028_sync_engine.sql`.
 - **New files.**
@@ -429,6 +466,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** connect Google, pull QuickBooks, or schedule anything.
 
 #### S7. External links registry and Monday entry points
+- **Status.** Built.
 - **Purpose.** Configurable shortcuts and approved embeds.
 - **Migration.** `0029_external_links.sql`.
 - **Files.**
@@ -444,6 +482,8 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** call the Monday API, copy any CRM or task record, or assume a logged-in iframe works.
 
 #### S8. Google Sheets provider and weekly schedule
+- **Status.** Built.
+- **As built.** `requireAdmin` checks `is_active` and accepts owner and admin.
 - **Purpose.** A real, live connection.
 - **Migration.** `0030_sync_schedule.sql`. It runs after your setup steps in 6.6.
 - **Edited files.**
@@ -456,6 +496,8 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Does not:** populate any module. That needs the mappings.
 
 #### S9. Role hierarchy foundation
+- **Status.** Built.
+- **As built.** `my_team_ids` is deferred (R5).
 - **Purpose.** Owner and Manager as values, a ranked grant guard, `reports_to` integrity, and the team helper.
 - **Migration.** `0031_role_hierarchy.sql`.
 - **Edited files.**
@@ -473,13 +515,13 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 
 ### Slices that need mappings or definitions
 
-| Slice | Purpose | Needs | Migration |
-| --- | --- | --- | --- |
-| S10 Sales & Finance reporting | Configure sources for sales and financial reporting, render them in MappedTable, check the figures against the sheet | Sheet links, tabs, fields, period conventions | none |
-| S11 PM capacity | Map PMs to `profiles.id` in `external_people`, show the capacity card; unmapped PMs flagged, never dropped | Capacity sheet, PM key, PMs on the roster | none |
-| S12 QuickBooks controls | Refresh with token rotation inside the lock, GET-only Invoice and Payment queries, deep links, mapped fields only (the confirmed subset from input 22) plus `source_ref` {entity, Id, realmId}. QuickBooks runs go through the same sync engine, so all six UI states, the last-good pointer and the run log apply unchanged | Kingdom connects QuickBooks, confirmed fields and definitions, production Intuit keys | none |
-| S13 Capability matrix and Manager scope | `role_capabilities` seeded to today's behavior, `private.can(cid, cap)`, view and edit policy split, `can_sync_source` body changed to the sync capability, team policies via `my_team_ids()`, company-admin audit read if the matrix grants it | The completed matrix, team definition (input 30a) | 0032 onward |
-| S14 Client score and cleanliness inputs | Tables and entry UI | Definitions, scale, subject, thresholds decision, permissions | later |
+| Slice | Purpose | Needs | Migration | Status |
+| --- | --- | --- | --- | --- |
+| S10 Sales & Finance reporting | Configure sources for sales and financial reporting, render them in MappedTable, check the figures against the sheet | Sheet links, tabs, fields, period conventions | none | Waiting on inputs |
+| S11 PM capacity | Map PMs to `profiles.id` in `external_people`, show the capacity card; unmapped PMs flagged, never dropped | Capacity sheet, PM key, PMs on the roster | none | Waiting on inputs |
+| S12 QuickBooks controls | Refresh with token rotation inside the lock, GET-only Invoice and Payment queries, deep links, mapped fields only (the confirmed subset from input 22) plus `source_ref` {entity, Id, realmId}. QuickBooks runs go through the same sync engine, so all six UI states, the last-good pointer and the run log apply unchanged | Kingdom connects QuickBooks, confirmed fields and definitions, production Intuit keys | none | Waiting on inputs. The read-only adapter is built (R8) |
+| S13 Capability matrix and Manager scope | `role_capabilities` seeded to today's behavior, `private.can(cid, cap)`, view and edit policy split, `can_sync_source` body changed to the sync capability, team policies via `my_team_ids()`, company-admin audit read if the matrix grants it | The completed matrix, team definition (input 30a) | 0032 onward | Waiting on inputs |
+| S14 Client score and cleanliness inputs | Tables and entry UI | Definitions, scale, subject, thresholds decision, permissions | later | Waiting on inputs |
 
 ---
 
@@ -925,10 +967,10 @@ These are outside this scope and are recorded only. None of them is fixed by thi
 - Unmanaged `public.rls_auto_enable()` is executable by anon, which contradicts rule 4. Checked: it returns `event_trigger`, so it cannot be called directly through PostgREST. Low risk, worth a revoke.
 - The `migration_backup_20261101` schema holds real GSR copies (3 tables) with RLS off. Checked: neither `anon` nor `authenticated` has USAGE on the schema, so the API cannot reach it. Low risk, worth dropping once the backup is no longer needed.
 - The migration tracking rows are out of step with the repo files.
-- `App.rococo.test.tsx` is missing three mocks (fixed in S1).
+- `App.rococo.test.tsx` is missing three mocks. **Fixed** in S1.
 - Portfolio marketing totals count unbudgeted campaigns.
 - The Financials tile says "Entered by hand" on QuickBooks rows, and a CSV import overwrites hand-entered rows.
-- The `connections` function does not check `is_active` (fixed in S8).
+- The `connections` function does not check `is_active`. **Fixed** in S8.
 - Leaked-password protection is off on both projects.
 - Provider tokens are stored in plain text. Vault or pgcrypto can come in a later migration.
 - 22 foreign keys have no index. New tables index their own.
