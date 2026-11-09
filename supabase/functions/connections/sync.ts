@@ -266,7 +266,15 @@ export async function handleSyncTick(req: Request): Promise<Response> {
   }
 
   // Due and connected; a source whose connection is not connected is left alone, nothing written.
-  const due = scheduled.filter((s) => isDue(s, now) && connections.get(s.connection_id)?.status === "connected");
+  // Each source is judged on its own, so one that cannot be read never stops the others.
+  const due = scheduled.filter((s) => {
+    try {
+      return isDue(s, now) && connections.get(s.connection_id)?.status === "connected";
+    } catch (err) {
+      console.error("scheduled sync skipped", s.id, err instanceof Error ? err.message : "unknown");
+      return false;
+    }
+  });
   const byConnection = new Map<string, SourceRow[]>();
   for (const source of due) byConnection.set(source.connection_id, [...(byConnection.get(source.connection_id) ?? []), source]);
 

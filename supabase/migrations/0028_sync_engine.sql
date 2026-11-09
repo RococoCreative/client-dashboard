@@ -18,7 +18,8 @@
 --   7. Indexes, including the lock that allows one running sync per connection.
 --   8. Runs and records take their company (and a run its connection) from their source.
 --   9. The guard on sources: its connection is its own company's and provider's, its time zone
---      is real, results are written by the sync, and someone who may only sync may only ask.
+--      is a real named zone, results are written by the sync, and someone who may only sync
+--      may only ask.
 --  10. Triggers on sources: the guard, who changed it, when, and an audit of its configuration.
 --  11. Row level security, grants and policies.
 
@@ -230,12 +231,17 @@ begin
   if not found or conn.company_id is distinct from new.company_id or conn.provider is distinct from new.provider then
     raise exception 'That connection belongs to another company or provider.';
   end if;
+  -- A named zone only: PostgreSQL also reads POSIX-style zones such as 'UTC+5', which the
+  -- scheduler (Intl.DateTimeFormat) cannot, so the name must be in pg_timezone_names too.
   if new.sync_timezone is not null then
     begin
       perform now() at time zone new.sync_timezone;
     exception when others then
       raise exception 'That time zone is not recognized.';
     end;
+    if not exists (select 1 from pg_catalog.pg_timezone_names where name = new.sync_timezone) then
+      raise exception 'That time zone is not recognized.';
+    end if;
   end if;
   if auth.uid() is not null then
     if tg_op = 'INSERT' then

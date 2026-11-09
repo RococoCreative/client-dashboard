@@ -77,6 +77,17 @@ function resolveWall(target: number, timezone: string): number {
   return hi;
 }
 
+// Whether Intl.DateTimeFormat can read the zone. The database admits named zones only, but a
+// zone it reads and this cannot (a POSIX-style 'UTC+5') must never throw out of a tick.
+function isReadableZone(timezone: string): boolean {
+  try {
+    formatterFor(timezone);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function scheduleOf(source: Pick<SyncSourceSpec, "sync_weekday" | "sync_time" | "sync_timezone">): WeeklySchedule | null {
   if (source.sync_weekday === null || source.sync_time === null || source.sync_timezone === null) return null;
   return { weekday: source.sync_weekday, time: source.sync_time, timezone: source.sync_timezone };
@@ -99,14 +110,14 @@ export function latestSlot(schedule: WeeklySchedule, now: Date): Date {
   return new Date(slot);
 }
 
-// Due when enabled, scheduled, and not tried since the latest slot.
+// Due when enabled, scheduled in a zone this can read, and not tried since the latest slot.
 export function isDue(
   source: Pick<SyncSourceSpec, "enabled" | "sync_weekday" | "sync_time" | "sync_timezone" | "last_attempt_at">,
   now: Date,
 ): boolean {
   if (!source.enabled) return false;
   const schedule = scheduleOf(source);
-  if (!schedule) return false;
+  if (!schedule || !isReadableZone(schedule.timezone)) return false;
   if (source.last_attempt_at === null) return true;
   return new Date(source.last_attempt_at).getTime() < latestSlot(schedule, now).getTime();
 }

@@ -59,4 +59,12 @@ describe("isDue", () => {
     expect(isDue({ ...base, last_attempt_at: "2026-11-09T12:00:00Z" }, now)).toBe(true);
     expect(isDue({ ...base, last_attempt_at: "2026-11-09T13:30:00Z" }, now)).toBe(false);
   });
+
+  it("is never due, and never throws, in a zone the scheduler cannot read", () => {
+    for (const sync_timezone of ["UTC+5", "Mars+3", "Mars/Olympus"]) {
+      expect(() => isDue({ ...base, sync_timezone }, now)).not.toThrow();
+      expect(isDue({ ...base, sync_timezone }, now)).toBe(false);
+      expect(isDue({ ...base, sync_timezone, last_attempt_at: "2026-11-01T00:00:00Z" }, now)).toBe(false);
+    }
+  });
 });

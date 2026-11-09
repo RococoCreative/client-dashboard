@@ -206,6 +206,42 @@ end $$;
 reset role;
 select set_config('request.jwt.claims', '', true);
 
+-- case: posix_timezone_rejected
+-- PostgreSQL reads a POSIX-style zone such as 'UTC+5' or 'Mars+3', but the scheduler's
+-- Intl.DateTimeFormat cannot, so only a named zone from pg_timezone_names is stored.
+select tests.act_as(tests.id('k_admin'));
+do $$
+begin
+  perform tests.assert_raises(
+    format(
+      $q$insert into public.sync_sources (company_id, connection_id, provider, name, target_module,
+                                         sync_weekday, sync_time, sync_timezone)
+         values (%L, %L, 'google_sheets', 'Sample posix tab', 'sales_reporting', 1, '07:00', 'UTC+5')$q$,
+      tests.company('kingdom'), tests.id('k_sheets')
+    ),
+    'That time zone is not recognized.'
+  );
+  perform tests.assert_raises(
+    format(
+      $q$insert into public.sync_sources (company_id, connection_id, provider, name, target_module,
+                                         sync_weekday, sync_time, sync_timezone)
+         values (%L, %L, 'google_sheets', 'Sample posix tab', 'sales_reporting', 1, '07:00', 'Mars+3')$q$,
+      tests.company('kingdom'), tests.id('k_sheets')
+    ),
+    'That time zone is not recognized.'
+  );
+  insert into public.sync_sources (company_id, connection_id, provider, name, target_module,
+                                   sync_weekday, sync_time, sync_timezone)
+  values (tests.company('kingdom'), tests.id('k_sheets'), 'google_sheets', 'Sample posix tab',
+          'sales_reporting', 1, '07:00', 'America/Chicago');
+  perform tests.assert(
+    (select count(*) from public.sync_sources where name = 'Sample posix tab') = 1,
+    'posix_timezone_rejected: a source in America/Chicago was not stored'
+  );
+end $$;
+reset role;
+select set_config('request.jwt.claims', '', true);
+
 -- case: schedule_all_or_nothing
 select tests.act_as(tests.id('k_admin'));
 do $$
