@@ -1,7 +1,7 @@
 // Every page renders real content against the mocked data layer, for an admin and, where it
 // differs, an employee. The mocks mirror the services module for module, so a page calling a
 // service that does not exist fails here rather than in someone's browser.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -27,6 +27,7 @@ vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
+import * as companiesService from "../services/companies.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as winsService from "../services/wins.ts";
 import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
@@ -560,6 +561,24 @@ describe("admin", () => {
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
   });
 
+  it("keeps events that share a timestamp across the Load more boundary", async () => {
+    const user = userEvent.setup();
+    // The first page ends on two events stamped at the same instant as the newest fixture event
+    // (audit-1), so that instant straddles the page boundary. Paging by timestamp alone would
+    // skip audit-1; the (created_at, id) cursor picks it up.
+    const shared = AUDIT_EVENTS[0].created_at;
+    const newer = Array.from({ length: 98 }, (_, i) => ({ ...AUDIT_EVENTS[1], id: `page-${i}`, created_at: new Date(Date.UTC(2026, 9, 1) - i * 60_000).toISOString() }));
+    const tied = ["audit-1c", "audit-1b"].map((id) => ({ ...AUDIT_EVENTS[1], id, created_at: shared }));
+    const spy = vi.spyOn(auditService, "listAuditEvents").mockResolvedValueOnce([...newer, ...tied]);
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
+    await user.click(await screen.findByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links")).toBeInTheDocument();
+    expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ before: { created_at: shared, id: "audit-1b" } }));
+    expect(screen.getByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(104);
+  });
+
   it("says nothing is recorded for a company with no events", async () => {
     const user = userEvent.setup();
     renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
@@ -623,6 +642,53 @@ describe("navigation and modules", () => {
     await waitFor(() => expect(within(klasik).getByRole("checkbox", { name: "Wins" })).toBeChecked());
     await user.click(within(klasik).getByRole("checkbox", { name: "Wins" }));
     await waitFor(() => expect(within(klasik).getByRole("checkbox", { name: "Wins" })).not.toBeChecked());
+  });
+
+  it("lands two module ticks in a row without dropping the first", async () => {
+    const user = userEvent.setup();
+    const save = companiesService.updateCompany;
+    // Each save waits on a gate the test opens, so the first is still in flight when the second
+    // tick comes in.
+    const gates: Array<() => void> = [];
+    const spy = vi.spyOn(companiesService, "updateCompany").mockImplementation(async (id, patch) => {
+      await new Promise<void>((resolve) => gates.push(resolve));
+      return save(id, patch);
+    });
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });
+    const klasik = await screen.findByRole("group", { name: "Modules for Klasik Construction" });
+    const wins = within(klasik).getByRole("checkbox", { name: "Wins" });
+    const production = within(klasik).getByRole("checkbox", { name: "Production" });
+
+    // Two ticks in one go, before the page has a chance to re-render: the second builds on the first.
+    act(() => {
+      fireEvent.click(wins);
+      fireEvent.click(production);
+    });
+    expect(wins).toBeChecked();
+    expect(production).toBeChecked();
+    // While a save is in flight the module checkboxes wait for it.
+    expect(klasik).toBeDisabled();
+    // The saves go out one at a time, in order, each carrying the whole list so far.
+    for (const expected of [["wins"], ["wins", "production"]]) {
+      await waitFor(() => expect(gates).toHaveLength(1));
+      expect(spy.mock.calls[spy.mock.calls.length - 1][1].modules).toEqual(expected);
+      await act(async () => gates.shift()!());
+    }
+    await waitFor(() => expect(klasik).not.toBeDisabled());
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect((await companiesService.getCompany("co-klasik")).modules).toEqual(["wins", "production"]);
+    expect(wins).toBeChecked();
+    expect(production).toBeChecked();
+
+    // A tick after the save settles builds on what the database now holds, and puts the shared
+    // mock store back to [] for later tests.
+    spy.mockRestore();
+    await user.click(wins);
+    await waitFor(() => expect(wins).not.toBeChecked());
+    await user.click(production);
+    await waitFor(() => expect(production).not.toBeChecked());
+    expect((await companiesService.getCompany("co-klasik")).modules).toEqual([]);
   });
 });
 
@@ -1155,6 +1221,14 @@ describe("production", () => {
     expect(within(second).getByText("0 of 2 done")).toBeInTheDocument();
     expect(within(second).getByText("Sep 25, 2026")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New project" })).toBeInTheDocument();
+  });
+
+  it("describes the project reference in industry-neutral words", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
+    await user.click(await screen.findByRole("button", { name: "New project" }));
+    expect(screen.getByText("A project number or any short code your team uses.")).toBeInTheDocument();
+    expect(screen.queryByText(/job number/)).not.toBeInTheDocument();
   });
 
   it("lists the same projects for a member, without New project", async () => {

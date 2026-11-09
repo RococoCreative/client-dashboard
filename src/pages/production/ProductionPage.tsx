@@ -52,7 +52,7 @@ function NewProjectDialog({ companyId, onClose, onCreated }: { companyId: string
           <Field label="Name" htmlFor="project-name">
             <input id="project-name" type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} className={inputClass} />
           </Field>
-          <Field label="Reference" htmlFor="project-reference" hint="A job number or any short code your team uses.">
+          <Field label="Reference" htmlFor="project-reference" hint="A project number or any short code your team uses.">
             <input id="project-reference" type="text" value={reference} onChange={(e) => setReference(e.target.value)} className={inputClass} />
           </Field>
           <Field label="Notes" htmlFor="project-notes">

@@ -84,7 +84,8 @@ export default function ActivityPage() {
     setLoadingMore(true);
     setMoreError("");
     try {
-      const next = await listAuditEvents({ companyId: filter || undefined, before: events[events.length - 1].created_at, limit: PAGE_SIZE });
+      const oldest = events[events.length - 1];
+      const next = await listAuditEvents({ companyId: filter || undefined, before: { created_at: oldest.created_at, id: oldest.id }, limit: PAGE_SIZE });
       setMore({ after: firstPage, events: [...(extra?.events ?? []), ...next], lastPageSize: next.length });
     } catch (err) {
       setMoreError(errorMessage(err));
