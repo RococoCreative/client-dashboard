@@ -228,12 +228,13 @@ function csvProblemText(err: CsvError): string {
 }
 
 // The period a physical line reads as when it stands alone as a line of the import, or null.
-// It does when its period cell reads as a period and it either fills every column or reaches a
+// It does when its period cell is in a period form and it either fills every column or reaches a
 // revenue that is blank or a number. A note that only mentions a month ("Paid\nMar 2026, on
-// time") does neither.
+// time") does neither. The form is enough, as written and before any check on the date: a line
+// whose year is out of range ("0000") would get its own line error, so it is a line too.
 function linePeriod(cells: string[], width: number, periodColumns: number[], revenueColumns: number[]): string | null {
   const bare = (index: number) => (cells[index] ?? "").trim().replace(/^"|"$/g, "").trim();
-  const period = periodColumns.map(bare).find((text) => parsePeriod(text) !== null);
+  const period = periodColumns.map(bare).find((text) => periodParts(text, null) !== null);
   if (period === undefined) return null;
   if (cells.length >= width || revenueColumns.length === 0) return period;
   const revenue = revenueColumns.find((index) => index < cells.length);
@@ -248,12 +249,12 @@ function samePeriod(a: string, b: string): boolean {
 
 // A row whose physical lines read as a period the row does not keep, or as more periods than it
 // holds: the header row holds none, and a line of the import holds one, its own period, and only
-// when its period cell reads as one. A quote out of place has run those lines together into one
+// when its period cell is in a period form. A quote out of place has run those lines together into one
 // cell, and closed on a quote that happened to end a cell, so the reader cannot tell. Read on, a
 // period vanishes into a note or a column name, or its figures land on another period. The lines
 // are checked as written, so the columns can come in any order, and the row's own period is
-// worked out first: a row whose own line is malformed (no readable period, or short of its
-// revenue) still loses whatever other period its quote took in.
+// worked out first: a row whose own line is malformed (no period, an impossible one, or short of
+// its revenue) still loses whatever other period its quote took in.
 function swallowedPeriods(table: CsvTable, text: string): string[] {
   const lines = physicalLines(text);
   const indexes = (keys: string[]) => table.columns.flatMap((c, index) => (keys.includes(c.key) ? [index] : []));
@@ -266,8 +267,10 @@ function swallowedPeriods(table: CsvTable, text: string): string[] {
       .slice(row.line - 1, row.endLine)
       .map((line) => linePeriod(lineCells(line), table.columns.length, periodColumns, revenueColumns))
       .filter((period): period is string => period !== null);
-    const own = holds === 0 ? undefined : periodColumns.map((index) => row.cells[index] ?? "").find((cell) => parsePeriod(cell) !== null);
-    const foreign = periods.filter((period) => own === undefined || !samePeriod(period, own));
+    // The row's own period cell, read by form as linePeriod reads a line: "2026-04-31" or "0000"
+    // is still the row's own (its line error names it), while a blank cell is none.
+    const own = holds === 0 ? undefined : periodColumns.map((index) => (row.cells[index] ?? "").trim()).find((cell) => periodParts(cell, null) !== null);
+    const foreign = periods.filter((period) => own === undefined || (period !== own && !samePeriod(period, own)));
     if (periods.length <= holds && foreign.length === 0) return [];
     // Name a period the row does not keep as its own: the one lost, not the one that survives.
     const lost = foreign[0] ?? periods[holds];
@@ -275,15 +278,28 @@ function swallowedPeriods(table: CsvTable, text: string): string[] {
   });
 }
 
-// A column headed just "Type" is the period type only when its cells say so: at least one of them
-// reads as month, quarter or year. Otherwise it means something else (a job type, or actual
-// against budget), and the import leaves it out like any other column it does not read, rather
-// than refuse every line over it. A column headed "Period type" is always the period type.
-// Returns the header of such a column, or null when there is none.
+// Whether a cell in a column headed just "Type" is about the period at all: it is a period type,
+// or it holds a word that starts like one ("Quarter-end", "Qtrly", "Year-end", "Fiscal year",
+// "Annual maintenance", "FY"). Looser than normalizeType on purpose. It only decides whether the
+// column is the period type; normalizeType still decides what each cell reads as, so a cell
+// that passes here and not there is refused on its line, never read as a month by default.
+function mentionsPeriod(raw: string): boolean {
+  const text = raw.trim().toLowerCase();
+  return normalizeType(text) !== null || /\b(month|mth|quarter|qtr|year|yr|annual|fy\b|ytd\b)/.test(text);
+}
+
+// A column headed just "Type" is the period type unless none of its cells is about the period:
+// then it means something else (a job type, or actual against budget), and the import leaves it
+// out like any other column it does not read, rather than refuse every line over it. One cell
+// that mentions a period keeps the column, and any cell in it that is not a plain month, quarter
+// or year is then refused on its line. A column with every cell blank names nothing and is kept
+// too, so a period on two lines beside it is handled as in a file without it. A column headed
+// "Period type" is always the period type. Returns the header of a column left out, or null.
 function foreignTypeColumn(table: CsvTable): string | null {
   const typeColumns = table.columns.flatMap((c, index) => (c.key === "type" ? [index] : []));
   if (typeColumns.length === 0) return null;
-  if (table.rows.some((row) => typeColumns.some((index) => normalizeType(row.cells[index] ?? "") !== null))) return null;
+  const cells = table.rows.flatMap((row) => typeColumns.map((index) => row.cells[index] ?? ""));
+  if (cells.every((cell) => cell.trim() === "") || cells.some(mentionsPeriod)) return null;
   return table.columns[typeColumns[0]].header;
 }
 

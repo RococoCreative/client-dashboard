@@ -222,8 +222,8 @@ describe("financial CSV import, strict", () => {
       rows: [],
       errors: [swallowedAt(3, "Feb 2026")],
     });
-    // A row whose own period cell is blank or impossible holds no period, so the one period its
-    // quote takes in is lost, not kept as the row's own.
+    // A row whose own period cell is blank or impossible holds no period that will save, so the
+    // one period its quote takes in is lost, not kept as the row's own.
     for (const own of ["", "2026-04-31"]) {
       expect(parseSnapshotsCsv(`period,revenue,notes\n${own},100,"draw\nMar 2026,200,6"\nApr 2026,300,ok\n`)).toEqual({ rows: [], errors: [swallowedAt(2, "Mar 2026")] });
     }
@@ -234,6 +234,14 @@ describe("financial CSV import, strict", () => {
     expect(parseSnapshotsCsv('period,revenue,cogs,opex,notes\nMar-2026,100,1,1,"draw pending\nApr 2026,200,2,2,pipe 6"\nMay 2026,300,3,3,ok\n')).toEqual({
       rows: [],
       errors: [swallowedAt(2, "Apr 2026")],
+    });
+    // A swallowed line whose year is out of range is a line all the same: on its own it would get
+    // a line error, so it is never kept quietly inside a note.
+    expect(parseSnapshotsCsv('period,revenue,notes\nFeb 2026,100,"draw\n0000,200,x"\nApr 2026,300,ok\n')).toEqual({ rows: [], errors: [swallowedAt(2, "0000")] });
+    // A row whose own year is out of range keeps it as its own, and its line error names it.
+    expect(parseSnapshotsCsv('period,revenue,notes\n0000,100,"draw\nstill pending"\nApr 2026,300,ok\n')).toEqual({
+      rows: [{ period_type: "month", period_start: "2026-04-01", period_end: "2026-04-30", revenue: 300, cogs: 0, opex: 0, net_profit: null, cash_on_hand: null, notes: "ok" }],
+      errors: ['Line 2: the year in "0000" is not between 1900 and 2100.'],
     });
   });
 
@@ -252,11 +260,34 @@ describe("financial CSV import, strict", () => {
     expect(result.rows.map((r) => `${r.period_type}:${r.period_start}`)).toEqual(["year:2026-01-01"]);
   });
 
-  it("reads a bare Type column as the period type only when its cells say month, quarter or year", () => {
+  it("leaves out a bare Type column only when none of its cells is about the period", () => {
     // A Type column that means something else is left out, like any column the import does not read.
-    const jobs = parseSnapshotsCsv("period,Type,revenue\nJan 2026,Remodel,100\nFeb 2026,New build,200\nQ1 2026,Annual maintenance,300\n");
+    const jobs = parseSnapshotsCsv("period,Type,revenue\nJan 2026,Remodel,100\nFeb 2026,New build,200\nQ1 2026,Service call,300\n");
     expect(jobs.errors).toEqual([]);
     expect(jobs.rows.map((r) => `${r.period_type}:${r.period_start}:${r.revenue}`)).toEqual(["month:2026-01-01:100", "quarter:2026-01-01:300", "month:2026-02-01:200"]);
+    // A cell that only starts like a period word keeps the column as the period type, so a
+    // quarter-end or year-end figure is refused on its line, never filed as a month by default.
+    const typeError = (line: number, type: string) => `Line ${line}: the period type "${type}" is not month, quarter or year.`;
+    expect(parseSnapshotsCsv("period,Type,revenue\n2026-01-01,Quarter-end,100\n2026-04-01,Quarter-end,200\n")).toEqual({
+      rows: [],
+      errors: [typeError(2, "Quarter-end"), typeError(3, "Quarter-end")],
+    });
+    expect(parseSnapshotsCsv("period,Type,revenue\n2024-12-31,Year-end,1000\n2025-12-31,Year-end,1200\n")).toEqual({
+      rows: [],
+      errors: [typeError(2, "Year-end"), typeError(3, "Year-end")],
+    });
+    for (const type of ["Qtrly", "Quarterly total", "Fiscal year", "FY", "Mthly"]) {
+      expect(parseSnapshotsCsv(`period,Type,revenue\n2026-01,${type},100\n`)).toEqual({ rows: [], errors: [typeError(2, type)] });
+    }
+    // One such cell is enough, and then every cell that is not a period type is refused too: the
+    // import cannot tell which lines that column was meant to describe.
+    expect(parseSnapshotsCsv("period,Type,revenue\nJan 2026,Remodel,100\nQ1 2026,Annual maintenance,300\n").errors).toEqual([
+      typeError(2, "Remodel"),
+      typeError(3, "Annual maintenance"),
+    ]);
+    // A Type column with nothing in it names nothing, so a period on two lines beside it is read
+    // as in a file without it: the later line wins.
+    expect(parseSnapshotsCsv("period,type,revenue\n2026-03,,100\n2026-03,,150\n")).toMatchObject({ errors: [], rows: [{ period_start: "2026-03-01", revenue: 150 }] });
     // Left out, it may still be what tells two lines of one period apart (an actual and a budget,
     // or one line per job), so the import never picks one of them and drops the other.
     expect(parseSnapshotsCsv("period,Type,revenue\nJan 2026,Actual,100\nJan 2026,Budget,200\nFeb 2026,Actual,300\n")).toEqual({
