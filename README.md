@@ -99,7 +99,9 @@ a reload resets the data.
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
   compensation and deliverables with them and leaves their months with the old company. A
   pending invitation moves with them while they still need it to sign in, and manager links
-  across the two companies are cleared (0029).
+  across the two companies are cleared (0029). Setting someone to No company withdraws their
+  pending invitations, since there is no company for one to wait in; the company that places
+  them later invites them from its People page.
 
 ## The roster and accounts
 

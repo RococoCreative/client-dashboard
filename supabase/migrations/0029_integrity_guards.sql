@@ -7,10 +7,10 @@
 --      travelled to another company with their person, admins' notes and all. A goal in the
 --      months now always names its month, and moving a person takes only their yearly and BHAG
 --      goals.
---   2. Moving a person to another company leaves nothing pointing back. The old company's pending
---      invitation for them moves with them while they still need it to sign in, and is withdrawn
---      otherwise; their manager link goes if the manager stays behind; and nobody left behind
---      still reports to them.
+--   2. Moving a person to another company, or to No company, leaves nothing pointing back. The old
+--      company's pending invitation for them moves with them while they still need it to sign in,
+--      and is withdrawn otherwise (always, for No company); their manager link goes if the manager
+--      stays behind; and nobody left behind still reports to them.
 --   3. A pillar or criterion that is part of a signed-off review cannot be deleted. Deleting one
 --      took its frozen rows with it while the review's pillar snapshot kept its weight, so every
 --      signed-off review it was part of quietly lost points. Retiring it (untick Active) is the
@@ -125,14 +125,17 @@ revoke execute on function public.guard_goal_frozen() from public, anon, authent
 -- ---------------------------------------------------------------------------------------
 -- Same as 0021, with three changes. Monthly goals are picked by scope rather than by a null
 -- cycle, so a goal in the months never moves (and 0028 keeps it with its month's company).
--- Anyone who is not in the new company stops reporting to the person. And a pending invitation
--- the old company made for them is settled: while they have no account and the address is
--- theirs, it moves to the new company, because the sign-in gate (0002) only admits a personal
--- address with a pending invitation; otherwise it is withdrawn. Left where it was, it stayed
--- pending for good on the old company's portfolio card, where nobody could see or cancel it.
+-- Anyone who is not in the new company stops reporting to the person. And on every change of
+-- company, No company included, the pending invitations that point back are settled. While the
+-- person has no account and the address is theirs, the old company's invitation moves to the new
+-- company, because the sign-in gate (0002) only admits a personal address with a pending
+-- invitation; otherwise it is withdrawn. Left where it was, it stayed pending for good on the old
+-- company's portfolio card, where nobody could see or cancel it once the person was off its
+-- roster, and at their first sign-in it put them back in the company they had been taken out of.
 -- invitations_company_email_key allows one invitation per company and address, so the move
--- only happens when the new company has none of its own for them. Setting someone to No company
--- moves nothing, invitations included; placing them afterwards settles all of it.
+-- only happens when the new company has none of its own for them. No company has nowhere to
+-- move an invitation to, so setting someone there withdraws it; whichever company places them
+-- later invites them from its People page.
 create or replace function public.move_employee_company()
 returns trigger
 language plpgsql
@@ -140,14 +143,49 @@ security definer
 set search_path = ''
 as $$
 begin
-  if new.company_id is distinct from old.company_id then
-    update public.profiles
-       set reports_to = null
-     where reports_to = new.id
-       and company_id is distinct from new.company_id;
+  if new.company_id is not distinct from old.company_id then
+    return new;
   end if;
 
-  if new.company_id is distinct from old.company_id and new.company_id is not null then
+  update public.profiles
+     set reports_to = null
+   where reports_to = new.id
+     and company_id is distinct from new.company_id;
+
+  -- The invitations to settle: any pending one in another company that names this person, and
+  -- the old company's for their address that names nobody. Naming them also covers an invitation
+  -- Rococo made for someone while they had no company. At most one moves (the newest), since a
+  -- company holds one invitation per address; the rest are withdrawn. This runs for every writer,
+  -- the SQL editor and handle_new_user included. When handle_new_user places someone at first
+  -- sign-in it claims the row in the same write, so nothing moves, and the invitation it is about
+  -- to accept is already in the new company, so only the others go.
+  if new.company_id is not null then
+    update public.invitations i
+       set company_id = new.company_id,
+           profile_id = new.id
+     where i.id = (
+             select c.id from public.invitations c
+              where c.accepted_at is null
+                and c.company_id is distinct from new.company_id
+                and c.email = lower(new.email)
+                and (c.profile_id = new.id
+                     or (c.profile_id is null and c.company_id = old.company_id))
+              order by c.created_at desc, c.id
+              limit 1
+           )
+       and new.user_id is null
+       and not exists (
+         select 1 from public.invitations j
+          where j.company_id = new.company_id and j.email = lower(new.email)
+       );
+  end if;
+  delete from public.invitations i
+   where i.accepted_at is null
+     and i.company_id is distinct from new.company_id
+     and (i.profile_id = new.id
+          or (i.profile_id is null and i.company_id = old.company_id and i.email = lower(new.email)));
+
+  if new.company_id is not null then
     update public.employee_kpis        set company_id = new.company_id where employee_id = new.id;
     update public.employee_financials  set company_id = new.company_id where employee_id = new.id;
     update public.compensation_items   set company_id = new.company_id where employee_id = new.id;
@@ -162,39 +200,6 @@ begin
      where employee_id = new.id;
     update public.deliverable_tasks    set company_id = new.company_id where employee_id = new.id;
     delete from public.impact_scores where employee_id = new.id;
-
-    -- The invitations to settle: any pending one in another company that names this person,
-    -- and the old company's for their address that names nobody. Naming them covers a move
-    -- made in two steps through No company on the Users page, where the second step no longer
-    -- knows the old company. At most one moves (the newest), since a company holds one
-    -- invitation per address; the rest are withdrawn. Placing someone who had no company at
-    -- first sign-in is handle_new_user's own write, with nobody signed in, and it settles the
-    -- invitation itself.
-    if old.company_id is not null or (select auth.uid()) is not null then
-      update public.invitations i
-         set company_id = new.company_id,
-             profile_id = new.id
-       where i.id = (
-               select c.id from public.invitations c
-                where c.accepted_at is null
-                  and c.company_id is distinct from new.company_id
-                  and c.email = lower(new.email)
-                  and (c.profile_id = new.id
-                       or (c.profile_id is null and c.company_id = old.company_id))
-                order by c.created_at desc, c.id
-                limit 1
-             )
-         and new.user_id is null
-         and not exists (
-           select 1 from public.invitations j
-            where j.company_id = new.company_id and j.email = lower(new.email)
-         );
-      delete from public.invitations i
-       where i.accepted_at is null
-         and i.company_id is distinct from new.company_id
-         and (i.profile_id = new.id
-              or (i.profile_id is null and i.company_id = old.company_id and i.email = lower(new.email)));
-    end if;
   end if;
   return new;
 end;
