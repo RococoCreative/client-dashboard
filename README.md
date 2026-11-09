@@ -106,7 +106,9 @@ a reload resets the data.
   pending invitation moves with them while they still need it to sign in, and manager links
   across the two companies are cleared (0029). Setting someone to No company withdraws their
   pending invitations, since there is no company for one to wait in; the company that places
-  them later invites them from its People page.
+  them later invites them from its People page. A parked person whose address is on a company's
+  sign-in domain can still sign in, and lands in No company: placement follows the roster row,
+  never the domain.
 
 ## The roster and accounts
 
@@ -114,7 +116,8 @@ A person on a company's roster is not the same thing as an account. An admin add
 People and fills in their whole profile (title, department, hire date, who they report to,
 compensation, KPIs) before anybody sends them anything. `profiles.user_id` is null until they
 first sign in, and every row shows which of three states it is in: Not invited, Invited, or
-Active. Sending an invitation creates the invitation row, points it at that profile, and copies
+Active. Any row except your own and a Rococo admin's can also be deactivated, signed in or not,
+and then reads Inactive; an inactive person is left out of new review cycles until reactivated. Sending an invitation creates the invitation row, points it at that profile, and copies
 a sign-in link to the clipboard; the hub sends no email.
 
 Signing in claims the profile that is already there rather than creating a second one, whether
