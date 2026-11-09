@@ -1,6 +1,9 @@
 // A small RFC 4180 CSV parser for the financial snapshot upload: quoted fields, escaped
 // quotes, CRLF or LF line endings, and a header row mapped to objects. No dependency
 // because the input is a spreadsheet export a few dozen rows long.
+import { normalizeHeader } from "../../supabase/functions/_shared/sync/parse.ts";
+export { normalizeHeader };
+
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -44,17 +47,6 @@ export function parseCsv(text: string): string[][] {
   }
   // A trailing newline produces one empty row; drop fully empty rows anywhere.
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
-}
-
-// Header keys are lowercased with spaces and punctuation collapsed to underscores, so
-// "Net Profit" and "net_profit" and "NET PROFIT ($)" all read as net_profit.
-export function normalizeHeader(header: string): string {
-  return header
-    .trim()
-    .toLowerCase()
-    .replace(/\(.*?\)/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
 }
 
 export function csvToObjects(text: string): Record<string, string>[] {

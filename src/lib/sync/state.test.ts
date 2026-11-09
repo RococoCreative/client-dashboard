@@ -1,0 +1,65 @@
+// Proves the six honest states a data source shows, in precedence order.
+import { describe, expect, it } from "vitest";
+import { SYNC_STATE_LABELS, ageHours, syncState } from "./state.ts";
+import type { SyncSource } from "../../types/database.ts";
+
+const now = new Date("2026-11-09T14:00:00Z");
+const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600000).toISOString();
+type SourceState = Pick<SyncSource, "last_status" | "last_success_at" | "stale_after_hours">;
+const source = (patch: Partial<SourceState> = {}): SourceState => ({
+  last_status: null,
+  last_success_at: null,
+  stale_after_hours: null,
+  ...patch,
+});
+const connected = { status: "connected" as const };
+
+describe("syncState", () => {
+  it("is not connected without a working connection, whatever happened before", () => {
+    expect(syncState(source({ last_status: "failed" }), null, now)).toBe("not_connected");
+    expect(syncState(source(), { status: "not_connected" }, now)).toBe("not_connected");
+  });
+
+  it("is syncing while a run is going", () => {
+    expect(syncState(source({ last_status: "running" }), { status: "error" }, now)).toBe("syncing");
+  });
+
+  it("is failed after a failed or abandoned run, or when the connection needs attention", () => {
+    expect(syncState(source({ last_status: "failed", last_success_at: hoursAgo(1) }), connected, now)).toBe("failed");
+    expect(syncState(source({ last_status: "abandoned", last_success_at: hoursAgo(1) }), connected, now)).toBe("failed");
+    expect(syncState(source({ last_status: "succeeded", last_success_at: hoursAgo(1) }), { status: "error" }, now)).toBe("failed");
+    expect(syncState(source({ last_status: "failed" }), connected, now)).toBe("failed");
+  });
+
+  it("awaits its first sync until one succeeds", () => {
+    expect(syncState(source(), connected, now)).toBe("awaiting_first_sync");
+  });
+
+  it("is stale only past its own threshold", () => {
+    const ok = { last_status: "succeeded" as const, stale_after_hours: 24 };
+    expect(syncState(source({ ...ok, last_success_at: hoursAgo(25) }), connected, now)).toBe("stale");
+    expect(syncState(source({ ...ok, last_success_at: hoursAgo(23) }), connected, now)).toBe("synced");
+    expect(syncState(source({ ...ok, last_success_at: hoursAgo(24) }), connected, now)).toBe("synced");
+    expect(syncState(source({ ...ok, stale_after_hours: null, last_success_at: hoursAgo(1000) }), connected, now)).toBe("synced");
+  });
+});
+
+describe("ageHours", () => {
+  it("is the hours since the last success, or null", () => {
+    expect(ageHours(null, now)).toBeNull();
+    expect(ageHours(new Date(now.getTime() - 90 * 60000).toISOString(), now)).toBe(1.5);
+  });
+});
+
+describe("SYNC_STATE_LABELS", () => {
+  it("names every state plainly", () => {
+    expect(SYNC_STATE_LABELS).toEqual({
+      not_connected: "Not connected",
+      awaiting_first_sync: "Awaiting first sync",
+      syncing: "Syncing",
+      failed: "Sync failed",
+      stale: "Stale data",
+      synced: "Synced",
+    });
+  });
+});

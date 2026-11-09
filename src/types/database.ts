@@ -4,6 +4,8 @@
 // selects all agree on one vocabulary.
 
 import type { ScoringType } from "../lib/gsr/scoring.ts";
+import type { FieldMapEntry, FieldType, SourceConfig, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
+export type { FieldType, FieldMapEntry, SourceConfig, SheetsSourceConfig, QuickBooksSourceConfig, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
 export type Role = "admin" | "employee";
@@ -626,6 +628,77 @@ export interface CompanyConnection {
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+// Data sources
+// What a company reads from its own accounts, each run of a sync, and the records a run brought
+// in (0028). Records are read-only; only the sync writes them. The shapes a sync works with live
+// in supabase/functions/_shared/sync/types.ts, shared with the connections function.
+export const TARGET_MODULE_LABELS: Record<TargetModule, string> = {
+  sales_reporting: "Sales reporting",
+  financial_reporting: "Financial reporting",
+  controls: "Controls",
+  pm_capacity: "PM capacity",
+};
+export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+  text: "Text",
+  number: "Number",
+  currency: "Currency",
+  percent: "Percent",
+  date: "Date",
+};
+export type SyncRunStatus = "running" | "succeeded" | "failed" | "abandoned";
+export type SyncTrigger = "schedule" | "manual";
+export interface SyncSource {
+  id: string;
+  company_id: string;
+  connection_id: string;
+  provider: SyncProvider;
+  name: string;
+  target_module: TargetModule;
+  config: SourceConfig;
+  field_map: FieldMapEntry[];
+  record_key: string[];
+  sync_weekday: number | null;
+  sync_time: string | null;
+  sync_timezone: string | null;
+  stale_after_hours: number | null;
+  enabled: boolean;
+  current_run_id: string | null;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_status: SyncRunStatus | null;
+  last_error: string | null;
+  sync_requested_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface SyncRun {
+  id: string;
+  company_id: string;
+  source_id: string;
+  connection_id: string;
+  trigger_kind: SyncTrigger;
+  requested_by: string | null;
+  status: SyncRunStatus;
+  started_at: string;
+  finished_at: string | null;
+  rows_read: number;
+  rows_applied: number;
+  rows_blank: number;
+  error_detail: unknown | null;
+}
+export interface SyncRecord {
+  id: string;
+  company_id: string;
+  source_id: string;
+  run_id: string;
+  record_key: string;
+  data: Record<string, string | number | null>;
+  source_ref: Record<string, unknown>;
+  created_at: string;
 }
 
 // Audit
