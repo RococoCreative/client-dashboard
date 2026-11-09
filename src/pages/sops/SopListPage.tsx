@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Plus, Search } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
+import Chip from "../../components/ui/Chip.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -51,14 +52,9 @@ export default function SopListPage() {
         </div>
         <div className="flex flex-wrap gap-1.5">
           {(["all", ...categories] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setCategory(key)}
-              className={`rounded-full border px-3 py-1 text-[12px] transition-colors duration-150 ${category === key ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`}
-            >
+            <Chip key={key} active={category === key} onClick={() => setCategory(key)}>
               {key === "all" ? "All" : SOP_CATEGORY_LABELS[key]}
-            </button>
+            </Chip>
           ))}
         </div>
       </div>

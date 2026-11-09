@@ -1,3 +1,5 @@
+// The financial snapshot math and the CSV import: margins, periods, and every way a file is
+// read, reported, or refused before anything is written over a real period.
 import { describe, expect, it } from "vitest";
 import { deriveSnapshot, parsePeriod, parseSnapshotsCsv, periodLabel, snapPeriodEnd } from "./financials.ts";
 
@@ -45,7 +47,7 @@ describe("financial snapshots", () => {
     );
     expect(result.errors).toEqual([
       'Line 5: could not read the period "nonsense".',
-      "Line 6: revenue is missing or not a number.",
+      "Line 6: revenue is missing.",
     ]);
     expect(result.rows).toHaveLength(2);
     expect(result.rows[0]).toMatchObject({ period_type: "month", period_start: "2026-07-01", period_end: "2026-07-31", revenue: 412000, cogs: 268000, opex: 96000, net_profit: null, cash_on_hand: 155000 });
@@ -55,5 +57,114 @@ describe("financial snapshots", () => {
 
   it("flags an empty file", () => {
     expect(parseSnapshotsCsv("").errors[0]).toMatch(/No rows/);
+  });
+});
+
+describe("financial CSV import, strict", () => {
+  it("reports a figure it cannot read instead of saving it as zero or blank", () => {
+    const result = parseSnapshotsCsv(
+      "period,revenue,cogs,opex,net_profit,cash_on_hand\n" +
+        "2026-01,100000,6O000,2O000,,\n" +
+        "2026-02,100000,n/a,TBD,,\n" +
+        "2026-03,100000,,,,\n" +
+        "2026-04,100000,50000,20000,1O000,\n" +
+        "2026-05,100000,50000,20000,,lots\n",
+    );
+    expect(result.errors).toEqual([
+      'Line 2: direct costs "6O000" is not a number.',
+      'Line 2: overhead "2O000" is not a number.',
+      'Line 3: direct costs "n/a" is not a number.',
+      'Line 3: overhead "TBD" is not a number.',
+      'Line 5: net profit "1O000" is not a number.',
+      'Line 6: cash on hand "lots" is not a number.',
+    ]);
+    // A blank cost still reads as zero and a blank net or cash as not recorded.
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ period_start: "2026-03-01", cogs: 0, opex: 0, net_profit: null, cash_on_hand: null });
+  });
+
+  it("names a missing revenue apart from an unreadable one", () => {
+    const result = parseSnapshotsCsv("period,revenue,cogs\n2026-01,,1\n2026-02,€1000,1\n");
+    expect(result.errors).toEqual(["Line 2: revenue is missing.", 'Line 3: revenue "€1000" is not a number.']);
+    expect(result.rows).toEqual([]);
+  });
+
+  it("refuses a figure too large to save or with a third decimal place", () => {
+    const result = parseSnapshotsCsv("period,revenue,cogs,opex\n2026-01,1000000000000,1,1\n2026-02,100,\"1.234,56\",1\n2026-03,100.50,1.10,0.333\n2026-04,999999999999.99,1,1\n");
+    expect(result.errors).toEqual([
+      'Line 2: revenue "1000000000000" is too large to save.',
+      'Line 3: direct costs "1.234,56" has more than two decimal places.',
+      'Line 4: overhead "0.333" has more than two decimal places.',
+    ]);
+    expect(result.rows.map((r) => r.revenue)).toEqual([999999999999.99]);
+  });
+
+  it("never rolls an impossible date into the next period", () => {
+    for (const text of ["2026-04-31", "2026-02-29", "2026-13-01", "2026-00-10", "13/2026", "0/2026", "2026/13", "2026-00"]) {
+      expect(parsePeriod(text)).toBeNull();
+    }
+    expect(parsePeriod("2028-02-29")).toEqual({ type: "month", start: "2028-02-01" });
+    expect(parsePeriod("12/2026")).toEqual({ type: "month", start: "2026-12-01" });
+    const result = parseSnapshotsCsv("period,revenue,cogs,opex\n2026-04-31,111,1,1\n2026-05-31,222,2,2\n");
+    expect(result.errors).toEqual(['Line 2: could not read the period "2026-04-31".']);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ period_start: "2026-05-01", revenue: 222 });
+  });
+
+  it("refuses a file where two columns read as the same figure", () => {
+    const result = parseSnapshotsCsv("Period,Revenue (Actual),Revenue (Budget),COGS,COGS (%),Opex\nJan 2026,100000,250000,60000,60%,20000\n");
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual([
+      'The columns "Revenue (Actual)" and "Revenue (Budget)" both read as revenue. Rename or remove one, then import again.',
+      'The columns "COGS" and "COGS (%)" both read as direct costs. Rename or remove one, then import again.',
+    ]);
+    // A repeated column the import does not read is no reason to refuse it.
+    expect(parseSnapshotsCsv("period,revenue,memo (a),memo (b)\n2026-01,100,x,y\n").errors).toEqual([]);
+  });
+
+  it("refuses a file with a quote that never closes", () => {
+    const result = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,"draw pending\n2026-02,200,ok\n');
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual(["Line 2: a quote opens here and never closes, so every line after it would be read as one cell. Close or remove it, then import again."]);
+    // A quote inside a note is just a character.
+    const inch = parseSnapshotsCsv('period,revenue,notes\n2026-01,100,6" pipe\n2026-02,200,ok\n');
+    expect(inch.errors).toEqual([]);
+    expect(inch.rows.map((r) => r.notes)).toEqual(['6" pipe', "ok"]);
+  });
+
+  it("reads the period type people write and refuses one it cannot, or one the period contradicts", () => {
+    const result = parseSnapshotsCsv(
+      "period_type,period,revenue\n" +
+        "Qtr,2026-07,1\n" +
+        "Y,2025-09,2\n" +
+        "annual,Dec 2024,3\n" +
+        "mo,2026-03,4\n" +
+        "Weekly,2026-04,5\n" +
+        "month,Q3 2026,6\n" +
+        "month,2023,7\n" +
+        "year,Q1 2022,8\n",
+    );
+    expect(result.rows.map((r) => `${r.period_type}:${r.period_start}`)).toEqual(["year:2024-01-01", "year:2025-01-01", "month:2026-03-01", "quarter:2026-07-01"]);
+    expect(result.errors).toEqual([
+      'Line 6: the period type "Weekly" is not month, quarter or year.',
+      'Line 7: "Q3 2026" is a quarter, but the period type says month.',
+      'Line 8: "2023" is a year, but the period type says month.',
+      'Line 9: "Q1 2022" is a quarter, but the period type says year.',
+    ]);
+  });
+
+  it("says plainly when a file has only its header row", () => {
+    expect(parseSnapshotsCsv("period,revenue,cogs,opex\n").errors).toEqual(["The file has a header row but no periods under it."]);
+  });
+
+  it("says when a file is separated by semicolons or tabs rather than reporting every period as unreadable", () => {
+    expect(parseSnapshotsCsv("period;revenue;cogs;opex\n2026-01;1000;500;200\n")).toEqual({
+      rows: [],
+      errors: ["This file is separated by semicolons, not commas. Save it as CSV (comma delimited) and import it again."],
+    });
+    expect(parseSnapshotsCsv("period\trevenue\tcogs\topex\n2026-01\t1000\t500\t200\n")).toEqual({
+      rows: [],
+      errors: ["These rows are separated by tabs, which is how a spreadsheet copies cells. Save the sheet as CSV (comma delimited) and import that file."],
+    });
   });
 });

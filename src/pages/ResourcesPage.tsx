@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { ExternalLink, FileText, Link2, Pencil, Plus, Search, Trash2, Video } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
+import Chip from "../components/ui/Chip.tsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.tsx";
 import EmptyState from "../components/ui/EmptyState.tsx";
 import Field from "../components/ui/Field.tsx";
@@ -170,9 +171,9 @@ export default function ResourcesPage() {
         </div>
         {allTags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => setTag(null)} className={`rounded-full border px-3 py-1 text-[12px] transition-colors duration-150 ${tag === null ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`}>All</button>
+            <Chip active={tag === null} onClick={() => setTag(null)}>All</Chip>
             {allTags.map((t) => (
-              <button key={t} type="button" onClick={() => setTag(tag === t ? null : t)} className={`rounded-full border px-3 py-1 text-[12px] transition-colors duration-150 ${tag === t ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`}>{t}</button>
+              <Chip key={t} active={tag === t} onClick={() => setTag(tag === t ? null : t)}>{t}</Chip>
             ))}
           </div>
         ) : null}
@@ -212,7 +213,7 @@ export default function ResourcesPage() {
               {resource.tags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {resource.tags.map((t) => (
-                    <button key={t} type="button" aria-label={`Filter by tag ${t}`} onClick={() => setTag(t)} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-ink-2 hover:text-ink">{t}</button>
+                    <Chip key={t} size="sm" active={tag === t} aria-label={`Filter by tag ${t}`} onClick={() => setTag(t)}>{t}</Chip>
                   ))}
                 </div>
               ) : null}

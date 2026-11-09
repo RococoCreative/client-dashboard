@@ -278,6 +278,15 @@ are flexible; these all work: `period` (or `period_start`, `month`, `date`), `re
 `2026`. Money may carry `$` and commas; parentheses mean negative. Re-importing the same
 period overwrites it.
 
+The import reads strictly, because a guess here is written over a real period. A filled-in
+cell that does not read as money (`n/a`, `6O,000`, `5%`), a figure of a trillion or more, a
+third decimal place, an impossible date (`2026-04-31`), and a `period_type` that is not a
+month, quarter or year (`qtr`, `yr` and `mo` are fine) or that the period contradicts
+(`month` beside `Q3 2026`) are each reported by line, and that period is left out rather
+than saved as a zero or a blank. A file separated by semicolons or tabs, a file with two
+columns that read as the same figure (`Revenue (Actual)` and `Revenue (Budget)`), and a file
+with a quote that never closes are refused whole, with the reason.
+
 ## Branding
 
 Each company has a `theme_key` (`klasik`, `kingdom`, `rba`, or the default `rococo`). The

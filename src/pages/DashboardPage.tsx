@@ -28,6 +28,7 @@ import { listResources } from "../services/resources.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
+import { liveCampaignTotals } from "../lib/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
 import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
@@ -207,14 +208,9 @@ function AdminDashboard() {
   const goalsHit = companyGoals.filter((g) => g.is_hit).length;
   const latestMonth = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start))[0] ?? snapshots[0] ?? null;
   const latestDerived = latestMonth ? deriveSnapshot(latestMonth) : null;
-  const liveCampaigns = campaigns.filter((c) => c.status === "active" || c.status === "paused");
-  // Spend against budget is only a share of anything when both sides cover the same campaigns.
-  // Counting a campaign with no budget set as zero budget while counting its spend in full read
-  // "$13,400 spent of $12,000 (112%)": over budget against a total that left one campaign out.
-  const budgeted = liveCampaigns.filter((c) => c.budget !== null);
-  const unbudgeted = liveCampaigns.length - budgeted.length;
-  const liveBudget = budgeted.reduce((sum, c) => sum + (c.budget ?? 0), 0);
-  const liveSpend = budgeted.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0);
+  // Budget and spend over the same live campaigns, with the unbudgeted counted apart, read the
+  // way the Marketing board and the Rococo portfolio read them.
+  const { live: liveCampaigns, unbudgeted, budget: liveBudget, spend: liveSpend } = liveCampaignTotals(campaigns);
 
   return (
     <>

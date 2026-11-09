@@ -26,6 +26,8 @@ import { listCampaigns } from "../../services/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, weightTotal } from "../../lib/gsr/scoring.ts";
 import { cycleProgress, cyclesInPlay } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
+import { liveCampaignTotals } from "../../lib/marketing.ts";
+import { hasAccount } from "../../lib/people.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -36,6 +38,8 @@ interface CompanySummary {
   company: Company;
   domains: string[];
   people: number;
+  // Active people who have never signed in. They are on the roster all the same.
+  notSignedIn: number;
   admins: number;
   cycles: ReviewCycle[];
   reviewsComplete: number;
@@ -48,6 +52,7 @@ interface CompanySummary {
   liveCampaigns: number;
   liveBudget: number;
   liveSpend: number;
+  liveUnbudgeted: number;
   pendingInvites: number;
   alerts: string[];
 }
@@ -90,7 +95,9 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   const lastSop = [...sops].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))[0] ?? null;
   const months = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start));
   const latestSnapshot = months[0] ?? snapshots[0] ?? null;
-  const live = campaigns.filter((c) => c.status === "active" || c.status === "paused");
+  // Read the way the company's own Marketing board and dashboard read it, so the card never
+  // shows a company over budget that its own screens show at half.
+  const marketing = liveCampaignTotals(campaigns);
   const pending = invitations.filter((i) => !i.accepted_at);
   const ownDomains = domains.filter((d) => d.company_id === company.id).map((d) => d.domain);
   const pillarTotal = weightTotal(pillars);
@@ -109,6 +116,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     company,
     domains: ownDomains,
     people: active.length,
+    notSignedIn: active.filter((p) => !hasAccount(p)).length,
     admins: admins.length,
     cycles: liveCycles,
     // Both halves counted over the same set: every live cycle owes a review for everybody
@@ -126,9 +134,10 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     publishedSops: published.length,
     lastSopUpdate: lastSop?.updated_at ?? null,
     latestSnapshot,
-    liveCampaigns: live.length,
-    liveBudget: live.reduce((sum, c) => sum + (c.budget ?? 0), 0),
-    liveSpend: live.reduce((sum, c) => sum + (c.actual_spend ?? 0), 0),
+    liveCampaigns: marketing.live.length,
+    liveBudget: marketing.budget,
+    liveSpend: marketing.spend,
+    liveUnbudgeted: marketing.unbudgeted,
     pendingInvites: pending.length,
     alerts,
   };
@@ -142,6 +151,15 @@ function Signal({ label, value, hint }: { label: string; value: string; hint?: s
       {hint ? <dd className="truncate text-[12px] text-ink-2">{hint}</dd> : null}
     </div>
   );
+}
+
+// "$9.5K of $17K · 1 with no budget set": spend against budget over the budgeted campaigns,
+// and the ones with no budget named apart rather than added to the spend.
+function marketingHint(summary: CompanySummary): string | undefined {
+  const parts: string[] = [];
+  if (summary.liveBudget > 0) parts.push(`${formatMoney(summary.liveSpend, true)} of ${formatMoney(summary.liveBudget, true)}`);
+  if (summary.liveUnbudgeted > 0) parts.push(`${summary.liveUnbudgeted} with no budget set`);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (path: string) => void }) {
@@ -186,7 +204,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
         <Signal
           label="Marketing"
           value={pluralize(summary.liveCampaigns, "live campaign")}
-          hint={summary.liveBudget > 0 ? `${formatMoney(summary.liveSpend, true)} of ${formatMoney(summary.liveBudget, true)}` : undefined}
+          hint={marketingHint(summary)}
         />
       </dl>
 
@@ -240,6 +258,7 @@ export default function PortfolioPage() {
   const summaries = state.data ?? [];
   const totals = {
     people: summaries.reduce((sum, s) => sum + s.people, 0),
+    notSignedIn: summaries.reduce((sum, s) => sum + s.notSignedIn, 0),
     openCycles: summaries.filter((s) => s.cycles.length > 0).length,
     pending: summaries.reduce((sum, s) => sum + s.pendingInvites, 0),
     attention: summaries.filter((s) => s.alerts.length > 0).length,
@@ -266,7 +285,7 @@ export default function PortfolioPage() {
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-4">
             <Stat label="Companies" value={companies.length} hint={pluralize(totals.attention, "needs attention", "need attention")} />
-            <Stat label="People" value={totals.people} hint="Active accounts across the hub" />
+            <Stat label="People" value={totals.people} hint={totals.notSignedIn > 0 ? `Active people, ${totals.notSignedIn} not signed in yet` : "Active people across the hub"} />
             <Stat label="Open cycles" value={totals.openCycles} hint={`of ${companies.length} companies`} />
             <Stat label="Pending invitations" value={totals.pending} />
           </div>

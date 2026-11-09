@@ -5,6 +5,7 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
+import Chip from "../components/ui/Chip.tsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.tsx";
 import EmptyState from "../components/ui/EmptyState.tsx";
 import Field from "../components/ui/Field.tsx";
@@ -21,8 +22,26 @@ import { useAsync } from "../hooks/useAsync.ts";
 import { createSnapshot, deleteSnapshot, listSnapshots, updateSnapshot, upsertSnapshots } from "../services/financials.ts";
 import { CSV_HEADER_HELP, CSV_SAMPLE, deriveSnapshot, parseSnapshotsCsv, periodLabel, snapPeriodEnd, snapPeriodStart, type CsvImportResult } from "../lib/financials.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatMoney, formatPercent, parseDate, parseMoney, pluralize, todayIso } from "../lib/format.ts";
-import { PERIOD_TYPE_LABELS, keysOf, type FinancialSnapshot, type PeriodType } from "../types/database.ts";
+import { formatMoney, formatPercent, moneyFieldError, parseDate, parseMoney, pluralize, todayIso } from "../lib/format.ts";
+import { PERIOD_TYPE_LABELS, keysOf, type FinancialSnapshot, type PeriodType, type SnapshotSource } from "../types/database.ts";
+
+type FigureField = "revenue" | "cogs" | "opex" | "net" | "cash";
+
+// How a field message names each figure, and the example it offers to type.
+const FIGURE_COPY: Record<FigureField, { label: string; example: string }> = {
+  revenue: { label: "the revenue", example: "412000" },
+  cogs: { label: "direct costs", example: "268000" },
+  opex: { label: "overhead", example: "96000" },
+  net: { label: "net profit", example: "48000" },
+  cash: { label: "cash on hand", example: "155000" },
+};
+
+// Where a period's figures came from, for the stat under the latest period.
+const SOURCE_HINT: Record<SnapshotSource, string> = {
+  manual: "Entered by hand",
+  csv: "From CSV import",
+  quickbooks: "From QuickBooks",
+};
 
 function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: { companyId: string; snapshot: FinancialSnapshot | null; defaultType: PeriodType; onClose: () => void; onSaved: (s: FinancialSnapshot) => void }) {
   const [type, setType] = useState<PeriodType>(snapshot?.period_type ?? defaultType);
@@ -35,17 +54,40 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
   const [notes, setNotes] = useState(snapshot?.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FigureField, string>>>({});
 
   const preview = deriveSnapshot({ revenue: parseMoney(revenue) ?? 0, cogs: parseMoney(cogs) ?? 0, opex: parseMoney(opex) ?? 0, net_profit: parseMoney(net) });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    const revenueValue = parseMoney(revenue);
-    if (revenueValue === null) return setError("Enter the revenue for the period.");
+    // A figure that is filled in but will not save is named under its field, never stored as a
+    // zero or a blank: a cost read as zero is a 100% margin nobody earned.
+    const values: Record<FigureField, string> = { revenue, cogs, opex, net, cash };
+    const problems: Partial<Record<FigureField, string>> = {};
+    for (const key of keysOf(values)) {
+      const message = moneyFieldError(FIGURE_COPY[key].label, values[key], FIGURE_COPY[key].example);
+      if (message) problems[key] = message;
+    }
+    if (!revenue.trim()) problems.revenue = "Enter the revenue for the period.";
+    setFieldErrors(problems);
+    if (Object.keys(problems).length > 0) {
+      setError("");
+      return;
+    }
     const startDate = parseDate(start);
     if (!startDate) return setError("Pick the period.");
     const snapped = snapPeriodStart(type, startDate);
+    const figures = {
+      revenue: parseMoney(revenue) ?? 0,
+      cogs: parseMoney(cogs) ?? 0,
+      opex: parseMoney(opex) ?? 0,
+      net_profit: parseMoney(net),
+      cash_on_hand: parseMoney(cash),
+    };
+    // A figure corrected by hand is a hand entry from then on, as on a person's own figures, so
+    // an import badge never vouches for a number someone overrode. A note alone changes no figure.
+    const handEdited = snapshot !== null && snapshot.source !== "manual" && (Object.keys(figures) as Array<keyof typeof figures>).some((key) => figures[key] !== snapshot[key]);
     setBusy(true);
     setError("");
     try {
@@ -53,12 +95,9 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
         period_type: type,
         period_start: snapped,
         period_end: snapPeriodEnd(type, snapped),
-        revenue: revenueValue,
-        cogs: parseMoney(cogs) ?? 0,
-        opex: parseMoney(opex) ?? 0,
-        net_profit: parseMoney(net),
-        cash_on_hand: parseMoney(cash),
+        ...figures,
         notes: notes.trim() || null,
+        ...(handEdited ? { source: "manual" as const } : {}),
       };
       onSaved(snapshot ? await updateSnapshot(snapshot.id, payload) : await createSnapshot({ company_id: companyId, source: "manual", ...payload }));
     } catch (err) {
@@ -71,6 +110,11 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
     <Modal onClose={onClose} labelledBy="snapshot-title" size="lg">
       <form onSubmit={handleSubmit} className="p-6">
         <h2 id="snapshot-title" className="font-display text-lg text-heading">{snapshot ? `Edit ${periodLabel(snapshot.period_type, snapshot.period_start)}` : "Add a period"}</h2>
+        {snapshot && snapshot.source !== "manual" ? (
+          <p className="mt-1 text-[13px] text-ink-2">
+            {snapshot.source === "csv" ? "These figures came from a CSV import." : "These figures came from QuickBooks."} Changing a figure marks this period as entered by hand.
+          </p>
+        ) : null}
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Period type" htmlFor="fs-type">
             <select id="fs-type" value={type} disabled={Boolean(snapshot)} onChange={(e) => setType(e.target.value as PeriodType)} className={selectClass}>
@@ -82,19 +126,19 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
           <Field label="Period" htmlFor="fs-start" hint="Any day in the period; it snaps to the period start.">
             <input id="fs-start" type="date" value={start} disabled={Boolean(snapshot)} max={todayIso()} onChange={(e) => setStart(e.target.value)} className={inputClass} />
           </Field>
-          <Field label="Revenue" htmlFor="fs-revenue">
+          <Field label="Revenue" htmlFor="fs-revenue" error={fieldErrors.revenue}>
             <input id="fs-revenue" type="text" inputMode="decimal" value={revenue} autoFocus onChange={(e) => setRevenue(e.target.value)} placeholder="412000" className={`${inputClass} tnum`} />
           </Field>
-          <Field label="Direct costs (COGS)" htmlFor="fs-cogs">
+          <Field label="Direct costs (COGS)" htmlFor="fs-cogs" error={fieldErrors.cogs}>
             <input id="fs-cogs" type="text" inputMode="decimal" value={cogs} onChange={(e) => setCogs(e.target.value)} placeholder="268000" className={`${inputClass} tnum`} />
           </Field>
-          <Field label="Overhead (operating expenses)" htmlFor="fs-opex">
+          <Field label="Overhead (operating expenses)" htmlFor="fs-opex" error={fieldErrors.opex}>
             <input id="fs-opex" type="text" inputMode="decimal" value={opex} onChange={(e) => setOpex(e.target.value)} placeholder="96000" className={`${inputClass} tnum`} />
           </Field>
-          <Field label="Net profit (optional override)" htmlFor="fs-net" hint={`Computed: ${formatMoney(preview.net)} (${formatPercent(preview.netMargin, 1)} net margin).`}>
+          <Field label="Net profit (optional override)" htmlFor="fs-net" error={fieldErrors.net} hint={`Computed: ${formatMoney(preview.net)} (${formatPercent(preview.netMargin, 1)} net margin).`}>
             <input id="fs-net" type="text" inputMode="decimal" value={net} onChange={(e) => setNet(e.target.value)} placeholder="Leave blank to compute" className={`${inputClass} tnum`} />
           </Field>
-          <Field label="Cash on hand (optional)" htmlFor="fs-cash">
+          <Field label="Cash on hand (optional)" htmlFor="fs-cash" error={fieldErrors.cash}>
             <input id="fs-cash" type="text" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} className={`${inputClass} tnum`} />
           </Field>
           <Field label="Notes" htmlFor="fs-notes" className="sm:col-span-2">
@@ -207,9 +251,11 @@ function ImportDialog({ companyId, onClose, onImported }: { companyId: string; o
   );
 }
 
-// Revenue as bars with net profit as a thinner bar inside, oldest to newest.
+// Revenue as bars with net profit as a thinner bar inside, oldest to newest. Both share one
+// scale, the largest revenue or net in view, so a net above every revenue (other income, or an
+// override with an extra zero) tops out at the chart's height instead of running up the page.
 function TrendBars({ rows }: { rows: FinancialSnapshot[] }) {
-  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.revenue, deriveSnapshot(r).net)));
   return (
     <div className="flex items-end gap-2" role="img" aria-label="Revenue and net profit by period">
       {rows.map((row) => {
@@ -219,7 +265,7 @@ function TrendBars({ rows }: { rows: FinancialSnapshot[] }) {
         return (
           <div key={row.id} className="flex flex-1 flex-col items-center gap-1" title={`${periodLabel(row.period_type, row.period_start)}: ${formatMoney(row.revenue)} revenue, ${formatMoney(d.net)} net`}>
             {/* Fixed height so the percentage bars have something definite to resolve against. */}
-            <div className="relative flex h-28 w-full items-end justify-center">
+            <div className="relative flex h-28 w-full items-end justify-center overflow-hidden">
               <div className="w-full rounded-t-sm bg-accent/25" style={{ height: `${revenueHeight}%` }} />
               <div className={`absolute bottom-0 w-1/2 rounded-t-sm ${d.net >= 0 ? "bg-success" : "bg-danger"}`} style={{ height: `${netHeight}%` }} />
             </div>
@@ -279,9 +325,9 @@ export default function FinancialsPage() {
         {keysOf(PERIOD_TYPE_LABELS).map((key) => {
           const count = all.filter((s) => s.period_type === key).length;
           return (
-            <button key={key} type="button" onClick={() => setType(key)} className={`rounded-full border px-3 py-1 text-[12px] transition-colors duration-150 ${type === key ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`}>
+            <Chip key={key} active={type === key} onClick={() => setType(key)}>
               {PERIOD_TYPE_LABELS[key]} {count > 0 ? <span className="tnum text-ink-3">({count})</span> : null}
-            </button>
+            </Chip>
           );
         })}
       </div>
@@ -300,7 +346,7 @@ export default function FinancialsPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label={`Revenue · ${periodLabel(latest!.period_type, latest!.period_start)}`} value={formatMoney(latest!.revenue)} hint={latest!.source === "csv" ? "From CSV import" : "Entered by hand"} />
+            <Stat label={`Revenue · ${periodLabel(latest!.period_type, latest!.period_start)}`} value={formatMoney(latest!.revenue)} hint={SOURCE_HINT[latest!.source]} />
             <Stat label="Gross margin" value={formatPercent(latestDerived!.grossMargin, 1)} hint={`${formatMoney(latestDerived!.grossProfit)} gross profit`} />
             <Stat label="Net profit" value={<span className={latestDerived!.net >= 0 ? "text-success" : "text-danger"}>{formatMoney(latestDerived!.net)}</span>} hint={`${formatPercent(latestDerived!.netMargin, 1)} net margin`} />
             <Stat label="Cash on hand" value={formatMoney(latest!.cash_on_hand)} hint={latest!.cash_on_hand === null ? "Not recorded" : "End of period"} />
