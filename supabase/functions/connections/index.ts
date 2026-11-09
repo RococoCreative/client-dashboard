@@ -7,20 +7,27 @@
 //   POST /start        { company_id, provider, return_to }   -> { url } to send the browser to
 //   GET  /callback     ?code&state[&realmId]                 -> redirect back to return_to
 //   POST /disconnect   { company_id, provider }              -> { ok: true }
+//   POST /sync/run     { source_id }                         -> { status, message, rows_applied }
+//   POST /sync/tick    (x-sync-secret header)                -> { due, ran }
+//   POST /sync/describe { connection_id, spreadsheet_id, gid } -> { title, tabs, headers }
 //
-// start and disconnect need the signed-in admin's JWT. The provider reaches callback with no
-// JWT at all, so this function verifies its own signed state and the gateway's JWT check is
-// off for it. Providers are entries in the registry below, never a branch on the company.
+// start, disconnect and sync/describe need the signed-in admin's JWT; sync/run needs the JWT of
+// someone allowed to sync the source, which row level security decides. The provider reaches
+// callback with no JWT at all, so this function verifies its own signed state and the gateway's
+// JWT check is off for it; the hourly cron reaches sync/tick with the shared secret instead.
+// Providers are entries in the registry below, never a branch on the company. The sync routes
+// (sync.ts) live in this function so it stays the only reader of connection_tokens.
 //
 // Environment (Supabase secrets): CONNECTIONS_STATE_SECRET, APP_ORIGINS (comma separated
 // origins the browser may be sent back to; localhost is always allowed), GHL_CLIENT_ID,
 // GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production),
-// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SYNC_CRON_SECRET (the secret the hourly tick sends).
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { PROVIDER_KEYS, type ProviderKey } from "../_shared/providers.ts";
 import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl } from "../_shared/sync/googleSheets.ts";
 import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, sameBytes, service } from "./http.ts";
+import { handleSyncDescribe, handleSyncRun, handleSyncTick } from "./sync.ts";
 
 type Provider = ProviderKey;
 
@@ -341,6 +348,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const path = new URL(req.url).pathname;
   try {
+    if (req.method === "POST" && path.endsWith("/sync/run")) return await handleSyncRun(req);
+    if (req.method === "POST" && path.endsWith("/sync/tick")) return await handleSyncTick(req);
+    if (req.method === "POST" && path.endsWith("/sync/describe")) return await handleSyncDescribe(req);
     if (req.method === "POST" && path.endsWith("/start")) return await handleStart(req);
     if (req.method === "GET" && path.endsWith("/callback")) return await handleCallback(req);
     if (req.method === "POST" && path.endsWith("/disconnect")) return await handleDisconnect(req);
