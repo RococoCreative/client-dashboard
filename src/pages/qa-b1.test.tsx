@@ -134,4 +134,15 @@ describe("a review signed off with no month locked in", () => {
     expect(within(overall).queryByText("Not scored")).not.toBeInTheDocument();
     expect(within(await sectionFor("Monthly GSRs")).getByText(/so this pillar scored zero/)).toBeInTheDocument();
   });
+
+  it("reads the same zero on the person's My reviews card that links to it", async () => {
+    // Same state as above: the card is the score of record one click away from the review page,
+    // so it may not call "Not scored" the pillar that pulled that score down.
+    renderWithHub(<MyReviewsPage />, rbaEmployee);
+    const card = await sectionFor(RBA.cycles[0].name);
+    expect(within(card).getByText("Latest scored review")).toBeInTheDocument();
+    expect(within(card).getByText("Monthly GSRs (20%)")).toBeInTheDocument();
+    expect(within(card).getByText("0%, no month locked in")).toBeInTheDocument();
+    expect(within(card).queryByText("Not scored")).not.toBeInTheDocument();
+  });
 });

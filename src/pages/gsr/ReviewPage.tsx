@@ -42,7 +42,7 @@ import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCr
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals, listJobRoles } from "../../services/jobRoles.ts";
-import { computeReviewScore , countCriteria, hasScoredItem, lineItemPercent, pillarsForReview, scoreInputsForReview, type ScoreInput } from "../../lib/gsr/scoring.ts";
+import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pillarsForReview, scoreInputsForReview, signedOffBarDetail, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -540,7 +540,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     label={`${p.name} (${formatNumber(p.weight)}%)`}
                     percent={p.score}
                     // Signed off with no month locked in, the pillar counted zero; its card says so.
-                    detail={frozen && p.scoringType === "gsr_goals" && p.score === null ? "0%, no month locked in" : undefined}
+                    detail={signedOffBarDetail(review, p)}
                   />
                 ))}
                 {shownPillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}

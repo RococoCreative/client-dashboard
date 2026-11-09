@@ -224,6 +224,18 @@ export function pillarsForReview(review: { status: string; pillar_snapshot?: Pil
   return review.status === "complete" && review.pillar_snapshot ? review.pillar_snapshot : pillars;
 }
 
+// What a pillar's bar says on a signed-off review when its own figure would mislead, or undefined
+// to show the figure. A Monthly GSRs pillar signed off with no month locked in carries no line
+// item, so its score is null, and the unscored-is-zero rule counted it as zero in the score of
+// record. "Not scored" there reads as if the pillar had been left out of a number it pulled down.
+// The review page and My reviews both draw these bars, so both ask here and say the same thing.
+export function signedOffBarDetail(
+  review: { status: string },
+  pillar: { scoringType?: ScoringType; score: number | null },
+): string | undefined {
+  return review.status === "complete" && pillar.scoringType === "gsr_goals" && pillar.score === null ? "0%, no month locked in" : undefined;
+}
+
 // Team average over reviews that have any score at all; null for an unscored team.
 export function averageScore(values: Array<number | null | undefined>): number | null {
   const present = values.filter(isFiniteNumber);
