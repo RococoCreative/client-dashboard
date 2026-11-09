@@ -52,4 +52,43 @@ describe("useAsync", () => {
     await waitFor(() => expect(view.getByTestId("error").textContent).not.toBe("none"));
     expect(view.getByTestId("data").textContent).toBe("none");
   });
+
+  it("hands back nothing while a different query is still loading", async () => {
+    let finish2025: (value: string) => void = () => undefined;
+    const load = vi
+      .fn<(year: number) => Promise<string>>()
+      .mockResolvedValueOnce("2026 goals")
+      .mockImplementationOnce(() => new Promise<string>((resolve) => (finish2025 = resolve)));
+    const view = render(<Probe year={2026} load={load} />);
+    await waitFor(() => expect(view.getByTestId("data").textContent).toBe("2026 goals"));
+
+    view.rerender(<Probe year={2025} load={load} />);
+    // The header already says 2025. 2026's rows, with Hit, Edit and Delete live on them, are not
+    // an answer to that question, so the page falls back to its skeleton until 2025 lands.
+    expect(view.getByTestId("data").textContent).toBe("none");
+    expect(view.getByTestId("error").textContent).toBe("none");
+
+    await act(async () => finish2025("2025 goals"));
+    expect(view.getByTestId("data").textContent).toBe("2025 goals");
+  });
+
+  it("keeps what is on screen while a reload of the same query is out", async () => {
+    let finishReload: (value: string) => void = () => undefined;
+    const load = vi
+      .fn<(year: number) => Promise<string>>()
+      .mockResolvedValueOnce("2026 goals")
+      .mockImplementationOnce(() => new Promise<string>((resolve) => (finishReload = resolve)));
+    const view = render(<Probe year={2026} load={load} />);
+    await waitFor(() => expect(view.getByTestId("data").textContent).toBe("2026 goals"));
+
+    await act(async () => {
+      view.getByRole("button", { name: "reload" }).click();
+    });
+    // Asking the same question again must not blank the page while the answer is on its way.
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(view.getByTestId("data").textContent).toBe("2026 goals");
+
+    await act(async () => finishReload("2026 goals, refreshed"));
+    expect(view.getByTestId("data").textContent).toBe("2026 goals, refreshed");
+  });
 });

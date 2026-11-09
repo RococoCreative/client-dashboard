@@ -14,7 +14,7 @@
 // the quarterly and annual reviews, because a Goal Setting Review is the month and nothing else.
 // Every change saves on its own; a closed or locked month is read-only except for the why, which
 // is written the month after.
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
@@ -75,13 +75,19 @@ function GoalEditor({
   onError: (message: string) => void;
   onTouched: () => void;
 }) {
-  async function save(patch: GoalPatch) {
-    try {
-      onChange(await updateGoal(goal.id, patch));
-      onTouched();
-    } catch (err) {
-      onError(errorMessage(err));
-    }
+  // Title, kind, completion, description and steps all write this one goals row, and each answer
+  // carries the whole row. Queued, the writes land in the order they were made, so a slow
+  // completion save cannot come back after a tick and put the old steps back on screen.
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  function save(patch: GoalPatch): Promise<void> {
+    const run = saveChain.current
+      .catch(() => undefined)
+      .then(async () => {
+        onChange(await updateGoal(goal.id, patch));
+        onTouched();
+      });
+    saveChain.current = run;
+    return run.catch((err: unknown) => onError(errorMessage(err)));
   }
   const { done, total } = stepsTaken(goal);
 
@@ -139,7 +145,7 @@ function GoalEditor({
           Action steps
           {total > 0 ? <span className="tnum text-[12px] normal-case tracking-normal text-ink-3">{done} of {total} done</span> : null}
         </p>
-        <ActionSteps steps={goal.action_steps} canTick={canTick} canEdit={canEdit} onChange={(steps) => void save({ action_steps: steps })} />
+        <ActionSteps steps={goal.action_steps} canTick={canTick} canEdit={canEdit} onChange={(steps) => save({ action_steps: steps })} />
       </div>
 
       {canEdit || notes.length > 0 ? (

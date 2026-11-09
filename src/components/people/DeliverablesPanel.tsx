@@ -128,7 +128,9 @@ export default function DeliverablesPanel({
   canEdit: boolean;
   // The year's figure across every heading, reported whenever it changes. The review reads it
   // to score a pillar of type deliverables_module and to write the frozen line item at sign-off.
-  onRollup?: (score: DeliverableScore) => void;
+  // Null while there is nothing loaded for this person and year, so a figure for the person or
+  // year shown before never stands in for this one.
+  onRollup?: (score: DeliverableScore | null) => void;
 }) {
   const state = useAsync(async () => {
     const [categories, deliverables, tasks] = await Promise.all([
@@ -164,7 +166,7 @@ export default function DeliverablesPanel({
   const deliverables: EmployeeDeliverable[] = state.data?.deliverables ?? [];
   const tasks: DeliverableTask[] = state.data?.tasks ?? [];
   useEffect(() => {
-    if (state.data && onRollup) onRollup(scoreCategory(state.data.deliverables, state.data.tasks));
+    if (onRollup) onRollup(state.data ? scoreCategory(state.data.deliverables, state.data.tasks) : null);
   }, [state.data, onRollup]);
 
   async function run(work: () => Promise<void>) {

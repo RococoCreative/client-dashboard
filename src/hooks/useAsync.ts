@@ -131,5 +131,11 @@ export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]):
     setSettled((prev) => ({ ...prev, data: typeof next === "function" ? (next as (p: T | null) => T | null)(prev.data) : next }));
   }, []);
 
-  return { data: settled.data, error: loading ? "" : settled.error, loading, reload, setData };
+  // Rows from an older generation are never handed back, loading or not. While a new deps
+  // question is out, the page falls back to its skeleton rather than showing the old answer under
+  // the new header with its actions live: clicking Hit on a 2026 goal while the header already
+  // reads 2025 flips the wrong year's goal. reload() keeps the generation, so a refresh of the
+  // same question still keeps the rows on screen while it runs.
+  const data = settled.gen === gen ? settled.data : null;
+  return { data, error: loading ? "" : settled.error, loading, reload, setData };
 }

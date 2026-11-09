@@ -166,7 +166,7 @@ function GoalCard({
   steps: ActionStep[];
   notes: GoalNote[];
   onChange: (goal: Goal) => void;
-  onSteps: (steps: ActionStep[]) => void;
+  onSteps: (steps: ActionStep[]) => Promise<void>;
   onNotes: (update: (notes: GoalNote[]) => GoalNote[]) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -352,7 +352,7 @@ export default function GoalsPanel({
                       steps={stepsFor(goal)}
                       notes={notesFor(goal)}
                       onChange={upsert}
-                      onSteps={(steps) => void saveSteps(goal, steps)}
+                      onSteps={(steps) => saveSteps(goal, steps)}
                       onNotes={(change) => update((data) => ({ ...data, notes: change(data.notes) }))}
                       onEdit={() => setDialog({ goal })}
                       onDelete={() => setDeleting(goal)}
