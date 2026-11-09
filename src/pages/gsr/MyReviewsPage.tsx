@@ -18,6 +18,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
+import { signedOffBarDetail } from "../../lib/gsr/scoring.ts";
 import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
@@ -69,7 +70,7 @@ export default function MyReviewsPage() {
                 </div>
                 <div className="space-y-3 md:col-span-2">
                   {(featured.result?.pillars ?? pillars.map((p) => ({ pillarId: p.id, name: p.name, weight: p.weight, score: null }))).map((p) => (
-                    <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} />
+                    <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p)} />
                   ))}
                 </div>
               </div>

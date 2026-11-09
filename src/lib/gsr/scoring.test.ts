@@ -9,6 +9,7 @@ import {
   pillarScore,
   pillarsForReview,
   scoreBand,
+  signedOffBarDetail,
   weightTotal,
   type PillarConfig,
 } from "./scoring.ts";
@@ -182,5 +183,26 @@ describe("lineItemAchievement and lineItemPercent", () => {
     const gsr: PillarConfig = { id: "gsr", name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", rating_scale_max: 5 };
     const item = { pillar_id: "gsr", target: 300, actual: 255 };
     expect(lineItemPercent(item)).toBe(Math.round(pillarScore(gsr, [item]) as number));
+  });
+});
+
+describe("signedOffBarDetail", () => {
+  const gsr: PillarConfig = { id: "gsr", name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", rating_scale_max: 5 };
+
+  it("says zero for a Monthly GSRs pillar signed off with no month locked in, the zero it counted as", () => {
+    const result = computeReviewScore([...KLASIK, gsr], [{ pillar_id: "deliv", target: 10, actual: 10 }]);
+    const pillar = result.pillars.find((p) => p.pillarId === "gsr")!;
+    expect(pillar.score).toBeNull();
+    expect(signedOffBarDetail({ status: "complete" }, pillar)).toBe("0%, no month locked in");
+  });
+
+  it("leaves every other bar to show its own figure", () => {
+    // Open: the month may still be locked in before sign-off, so nothing is final yet.
+    expect(signedOffBarDetail({ status: "in_progress" }, { scoringType: "gsr_goals", score: null })).toBeUndefined();
+    // Signed off with a month locked in: the bar's own percent is the truth.
+    expect(signedOffBarDetail({ status: "complete" }, { scoringType: "gsr_goals", score: 80 })).toBeUndefined();
+    // Another kind of pillar, or a bar drawn with no scoring type at all.
+    expect(signedOffBarDetail({ status: "complete" }, { scoringType: "rating", score: null })).toBeUndefined();
+    expect(signedOffBarDetail({ status: "complete" }, { score: null })).toBeUndefined();
   });
 });
