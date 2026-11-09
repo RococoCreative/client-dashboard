@@ -11,7 +11,7 @@ import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";

@@ -22,7 +22,7 @@ import CompensationTable from "../../components/people/CompensationTable.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import FinancialsTable from "../../components/people/FinancialsTable.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";

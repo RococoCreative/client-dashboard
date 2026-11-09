@@ -13,7 +13,7 @@ import Field from "../../components/ui/Field.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, selectClass, textareaClass } from "../../components/ui/forms.ts";
 import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";

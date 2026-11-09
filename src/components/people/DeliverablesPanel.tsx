@@ -24,7 +24,7 @@ import EmptyState from "../ui/EmptyState.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import RatingChoice from "../ui/RatingChoice.tsx";
-import { SkeletonRows } from "../ui/Skeleton.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import {

@@ -13,7 +13,7 @@ import Modal from "../components/ui/Modal.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Stat from "../components/ui/Stat.tsx";
-import { SkeletonCard } from "../components/ui/Skeleton.tsx";
+import SkeletonCard from "../components/ui/SkeletonCard.tsx";
 import { inputClass, selectClass, textareaClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";

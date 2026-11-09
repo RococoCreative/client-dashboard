@@ -20,7 +20,7 @@ import Modal from "../ui/Modal.tsx";
 import Notice from "../ui/Notice.tsx";
 import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
-import { SkeletonRows } from "../ui/Skeleton.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";

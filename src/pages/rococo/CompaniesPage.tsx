@@ -13,7 +13,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";

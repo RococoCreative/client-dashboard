@@ -11,7 +11,7 @@ import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
-import { SkeletonRows } from "../ui/Skeleton.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createJobRole, createJobRoleGoal, deleteJobRole, deleteJobRoleGoal, listJobRoleGoals, listJobRoles, updateJobRole, updateJobRoleGoal } from "../../services/jobRoles.ts";

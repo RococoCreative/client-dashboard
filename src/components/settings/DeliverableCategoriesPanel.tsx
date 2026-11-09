@@ -14,7 +14,7 @@ import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
-import { SkeletonRows } from "../ui/Skeleton.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { deleteDeliverableCategory, listDeliverableCategories, updateDeliverableCategory } from "../../services/deliverables.ts";

@@ -8,7 +8,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";

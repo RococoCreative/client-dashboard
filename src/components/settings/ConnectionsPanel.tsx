@@ -8,7 +8,7 @@ import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
-import { SkeletonRows } from "../ui/Skeleton.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection, listConnections, startConnection } from "../../services/connections.ts";
 import { errorMessage } from "../../lib/errors.ts";

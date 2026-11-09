@@ -12,7 +12,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
-import { SkeletonCard } from "../../components/ui/Skeleton.tsx";
+import SkeletonCard from "../../components/ui/SkeletonCard.tsx";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";

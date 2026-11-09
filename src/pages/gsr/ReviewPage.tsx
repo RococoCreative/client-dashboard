@@ -32,7 +32,7 @@ import RatingInput from "../../components/ui/RatingInput.tsx";
 import ScoreBar from "../../components/ui/ScoreBar.tsx";
 import ScoreRing from "../../components/ui/ScoreRing.tsx";
 import Section from "../../components/ui/Section.tsx";
-import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";

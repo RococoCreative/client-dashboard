@@ -15,7 +15,7 @@ import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
-import { SkeletonRows } from "../components/ui/Skeleton.tsx";
+import SkeletonRows from "../components/ui/SkeletonRows.tsx";
 import { inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
