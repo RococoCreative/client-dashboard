@@ -1,3 +1,5 @@
+// In-memory stand-in for services/auth.ts, same exports, so page tests and `npm run demo`
+// run the login lookups against the seeded companies and never touch the network.
 import type { PublicCompany } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
 import { db } from "./supabase.ts";

@@ -1,3 +1,5 @@
+// In-memory stand-in for services/storage.ts, same exports, so page tests and `npm run demo`
+// run with fake object paths and signed URLs and never touch the network.
 function safeFileName(name: string): string {
   const trimmed = name.trim().replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-");
   return trimmed.length > 0 ? trimmed.slice(0, 120) : "file";

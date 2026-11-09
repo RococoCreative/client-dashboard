@@ -1,3 +1,5 @@
+// In-memory stand-in for services/employees.ts, same exports, so page tests and `npm run demo`
+// run against seeded KPIs, figures and compensation and never touch the network.
 import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { companyOf } from "./profiles.ts";

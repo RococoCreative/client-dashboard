@@ -1,3 +1,4 @@
+// Pins the tenant theme registry: which theme keys exist and how a company resolves to one.
 import { describe, expect, it } from "vitest";
 import { applyTheme, isThemeKey, resolveTheme, THEME_KEYS } from "./theme.ts";
 

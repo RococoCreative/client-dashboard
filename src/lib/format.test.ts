@@ -1,3 +1,5 @@
+// Pins the display formatting every screen shares: names, initials, money, percents, periods
+// and the money parser behind every figure an admin types.
 import { describe, expect, it } from "vitest";
 import { displayName, formatMoney, formatPercent, formatPeriod, initials, parseDate, parseMoney } from "./format.ts";
 

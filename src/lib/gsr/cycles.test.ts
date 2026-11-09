@@ -1,3 +1,5 @@
+// Pins the cycle rules every GSR screen shares: periods, cadences, which cycles are in play,
+// default names, and the months inside a quarter.
 import { describe, expect, it } from "vitest";
 import { activeCycles, currentCycle, cycleColumns, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart } from "./cycles.ts";
 

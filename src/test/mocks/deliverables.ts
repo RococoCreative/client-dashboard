@@ -1,3 +1,5 @@
+// In-memory stand-in for services/deliverables.ts, same exports, so page tests and `npm run demo`
+// run against seeded categories, deliverables and tasks and never touch the network.
 import type { DeliverableCategory, DeliverableTask, EmployeeDeliverable } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { companyOf } from "./profiles.ts";

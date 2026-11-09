@@ -1,3 +1,5 @@
+// In-memory stand-in for services/sops.ts, same exports, so page tests and `npm run demo`
+// run against seeded SOPs, versions and attachments and never touch the network.
 import type { Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

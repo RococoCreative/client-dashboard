@@ -1,3 +1,5 @@
+// In-memory stand-in for services/companies.ts, same exports, so page tests and `npm run demo`
+// run against the seeded companies and their domains and never touch the network.
 import type { Company, CompanyDomain, ThemeKey } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
 

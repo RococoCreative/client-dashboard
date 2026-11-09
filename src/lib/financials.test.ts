@@ -1,3 +1,5 @@
+// Pins how financial snapshots are read from a CSV and summarised: periods, money cells,
+// margins, and the errors an admin sees when a line cannot be read.
 import { describe, expect, it } from "vitest";
 import { deriveSnapshot, parsePeriod, parseSnapshotsCsv, periodLabel, snapPeriodEnd } from "./financials.ts";
 

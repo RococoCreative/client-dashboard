@@ -1,3 +1,5 @@
+// Pins the email helpers the sign-in screen and the company domain list rely on: what counts
+// as an address, how a domain is normalised, and who is Rococo staff.
 import { describe, expect, it } from "vitest";
 import { emailDomain, isRococoEmail, isValidEmail, normalizeDomain, normalizeEmail } from "./email.ts";
 
