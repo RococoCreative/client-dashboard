@@ -84,6 +84,40 @@ describe("Modal", () => {
     expect(focused()).toBe(screen.getByRole("button", { name: "Close" }));
   });
 
+  it("leaves Tab to the browser while focus is inside, so a date field can step through its parts", async () => {
+    const user = userEvent.setup();
+    render(
+      <Modal onClose={() => undefined} labelledBy="t">
+        <h2 id="t">Campaign</h2>
+        <input type="text" aria-label="Name" />
+        <input type="date" aria-label="Starts" />
+        <button type="button">Save</button>
+      </Modal>,
+    );
+    const starts = screen.getByLabelText("Starts");
+    // fireEvent returns false when a listener called preventDefault. The trap must not take the
+    // key here: Chrome moves from month to day to year inside the field on Tab.
+    expect(fireEvent.keyDown(starts, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(starts, { key: "Tab", shiftKey: true })).toBe(true);
+    // The edges are left alone as well; the guards either side of the panel do the wrapping.
+    expect(fireEvent.keyDown(screen.getByRole("button", { name: "Save" }), { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "Tab", shiftKey: true })).toBe(true);
+    // Off the last control, the browser lands on the far guard, which sends focus round to the top.
+    screen.getByRole("button", { name: "Save" }).focus();
+    await user.tab();
+    expect(focused()).toBe(screen.getByRole("textbox", { name: "Name" }));
+    await user.tab({ shift: true });
+    expect(focused()).toBe(screen.getByRole("button", { name: "Save" }));
+  });
+
+  it("takes Tab only when focus is outside the dialog", () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    screen.getByRole("button", { name: "After" }).focus();
+    expect(fireEvent.keyDown(focused(), { key: "Tab" })).toBe(false);
+    expect(focused()).toBe(screen.getByRole("textbox", { name: "Name" }));
+  });
+
   it("returns focus to the opener on close", async () => {
     const user = userEvent.setup();
     render(<Page />);

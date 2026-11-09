@@ -4,10 +4,13 @@
 //
 // The trap matters beyond tidiness. Without it Tab walked out of a dialog to the controls under the
 // scrim, so a second dialog could open over a delete that was still running and show that delete's
-// failure as its own. Tab and Shift+Tab are handled here rather than left to the browser, so they
-// cycle through the panel's controls and nothing else, wherever focus happens to be when the key is
-// pressed (on the panel itself, dropped to the page by a control that went disabled, or anywhere
-// else). Only the topmost dialog handles a key, so stacked dialogs behave too.
+// failure as its own. Inside the panel Tab belongs to the browser, because a control can use it
+// itself: in a date field Tab moves between month, day and year. The trap only acts at the edges.
+// A focusable guard sits on each side of the panel, so a Tab off the last control lands on the far
+// guard and goes round to the first control, and Shift+Tab off the first goes round to the last.
+// When focus is not in the dialog at all (dropped to the page by a control that went disabled, or
+// moved under the scrim), the key is taken here and focus comes back to the near end. Only the
+// topmost dialog handles a key, so stacked dialogs behave too.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // Open-modal stack so Escape and Tab only act for the topmost dialog when modals stack.
@@ -32,6 +35,7 @@ const FOCUSABLE = [
 function tabStops(panel: HTMLElement): HTMLElement[] {
   const candidates = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
     if (el.tabIndex < 0) return false;
+    if (el.hasAttribute("data-focus-guard")) return false;
     if (el.closest("[inert], [hidden]")) return false;
     if (el.matches(":disabled")) return false;
     return typeof el.checkVisibility !== "function" || el.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true });
@@ -43,21 +47,16 @@ function tabStops(panel: HTMLElement): HTMLElement[] {
   });
 }
 
-// Where Tab (or Shift+Tab) goes from the element that has focus now.
-function nextStop(panel: HTMLElement, stops: HTMLElement[], current: Element | null, backward: boolean): HTMLElement {
-  const last = stops.length - 1;
-  const index = current ? stops.indexOf(current as HTMLElement) : -1;
-  if (index !== -1) return stops[backward ? (index === 0 ? last : index - 1) : index === last ? 0 : index + 1];
-  // Focus is on something inside the panel that Tab would not stop on (an element focused by a
-  // click or a script): go to the nearest stop after it, or before it going backward, wrapping round.
-  if (current && current !== panel && panel.contains(current)) {
-    const following = stops.filter((s) => current.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING);
-    const preceding = stops.filter((s) => current.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_PRECEDING);
-    if (backward) return preceding[preceding.length - 1] ?? stops[last];
-    return following[0] ?? stops[0];
-  }
-  // On the panel itself, or outside the dialog altogether: start from the near end.
-  return backward ? stops[last] : stops[0];
+// Where focus goes round to: the first stop going forward, the last going backward, or the panel
+// itself when nothing inside takes focus.
+function edgeStop(panel: HTMLElement, backward: boolean): HTMLElement {
+  const stops = tabStops(panel);
+  return (backward ? stops[stops.length - 1] : stops[0]) ?? panel;
+}
+
+// One of the two edge guards: a Tab stop with nothing in it that sends focus straight on round.
+function FocusGuard({ onFocus }: { onFocus: () => void }) {
+  return <span data-focus-guard="" tabIndex={0} onFocus={onFocus} className="sr-only" />;
 }
 
 export default function Modal({
@@ -71,6 +70,7 @@ export default function Modal({
   size?: "md" | "lg" | "xl";
   children: ReactNode;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   // Callers pass inline onClose closures, so the mount effect must NOT key on it: re-running
   // per parent render would steal focus back to the panel mid-typing.
@@ -96,13 +96,10 @@ export default function Modal({
         return;
       }
       if (e.key !== "Tab" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || !panel) return;
+      // Focus somewhere in the dialog: the browser moves it, and the guards wrap it at the edges.
+      if (rootRef.current?.contains(document.activeElement)) return;
       e.preventDefault();
-      const stops = tabStops(panel);
-      if (stops.length === 0) {
-        panel.focus();
-        return;
-      }
-      nextStop(panel, stops, document.activeElement, e.shiftKey).focus();
+      edgeStop(panel, e.shiftKey).focus();
     }
     window.addEventListener("keydown", onKey);
     return () => {
@@ -119,6 +116,7 @@ export default function Modal({
 
   return (
     <div
+      ref={rootRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
       role="dialog"
       aria-modal="true"
@@ -127,6 +125,7 @@ export default function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <FocusGuard onFocus={() => panelRef.current && edgeStop(panelRef.current, true).focus()} />
       <div
         ref={panelRef}
         tabIndex={-1}
@@ -134,6 +133,7 @@ export default function Modal({
       >
         {children}
       </div>
+      <FocusGuard onFocus={() => panelRef.current && edgeStop(panelRef.current, false).focus()} />
     </div>
   );
 }
