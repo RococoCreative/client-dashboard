@@ -1,3 +1,5 @@
+// Pins the deliverables module rule: two points a task on a four-step scale, so a Hit on
+// every task lands exactly on target.
 import { describe, expect, it } from "vitest";
 import { RATING_LABELS, groupByCategory, scoreCategory, scoreDeliverable } from "./deliverables.ts";
 import type { DeliverableTask, EmployeeDeliverable } from "../../types/database.ts";

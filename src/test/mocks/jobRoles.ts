@@ -1,3 +1,5 @@
+// In-memory stand-in for services/jobRoles.ts, same exports, so page tests and `npm run demo`
+// run against seeded job roles and role goals and never touch the network.
 import type { DashboardModule, JobRole, JobRoleGoal } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

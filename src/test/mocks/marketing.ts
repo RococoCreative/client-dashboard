@@ -1,3 +1,5 @@
+// In-memory stand-in for services/marketing.ts, same exports, so page tests and `npm run demo`
+// run against seeded campaigns and never touch the network.
 import type { CampaignStatus, MarketingCampaign } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

@@ -1,3 +1,5 @@
+// In-memory stand-in for services/financials.ts, same exports, so page tests and `npm run demo`
+// run against seeded financial snapshots and never touch the network.
 import type { FinancialSnapshot, PeriodType, SnapshotSource } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

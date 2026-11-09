@@ -1,3 +1,5 @@
+// In-memory stand-in for services/invitations.ts, same exports, so page tests and `npm run demo`
+// run against seeded invitation rows and never touch the network.
 import type { Invitation, Role } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

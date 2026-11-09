@@ -1,3 +1,5 @@
+// Pins the CSV reader the financial import stands on: quoting, line endings, and how
+// header names are matched to columns.
 import { describe, expect, it } from "vitest";
 import { csvToObjects, normalizeHeader, parseCsv } from "./csv.ts";
 

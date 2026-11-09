@@ -1,3 +1,5 @@
+// In-memory stand-in for services/gsr.ts, same exports, so page tests and `npm run demo`
+// run against seeded cycles, reviews, pillars, criteria, scores and goals and never touch the network.
 import type {
   ActionStep,
   CompanyGoal,

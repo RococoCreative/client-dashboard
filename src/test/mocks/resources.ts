@@ -1,3 +1,5 @@
+// In-memory stand-in for services/resources.ts, same exports, so page tests and `npm run demo`
+// run against seeded resources and never touch the network.
 import type { Resource, ResourceKind } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 

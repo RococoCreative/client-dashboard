@@ -1,3 +1,5 @@
+// Pins how a person's review history is ordered and which review carries the score of
+// record: open reviews and locked months never do.
 import { describe, expect, it } from "vitest";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "./history.ts";
 import type { GsrPillar, Review, ReviewCycle, ReviewScore } from "../../types/database.ts";

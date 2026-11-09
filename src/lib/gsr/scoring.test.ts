@@ -1,3 +1,5 @@
+// Pins the ported Klasik scoring math: pillar weights, rating and line-item pillars, the
+// unscored-is-zero rule, and scoring a signed-off review with its own pillars.
 import { describe, expect, it } from "vitest";
 import {
   averageScore,

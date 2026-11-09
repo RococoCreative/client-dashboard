@@ -1,3 +1,5 @@
+// In-memory stand-in for services/profiles.ts, same exports, so page tests and `npm run demo`
+// run against the seeded roster and never touch the network.
 import type { Profile, Role } from "../../types/database.ts";
 import { ALL_PROFILES, personaFromLocation } from "../fixtures.ts";
 

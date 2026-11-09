@@ -1,3 +1,5 @@
+// In-memory stand-in for services/connections.ts, same exports, so page tests and `npm run demo`
+// run against seeded connection status rows and never touch the network.
 import type { CompanyConnection, ConnectionProvider } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 
