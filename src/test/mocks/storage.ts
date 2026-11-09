@@ -17,6 +17,9 @@ export async function getSignedUrl(path: string): Promise<string> {
 export async function removeFile(): Promise<void> {
   return undefined;
 }
+export async function removeCompanyFiles(): Promise<number> {
+  return 0;
+}
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return "";
   if (bytes < 1024) return `${bytes} B`;

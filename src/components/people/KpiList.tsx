@@ -96,7 +96,7 @@ export default function KpiList({
           <li key={kpi.id} className={compact ? "flex flex-wrap items-center justify-between gap-2" : "flex flex-wrap items-center gap-3 py-2.5 first:pt-0 last:pb-0"}>
             <div className="min-w-0 flex-1">
               {canEdit && !compact ? (
-                <BlurInput value={kpi.name} ariaLabel={`KPI ${kpi.name}`} onSave={(next) => void save(kpi, { name: next.trim() || kpi.name })} className={`${inputClass} mt-0 text-[13px]`} />
+                <BlurInput value={kpi.name} required ariaLabel={`KPI ${kpi.name}`} onSave={(next) => void save(kpi, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
               ) : (
                 <p className="text-sm text-ink">{kpi.name}</p>
               )}

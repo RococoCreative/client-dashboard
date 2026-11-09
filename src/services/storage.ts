@@ -44,6 +44,37 @@ export async function removeFile(path: string): Promise<void> {
   if (error) throw error;
 }
 
+// Every file a company holds, removed when the company itself is deleted. The rows that point
+// at files cascade away with the company, but stored objects are not rows and the database
+// refuses a plain DELETE on them, so they are listed under {company_id}/ and removed through the
+// Storage API. The whole tree is listed before anything is removed, so paging is never thrown off
+// by the removals. Returns how many files went.
+const PAGE = 100;
+
+export async function removeCompanyFiles(companyId: string): Promise<number> {
+  const bucket = db().storage.from(BUCKET);
+  const paths: string[] = [];
+  async function walk(prefix: string): Promise<void> {
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await bucket.list(prefix, { limit: PAGE, offset });
+      if (error) throw error;
+      for (const entry of data) {
+        const path = `${prefix}/${entry.name}`;
+        // A folder comes back with no id; a file has one.
+        if (entry.id === null) await walk(path);
+        else paths.push(path);
+      }
+      if (data.length < PAGE) return;
+    }
+  }
+  await walk(companyId);
+  for (let i = 0; i < paths.length; i += PAGE) {
+    const { error } = await bucket.remove(paths.slice(i, i + PAGE));
+    if (error) throw error;
+  }
+  return paths.length;
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return "";
   if (bytes < 1024) return `${bytes} B`;

@@ -35,11 +35,17 @@ export default function GsrSettingsPage() {
   const companyId = company!.id;
   const [error, setError] = useState("");
   const [deletingPillar, setDeletingPillar] = useState<GsrPillar | null>(null);
-  // Deleting a criterion cascades to every score ever recorded against it, so it is confirmed
-  // and the copy points at the Active tickbox, which is the way to retire one without
-  // rewriting last quarter's numbers.
+  // Deleting a pillar or criterion takes its open ratings with it, so it is confirmed, and the
+  // database refuses one that is part of a signed-off review so a finished score never moves.
+  // The copy points at the Active tickbox, which is the way to retire one. A refusal reports
+  // inside the dialog, which has its own error, cleared whenever a dialog opens, so it never shows
+  // an inline save's or another dialog's. A delete already sent cannot be called back, so the
+  // dialog waits for the answer rather than closing on Cancel and reporting into the next one.
   const [deletingCriterion, setDeletingCriterion] = useState<GsrCriterion | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState("");
+  // A weight outside 0 to 100 is refused where it was typed, and the box shows the stored weight.
+  const [weightError, setWeightError] = useState<{ pillarId: string; message: string } | null>(null);
   const [newCriterion, setNewCriterion] = useState<Record<string, string>>({});
 
   const state = useAsync(async () => {
@@ -99,16 +105,61 @@ export default function GsrSettingsPage() {
     });
   }
 
+  // Returns false to decline the draft, which puts the stored weight back in the box.
+  function saveWeight(pillar: GsrPillar, next: string): false | void {
+    const text = next.trim();
+    const value = Number(text);
+    if (!text || !Number.isFinite(value) || value < 0 || value > 100) {
+      setWeightError({ pillarId: pillar.id, message: "Enter a weight from 0 to 100." });
+      return false;
+    }
+    setWeightError(null);
+    void patchPillar(pillar, { weight: value });
+  }
+
+  // One dialog at a time. The dialog has no focus trap, so a key press can still reach a Delete
+  // button under the scrim; while a dialog is open, its delete running included, that opens
+  // nothing, because the two dialogs share one error and a second would show the first's refusal.
+  function openDeletePillar(pillar: GsrPillar) {
+    if (busy || deletingPillar || deletingCriterion) return;
+    setDialogError("");
+    setDeletingPillar(pillar);
+  }
+
+  function openDeleteCriterion(criterion: GsrCriterion) {
+    if (busy || deletingPillar || deletingCriterion) return;
+    setDialogError("");
+    setDeletingCriterion(criterion);
+  }
+
+  function closeDialogs() {
+    if (busy) return;
+    setDeletingPillar(null);
+    setDeletingCriterion(null);
+    setDialogError("");
+  }
+
+  async function confirmDelete(action: () => Promise<void>) {
+    setBusy(true);
+    setDialogError("");
+    try {
+      await action();
+    } catch (err) {
+      setDialogError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDeletePillar() {
     if (!deletingPillar) return;
-    setBusy(true);
-    await run(async () => {
-      await deletePillar(deletingPillar.id);
-      setPillars((list) => list.filter((p) => p.id !== deletingPillar.id));
-      setCriteria((list) => list.filter((c) => c.pillar_id !== deletingPillar.id));
+    const id = deletingPillar.id;
+    await confirmDelete(async () => {
+      await deletePillar(id);
+      setPillars((list) => list.filter((p) => p.id !== id));
+      setCriteria((list) => list.filter((c) => c.pillar_id !== id));
       setDeletingPillar(null);
     });
-    setBusy(false);
   }
 
   async function addCriterion(pillar: GsrPillar) {
@@ -136,7 +187,7 @@ export default function GsrSettingsPage() {
   async function removeCriterion() {
     if (!deletingCriterion) return;
     const id = deletingCriterion.id;
-    await run(async () => {
+    await confirmDelete(async () => {
       await deleteCriterion(id);
       setCriteria((list) => list.filter((c) => c.id !== id));
       setDeletingCriterion(null);
@@ -180,7 +231,7 @@ export default function GsrSettingsPage() {
                 <>
                   <IconButton label="Move up" disabled={index === 0} onClick={() => void move(pillar, -1)}><ArrowUp size={14} aria-hidden /></IconButton>
                   <IconButton label="Move down" disabled={index === sorted.length - 1} onClick={() => void move(pillar, 1)}><ArrowDown size={14} aria-hidden /></IconButton>
-                  <IconButton label="Delete pillar" onClick={() => setDeletingPillar(pillar)}><Trash2 size={14} aria-hidden /></IconButton>
+                  <IconButton label="Delete pillar" onClick={() => openDeletePillar(pillar)}><Trash2 size={14} aria-hidden /></IconButton>
                 </>
               }
             >
@@ -191,10 +242,8 @@ export default function GsrSettingsPage() {
                 </div>
                 <div className="md:col-span-2">
                   <label htmlFor={`pillar-weight-${pillar.id}`} className={labelClass}>Weight %</label>
-                  <BlurInput id={`pillar-weight-${pillar.id}`} type="number" value={String(pillar.weight)} className={`${inputClass} tnum`} onSave={(next) => {
-                    const value = Number(next);
-                    if (Number.isFinite(value) && value >= 0 && value <= 100) void patchPillar(pillar, { weight: value });
-                  }} />
+                  <BlurInput id={`pillar-weight-${pillar.id}`} type="number" value={String(pillar.weight)} className={`${inputClass} tnum`} onSave={(next) => saveWeight(pillar, next)} />
+                  {weightError?.pillarId === pillar.id ? <p className="mt-1.5 text-[12px] text-danger" role="alert">{weightError.message}</p> : null}
                 </div>
                 <div className="md:col-span-3">
                   <label htmlFor={`pillar-type-${pillar.id}`} className={labelClass}>Scoring</label>
@@ -260,7 +309,7 @@ export default function GsrSettingsPage() {
                           </label>
                         </div>
                         <div className="flex items-center justify-end md:col-span-1">
-                          <IconButton label="Delete criterion" onClick={() => setDeletingCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
+                          <IconButton label="Delete criterion" onClick={() => openDeleteCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
                         </div>
                       </li>
                     ))}
@@ -288,23 +337,23 @@ export default function GsrSettingsPage() {
       {deletingPillar ? (
         <ConfirmDialog
           title={`Delete "${deletingPillar.name}"?`}
-          body="Every score ever recorded against this pillar is deleted with it. To retire a pillar without losing history, untick Active instead."
+          body="Its criteria go with it, along with every rating and line item recorded against it on open reviews and people's profiles. A pillar that is part of a signed-off review cannot be deleted, so finished scores never move. To take it out of use, untick Active instead."
           confirmLabel="Delete pillar"
           busy={busy}
-          error={error}
+          error={dialogError}
           onConfirm={() => void handleDeletePillar()}
-          onCancel={() => setDeletingPillar(null)}
+          onCancel={closeDialogs}
         />
       ) : null}
       {deletingCriterion ? (
         <ConfirmDialog
           title={`Delete "${deletingCriterion.name}"?`}
-          body="Every rating ever recorded against this criterion is deleted with it, which changes the scores on reviews already finished. To retire it without touching that history, untick Active instead."
+          body="Every rating recorded against it on open reviews and people's profiles goes with it. A criterion that is part of a signed-off review cannot be deleted, so finished scores never move. To take it out of use, untick Active instead."
           confirmLabel="Delete criterion"
           busy={busy}
-          error={error}
+          error={dialogError}
           onConfirm={() => void removeCriterion()}
-          onCancel={() => setDeletingCriterion(null)}
+          onCancel={closeDialogs}
         />
       ) : null}
     </>

@@ -146,7 +146,10 @@ Sales, Production, Financial, Operations & Systems, Leadership, plus an option t
 name. A starter
 becomes a real category row the first moment a heading is filed under it, so nothing is created
 speculatively and a company can still name its categories anything. Every heading carries the
-same pulldown, which is how one is refiled and the only way out of Uncategorized.
+same pulldown, which is how one is refiled and the only way out of Uncategorized. An admin
+corrects the categories themselves in Settings, Deliverable categories: rename, reorder, retire
+(no longer offered for new headings; the ones already filed keep it) or delete (its headings
+move to Uncategorized and keep their tasks and ratings).
 
 The same panel appears on the person page and inside the quarterly review. A pillar of type
 "Deliverables module" is scored from it: the app writes the year's target and actual into the
@@ -180,8 +183,11 @@ security on and no policies, so only the function's service role can read it. Ea
 state is single use: the function records its nonce in `connection_states` (0029, locked down
 the same way) and redeems it once on the way back. Nothing in the
 browser holds a provider secret or token, and nothing is shared between companies. Disconnect
-revokes at the provider where it can and drops the tokens either way. The figures themselves
-are not synced yet; `docs/integrations.md` maps where each one will come from.
+revokes at the provider where it can and drops the tokens either way. Deleting a company on the
+Rococo Companies tab disconnects each of its connections first, because its tokens go with it,
+and then removes its stored files under `{company_id}/` in `hub-files`, which no row cascades to.
+The figures themselves are not synced yet; `docs/integrations.md` maps where each one will come
+from.
 
 ## Impact scores
 

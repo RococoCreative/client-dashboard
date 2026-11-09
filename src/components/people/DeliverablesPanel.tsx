@@ -9,7 +9,8 @@
 // Filing a deliverable is one step, never two. The category pulldown offers the company's own
 // categories alongside the starters it has not named yet, and a starter only becomes a row at the
 // moment somebody files something under it. Nothing is created speculatively, so categories stay
-// company data rather than a list the code owns.
+// company data rather than a list the code owns. A category retired in Company Settings is no
+// longer offered, but a heading already filed under it keeps it and says so.
 //
 // The same panel serves the person page and the review, because the ratings are set in the
 // meeting. `canEdit` is what separates an admin from the employee reading their own.
@@ -180,11 +181,12 @@ export default function DeliverablesPanel({
 
   const tasksFor = (deliverableId: string) => tasks.filter((t) => t.deliverable_id === deliverableId);
 
-  // Everything the company can file under: its own categories first, then the starters it has not
-  // named. The two read the same in the list on purpose, because the difference is only whether a
-  // row exists yet, which is not the admin's problem.
+  // Everything the company can file under: its own active categories first, then the starters it
+  // has not named. The two read the same in the list on purpose, because the difference is only
+  // whether a row exists yet, which is not the admin's problem. A retired category is neither
+  // offered nor brought back as a starter.
   const categoryOptions = [
-    ...categories.map((c) => ({ value: c.id, name: c.name })),
+    ...categories.filter((c) => c.is_active).map((c) => ({ value: c.id, name: c.name })),
     ...SUGGESTED_CATEGORIES.filter((name) => !categories.some((c) => c.name.toLowerCase() === name.toLowerCase())).map(
       (name) => ({ value: `${NEW}${name}`, name }),
     ),
@@ -207,6 +209,7 @@ export default function DeliverablesPanel({
     // The table is unique on (company_id, name), so a name already taken is reused rather than
     // sent to the database to be refused.
     const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (existing && !existing.is_active) throw new Error(`${existing.name} is retired. Restore it in Settings to file under it.`);
     if (existing) return existing.id;
     const created = await createDeliverableCategory({ company_id: companyId, name, sort_order: categories.length + 1 });
     state.setData((prev) => (prev ? { ...prev, categories: [...prev.categories, created] } : prev));
@@ -403,6 +406,7 @@ export default function DeliverablesPanel({
                   const own = tasksFor(deliverable.id);
                   const figure = scoreDeliverable(own);
                   const filedNowhere = deliverable.category_id === null || !categories.some((c) => c.id === deliverable.category_id);
+                  const retiredHome = categories.find((c) => c.id === deliverable.category_id && !c.is_active);
                   return (
                     <div key={deliverable.id} className="px-4 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -434,6 +438,7 @@ export default function DeliverablesPanel({
                                 // a heading back into nowhere.
                                 <option value="">Uncategorized</option>
                               ) : null}
+                              {retiredHome ? <option value={retiredHome.id}>{retiredHome.name} (retired)</option> : null}
                               {categoryOptions.map((o) => (
                                 <option key={o.value} value={o.value}>{o.name}</option>
                               ))}

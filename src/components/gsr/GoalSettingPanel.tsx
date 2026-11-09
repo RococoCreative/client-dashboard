@@ -96,7 +96,7 @@ function GoalEditor({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {canEdit ? (
-            <BlurInput value={goal.title} ariaLabel={`Title for ${goal.title}`} onSave={(next) => void save({ title: next.trim() || goal.title })} className={`${inputClass} mt-0 font-medium`} />
+            <BlurInput value={goal.title} required ariaLabel={`Title for ${goal.title}`} onSave={(next) => void save({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
           ) : (
             <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           )}

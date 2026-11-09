@@ -77,7 +77,7 @@ function RoleCard({
   }
   async function renameGoal(goal: JobRoleGoal, title: string) {
     try {
-      const next = await updateJobRoleGoal(goal.id, { title: title.trim() || goal.title });
+      const next = await updateJobRoleGoal(goal.id, { title: title.trim() });
       onGoals((list) => list.map((g) => (g.id === next.id ? next : g)));
     } catch (err) {
       onError(errorMessage(err));
@@ -96,7 +96,7 @@ function RoleCard({
     <li className={`rounded-lg border border-line bg-surface p-4 ${role.is_active ? "" : "opacity-70"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <BlurInput value={role.name} ariaLabel={`Name for ${role.name}`} onSave={(next) => void save({ name: next.trim() || role.name })} className={`${inputClass} mt-0 font-medium`} />
+          <BlurInput value={role.name} required ariaLabel={`Name for ${role.name}`} onSave={(next) => void save({ name: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
           <BlurInput value={role.description ?? ""} placeholder="What this role owns, in a line" ariaLabel={`Description for ${role.name}`} onSave={(next) => void save({ description: next.trim() || null })} className={`${inputClass} mt-2 text-[13px]`} />
         </div>
         <div className="flex items-center gap-2">
@@ -109,6 +109,9 @@ function RoleCard({
           </IconButton>
         </div>
       </div>
+      {role.is_active ? null : (
+        <p className="mt-2 text-[12px] text-ink-3">Retired: it stays on the profiles of the people still in it, but no longer adds its dashboard modules or its role goals for them. Restore it to bring both back.</p>
+      )}
 
       <div className="mt-4">
         <p className={eyebrowClass}>Dashboard modules</p>
@@ -131,7 +134,7 @@ function RoleCard({
           <ul className="mt-2 divide-y divide-line">
             {goals.map((goal) => (
               <li key={goal.id} className="flex items-center gap-2 py-1.5">
-                <BlurInput value={goal.title} ariaLabel={`Role goal ${goal.title}`} onSave={(next) => void renameGoal(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
+                <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => void renameGoal(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
                 <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void removeGoal(goal)}>
                   <Trash2 size={14} aria-hidden />
                 </IconButton>
@@ -190,7 +193,7 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
     <Section
       eyebrow="People"
       title="Job roles"
-      description="The jobs people do here. A person's role decides which modules their dashboard carries and which goals their monthly Goal Setting Review offers. Set it on their profile."
+      description="The jobs people do here. A person's role decides which modules their dashboard carries and which goals their monthly Goal Setting Review offers. Set it on their profile. Retiring a role keeps it on record, but it stops adding its modules and goals for anyone still in it."
     >
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={3} /> : null}
