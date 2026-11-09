@@ -23,6 +23,7 @@ vi.mock("./services/deliverables.ts", () => import("./test/mocks/deliverables.ts
 vi.mock("./services/jobRoles.ts", () => import("./test/mocks/jobRoles.ts"));
 vi.mock("./services/connections.ts", () => import("./test/mocks/connections.ts"));
 vi.mock("./services/audit.ts", () => import("./test/mocks/audit.ts"));
+vi.mock("./services/projects.ts", () => import("./test/mocks/projects.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";
@@ -148,7 +149,12 @@ describe("routes land the same with modules on", () => {
   }
 
   // Module routes: Tasks 4, 5 and 6 append [path, persona, slug, expected] rows here.
-  const moduleRoutes: Array<[string, Persona, string, string]> = [];
+  const moduleRoutes: Array<[string, Persona, string, string]> = [
+    ["/production", "admin", "kingdom", "/production"],
+    ["/production", "admin", "klasik", "/"],
+    ["/production/projects/kingdom-project-1", "employee", "kingdom", "/production/projects/kingdom-project-1"],
+    ["/production/projects/kingdom-project-1", "employee", "klasik", "/"],
+  ];
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
     const landed = await landing(path, persona, slug);
     expect(landed.pathname).toBe(expected);

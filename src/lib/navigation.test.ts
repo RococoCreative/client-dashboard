@@ -91,6 +91,16 @@ describe("navFor without the switchboard module", () => {
     expect(shape(ungated(navFor(others, true, true)))).toEqual(shape(withoutRococoMy));
   });
 
+  it("puts Projects right after People for admins and right after My Goals for employees with production on", () => {
+    const production = { ...klasik, modules: ["production"] };
+    const admin = flatItems(navFor(production, true, false)).map((i) => i.label);
+    expect(admin.slice(admin.indexOf("People"), admin.indexOf("People") + 2)).toEqual(["People", "Projects"]);
+    expect(admin.filter((label) => label !== "Projects")).toEqual(TODAY_ADMIN.map((i) => i.label));
+    const employee = flatItems(navFor(production, false, false)).map((i) => i.label);
+    expect(employee.slice(employee.indexOf("My Goals"), employee.indexOf("My Goals") + 2)).toEqual(["My Goals", "Projects"]);
+    expect(employee.filter((label) => label !== "Projects")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
+  });
+
   it("ignores an unknown key entirely", () => {
     const future = { ...klasik, modules: ["future"] };
     expect(shape(flatItems(navFor(future, true, false)))).toEqual(shape(TODAY_ADMIN));
@@ -108,26 +118,28 @@ describe("PORTFOLIO_NAV", () => {
 describe("navFor with the switchboard module", () => {
   it("groups a Kingdom admin's sidebar into sections", () => {
     const layout = navFor(kingdom, true, false);
-    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "People / HR", null]);
+    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
     expect(labelsOf(layout, "Home")).toEqual(["Home"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
+    expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People", "My GSR"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
-    expect(labelsOf(layout, "Production")).toBeUndefined();
   });
 
   it("groups a Kingdom employee's sidebar without Sales & Finance", () => {
     const layout = navFor(kingdom, false, false);
-    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "People / HR", null]);
+    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Production", "People / HR", null]);
+    expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["My GSR", "My Reviews", "My Goals"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources"]);
   });
 
   it("drops My GSR for a Rococo admin inside Kingdom", () => {
     const layout = navFor(kingdom, true, true);
-    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "People / HR", null]);
+    expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
     expect(labelsOf(layout, "Home")).toEqual(["Home"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
+    expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
   });
@@ -137,9 +149,13 @@ describe("sectionShortcuts", () => {
   it("points at each section's first page, except Home and the utility group", () => {
     expect(sectionShortcuts(navFor(kingdom, true, false))).toEqual([
       { group: "sales_finance", heading: "Sales & Finance", to: "/financials" },
+      { group: "production", heading: "Production", to: "/production" },
       { group: "people_hr", heading: "People / HR", to: "/gsr" },
     ]);
-    expect(sectionShortcuts(navFor(kingdom, false, false))).toEqual([{ group: "people_hr", heading: "People / HR", to: "/my/gsr" }]);
+    expect(sectionShortcuts(navFor(kingdom, false, false))).toEqual([
+      { group: "production", heading: "Production", to: "/production" },
+      { group: "people_hr", heading: "People / HR", to: "/my/gsr" },
+    ]);
   });
 
   it("is empty for a flat layout", () => {

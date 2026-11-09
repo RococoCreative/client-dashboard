@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^(.*)\/services\/(supabase|auth|profiles|companies|invitations|gsr|sops|resources|storage|financials|marketing|employees|deliverables|jobRoles|connections|audit)\.ts$/,
+        find: /^(.*)\/services\/(supabase|auth|profiles|companies|invitations|gsr|sops|resources|storage|financials|marketing|employees|deliverables|jobRoles|connections|audit|projects)\.ts$/,
         replacement: `${REPO}/src/test/mocks/$2.ts`,
       },
     ],

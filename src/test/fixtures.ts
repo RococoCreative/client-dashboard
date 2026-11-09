@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
@@ -33,6 +33,7 @@ interface CompanySpec {
   sops: SopSpec[];
   resources: ResourceSpec[];
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
+  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
 }
 
 const SPECS: Record<string, CompanySpec> = {
@@ -95,6 +96,28 @@ const SPECS: Record<string, CompanySpec> = {
       { name: "Homes delivered", target: "6", current: "4", hit: false },
       { name: "Net promoter score", target: "70", current: "74", hit: true },
     ],
+    projects: [
+      {
+        name: "Sample job 101",
+        reference: "101",
+        notes: null,
+        milestones: [
+          { title: "Contract signed", kind: "milestone", target_date: "2026-08-01", completed_on: "2026-07-30", responsible: 0 },
+          { title: "Welcome letter sent", kind: "letter", target_date: "2026-08-05", completed_on: "2026-08-04" },
+          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, responsible: 1 },
+          { title: "Final walkthrough", kind: "milestone", target_date: "2026-11-20", completed_on: null },
+        ],
+      },
+      {
+        name: "Sample job 102",
+        reference: "102",
+        notes: "Illustrative sample project.",
+        milestones: [
+          { title: "Permit approved", kind: "milestone", target_date: "2026-09-25", completed_on: null },
+          { title: "Foundation poured", kind: "milestone", target_date: "2026-10-15", completed_on: null },
+        ],
+      },
+    ],
   },
   "co-rba": {
     domain: "rbaprojects.com",
@@ -135,6 +158,8 @@ export interface CompanyBundle {
   jobRoleGoals: JobRoleGoal[];
   financials: EmployeeFinancial[];
   connections: CompanyConnection[];
+  projects: Project[];
+  milestones: ProjectMilestone[];
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
@@ -424,6 +449,46 @@ function build(company: Company): CompanyBundle {
   const connections: CompanyConnection[] = [
     { id: p("conn-ghl"), company_id: company.id, provider: "gohighlevel", status: "connected", external_account_id: p("ghl-location"), external_account_name: `${company.name} (HighLevel)`, scopes: "opportunities.readonly users.readonly locations.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
   ];
+
+  // Projects entered by hand, each with its milestones and letters in order (Kingdom only).
+  const projects: Project[] = [];
+  const milestones: ProjectMilestone[] = [];
+  (spec.projects ?? []).forEach((ps, i) => {
+    const project: Project = {
+      id: p(`project-${i + 1}`),
+      company_id: company.id,
+      name: ps.name,
+      reference: ps.reference,
+      notes: ps.notes,
+      source: "manual",
+      source_key: null,
+      archived_at: null,
+      created_by: profiles[0].id,
+      updated_by: profiles[0].id,
+      created_at: EARLIER,
+      updated_at: EARLIER,
+    };
+    projects.push(project);
+    ps.milestones.forEach((m, j) => {
+      milestones.push({
+        id: p(`milestone-${i + 1}-${j + 1}`),
+        company_id: company.id,
+        project_id: project.id,
+        title: m.title,
+        description: null,
+        kind: m.kind,
+        sort_order: j + 1,
+        target_date: m.target_date,
+        responsible_profile_id: m.responsible === undefined ? null : profiles[m.responsible].id,
+        completed_on: m.completed_on,
+        archived_at: null,
+        created_by: profiles[0].id,
+        updated_by: profiles[0].id,
+        created_at: EARLIER,
+        updated_at: EARLIER,
+      });
+    });
+  });
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -922,7 +987,7 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

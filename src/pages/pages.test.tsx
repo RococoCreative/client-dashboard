@@ -21,6 +21,7 @@ vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
@@ -50,6 +51,8 @@ import UsersPage from "./rococo/UsersPage.tsx";
 import ActivityPage from "./rococo/ActivityPage.tsx";
 import FinancialsPage from "./FinancialsPage.tsx";
 import MarketingPage from "./MarketingPage.tsx";
+import ProductionPage from "./production/ProductionPage.tsx";
+import ProjectPage from "./production/ProjectPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -565,7 +568,7 @@ describe("navigation and modules", () => {
   it("groups a Kingdom admin's sidebar into sections with Home first", () => {
     renderWithHub(<AppLayout />, makeHub("admin", KINGDOM.company));
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    for (const name of ["Home", "Sales & Finance", "People / HR", "More"]) {
+    for (const name of ["Home", "Sales & Finance", "Production", "People / HR", "More"]) {
       expect(within(nav).getByRole("group", { name })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: "Home" })).toBeInTheDocument();
@@ -1125,5 +1128,120 @@ describe("monthly GSRs, scored", () => {
     expect(within(impact).getByText(`Monthly GSRs, ${RBA.cycles[0].name}`)).toBeInTheDocument();
     expect(within(impact).getByText("88%")).toBeInTheDocument();
     expect(within(impact).getByText(/1 month locked in so far/)).toBeInTheDocument();
+  });
+});
+
+describe("production", () => {
+  // Read-only cases first, then the mutations, because the mock store is shared.
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const job101 = { path: "/production/projects/kingdom-project-1", pattern: "/production/projects/:projectId" };
+  const job102 = { path: "/production/projects/kingdom-project-2", pattern: "/production/projects/:projectId" };
+  const titleOrder = () => screen.getAllByLabelText(/^Title of /).map((input) => (input as HTMLInputElement).value);
+
+  it("lists projects with their counts and next target for an admin", async () => {
+    renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
+    expect(await screen.findByRole("heading", { name: "Production" })).toBeInTheDocument();
+    const first = (await screen.findByRole("link", { name: "Sample job 101" })).closest("tr") as HTMLElement;
+    expect(within(first).getByText("2 of 4 done")).toBeInTheDocument();
+    expect(within(first).getByText("Oct 2, 2026")).toBeInTheDocument();
+    const second = screen.getByRole("link", { name: "Sample job 102" }).closest("tr") as HTMLElement;
+    expect(within(second).getByText("0 of 2 done")).toBeInTheDocument();
+    expect(within(second).getByText("Sep 25, 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New project" })).toBeInTheDocument();
+  });
+
+  it("lists the same projects for a member, without New project", async () => {
+    renderWithHub(<ProductionPage />, kingdomEmployee, { path: "/production", pattern: "/production" });
+    const first = (await screen.findByRole("link", { name: "Sample job 101" })).closest("tr") as HTMLElement;
+    expect(within(first).getByText("2 of 4 done")).toBeInTheDocument();
+    expect(within(first).getByText("Oct 2, 2026")).toBeInTheDocument();
+    const second = screen.getByRole("link", { name: "Sample job 102" }).closest("tr") as HTMLElement;
+    expect(within(second).getByText("0 of 2 done")).toBeInTheDocument();
+    expect(within(second).getByText("Sep 25, 2026")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New project" })).not.toBeInTheDocument();
+  });
+
+  it("shows a member the project read-only", async () => {
+    renderWithHub(<ProjectPage />, kingdomEmployee, job101);
+    expect(await screen.findByRole("heading", { name: "Sample job 101" })).toBeInTheDocument();
+    expect(screen.getByText("Framing complete")).toBeInTheDocument();
+    expect(screen.getAllByText("Letter")).toHaveLength(1);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add milestone" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Move .* up$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Archive / })).not.toBeInTheDocument();
+  });
+
+  it("refuses another company's project", async () => {
+    renderWithHub(<ProjectPage />, admin, job101);
+    expect(await screen.findByText(/not in this company/)).toBeInTheDocument();
+    expect(screen.queryByText("Sample job 101")).not.toBeInTheDocument();
+  });
+
+  it("filters to letters, read-only, and back to all", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProjectPage />, kingdomAdmin, job101);
+    expect(await screen.findByRole("heading", { name: "Sample job 101" })).toBeInTheDocument();
+    const show = screen.getByRole("group", { name: "Show" });
+    await user.click(within(show).getByRole("button", { name: "Letters" }));
+    expect(within(show).getByRole("button", { name: "Letters" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Welcome letter sent")).toBeInTheDocument();
+    expect(screen.queryByText("Contract signed")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Title of /)).not.toBeInTheDocument();
+    expect(screen.getByText("Switch to All to edit or reorder.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Move / })).not.toBeInTheDocument();
+    await user.click(within(show).getByRole("button", { name: "All" }));
+    expect(titleOrder()).toEqual(["Contract signed", "Welcome letter sent", "Framing complete", "Final walkthrough"]);
+  });
+
+  it("moves an item up", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProjectPage />, kingdomAdmin, job102);
+    await screen.findByRole("heading", { name: "Sample job 102" });
+    expect(titleOrder()).toEqual(["Permit approved", "Foundation poured"]);
+    await user.click(screen.getByRole("button", { name: "Move Foundation poured up" }));
+    await waitFor(() => expect(titleOrder()).toEqual(["Foundation poured", "Permit approved"]));
+  });
+
+  it("edits an item's title and completed-on date", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProjectPage />, kingdomAdmin, job102);
+    await screen.findByRole("heading", { name: "Sample job 102" });
+    const title = screen.getByLabelText("Title of Permit approved");
+    await user.clear(title);
+    await user.type(title, "Permit issued");
+    await user.tab();
+    expect(await screen.findByDisplayValue("Permit issued")).toBeInTheDocument();
+    const done = screen.getByLabelText("Completed on for Foundation poured");
+    fireEvent.change(done, { target: { value: "2026-09-14" } });
+    fireEvent.blur(done);
+    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+  });
+
+  it("adds a letter at the end", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProjectPage />, kingdomAdmin, job102);
+    await screen.findByRole("heading", { name: "Sample job 102" });
+    await user.type(screen.getByLabelText("New milestone title"), "Sample milestone");
+    await user.selectOptions(screen.getByLabelText("New milestone kind"), "Letter");
+    await user.click(screen.getByRole("button", { name: "Add milestone" }));
+    await waitFor(() => expect(titleOrder().at(-1)).toBe("Sample milestone"));
+    const row = screen.getByLabelText("Title of Sample milestone").closest("li") as HTMLElement;
+    expect(within(row).getByText("Letter", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("creates a project from the list", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
+    await user.click(await screen.findByRole("button", { name: "New project" }));
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    await user.click(within(dialog).getByRole("button", { name: "Add project" }));
+    expect(within(dialog).getByText("Give the project a name.")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Name"), "Sample job 103");
+    await user.click(within(dialog).getByRole("button", { name: "Add project" }));
+    const row = (await screen.findByRole("link", { name: "Sample job 103" })).closest("tr") as HTMLElement;
+    expect(within(row).getByText("0 of 0 done")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

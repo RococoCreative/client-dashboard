@@ -43,6 +43,8 @@ import ResourcesPage from "./pages/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
+import ProductionPage from "./pages/production/ProductionPage.tsx";
+import ProjectPage from "./pages/production/ProjectPage.tsx";
 import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
@@ -320,6 +322,8 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<AdminOnly><PeoplePage /></AdminOnly>} />
             <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
+            <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
+            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
             <Route path="sops" element={<WithCompany><SopListPage /></WithCompany>} />
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
