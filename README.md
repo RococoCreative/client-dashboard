@@ -257,7 +257,10 @@ defines pillars, each with a weight and a scoring type:
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
 an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
 is fully unit tested. Klasik's live configuration (Deliverables 50, Brand Impact 25,
-Character & Values 25) is seeded as-is.
+Character & Values 25) is seeded as-is. RBA was brought level with Klasik's live shape on
+2026-11-09 (Deliverables 40, Brand Impact 20, Character & Values 20, Monthly GSRs 20, the same
+deliverable categories and job roles), without Klasik's own wording, goals, cycles or people;
+`docs/rba-klasik-parity.sql` is the record.
 
 A completed review keeps the pillars and weights it was signed off with (0022), alongside its
 frozen ratings and line items, so re-weighting or adding a pillar later never moves a score of
