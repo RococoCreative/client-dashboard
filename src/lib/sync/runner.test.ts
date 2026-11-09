@@ -232,6 +232,24 @@ describe("runSync", () => {
     expect(fake.called("finishRun")[0].args[1]).toMatchObject({ status: "failed", rowsApplied: 0 });
   });
 
+  it("takes the failure path when the column map throws, so the run never stays running", async () => {
+    const fake = fakeStore();
+    // field_map is only checked to be an array in the database, so an entry can arrive without a header.
+    const broken = [{ key: "job", label: "Job", type: "text", unit: null, required: true }] as unknown as SyncSourceSpec["field_map"];
+    const outcome = await runSync({
+      source: makeSource({ field_map: broken }), connection, trigger: "schedule", requestedBy: null,
+      store: fake.store, adapters: adapterFor(GOOD), now,
+    });
+    expect(outcome).toMatchObject({ status: "failed", runId: "run-1", rowsRead: 2, rowsApplied: 0, errors: [] });
+    expect(typeof outcome.message).toBe("string");
+    expect(fake.calls.map((c) => c.name)).toEqual(["abandonStaleRuns", "startRun", "finishRun", "markSource"]);
+    expect(fake.called("finishRun")[0].args).toEqual([
+      "run-1",
+      { status: "failed", rowsRead: 2, rowsApplied: 0, rowsBlank: 0, errorDetail: { message: outcome.message }, finishedAt: now() },
+    ]);
+    expect(fake.called("markSource")[0].args).toEqual(["source-1", { last_status: "failed", last_error: outcome.message }]);
+  });
+
   it("still succeeds when pruning fails, leaving it for the next success", async () => {
     const fake = fakeStore({ pruneThrows: true });
     const outcome = await runSync({ source: makeSource(), connection, trigger: "manual", requestedBy: null, store: fake.store, adapters: adapterFor(GOOD), now });

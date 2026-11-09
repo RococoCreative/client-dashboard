@@ -79,6 +79,10 @@ describe("parseCell", () => {
     expect(parseCell("08/14/2026", "date")).toEqual({ ok: false, message: 'Expected a date but found "08/14/2026".' });
     expect(parseCell(true, "date").ok).toBe(false);
   });
+
+  it("fails a serial past the calendar's range instead of throwing", () => {
+    expect(parseCell(123456789012, "date")).toEqual({ ok: false, message: 'Expected a date but found "123456789012".' });
+  });
 });
 
 describe("mapRows", () => {

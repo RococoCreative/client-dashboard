@@ -44,7 +44,10 @@ export function parseCell(cell: CellValue | undefined, type: FieldType): CellPar
       if (typeof cell === "number" && Number.isFinite(cell)) return { ok: true, value: cell };
       return { ok: false, message: `Expected a number but found "${String(cell)}".` };
     case "date":
-      if (typeof cell === "number" && Number.isFinite(cell)) return { ok: true, value: serialToIsoDate(cell) };
+      // A serial past the calendar's range (an id typed into a date column) is no date at all.
+      if (typeof cell === "number" && Number.isFinite(cell) && !Number.isNaN(new Date((cell - SHEETS_SERIAL_EPOCH) * 86400000).getTime())) {
+        return { ok: true, value: serialToIsoDate(cell) };
+      }
       if (typeof cell === "string" && ISO_DATE.test(cell.trim())) return { ok: true, value: cell.trim() };
       return { ok: false, message: `Expected a date but found "${String(cell)}".` };
   }

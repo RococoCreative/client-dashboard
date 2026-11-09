@@ -55,29 +55,34 @@ export async function runSync(args: {
   }
   const runId = started.runId;
 
-  // Everything from here to the success markSource fails the run, not the caller.
+  // Everything from here to the success markSource fails the run, not the caller: a throw from
+  // anywhere in it, the column map included, closes the run and frees the lock.
   const attempt = async (): Promise<Attempt> => {
-    const adapter = adapters[source.provider];
-    if (!adapter) return { ok: false, message: "Provider not supported yet", errors: [], rowsRead: 0, rowsBlank: 0 };
-    let table;
+    let rowsRead = 0;
+    let rowsBlank = 0;
     try {
-      table = await adapter.read(source, connection);
-    } catch (err) {
-      return { ok: false, message: messageOf(err, "The source could not be read."), errors: [], rowsRead: 0, rowsBlank: 0 };
-    }
-    const mapped = mapRows(table, source.field_map, source.record_key);
-    if (!mapped.ok) {
-      const more = mapped.errors.length - 1;
-      const message = mapped.errors[0].message + (more > 0 ? ` (and ${more} more)` : "");
-      return { ok: false, message, errors: mapped.errors, rowsRead: mapped.rowsRead, rowsBlank: mapped.rowsBlank };
-    }
-    try {
+      const adapter = adapters[source.provider];
+      if (!adapter) return { ok: false, message: "Provider not supported yet", errors: [], rowsRead, rowsBlank };
+      let table;
+      try {
+        table = await adapter.read(source, connection);
+      } catch (err) {
+        return { ok: false, message: messageOf(err, "The source could not be read."), errors: [], rowsRead, rowsBlank };
+      }
+      rowsRead = table.rows.length;
+      const mapped = mapRows(table, source.field_map, source.record_key);
+      rowsBlank = mapped.rowsBlank;
+      if (!mapped.ok) {
+        const more = mapped.errors.length - 1;
+        const message = mapped.errors[0].message + (more > 0 ? ` (and ${more} more)` : "");
+        return { ok: false, message, errors: mapped.errors, rowsRead: mapped.rowsRead, rowsBlank };
+      }
       await store.insertRecords(runId, source, mapped.rows);
       await store.markSource(source.id, { current_run_id: runId, last_success_at: now().toISOString(), last_status: "succeeded", last_error: null });
+      return mapped;
     } catch (err) {
-      return { ok: false, message: messageOf(err, "The sync could not finish."), errors: [], rowsRead: mapped.rowsRead, rowsBlank: mapped.rowsBlank };
+      return { ok: false, message: messageOf(err, "The sync could not finish."), errors: [], rowsRead, rowsBlank };
     }
-    return mapped;
   };
 
   const result = await attempt();
