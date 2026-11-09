@@ -29,6 +29,10 @@ import { pluralize } from "../../lib/format.ts";
 import type { Company, ThemeKey } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
+// A company already deleted whose stored files did not all go. One entry per company, so a later
+// delete never drops an earlier one: nothing else in the app could reach those files again.
+type StrandedFiles = { company: Company; reason: string; retrying: boolean };
+
 export default function CompaniesPage() {
   const { refreshCompanies } = useHub();
   const [creating, setCreating] = useState(false);
@@ -39,8 +43,8 @@ export default function CompaniesPage() {
   const [error, setError] = useState("");
   // The delete dialog sits over a scrim, so its failure is reported inside it, not on the page.
   const [deleteError, setDeleteError] = useState("");
-  // A company already deleted whose stored files did not all go, kept so the removal can be retried.
-  const [strandedFiles, setStrandedFiles] = useState<{ company: Company; reason: string } | null>(null);
+  // Companies already deleted whose stored files did not all go, kept so each removal can be retried.
+  const [strandedFiles, setStrandedFiles] = useState<StrandedFiles[]>([]);
 
   const state = useAsync(async () => {
     const [companies, domains, profiles] = await Promise.all([listCompanies(), listAllDomains(), listAllProfiles()]);
@@ -83,14 +87,25 @@ export default function CompaniesPage() {
 
   // Stored files are not rows, so nothing cascades to them. They go once the company row is gone,
   // the way an SOP's or a resource's file goes after its row, and a failure is reported with a way
-  // to retry rather than swallowed, because no screen would ever show those files again.
+  // to retry rather than swallowed, because no screen would ever show those files again. Each run
+  // touches only its own company's entry, so two deletes (or a delete and a retry) never clear
+  // each other's notice.
   async function clearFiles(company: Company) {
-    setStrandedFiles(null);
+    const others = (list: StrandedFiles[]) => list.filter((s) => s.company.id !== company.id);
+    setStrandedFiles((list) => list.map((s) => (s.company.id === company.id ? { ...s, retrying: true } : s)));
     try {
       await removeCompanyFiles(company.id);
+      setStrandedFiles(others);
     } catch (err) {
-      setStrandedFiles({ company, reason: errorMessage(err) });
+      const stranded = { company, reason: errorMessage(err), retrying: false };
+      setStrandedFiles((list) => (list.some((s) => s.company.id === company.id) ? list.map((s) => (s.company.id === company.id ? stranded : s)) : [...list, stranded]));
     }
+  }
+
+  function openDelete(company: Company) {
+    setDeleteError("");
+    setConfirmText("");
+    setDeleting(company);
   }
 
   async function handleDeleteCompany() {
@@ -119,7 +134,10 @@ export default function CompaniesPage() {
     await run(refreshCompanies);
   }
 
+  // Once the delete has started it cannot be called back (a provider may already be disconnected),
+  // so the dialog stays until the outcome is known: Cancel, Escape and the backdrop wait for it.
   function closeDelete() {
+    if (busy) return;
     setDeleting(null);
     setConfirmText("");
     setDeleteError("");
@@ -139,12 +157,14 @@ export default function CompaniesPage() {
       />
       <Tabs items={PORTFOLIO_TABS} />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {strandedFiles ? (
-        <Notice tone="error" className="mb-4">
-          <p>{strandedFiles.company.name} is deleted, but some of its stored files were not removed. {strandedFiles.reason}</p>
-          <Button variant="secondary" size="sm" className="mt-2" onClick={() => void clearFiles(strandedFiles.company)}>Remove the files</Button>
+      {strandedFiles.map(({ company, reason, retrying }) => (
+        <Notice key={company.id} tone="error" className="mb-4">
+          <p>{company.name} is deleted, but some of its stored files were not removed. {reason}</p>
+          <Button variant="secondary" size="sm" className="mt-2" disabled={retrying} aria-label={`Remove the files for ${company.name}`} onClick={() => void clearFiles(company)}>
+            {retrying ? "Removing..." : "Remove the files"}
+          </Button>
         </Notice>
-      ) : null}
+      ))}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
 
       {!state.data && !state.error ? (
@@ -160,7 +180,7 @@ export default function CompaniesPage() {
                 eyebrow={company.slug}
                 title={company.name}
                 description={pluralize(members.length, "person", "people")}
-                actions={<IconButton label={`Delete ${company.name}`} onClick={() => setDeleting(company)}><Trash2 size={14} aria-hidden /></IconButton>}
+                actions={<IconButton label={`Delete ${company.name}`} onClick={() => openDelete(company)}><Trash2 size={14} aria-hidden /></IconButton>}
               >
                 <div className="grid gap-4 md:grid-cols-12">
                   <div className="md:col-span-4">
@@ -229,10 +249,10 @@ export default function CompaniesPage() {
             <p className="mt-2 text-sm leading-relaxed text-ink-2">
               The people themselves stay on record, including anyone not signed in yet, listed under No company on the People tab and ready to move. There is no undo. Type <b>{deleting.slug}</b> to confirm.
             </p>
-            <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Type the identifier to confirm" className={`${inputClass} mt-4 font-mono`} />
+            <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Type the identifier to confirm" disabled={busy} className={`${inputClass} mt-4 font-mono`} />
             {deleteError ? <Notice tone="error" className="mt-4">{deleteError}</Notice> : null}
             <div className="mt-6 flex justify-end gap-2">
-              <Button variant="secondary" onClick={closeDelete}>Cancel</Button>
+              <Button variant="secondary" disabled={busy} onClick={closeDelete}>Cancel</Button>
               <Button variant="danger-solid" disabled={busy || confirmText !== deleting.slug} onClick={() => void handleDeleteCompany()}>{busy ? "Deleting..." : "Delete company"}</Button>
             </div>
           </div>

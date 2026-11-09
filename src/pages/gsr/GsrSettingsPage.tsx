@@ -38,7 +38,9 @@ export default function GsrSettingsPage() {
   // Deleting a pillar or criterion takes its open ratings with it, so it is confirmed, and the
   // database refuses one that is part of a signed-off review so a finished score never moves.
   // The copy points at the Active tickbox, which is the way to retire one. A refusal reports
-  // inside the dialog, which has its own error so it never opens showing an inline save's.
+  // inside the dialog, which has its own error, cleared whenever a dialog opens, so it never shows
+  // an inline save's or another dialog's. A delete already sent cannot be called back, so the
+  // dialog waits for the answer rather than closing on Cancel and reporting into the next one.
   const [deletingCriterion, setDeletingCriterion] = useState<GsrCriterion | null>(null);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState("");
@@ -113,6 +115,23 @@ export default function GsrSettingsPage() {
     }
     setWeightError(null);
     void patchPillar(pillar, { weight: value });
+  }
+
+  function openDeletePillar(pillar: GsrPillar) {
+    setDialogError("");
+    setDeletingPillar(pillar);
+  }
+
+  function openDeleteCriterion(criterion: GsrCriterion) {
+    setDialogError("");
+    setDeletingCriterion(criterion);
+  }
+
+  function closeDialogs() {
+    if (busy) return;
+    setDeletingPillar(null);
+    setDeletingCriterion(null);
+    setDialogError("");
   }
 
   async function confirmDelete(action: () => Promise<void>) {
@@ -207,7 +226,7 @@ export default function GsrSettingsPage() {
                 <>
                   <IconButton label="Move up" disabled={index === 0} onClick={() => void move(pillar, -1)}><ArrowUp size={14} aria-hidden /></IconButton>
                   <IconButton label="Move down" disabled={index === sorted.length - 1} onClick={() => void move(pillar, 1)}><ArrowDown size={14} aria-hidden /></IconButton>
-                  <IconButton label="Delete pillar" onClick={() => setDeletingPillar(pillar)}><Trash2 size={14} aria-hidden /></IconButton>
+                  <IconButton label="Delete pillar" onClick={() => openDeletePillar(pillar)}><Trash2 size={14} aria-hidden /></IconButton>
                 </>
               }
             >
@@ -285,7 +304,7 @@ export default function GsrSettingsPage() {
                           </label>
                         </div>
                         <div className="flex items-center justify-end md:col-span-1">
-                          <IconButton label="Delete criterion" onClick={() => setDeletingCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
+                          <IconButton label="Delete criterion" onClick={() => openDeleteCriterion(criterion)}><Trash2 size={14} aria-hidden /></IconButton>
                         </div>
                       </li>
                     ))}
@@ -318,7 +337,7 @@ export default function GsrSettingsPage() {
           busy={busy}
           error={dialogError}
           onConfirm={() => void handleDeletePillar()}
-          onCancel={() => { setDeletingPillar(null); setDialogError(""); }}
+          onCancel={closeDialogs}
         />
       ) : null}
       {deletingCriterion ? (
@@ -329,7 +348,7 @@ export default function GsrSettingsPage() {
           busy={busy}
           error={dialogError}
           onConfirm={() => void removeCriterion()}
-          onCancel={() => { setDeletingCriterion(null); setDialogError(""); }}
+          onCancel={closeDialogs}
         />
       ) : null}
     </>

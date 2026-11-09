@@ -28,7 +28,9 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<DeliverableCategory | null>(null);
   const [busy, setBusy] = useState(false);
-  // The delete dialog reports only its own failure, never an inline save's.
+  // The delete dialog reports only its own failure, never an inline save's or an earlier
+  // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
+  // back, so the dialog waits for the answer rather than closing on Cancel mid-flight.
   const [dialogError, setDialogError] = useState("");
 
   const categories = [...(state.data ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
@@ -61,6 +63,17 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
     } catch (err) {
       setError(errorMessage(err));
     }
+  }
+
+  function openDelete(category: DeliverableCategory) {
+    setDialogError("");
+    setDeleting(category);
+  }
+
+  function closeDelete() {
+    if (busy) return;
+    setDeleting(null);
+    setDialogError("");
   }
 
   async function remove() {
@@ -108,7 +121,7 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
                 <IconButton label={`Move ${category.name} down`} disabled={index === categories.length - 1} onClick={() => void move(index, 1)}>
                   <ArrowDown size={14} aria-hidden />
                 </IconButton>
-                <IconButton label={`Delete ${category.name}`} onClick={() => setDeleting(category)}>
+                <IconButton label={`Delete ${category.name}`} onClick={() => openDelete(category)}>
                   <Trash2 size={14} aria-hidden />
                 </IconButton>
               </li>
@@ -124,10 +137,7 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
           busy={busy}
           error={dialogError}
           onConfirm={() => void remove()}
-          onCancel={() => {
-            setDeleting(null);
-            setDialogError("");
-          }}
+          onCancel={closeDelete}
         />
       ) : null}
     </Section>

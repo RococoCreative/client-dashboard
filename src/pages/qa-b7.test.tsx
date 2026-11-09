@@ -3,12 +3,13 @@
 // weight refused without a word, delete dialogs that promised the wrong thing or hid their own
 // failure, a company delete that left files and provider grants behind, deliverable categories
 // nobody could correct, a remove control built by hand, and a Retire button that never said what
-// it does.
+// it does. Round two adds the races a reviewer found: a delete dialog cancelled while its delete
+// was still running, and a second company delete that wiped the first one's stranded-files notice.
 //
 // The mocks are the usual in-memory data layer, with the calls these defects get wrong watched so
 // a test can make one fail or read the order they ran in. The company deletes run last, because
 // the companies mock keeps what they remove for the rest of the file.
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -33,7 +34,10 @@ vi.mock("../services/storage.ts", async () => {
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
 vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
-vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
+vi.mock("../services/deliverables.ts", async () => {
+  const mock = await import("../test/mocks/deliverables.ts");
+  return { ...mock, deleteDeliverableCategory: vi.fn(mock.deleteDeliverableCategory) };
+});
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", async () => {
   const mock = await import("../test/mocks/connections.ts");
@@ -41,7 +45,8 @@ vi.mock("../services/connections.ts", async () => {
 });
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { deleteCompany } from "../services/companies.ts";
+import { createCompany, deleteCompany } from "../services/companies.ts";
+import { deleteDeliverableCategory } from "../services/deliverables.ts";
 import { deleteCriterion, deletePillar, updatePillar } from "../services/gsr.ts";
 import { removeCompanyFiles } from "../services/storage.ts";
 import { disconnectConnection } from "../services/connections.ts";
@@ -59,6 +64,15 @@ const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!
 
 function renderPerson() {
   return renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+}
+
+// A call that stays in flight until the test settles it, so a test can act while it runs.
+function pending() {
+  let settle: { resolve: () => void; reject: (err: Error) => void } = { resolve: () => undefined, reject: () => undefined };
+  const promise = new Promise<void>((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+  return { promise, ...settle };
 }
 
 function renderCompanies() {
@@ -171,6 +185,37 @@ describe("deleting a pillar or criterion", () => {
     expect(await within(dialog).findByText(refusal)).toBeInTheDocument();
     expect(screen.getAllByText(refusal)).toHaveLength(1);
   });
+
+  it("waits for a delete already sent, and the next dialog opens without its refusal", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<GsrSettingsPage />, admin);
+    const section = (await screen.findByDisplayValue("Brand Impact")).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("button", { name: "Delete pillar" }));
+    const dialog = screen.getByRole("dialog");
+    const call = pending();
+    vi.mocked(deletePillar).mockImplementationOnce(() => call.promise);
+    await user.click(within(dialog).getByRole("button", { name: "Delete pillar" }));
+    expect(within(dialog).getByRole("button", { name: "Working..." })).toBeDisabled();
+
+    // The delete is on its way, so Cancel, Escape and the backdrop wait for its answer.
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.keyboard("{Escape}");
+    fireEvent.mouseDown(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    const refusal = "This pillar is part of a signed-off review, so it cannot be deleted. Untick Active to retire it instead.";
+    call.reject(new Error(refusal));
+    expect(await within(dialog).findByText(refusal)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    const row = screen.getByDisplayValue("Curiosity").closest("li") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Delete criterion" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Curiosity"?');
+    expect(screen.queryByText(refusal)).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByDisplayValue("Brand Impact")).toBeInTheDocument();
+  });
 });
 
 describe("retiring a job role", () => {
@@ -265,6 +310,30 @@ describe("deliverable categories", () => {
     expect(within(group).getByText("Uncategorized", { selector: "p" })).toBeInTheDocument();
     expect(within(group).getByDisplayValue("Monthly jobsite inspections")).toBeInTheDocument();
   });
+
+  it("waits for a category delete already sent, and opens the next dialog without its failure", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanySettingsPage />, admin);
+    await screen.findByLabelText("Category name BD & Sales");
+    await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
+    const dialog = screen.getByRole("dialog");
+    const call = pending();
+    vi.mocked(deleteDeliverableCategory).mockImplementationOnce(() => call.promise);
+    await user.click(within(dialog).getByRole("button", { name: "Delete category" }));
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    call.reject(new Error("Failed to fetch"));
+    expect(await within(dialog).findByText("The connection dropped. Check your signal and try again.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Category name BD & Sales")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("The connection dropped");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+  });
 });
 
 describe("deleting a company", () => {
@@ -281,6 +350,40 @@ describe("deleting a company", () => {
     }
     expect(dialog).not.toHaveTextContent("Its people stay as accounts");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  });
+
+  it("cannot be cancelled once the delete starts, and the next dialog opens clean", async () => {
+    const user = userEvent.setup();
+    vi.mocked(deleteCompany).mockClear();
+    renderCompanies();
+    await user.click(await screen.findByRole("button", { name: "Delete Klasik Construction" }));
+    const dialog = screen.getByRole("dialog");
+    const call = pending();
+    vi.mocked(disconnectConnection).mockImplementationOnce(() => call.promise);
+    await user.type(within(dialog).getByLabelText("Type the identifier to confirm"), "klasik");
+    await user.click(within(dialog).getByRole("button", { name: "Delete company" }));
+
+    // A provider may already be disconnected, so nothing offers to call the delete back.
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Deleting..." })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    fireEvent.mouseDown(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    call.reject(new Error("Failed to fetch"));
+    expect(await within(dialog).findByText("The connection dropped. Check your signal and try again.")).toBeInTheDocument();
+    expect(deleteCompany).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).not.toBeDisabled();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Klasik Construction" })).toBeInTheDocument();
+
+    // The next dialog says nothing about the last one's failure, and its confirm box is empty.
+    await user.click(screen.getByRole("button", { name: "Delete RBA Projects" }));
+    const next = screen.getByRole("dialog");
+    expect(next).not.toHaveTextContent("The connection dropped");
+    expect(within(next).getByLabelText("Type the identifier to confirm")).toHaveValue("");
+    await user.click(within(next).getByRole("button", { name: "Cancel" }));
   });
 
   it("stops before deleting anything when a connection cannot be revoked, and says why in the dialog", async () => {
@@ -347,8 +450,51 @@ describe("deleting a company", () => {
     expect(screen.queryByRole("heading", { name: "RBA Projects" })).not.toBeInTheDocument();
     // The removal can be run again from the notice, and goes once it works.
     vi.mocked(removeCompanyFiles).mockClear();
-    await user.click(screen.getByRole("button", { name: "Remove the files" }));
+    await user.click(screen.getByRole("button", { name: "Remove the files for RBA Projects" }));
     await waitFor(() => expect(screen.queryByText(/some of its stored files were not removed/)).not.toBeInTheDocument());
     expect(removeCompanyFiles).toHaveBeenCalledWith("co-rba");
+  });
+
+  it("keeps a notice for each company whose files did not all go, whatever is deleted after", async () => {
+    const user = userEvent.setup();
+    for (const [slug, name] of [["north", "North Yard"], ["south", "South Yard"], ["east", "East Yard"]]) {
+      await createCompany({ slug, name, theme_key: "kingdom" });
+    }
+    renderCompanies();
+
+    async function remove(name: string, slug: string) {
+      await user.click(await screen.findByRole("button", { name: `Delete ${name}` }));
+      const dialog = screen.getByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Type the identifier to confirm"), slug);
+      await user.click(within(dialog).getByRole("button", { name: "Delete company" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    }
+    const stranded = (name: string) => screen.queryByText(new RegExp(`${name} is deleted, but some of its stored files were not removed`));
+
+    vi.mocked(removeCompanyFiles).mockRejectedValueOnce(new Error("Failed to fetch"));
+    await remove("North Yard", "north");
+    expect(await screen.findByText(/North Yard is deleted, but some of its stored files were not removed/)).toBeInTheDocument();
+
+    // A later delete whose files all go leaves the earlier notice where it is.
+    vi.mocked(removeCompanyFiles).mockClear();
+    await remove("South Yard", "south");
+    await waitFor(() => expect(removeCompanyFiles).toHaveBeenCalledWith("co-south"));
+    expect(stranded("North Yard")).toBeInTheDocument();
+    expect(stranded("South Yard")).not.toBeInTheDocument();
+
+    // A second failure adds its own notice beside the first.
+    vi.mocked(removeCompanyFiles).mockRejectedValueOnce(new Error("Failed to fetch"));
+    await remove("East Yard", "east");
+    expect(await screen.findByText(/East Yard is deleted, but some of its stored files were not removed/)).toBeInTheDocument();
+    expect(stranded("North Yard")).toBeInTheDocument();
+
+    // Each notice retries its own company, and only its own notice goes.
+    vi.mocked(removeCompanyFiles).mockClear();
+    await user.click(screen.getByRole("button", { name: "Remove the files for North Yard" }));
+    await waitFor(() => expect(stranded("North Yard")).not.toBeInTheDocument());
+    expect(removeCompanyFiles).toHaveBeenCalledTimes(1);
+    expect(removeCompanyFiles).toHaveBeenCalledWith("co-north");
+    expect(stranded("East Yard")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove the files for East Yard" })).toBeInTheDocument();
   });
 });
