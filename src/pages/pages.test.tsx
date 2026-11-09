@@ -57,6 +57,8 @@ import MarketingPage from "./MarketingPage.tsx";
 import ProductionPage from "./production/ProductionPage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
 import WinsPage from "./WinsPage.tsx";
+import SalesFinancePage from "./salesFinance/SalesFinancePage.tsx";
+import ControlsPage from "./salesFinance/ControlsPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -1265,7 +1267,7 @@ describe("home cards", () => {
     const shortcuts = card("Sections");
     expect(within(shortcuts).getByRole("link", { name: "Production" })).toHaveAttribute("href", "/production");
     expect(within(shortcuts).getByRole("link", { name: "People / HR" })).toHaveAttribute("href", "/gsr");
-    expect(within(shortcuts).getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/financials");
+    expect(within(shortcuts).getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/sales-finance");
     expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
     const wins = card("Recent wins");
     expect(within(wins).getByText("Sample win 6")).toBeInTheDocument();
@@ -1392,6 +1394,25 @@ describe("scaffolds", () => {
     expect(region.textContent).not.toMatch(/\d/);
     expect(region.querySelector("svg")).toBeNull();
   }
+
+  it("shows Sales & Finance reporting as not configured, with no figures", async () => {
+    const { container } = renderWithHub(<SalesFinancePage />, freshAdmin, { path: "/sales-finance", pattern: "/sales-finance" });
+    expect(await screen.findByRole("heading", { name: "Sales & Finance" })).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "Reporting" })).toHaveAttribute("href", "/sales-finance");
+    expect(within(tabs).getByRole("link", { name: "Controls" })).toHaveAttribute("href", "/sales-finance/controls");
+    await expectScaffold("Sales reporting");
+    await expectScaffold("Financial reporting");
+    expect(container.querySelectorAll("input, select, textarea")).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Financials" })).toHaveAttribute("href", "/financials");
+    expect(screen.getByRole("link", { name: "Marketing" })).toHaveAttribute("href", "/marketing");
+  });
+
+  it("shows Controls as not configured", async () => {
+    renderWithHub(<ControlsPage />, freshAdmin, { path: "/sales-finance/controls", pattern: "/sales-finance/controls" });
+    expect(await screen.findByRole("heading", { name: "Controls" })).toBeInTheDocument();
+    await expectScaffold("QuickBooks controls");
+  });
 
   it("keeps the Production cards unscored", async () => {
     renderWithHub(<ProductionPage />, freshAdmin, { path: "/production", pattern: "/production" });

@@ -111,6 +111,14 @@ describe("navFor without the switchboard module", () => {
     expect(employee.filter((label) => label !== "Wins")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
   });
 
+  it("puts Reporting and Controls after People for admins with data sources on, and nothing new for employees", () => {
+    const dataSources = { ...klasik, modules: ["data_sources"] };
+    expect(flatItems(navFor(dataSources, true, false)).map((i) => i.id)).toEqual([
+      "dashboard", "gsr", "reviews", "goals", "people", "sales-reporting", "controls", "sops", "resources", "financials", "marketing", "my-gsr-admin", "settings",
+    ]);
+    expect(shape(flatItems(navFor(dataSources, false, false)))).toEqual(shape(TODAY_EMPLOYEE));
+  });
+
   it("ignores an unknown key entirely", () => {
     const future = { ...klasik, modules: ["future"] };
     expect(shape(flatItems(navFor(future, true, false)))).toEqual(shape(TODAY_ADMIN));
@@ -130,7 +138,7 @@ describe("navFor with the switchboard module", () => {
     const layout = navFor(kingdom, true, false);
     expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
     expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
-    expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
+    expect(labelsOf(layout, "Sales & Finance")).toEqual(["Reporting", "Controls", "Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People", "My GSR"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
@@ -149,17 +157,28 @@ describe("navFor with the switchboard module", () => {
     const layout = navFor(kingdom, true, true);
     expect(sections(layout).map((s) => s.heading)).toEqual(["Home", "Sales & Finance", "Production", "People / HR", null]);
     expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
-    expect(labelsOf(layout, "Sales & Finance")).toEqual(["Financials", "Marketing"]);
+    expect(labelsOf(layout, "Sales & Finance")).toEqual(["Reporting", "Controls", "Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
     expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
+  });
+
+  it("opens Sales & Finance with Reporting and Controls for an admin and a Rococo admin", () => {
+    const idsOf = (layout: NavLayout) => sections(layout).find((s) => s.group === "sales_finance")?.items.map((i) => i.id);
+    expect(idsOf(navFor(kingdom, true, false))).toEqual(["sales-reporting", "controls", "financials", "marketing"]);
+    expect(idsOf(navFor(kingdom, true, true))).toEqual(["sales-reporting", "controls", "financials", "marketing"]);
+    expect(sections(navFor(kingdom, true, true)).flatMap((s) => s.items.map((i) => i.id))).not.toContain("my-gsr-admin");
+  });
+
+  it("gives a Kingdom employee no Sales & Finance section", () => {
+    expect(sections(navFor(kingdom, false, false)).find((s) => s.group === "sales_finance")).toBeUndefined();
   });
 });
 
 describe("sectionShortcuts", () => {
   it("points at each section's first page, except Home and the utility group", () => {
     expect(sectionShortcuts(navFor(kingdom, true, false))).toEqual([
-      { group: "sales_finance", heading: "Sales & Finance", to: "/financials" },
+      { group: "sales_finance", heading: "Sales & Finance", to: "/sales-finance" },
       { group: "production", heading: "Production", to: "/production" },
       { group: "people_hr", heading: "People / HR", to: "/gsr" },
     ]);

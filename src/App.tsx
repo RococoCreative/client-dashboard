@@ -46,6 +46,8 @@ import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
 import WinsPage from "./pages/WinsPage.tsx";
+import SalesFinancePage from "./pages/salesFinance/SalesFinancePage.tsx";
+import ControlsPage from "./pages/salesFinance/ControlsPage.tsx";
 import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
@@ -333,6 +335,8 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="resources" element={<WithCompany><ResourcesPage /></WithCompany>} />
             <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
+            <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
+            <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
             <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />

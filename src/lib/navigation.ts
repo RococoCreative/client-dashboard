@@ -3,7 +3,7 @@
 // its data differs: without the switchboard module a company gets the flat sidebar it always had,
 // with it the same items grouped into four sections plus an unlabeled utility group.
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, Trophy, UserRound, Users } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, FolderOpen, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
 import type { Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
@@ -46,6 +46,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "my-goals", to: "/my/goals", label: "My Goals", icon: Target, audience: "employee", group: "people_hr" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "admin", group: "people_hr" },
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production" },
+  { id: "sales-reporting", to: "/sales-finance", label: "Reporting", icon: ChartColumn, end: true, audience: "admin", group: "sales_finance", requires: "data_sources" },
+  { id: "controls", to: "/sales-finance/controls", label: "Controls", icon: ShieldCheck, audience: "admin", group: "sales_finance", requires: "data_sources" },
   { id: "sops", to: "/sops", label: "SOPs", icon: BookOpen, audience: "both", group: "utility" },
   { id: "resources", to: "/resources", label: "Resources", icon: FolderOpen, audience: "both", group: "utility" },
   { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance" },

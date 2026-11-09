@@ -1,9 +1,10 @@
 // The Rococo admin path through the real gate and router: sign in with no company, land on
 // the portfolio in the Rococo theme with no "My GSR", open a company from its card, and the
 // hub switches to that company's dashboard and theme with a way back. It also proves every
-// route lands in the same place for a company with modules on as for one with none, and that
-// ModuleOnly keeps a module's pages to the companies that have it.
-import { render, screen, waitFor } from "@testing-library/react";
+// route lands in the same place for a company with modules on as for one with none, that
+// ModuleOnly keeps a module's pages to the companies that have it, and that a module route
+// typed by someone who may not see it redirects home.
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -163,5 +164,28 @@ describe("routes land the same with modules on", () => {
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
     const landed = await landing(path, persona, slug);
     expect(landed.pathname).toBe(expected);
+  });
+
+  it.each(["/sales-finance", "/sales-finance/controls"])("keeps a company without data sources out of Sales & Finance: %s", async (path) => {
+    window.history.pushState({}, "", `${path}?persona=admin&company=klasik`);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sales & Finance" })).not.toBeInTheDocument();
+  });
+
+  it.each(["/sales-finance", "/sales-finance/controls"])("sends an employee who types the address back home: %s", async (path) => {
+    window.history.pushState({}, "", `${path}?persona=employee&company=kingdom`);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: /Welcome back/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sales & Finance" })).not.toBeInTheDocument();
+  });
+
+  it("opens both pages for a Kingdom admin", async () => {
+    window.history.pushState({}, "", "/sales-finance?persona=admin&company=kingdom");
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Sales & Finance" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", { name: "Sections" })).getByRole("link", { name: "Controls" }));
+    expect(await screen.findByRole("heading", { name: "Controls" })).toBeInTheDocument();
   });
 });
