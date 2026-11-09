@@ -5,10 +5,14 @@
 // both what is rated and what the months are adding up to.
 import { pluralize } from "../../lib/format.ts";
 import type { GsrMonthsFigure } from "../../lib/gsr/goals.ts";
+import { lineItemPercent } from "../../lib/gsr/scoring.ts";
 import type { ReviewCycle } from "../../types/database.ts";
 
 export default function GsrQuarterLine({ cycle, figure }: { cycle: ReviewCycle; figure: GsrMonthsFigure<ReviewCycle> }) {
   const locked = figure.months.filter((m) => m.locked !== null).length;
+  // The months' figure is the one line item the review signs off, so it reads the way that
+  // line item scores.
+  const percent = lineItemPercent(figure);
   return (
     <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-3 text-sm">
       <div className="min-w-0">
@@ -17,7 +21,7 @@ export default function GsrQuarterLine({ cycle, figure }: { cycle: ReviewCycle; 
           {locked === 0 ? "Counts once a month is locked in." : `${pluralize(locked, "month")} locked in so far; written into the review when it is signed off.`}
         </p>
       </div>
-      <span className="tnum text-ink">{figure.target === 0 ? "-" : `${Math.round((figure.actual / figure.target) * 100)}%`}</span>
+      <span className="tnum text-ink">{percent === null ? "-" : `${percent}%`}</span>
     </div>
   );
 }

@@ -130,10 +130,14 @@ export async function listCycleReviews(cycleId: string): Promise<Review[]> {
   return (data as Review[]) ?? [];
 }
 
-export async function listEmployeeReviews(employeeId: string): Promise<Review[]> {
+// One person's reviews in one company. A person who moves company leaves their reviews with the
+// old one (they belong to its cycles), and RLS still lets them and Rococo read those, so the
+// history asks for this company's rather than everything the caller can see.
+export async function listEmployeeReviews(companyId: string, employeeId: string): Promise<Review[]> {
   const { data, error } = await db()
     .from("reviews")
     .select(REVIEW_COLUMNS)
+    .eq("company_id", companyId)
     .eq("employee_id", employeeId)
     .order("created_at", { ascending: false });
   if (error) throw error;

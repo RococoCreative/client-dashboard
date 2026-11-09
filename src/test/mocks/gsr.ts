@@ -98,8 +98,8 @@ export async function deleteCycle(id: string): Promise<void> {
 export async function listCycleReviews(cycleId: string): Promise<Review[]> {
   return reviews.filter((r) => r.cycle_id === cycleId);
 }
-export async function listEmployeeReviews(employeeId: string): Promise<Review[]> {
-  return reviews.filter((r) => r.employee_id === employeeId).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+export async function listEmployeeReviews(companyId: string, employeeId: string): Promise<Review[]> {
+  return reviews.filter((r) => r.company_id === companyId && r.employee_id === employeeId).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 export async function listCompanyReviews(companyId: string): Promise<Review[]> {
   return reviews.filter((r) => r.company_id === companyId);

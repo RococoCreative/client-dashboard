@@ -405,7 +405,7 @@ function EmployeeDashboard() {
 
   const state = useAsync(async () => {
     const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, jobRoles, financials] = await Promise.all([
-      listEmployeeReviews(profile.id),
+      listEmployeeReviews(companyId, profile.id),
       listPillars(companyId),
       listCriteria(companyId),
       listImpactScores(companyId, profile.id),

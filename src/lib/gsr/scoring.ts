@@ -90,15 +90,28 @@ export function weightTotal(pillars: PillarConfig[]): number {
   return activePillars(pillars).reduce((sum, p) => sum + (isFiniteNumber(p.weight) ? p.weight : 0), 0);
 }
 
+// One line item's achievement, the step every line-item pillar averages: actual over target,
+// held at 1. Null when the item has no target or no actual yet, so it is not scored.
+export function lineItemAchievement(item: { target?: number | null; actual?: number | null }): number | null {
+  if (!isFiniteNumber(item.target) || item.target <= 0 || !isFiniteNumber(item.actual)) return null;
+  return Math.min(item.actual / item.target, 1);
+}
+
+// The same achievement as the whole percent a screen shows beside a line item or a figure that
+// becomes one (the deliverables module's, the months' GSR scores), so a screen never works the
+// division out for itself.
+export function lineItemPercent(item: { target?: number | null; actual?: number | null }): number | null {
+  const achievement = lineItemAchievement(item);
+  return achievement === null ? null : Math.round(achievement * 100);
+}
+
 // Score one pillar from the score rows that belong to it. Null when nothing is scored.
 export function pillarScore(pillar: PillarConfig, scores: ScoreInput[]): number | null {
   const own = scores.filter((s) => s.pillar_id === pillar.id);
   if (pillar.scoring_type !== "rating") {
-    const items = own.filter((s) => isFiniteNumber(s.target) && s.target > 0 && isFiniteNumber(s.actual));
-    if (items.length === 0) return null;
-    const achievement =
-      items.reduce((sum, s) => sum + Math.min((s.actual as number) / (s.target as number), 1), 0) /
-      items.length;
+    const achieved = own.map(lineItemAchievement).filter(isFiniteNumber);
+    if (achieved.length === 0) return null;
+    const achievement = achieved.reduce((sum, a) => sum + a, 0) / achieved.length;
     return clamp(achievement * 100, 0, 100);
   }
   const scale = isFiniteNumber(pillar.rating_scale_max) && pillar.rating_scale_max > 0 ? pillar.rating_scale_max : 5;

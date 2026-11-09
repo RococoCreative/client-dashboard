@@ -28,7 +28,7 @@ export default function MyReviewsPage() {
   const companyId = company!.id;
 
   const state = useAsync(async () => {
-    const [reviews, cycles, pillars] = await Promise.all([listEmployeeReviews(profile.id), listCycles(companyId), listPillars(companyId)]);
+    const [reviews, cycles, pillars] = await Promise.all([listEmployeeReviews(companyId, profile.id), listCycles(companyId), listPillars(companyId)]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     return { reviews, cycles, pillars, scores };
   }, [companyId, profile.id]);

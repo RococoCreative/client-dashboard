@@ -27,7 +27,7 @@ export default function MyGsrPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [cycles, reviews] = await Promise.all([listCycles(companyId), listEmployeeReviews(profile.id)]);
+    const [cycles, reviews] = await Promise.all([listCycles(companyId), listEmployeeReviews(companyId, profile.id)]);
     // The live month: the first GSR among the cycles covering today.
     const cycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
     const review = cycle ? (reviews.find((r) => r.cycle_id === cycle.id) ?? null) : null;

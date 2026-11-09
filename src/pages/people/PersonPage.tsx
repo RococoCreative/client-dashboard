@@ -50,7 +50,7 @@ export default function PersonPage() {
   const state = useAsync(async () => {
     const [people, reviews, cycles, pillars, criteria, impact, kpis, compensation, financials, jobRoles, goals] = await Promise.all([
       listCompanyProfiles(companyId),
-      listEmployeeReviews(profileId),
+      listEmployeeReviews(companyId, profileId),
       listCycles(companyId),
       listPillars(companyId),
       listCriteria(companyId),

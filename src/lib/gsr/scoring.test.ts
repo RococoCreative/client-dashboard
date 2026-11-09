@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   averageScore,
   computeReviewScore,
+  lineItemAchievement,
+  lineItemPercent,
   pillarScore,
   pillarsForReview,
   scoreBand,
@@ -154,5 +156,29 @@ describe("pillarsForReview", () => {
   it("scores a Monthly GSRs pillar from its one line item: the months' average", () => {
     const gsrOnly: PillarConfig[] = [{ id: "gsr", name: "Monthly GSRs", weight: 100, scoring_type: "gsr_goals", rating_scale_max: 5 }];
     expect(computeReviewScore(gsrOnly, [{ pillar_id: "gsr", target: 300, actual: 255 }]).overall).toBe(85);
+  });
+});
+
+describe("lineItemAchievement and lineItemPercent", () => {
+  it("reads one line item the way its pillar averages it: actual over target, held at 100%", () => {
+    expect(lineItemAchievement({ target: 10, actual: 8 })).toBeCloseTo(0.8);
+    expect(lineItemAchievement({ target: 20, actual: 25 })).toBe(1);
+    expect(lineItemPercent({ target: 10, actual: 8 })).toBe(80);
+    expect(lineItemPercent({ target: 20, actual: 25 })).toBe(100);
+    // Two thirds rounds the way a screen shows it.
+    expect(lineItemPercent({ target: 6, actual: 4 })).toBe(67);
+  });
+
+  it("leaves an item with no target or no actual unscored", () => {
+    for (const item of [{ target: 0, actual: 8 }, { target: null, actual: 8 }, { target: 10, actual: null }, {}]) {
+      expect(lineItemAchievement(item)).toBeNull();
+      expect(lineItemPercent(item)).toBeNull();
+    }
+  });
+
+  it("agrees with the pillar score for a pillar of one line item", () => {
+    const gsr: PillarConfig = { id: "gsr", name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", rating_scale_max: 5 };
+    const item = { pillar_id: "gsr", target: 300, actual: 255 };
+    expect(lineItemPercent(item)).toBe(Math.round(pillarScore(gsr, [item]) as number));
   });
 });
