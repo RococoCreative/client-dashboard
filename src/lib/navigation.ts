@@ -3,7 +3,7 @@
 // its data differs: without the switchboard module a company gets the flat sidebar it always had,
 // with it the same items grouped into four sections plus an unlabeled utility group.
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users } from "lucide-react";
 import type { Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
@@ -57,6 +57,7 @@ export const PORTFOLIO_NAV: readonly NavItem[] = [
   { id: "portfolio", to: "/rococo", label: "Portfolio", icon: LayoutGrid, end: true, audience: "both", group: "utility" },
   { id: "companies", to: "/rococo/companies", label: "Companies", icon: Building2, audience: "both", group: "utility" },
   { id: "rococo-people", to: "/rococo/people", label: "People", icon: Users, audience: "both", group: "utility" },
+  { id: "activity", to: "/rococo/activity", label: "Activity", icon: History, audience: "both", group: "utility" },
 ];
 
 export interface NavSection {

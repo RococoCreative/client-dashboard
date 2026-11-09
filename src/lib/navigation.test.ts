@@ -2,7 +2,7 @@
 // before the registry replaced them, so a company without the switchboard module is proven to see
 // exactly the sidebar it always had, and the four-section layout is pinned for one that has it.
 import { describe, expect, it } from "vitest";
-import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
 import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, navFor, sectionShortcuts, type NavItem, type NavLayout } from "./navigation.ts";
@@ -28,6 +28,9 @@ const TODAY_PORTFOLIO: TodayItem[] = [
   { to: "/rococo/companies", label: "Companies", icon: Building2 },
   { to: "/rococo/people", label: "People", icon: Users },
 ];
+
+// The portfolio sidebar is today's three plus the Activity page (0025).
+const PORTFOLIO: TodayItem[] = [...TODAY_PORTFOLIO, { to: "/rococo/activity", label: "Activity", icon: History, end: false }];
 
 const TODAY_EMPLOYEE: TodayItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -97,8 +100,8 @@ describe("navFor without the switchboard module", () => {
 });
 
 describe("PORTFOLIO_NAV", () => {
-  it("is today's portfolio sidebar", () => {
-    expect(shape(PORTFOLIO_NAV)).toEqual(shape(TODAY_PORTFOLIO));
+  it("is today's portfolio sidebar plus Activity", () => {
+    expect(shape(PORTFOLIO_NAV)).toEqual(shape(PORTFOLIO));
   });
 });
 

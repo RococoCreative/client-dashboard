@@ -46,6 +46,7 @@ import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
 import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
+import ActivityPage from "./pages/rococo/ActivityPage.tsx";
 import type { Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
@@ -330,6 +331,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
             <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />
+            <Route path="rococo/activity" element={<RococoOnly><ActivityPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

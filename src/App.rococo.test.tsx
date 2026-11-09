@@ -22,6 +22,7 @@ vi.mock("./services/employees.ts", () => import("./test/mocks/employees.ts"));
 vi.mock("./services/deliverables.ts", () => import("./test/mocks/deliverables.ts"));
 vi.mock("./services/jobRoles.ts", () => import("./test/mocks/jobRoles.ts"));
 vi.mock("./services/connections.ts", () => import("./test/mocks/connections.ts"));
+vi.mock("./services/audit.ts", () => import("./test/mocks/audit.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";

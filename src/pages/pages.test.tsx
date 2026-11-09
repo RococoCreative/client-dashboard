@@ -3,7 +3,7 @@
 // service that does not exist fails here rather than in someone's browser.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -20,10 +20,12 @@ vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
-import { COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import * as auditService from "../services/audit.ts";
+import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
@@ -45,6 +47,7 @@ import CompanySettingsPage from "./CompanySettingsPage.tsx";
 import PortfolioPage from "./rococo/PortfolioPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
 import UsersPage from "./rococo/UsersPage.tsx";
+import ActivityPage from "./rococo/ActivityPage.tsx";
 import FinancialsPage from "./FinancialsPage.tsx";
 import MarketingPage from "./MarketingPage.tsx";
 
@@ -506,6 +509,55 @@ describe("admin", () => {
     // RBA is the one company these tests never add anyone to, so its count is stable.
     expect(screen.getByText("4 users")).toBeInTheDocument();
     expect(screen.queryByText("Austin Rococo (you)")).not.toBeInTheDocument();
+  });
+
+  it("reads the audit log on the Activity tab, newest first", async () => {
+    renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links")).toBeInTheDocument();
+    expect(screen.getByText("profiles: role employee to admin")).toBeInTheDocument();
+    expect(screen.getByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText("Austin Rococo")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Rococo")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Kingdom Custom Construction")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("Company user")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("filters the Activity tab by company", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
+    await screen.findByText("profiles: role employee to admin");
+    await user.selectOptions(screen.getByLabelText("Filter by company"), "co-klasik");
+    await waitFor(() => expect(screen.queryByText("profiles: role employee to admin")).not.toBeInTheDocument());
+    expect(screen.getByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
+    expect(screen.queryByText(/^companies: modules/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("loads older events under the first page with Load more", async () => {
+    const user = userEvent.setup();
+    // A full first page, all newer than the fixture events, so Load more fetches those three.
+    const firstPage = Array.from({ length: 100 }, (_, i) => ({ ...AUDIT_EVENTS[1], id: `page-${i}`, created_at: new Date(Date.UTC(2026, 9, 1) - i * 60_000).toISOString() }));
+    const spy = vi.spyOn(auditService, "listAuditEvents").mockResolvedValueOnce(firstPage);
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
+    await user.click(await screen.findByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(104);
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("says nothing is recorded for a company with no events", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
+    await screen.findByText("profiles: role employee to admin");
+    await user.selectOptions(screen.getByLabelText("Filter by company"), "co-rba");
+    expect(await screen.findByText("Nothing recorded yet")).toBeInTheDocument();
+    expect(screen.getByText("Role, access and setup changes appear here from now on.")).toBeInTheDocument();
   });
 });
 

@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
@@ -947,6 +947,47 @@ const ROCOCO: Profile = {
 };
 
 export const ALL_PROFILES: Profile[] = [...BUNDLES.flatMap((b) => b.profiles), ROCOCO];
+
+// A few recorded changes for the Rococo Activity page, newest first: Rococo turning Kingdom's
+// modules on and changing a Kingdom role, and a Klasik admin inviting someone.
+export const AUDIT_EVENTS: AuditEvent[] = [
+  {
+    id: "audit-1",
+    company_id: "co-kingdom",
+    table_name: "companies",
+    row_id: "co-kingdom",
+    action: "update",
+    changed: { modules: { old: [], new: [...MODULE_KEYS] } },
+    actor_user_id: "rococo-auth-1",
+    actor_profile_id: "rococo-user-1",
+    actor_kind: "rococo",
+    created_at: "2026-09-02T15:00:00.000Z",
+  },
+  {
+    id: "audit-2",
+    company_id: "co-kingdom",
+    table_name: "profiles",
+    row_id: "kingdom-user-1",
+    action: "update",
+    changed: { role: { old: "employee", new: "admin" } },
+    actor_user_id: "rococo-auth-1",
+    actor_profile_id: "rococo-user-1",
+    actor_kind: "rococo",
+    created_at: "2026-09-01T16:00:00.000Z",
+  },
+  {
+    id: "audit-3",
+    company_id: "co-klasik",
+    table_name: "invitations",
+    row_id: "klasik-invite-1",
+    action: "insert",
+    changed: { role: { old: null, new: "employee" }, email: { old: null, new: "new.hire@beklasik.com" } },
+    actor_user_id: "klasik-auth-1",
+    actor_profile_id: "klasik-user-1",
+    actor_kind: "user",
+    created_at: "2026-09-01T12:00:00.000Z",
+  },
+];
 
 function bundleFor(companyId: string): CompanyBundle | undefined {
   return BUNDLES.find((b) => b.company.id === companyId);
