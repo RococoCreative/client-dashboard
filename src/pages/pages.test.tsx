@@ -1378,3 +1378,32 @@ describe("wins", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
+
+describe("scaffolds", () => {
+  // A company with the modules on and nothing configured, so later tasks that give Kingdom its
+  // sources do not move these assertions.
+  const freshAdmin = makeHub("admin", { ...RBA.company, modules: ["production", "data_sources"] });
+  const freshEmployee = makeHub("employee", { ...RBA.company, modules: ["production", "data_sources"] });
+  const productionCards = ["Client score", "Cleanliness", "Job health", "Warranty", "PM capacity"];
+
+  async function expectScaffold(name: string) {
+    const region = await screen.findByRole("region", { name });
+    within(region).getByText("Not configured");
+    expect(region.textContent).not.toMatch(/\d/);
+    expect(region.querySelector("svg")).toBeNull();
+  }
+
+  it("keeps the Production cards unscored", async () => {
+    renderWithHub(<ProductionPage />, freshAdmin, { path: "/production", pattern: "/production" });
+    for (const name of productionCards) await expectScaffold(name);
+  });
+
+  it("shows an employee the same Production cards, read-only", async () => {
+    renderWithHub(<ProductionPage />, freshEmployee, { path: "/production", pattern: "/production" });
+    for (const name of productionCards) {
+      await expectScaffold(name);
+      const region = await screen.findByRole("region", { name });
+      expect(within(region).queryAllByRole("button")).toHaveLength(0);
+    }
+  });
+});

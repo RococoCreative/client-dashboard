@@ -1,9 +1,11 @@
 // The Production section's front page: every live project the company tracks by hand, with how
 // many of its milestones and letters are done and the next date it is aiming at. Members read
-// it; admins add projects here and edit them on the project page.
+// it; admins add projects here and edit them on the project page. Below the list sit the
+// Production cards whose definitions are still pending, each saying what it waits on.
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
+import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Field from "../../components/ui/Field.tsx";
@@ -82,6 +84,15 @@ export default function ProductionPage() {
     return map;
   }, [state.data]);
 
+  // PM capacity is its own element so it can be wrapped on its own, apart from the other cards.
+  const pmCapacity = (
+    <ScaffoldCard
+      eyebrow="Production"
+      title="PM capacity"
+      pending={["The capacity sheet and the tab to read", "How each project manager is matched to a person on the roster", "How capacity is calculated"]}
+    />
+  );
+
   const newProject = isAdmin ? <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> New project</Button> : null;
 
   return (
@@ -129,6 +140,22 @@ export default function ProductionPage() {
           </div>
         </Section>
       )}
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ScaffoldCard
+          eyebrow="Production"
+          title="Client score"
+          pending={["How a client score is defined, and its scale", "Who enters it, and for which job or period", "Who may see and edit it"]}
+        />
+        <ScaffoldCard
+          eyebrow="Production"
+          title="Cleanliness"
+          pending={["How cleanliness is scored, and its scale", "Who records it, and for which job or visit", "Who may see and edit it"]}
+        />
+        <ScaffoldCard eyebrow="Production" title="Job health" pending={["Which signals make a job healthy or at risk", "Where those signals come from"]} />
+        <ScaffoldCard eyebrow="Production" title="Warranty" pending={["Where warranty items are tracked today", "What the hub should show about them"]} />
+        {pmCapacity}
+      </div>
 
       {creating ? (
         <NewProjectDialog
