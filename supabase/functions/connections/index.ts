@@ -17,7 +17,7 @@
 // GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production).
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, sameBytes, service } from "./http.ts";
 
 type Provider = "gohighlevel" | "quickbooks";
 
@@ -44,43 +44,13 @@ interface ProviderDef {
   revoke?(args: Credentials & { accessToken: string; refreshToken: string | null }): Promise<void>;
 }
 
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const STATE_SECRET = Deno.env.get("CONNECTIONS_STATE_SECRET") ?? "";
 const APP_ORIGINS = (Deno.env.get("APP_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/connections/callback`;
 const STATE_TTL_SECONDS = 10 * 60;
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
 const secondsFromNow = (seconds: number | undefined): string | null =>
   typeof seconds === "number" && Number.isFinite(seconds) ? new Date(Date.now() + seconds * 1000).toISOString() : null;
-
-async function readJson<T>(response: Response, what: string): Promise<T> {
-  const text = await response.text();
-  if (!response.ok) {
-    console.error(`${what} failed with ${response.status}`);
-    throw new HttpError(502, `${what} was refused by the provider.`);
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new HttpError(502, `${what} returned something unexpected.`);
-  }
-}
 
 // GoHighLevel: a sub-account (location) install. The token answer names the location; the
 // location's name is fetched for the card and is not required.
@@ -206,13 +176,6 @@ async function hmac(payload: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload)));
 }
 
-function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
 async function signState(claims: StateClaims): Promise<string> {
   const payload = toBase64Url(encoder.encode(JSON.stringify(claims)));
   return `${payload}.${toBase64Url(await hmac(payload))}`;
@@ -241,23 +204,6 @@ function checkReturnTo(value: unknown): string {
   return `${url.origin}${url.pathname}`;
 }
 
-// The signed-in person, checked as an admin of the company through their own JWT and the same
-// row level security the app lives under. Returns their profile id.
-async function requireAdmin(req: Request, companyId: string): Promise<string> {
-  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!jwt) throw new HttpError(401, "Sign in first.");
-  const asUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: userData, error: userError } = await asUser.auth.getUser(jwt);
-  if (userError || !userData.user) throw new HttpError(401, "Sign in first.");
-  const { data: profile } = await asUser.from("profiles").select("id, role, company_id, is_rococo_admin").eq("user_id", userData.user.id).maybeSingle();
-  const allowed = Boolean(profile) && (profile!.is_rococo_admin || (profile!.role === "admin" && profile!.company_id === companyId));
-  if (!allowed) throw new HttpError(403, "Only a company admin can manage connections.");
-  return profile!.id as string;
-}
-
-const service = () => createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 const redirect = (to: string) => new Response(null, { status: 302, headers: { Location: to } });
 const backTo = (returnTo: string, params: Record<string, string>) => redirect(`${returnTo}?${new URLSearchParams(params).toString()}`);
 
