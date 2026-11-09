@@ -18,6 +18,7 @@ import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import { hasModule, type ModuleKey } from "./lib/modules.ts";
+import { isCompanyAdminRole } from "./lib/people.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -285,7 +286,7 @@ function SignedIn({ session }: { session: Session }) {
   }
 
   const isRococo = profile.is_rococo_admin;
-  const isAdmin = isRococo || (profile.role === "admin" && profile.company_id !== null && profile.company_id === company?.id);
+  const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && profile.company_id !== null && profile.company_id === company?.id);
 
   const value: HubValue = {
     session,

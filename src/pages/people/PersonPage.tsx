@@ -37,8 +37,8 @@ import { activeCycles, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
-import { formatTenure, hasAccount, totalAnnual } from "../../lib/people.ts";
-import { REVIEW_STATUS_LABELS, ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
+import { canGrantRole, formatTenure, grantableRoles, hasAccount, totalAnnual } from "../../lib/people.ts";
+import { REVIEW_STATUS_LABELS, ROLE_LABELS, type Profile, type Role } from "../../types/database.ts";
 
 export default function PersonPage() {
   const { profileId = "" } = useParams();
@@ -128,6 +128,7 @@ export default function PersonPage() {
   }
   const average = averageScore(rows.map((r) => r.result?.overall ?? null));
   const self = person.id === me.id;
+  const canChangeRole = canGrantRole(me, person.role);
   const tenure = formatTenure(person.hire_date);
   const manager = person.reports_to ? people.find((p) => p.id === person.reports_to) ?? null : null;
 
@@ -220,11 +221,12 @@ export default function PersonPage() {
               </div>
               <div>
                 <label htmlFor="person-role" className={labelClass}>Role</label>
-                <select id="person-role" value={person.role} disabled={self} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
-                  {keysOf(ROLE_LABELS).map((r) => (
+                <select id="person-role" value={person.role} disabled={self || !canChangeRole} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
+                  {(canChangeRole ? grantableRoles(me) : [person.role]).map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
                 </select>
+                {!canChangeRole && !self ? <p className="mt-1 text-[12px] text-ink-3">Only an owner or Rococo can change this person's role.</p> : null}
               </div>
             </div>
           </Section>

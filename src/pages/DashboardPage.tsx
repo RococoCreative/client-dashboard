@@ -37,7 +37,7 @@ import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, c
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
-import { financialProgress, hasAccount } from "../lib/people.ts";
+import { financialProgress, hasAccount, isCompanyAdminRole } from "../lib/people.ts";
 import { hasModule } from "../lib/modules.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
@@ -230,7 +230,7 @@ function AdminDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
+        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
         <Stat
           label="GSRs complete"
           value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
