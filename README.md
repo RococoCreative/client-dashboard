@@ -93,8 +93,15 @@ a reload resets the data.
   profile inherits the invitation's company, role, and title.
 - **First sign-in:** the person gives their name and is in. Roles are `admin` (the whole
   hub for their company) or `employee` (own GSR data plus the libraries).
-- **Deactivating** a person on the People page removes all access immediately; their
-  account can be reactivated later.
+- **Deactivating** a person on the People page removes all access immediately, including
+  editing their own profile; their account can be reactivated later. A Rococo admin's profile
+  is Rococo's to change, even when it sits on a company's roster.
+- **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
+  compensation and deliverables with them and leaves their months with the old company. A
+  pending invitation moves with them while they still need it to sign in, and manager links
+  across the two companies are cleared (0029). Setting someone to No company withdraws their
+  pending invitations, since there is no company for one to wait in; the company that places
+  them later invites them from its People page.
 
 ## The roster and accounts
 
@@ -169,7 +176,9 @@ Connections. Connect sends the admin to the provider's own sign-in page; the pro
 the browser back to the `connections` Edge Function, which exchanges the code for tokens,
 records the connection on `company_connections` (the status row admins see: which account,
 since when, last sync) and keeps the tokens in `connection_tokens`, a table with row level
-security on and no policies, so only the function's service role can read it. Nothing in the
+security on and no policies, so only the function's service role can read it. Each sign-in's
+state is single use: the function records its nonce in `connection_states` (0029, locked down
+the same way) and redeems it once on the way back. Nothing in the
 browser holds a provider secret or token, and nothing is shared between companies. Disconnect
 revokes at the provider where it can and drops the tokens either way. The figures themselves
 are not synced yet; `docs/integrations.md` maps where each one will come from.
@@ -210,7 +219,9 @@ month's goals read back as hit or miss with the steps that were taken, their not
 the manager writes now, and a missed goal carries into this month in one click (only the steps
 not yet taken come along, linked to the goal it came from). Closing a cycle freezes its goals and
 their notes, and so does an admin locking a person's month in (database triggers, not just the
-UI; only the why stays writable), so what a month recorded stays as recorded.
+UI; only the why stays writable), so what a month recorded stays as recorded. Deleting a cycle
+deletes its reviews and the goals filed into it, notes and all (0029); closing it is how to keep
+the history.
 
 The person works their own open month the same way, from My GSR: they add and edit goals,
 steps, completion and notes, carry last month's misses forward, and write the why, so the
@@ -266,7 +277,11 @@ deliverable categories and job roles), without Klasik's own wording, goals, cycl
 
 A completed review keeps the pillars and weights it was signed off with (0022), alongside its
 frozen ratings and line items, so re-weighting or adding a pillar later never moves a score of
-record. Reopening a review lets them go; completing it again freezes today's.
+record. Reopening a review lets them go; completing it again freezes today's. Until it is
+reopened, a signed-off review is read-only in the database as well as on the page: its line
+items, ratings, notes, feedback and score cannot be changed through the API, and a pillar or
+criterion it holds cannot be deleted (untick Active to retire it instead). A company also runs
+one cycle per cadence and period (0029).
 
 ## Financial CSV import
 
