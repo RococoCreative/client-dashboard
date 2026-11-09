@@ -1659,6 +1659,58 @@ describe("data sources", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(within(panel).getByText("Sample new tab")).toBeInTheDocument();
   });
+
+  it("shows the Google Sheets connection only to a company with data sources", async () => {
+    const { unmount } = renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    await screen.findByRole("heading", { name: "Connections" });
+    const connections = card("Connections");
+    const row = (await within(connections).findByText("Google Sheets")).closest("li") as HTMLElement;
+    expect(within(row).getByText("Connected")).toBeInTheDocument();
+    expect(within(row).getByText((text) => text.includes("sample-reports@example.com"))).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Disconnect Google Sheets" })).toBeInTheDocument();
+    unmount();
+
+    renderWithHub(<CompanySettingsPage />, admin, { path: "/settings", pattern: "/settings" });
+    expect(await screen.findByText("GoHighLevel")).toBeInTheDocument();
+    expect(screen.queryByText("Google Sheets")).not.toBeInTheDocument();
+  });
+
+  it("confirms a Google Sheets connection on the way back", async () => {
+    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings?connected=google_sheets", pattern: "/settings" });
+    expect(await screen.findByText("Google Sheets is connected.")).toBeInTheDocument();
+  });
+
+  it("reads a sheet's headers into the field map", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    await screen.findByRole("heading", { name: "Data sources" });
+    const panel = card("Data sources");
+    await within(panel).findByText("Sample sales tab");
+    await user.click(within(panel).getByRole("button", { name: "Add source" }));
+    const dialog = screen.getByRole("dialog", { name: "New data source" });
+    fireEvent.change(within(dialog).getByLabelText("Google Sheets link"), { target: { value: "https://docs.google.com/spreadsheets/d/sample-new-sheet/edit#gid=42" } });
+    await user.click(within(dialog).getByRole("button", { name: "Read headers" }));
+    expect(await within(dialog).findByText("Sample reporting workbook, tab Sample finance")).toBeInTheDocument();
+    expect(within(dialog).getByText("Added 4 fields.")).toBeInTheDocument();
+    // The label inputs repeat each header, so the header inputs are read by their own names.
+    const headerInputs = within(dialog).getAllByRole("textbox", { name: /^Column header / });
+    expect(headerInputs.map((input) => (input as HTMLInputElement).value)).toEqual(["Job", "Contract amount", "Margin", "Signed on"]);
+    expect(within(dialog).getByDisplayValue("job")).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue("contract_amount")).toBeInTheDocument();
+  });
+
+  it("keeps Read headers off until the link names a tab", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    await screen.findByRole("heading", { name: "Data sources" });
+    const panel = card("Data sources");
+    await within(panel).findByText("Sample sales tab");
+    await user.click(within(panel).getByRole("button", { name: "Add source" }));
+    const dialog = screen.getByRole("dialog", { name: "New data source" });
+    expect(within(dialog).getByRole("button", { name: "Read headers" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Google Sheets link"), { target: { value: "https://docs.google.com/spreadsheets/d/sample-new-sheet/edit" } });
+    expect(within(dialog).getByRole("button", { name: "Read headers" })).toBeDisabled();
+  });
 });
 
 describe("external links", () => {

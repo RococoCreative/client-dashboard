@@ -1,9 +1,9 @@
 // Proves the data source editor's form logic: a new draft's shape, a source read back into a
-// draft and out again unchanged, and every message a bad draft is refused with, first failure
-// first.
+// draft and out again unchanged, every message a bad draft is refused with, first failure first,
+// and a sheet's headers merged into the field map.
 import { describe, expect, it } from "vitest";
 import { KINGDOM } from "../../test/fixtures.ts";
-import { draftFromSource, draftToInput, emptyDraft, fieldFromHeader, type SourceDraft } from "./draft.ts";
+import { draftFromSource, draftToInput, emptyDraft, fieldFromHeader, withHeaders, type SourceDraft } from "./draft.ts";
 
 const salesTab = KINGDOM.syncSources.find((s) => s.name === "Sample sales tab")!;
 
@@ -118,5 +118,32 @@ describe("draftFromSource and draftToInput", () => {
     if (!result.ok) throw new Error(result.message);
     expect(result.value.config).toEqual({ entity: "Invoice" });
     expect(result.value.provider).toBe("quickbooks");
+  });
+});
+
+describe("withHeaders", () => {
+  it("replaces the empty starter row with a field for each header", () => {
+    const { fields, added } = withHeaders([fieldFromHeader("")], ["Job", "Contract amount"]);
+    expect(fields.map((f) => f.key)).toEqual(["job", "contract_amount"]);
+    expect(added).toBe(2);
+  });
+
+  it("keeps a field already mapped, whatever its header's case or spacing", () => {
+    const job = { ...fieldFromHeader("Job"), label: "Sample job label" };
+    const { fields, added } = withHeaders([job], ["JOB ", "Margin"]);
+    expect(fields).toEqual([job, fieldFromHeader("Margin")]);
+    expect(fields[0]).toBe(job);
+    expect(added).toBe(1);
+  });
+
+  it("changes nothing when every header is mapped", () => {
+    const job = fieldFromHeader("Job");
+    expect(withHeaders([job], ["Job"])).toEqual({ fields: [job], added: 0 });
+  });
+
+  it("skips blank and repeated headers", () => {
+    const { fields, added } = withHeaders([], ["", "  ", "Job", "Job"]);
+    expect(fields).toEqual([fieldFromHeader("Job")]);
+    expect(added).toBe(1);
   });
 });

@@ -98,3 +98,17 @@ export async function requestSync(sourceId: string): Promise<SyncRunResult> {
   const applied = records.filter((r) => r.source_id === source.id && r.run_id === source.current_run_id).length;
   return { status: "succeeded", message: null, rows_applied: applied };
 }
+
+export interface SpreadsheetDescription { title: string; tabs: Array<{ gid: number; title: string }>; headers: string[] }
+
+// Any link reads as the same sample workbook, a fresh copy each call; the arguments are ignored.
+export async function describeSpreadsheet(): Promise<SpreadsheetDescription> {
+  return {
+    title: "Sample reporting workbook",
+    tabs: [
+      { gid: 0, title: "Sample sales" },
+      { gid: 42, title: "Sample finance" },
+    ],
+    headers: ["Job", "Contract amount", "Margin", "Signed on"],
+  };
+}

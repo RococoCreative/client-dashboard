@@ -20,6 +20,10 @@ import { listCompanyDomains, updateCompany } from "../services/companies.ts";
 import { THEMES } from "../lib/theme.ts";
 import { hasModule } from "../lib/modules.ts";
 import { errorMessage } from "../lib/errors.ts";
+import type { ConnectionProvider } from "../types/database.ts";
+
+// A company with data sources also connects its own Google account for them.
+const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
 
 export default function CompanySettingsPage() {
   const { company, refreshCompanies, isRococo } = useHub();
@@ -97,7 +101,7 @@ export default function CompanySettingsPage() {
             </dl>
             {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
           </Section>
-          <ConnectionsPanel companyId={company!.id} />
+          <ConnectionsPanel companyId={company!.id} providers={hasModule(company!, "data_sources") ? GOOGLE_ROW_PROVIDERS : undefined} />
         </div>
       </div>
     </>

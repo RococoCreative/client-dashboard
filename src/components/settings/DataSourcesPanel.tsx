@@ -1,8 +1,9 @@
 // The company's data sources, for an admin in Company Settings: each spreadsheet tab or
 // QuickBooks record set the hub reads, with its state and freshness, a switch to turn it on or
-// off, Sync now, its recent runs, and an editor for what it reads. Runs and records are only ever
-// shown, never edited, and nothing here shows or asks for a token: syncing goes through the
-// connections Edge Function, which alone holds one.
+// off, Sync now, its recent runs, and an editor for what it reads, which can read a tab's column
+// headers into the field map. Runs and records are only ever shown, never edited, and nothing here
+// shows or asks for a token: syncing and reading headers go through the connections Edge
+// Function, which alone holds one.
 import { useState, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import FreshnessLine from "../sync/FreshnessLine.tsx";
@@ -19,10 +20,10 @@ import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableCla
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDateTime, pluralize } from "../../lib/format.ts";
-import { draftFromSource, draftToInput, emptyDraft, fieldFromHeader, type FieldDraft, type SourceDraft } from "../../lib/sync/draft.ts";
+import { draftFromSource, draftToInput, emptyDraft, fieldFromHeader, withHeaders, type FieldDraft, type SourceDraft } from "../../lib/sync/draft.ts";
 import { syncState } from "../../lib/sync/state.ts";
 import { listConnections } from "../../services/connections.ts";
-import { createSyncSource, listSyncRuns, listSyncSources, requestSync, setSyncSourceEnabled, updateSyncSource } from "../../services/sync.ts";
+import { createSyncSource, describeSpreadsheet, listSyncRuns, listSyncSources, requestSync, setSyncSourceEnabled, updateSyncSource } from "../../services/sync.ts";
 import { parseSpreadsheetUrl } from "../../../supabase/functions/_shared/sync/links.ts";
 import { normalizeHeader } from "../../../supabase/functions/_shared/sync/parse.ts";
 import {
@@ -117,12 +118,16 @@ function SourceEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [zones] = useState(timeZones);
+  const [reading, setReading] = useState(false);
+  const [readNote, setReadNote] = useState<{ sheet: string; added: string } | null>(null);
+  const [readError, setReadError] = useState("");
 
   const connection = connections.find((c) => c.provider === draft.provider) ?? null;
   const providerLabel = CONNECTION_PROVIDER_LABELS[draft.provider];
   const link = draft.provider === "google_sheets" && draft.spreadsheet_url.trim() ? parseSpreadsheetUrl(draft.spreadsheet_url.trim()) : null;
   const mappedKeys = [...new Set(fields.map((field) => field.key.trim().toLowerCase()).filter(Boolean))];
   const headingId = "data-source-editor-title";
+  const canReadHeaders = link !== null && link.gid !== null && connection?.status === "connected" && !reading;
 
   function set<K extends keyof SourceDraft>(key: K, value: SourceDraft[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -138,6 +143,28 @@ function SourceEditor({
 
   function toggleKey(key: string, on: boolean) {
     set("record_key", on ? [...draft.record_key.filter((k) => k !== key), key] : draft.record_key.filter((k) => k !== key));
+  }
+
+  // Reads row 1 of the linked tab through the connections function and adds a field for each
+  // column header not mapped yet.
+  async function readHeaders() {
+    if (!link || link.gid === null || !connection || reading) return;
+    const gid = link.gid;
+    setReading(true);
+    setReadError("");
+    setReadNote(null);
+    try {
+      const description = await describeSpreadsheet(connection.id, link.spreadsheetId, gid);
+      const tab = description.tabs.find((t) => t.gid === gid);
+      const sheet = tab ? `${description.title}, tab ${tab.title}` : `${description.title}. That tab is not in the spreadsheet.`;
+      const merged = withHeaders(fields, description.headers);
+      setFields(merged.fields.map((field) => ("uid" in field ? field : editorField(field, false))));
+      setReadNote({ sheet, added: merged.added === 0 ? "Every column is already mapped." : `Added ${pluralize(merged.added, "field")}.` });
+    } catch (err) {
+      setReadError(errorMessage(err));
+    } finally {
+      setReading(false);
+    }
   }
 
   async function save(event: FormEvent) {
@@ -214,6 +241,19 @@ function SourceEditor({
               <Field label="Range" htmlFor="source-range" hint="Leave blank to read the whole tab.">
                 <input id="source-range" type="text" value={draft.range} onChange={(e) => set("range", e.target.value)} placeholder="A1:H200" className={inputClass} />
               </Field>
+              <div className="sm:col-span-4">
+                <Button variant="secondary" size="sm" disabled={!canReadHeaders} onClick={() => void readHeaders()}>
+                  {reading ? "Reading..." : "Read headers"}
+                </Button>
+                <p className={helpClass}>Reads row 1 of the tab and adds a field for each column header not mapped yet.</p>
+                {readNote ? (
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="text-[12.5px] text-ink-2">{readNote.sheet}</p>
+                    <p className="text-[12.5px] text-ink-2">{readNote.added}</p>
+                  </div>
+                ) : null}
+                {readError ? <Notice tone="error" className="mt-2">{readError}</Notice> : null}
+              </div>
             </div>
           ) : (
             <Field label="QuickBooks records" htmlFor="source-entity" className="sm:max-w-xs">

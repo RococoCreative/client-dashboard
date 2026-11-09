@@ -1,7 +1,7 @@
 // The data source editor's form logic, kept pure so every rule is tested here and the editor is
 // a view: a blank draft, a source read back into a draft, and a draft checked and turned into
-// the row the service saves. The column map is checked as a whole, which is why the editor has
-// one Save rather than saving each field on blur.
+// the row the service saves, plus a sheet's headers merged into the column map. The column map is
+// checked as a whole, which is why the editor has one Save rather than saving each field on blur.
 import { parseSpreadsheetUrl, sheetsUrl } from "../../../supabase/functions/_shared/sync/links.ts";
 import { normalizeHeader } from "../../../supabase/functions/_shared/sync/parse.ts";
 import type { SyncSourceInput } from "../../services/sync.ts";
@@ -33,6 +33,25 @@ const TIME = /^\d{2}:\d{2}$/;
 
 export function fieldFromHeader(header: string): FieldDraft {
   return { header, key: normalizeHeader(header), label: header.trim(), type: "text", unit: "", required: false };
+}
+
+// A sheet's column headers merged into the field map: rows with no header go first, then each
+// header no remaining field maps yet (compared as keys, so case and spacing do not matter) is
+// added in the sheet's order. Fields already mapped are kept as they are.
+export function withHeaders<F extends FieldDraft>(fields: F[], headers: string[]): { fields: Array<F | FieldDraft>; added: number } {
+  const next: Array<F | FieldDraft> = fields.filter((field) => field.header.trim() !== "");
+  const mapped = new Set(next.map((field) => normalizeHeader(field.header)));
+  let added = 0;
+  for (const raw of headers) {
+    const header = raw.trim();
+    if (!header) continue;
+    const key = normalizeHeader(header);
+    if (mapped.has(key)) continue;
+    mapped.add(key);
+    next.push(fieldFromHeader(header));
+    added += 1;
+  }
+  return { fields: next, added };
 }
 
 export function emptyDraft(provider: SyncProvider, timezone: string): SourceDraft {

@@ -91,3 +91,10 @@ export interface SyncRunResult {
 export async function requestSync(sourceId: string): Promise<SyncRunResult> {
   return invokeFunction<SyncRunResult>("connections/sync/run", { source_id: sourceId });
 }
+
+export interface SpreadsheetDescription { title: string; tabs: Array<{ gid: number; title: string }>; headers: string[] }
+
+// Reads the tab list and the first row of one tab through the connections function, which holds the Google token.
+export async function describeSpreadsheet(connectionId: string, spreadsheetId: string, gid: number | null): Promise<SpreadsheetDescription> {
+  return invokeFunction<SpreadsheetDescription>("connections/sync/describe", { connection_id: connectionId, spreadsheet_id: spreadsheetId, gid });
+}
