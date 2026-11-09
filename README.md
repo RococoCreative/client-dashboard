@@ -116,7 +116,9 @@ People / HR, plus an unlabeled group for SOPs, Resources and Settings.
 A module is a key in `companies.modules`, read only through `src/lib/modules.ts` (`hasModule`)
 and changed only by a Rococo admin on Rococo > Companies. A company with no modules on looks
 exactly as it did before modules existed. Turning a module off hides its screens and keeps its
-rows, so turning it back on brings everything back as it was.
+rows, so turning it back on brings everything back as it was. Turning `data_sources` off also
+stops its syncs: the hourly tick skips that company's sources and Sync now refuses, so nothing is
+read from Google Sheets or QuickBooks while it is off.
 
 ## How people get in
 
@@ -359,7 +361,7 @@ and the RBA theme picks them up without a code change.
 - `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
 - `supabase/functions/`: the `connections` Edge Function and `_shared/` (provider keys and the
-  pure sync modules: parse, keys, schedule, runner, links, Google Sheets, QuickBooks).
+  pure sync modules: parse, keys, schedule, runner, tick, links, Google Sheets, QuickBooks).
 - `supabase/tests/`: the SQL harness and one test file per migration.
 - `docs/`: designs for work that is specified but not built.
 
@@ -373,9 +375,13 @@ provider's callback arrives with no session. Its routes, all under
   admin, checked on their own JWT.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
 - `POST /sync/run`: Sync now, on the JWT of someone allowed to sync the source
-  (`private.can_sync_source`, decided by row level security).
+  (`private.can_sync_source`, decided by row level security), for a company with `data_sources`
+  on.
 - `POST /sync/tick`: the hourly cron, with the `x-sync-secret` header checked against
-  `SYNC_CRON_SECRET`.
+  `SYNC_CRON_SECRET`. It starts due sources only in companies with `data_sources` on. First it
+  closes any run on the connections it reads that is still marked running past the stale window
+  (`STALE_RUN_MINUTES` in `_shared/sync/runner.ts`), since the platform cut that run off. The app
+  already shows such a source as failed ("The last sync did not finish."), never Syncing forever.
 - `POST /sync/describe`: an active Owner or Admin of the company, or a Rococo admin; reads a
   sheet's tabs and first row.
 

@@ -3,13 +3,14 @@
 // authorised by the caller's own one-row write under row level security
 // (private.can_sync_source), never by a role check here; the hourly tick is authorised by a
 // shared secret that can only start a sync; describe is for a company admin choosing a Google
-// Sheets tab. The database side of the runner and the token store live here, over the service
-// role; everything else a sync does is in the pure modules under _shared/sync.
+// Sheets tab. Neither sync route runs a source whose company has the data sources module off.
+// The database side of the runner and the token store live here, over the service role;
+// everything else a sync does is in the pure modules under _shared/sync.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
 import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
 import { runSync, type RunOutcome, type SyncStore } from "../_shared/sync/runner.ts";
-import { isDue } from "../_shared/sync/schedule.ts";
+import { carriesSyncModule, planTick, sweepStaleRuns } from "../_shared/sync/tick.ts";
 import type { AdapterRegistry, ProviderAdapter, ProviderTokens, SyncProvider, SyncSourceSpec, TokenStore } from "../_shared/sync/types.ts";
 import { HttpError, json, requireAdmin, sameBytes, service, signedInUser } from "./http.ts";
 
@@ -230,6 +231,11 @@ export async function handleSyncRun(req: Request): Promise<Response> {
   const { data: source } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("id", sourceId).maybeSingle();
   if (!source) throw new HttpError(403, "That source was not found, or you cannot sync it.");
   const spec = source as unknown as SourceRow;
+  const { data: company, error: companyError } = await admin.from("companies").select("modules").eq("id", spec.company_id).maybeSingle();
+  if (companyError) throw new Error("The company could not be read.");
+  if (!carriesSyncModule((company?.modules as string[] | null | undefined) ?? null)) {
+    throw new HttpError(409, "Data sources are turned off for this company. A Rococo admin can turn them on.");
+  }
   const { data: connection } = await admin.from("company_connections").select(CONNECTION_COLUMNS).eq("id", spec.connection_id).maybeSingle();
   // A disabled source may still be synced by hand, so an admin can test it before enabling it.
   if (!connection || connection.status !== "connected") throw new HttpError(409, `Connect ${SYNC_LABELS[spec.provider] ?? "the source"} in Settings first.`);
@@ -264,19 +270,25 @@ export async function handleSyncTick(req: Request): Promise<Response> {
     if (connectionError) throw new Error("The connections could not be read.");
     for (const row of (connectionData ?? []) as ConnectionRow[]) connections.set(row.id, row);
   }
+  // Each company's modules, read as data: a source in a company without data sources stays put.
+  const companyIds = [...new Set(scheduled.map((s) => s.company_id))];
+  const modules = new Map<string, readonly string[]>();
+  if (companyIds.length > 0) {
+    const { data: companyData, error: companyError } = await admin.from("companies").select("id, modules").in("id", companyIds);
+    if (companyError) throw new Error("The companies could not be read.");
+    for (const row of (companyData ?? []) as Array<{ id: string; modules: string[] | null }>) modules.set(row.id, row.modules ?? []);
+  }
 
-  // Due and connected; a source whose connection is not connected is left alone, nothing written.
-  // Each source is judged on its own, so one that cannot be read never stops the others.
-  const due = scheduled.filter((s) => {
-    try {
-      return isDue(s, now) && connections.get(s.connection_id)?.status === "connected";
-    } catch (err) {
-      console.error("scheduled sync skipped", s.id, err instanceof Error ? err.message : "unknown");
-      return false;
-    }
+  // Due, connected and in a company with data sources on; anything else is left alone, nothing
+  // written. Every connection read is first swept of runs the platform cut off.
+  const { due, byConnection, sweep } = planTick({
+    sources: scheduled,
+    connections,
+    modules,
+    now,
+    onSkip: (id, message) => console.error("scheduled sync skipped", id, message),
   });
-  const byConnection = new Map<string, SourceRow[]>();
-  for (const source of due) byConnection.set(source.connection_id, [...(byConnection.get(source.connection_id) ?? []), source]);
+  const abandoned = await sweepStaleRuns(createSyncStore(admin), sweep, now, (id, message) => console.error("stale sweep failed", id, message));
 
   // One connection at a time and, within it, one source at a time, so sources sharing a
   // connection never meet on the lock and a refresh token never rotates twice at once.
@@ -294,7 +306,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
       }
     }
   }
-  console.log("sync tick", JSON.stringify({ due: due.length, ran }));
+  console.log("sync tick", JSON.stringify({ due: due.length, abandoned, ran }));
   return json(200, { due: due.length, ran });
 }
 
