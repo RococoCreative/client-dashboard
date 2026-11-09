@@ -133,16 +133,17 @@ export default function Login() {
             Check <b>{normalizeEmail(email)}</b> for your sign-in link. Open it on this device to continue. You will
             stay signed in here.
           </Notice>
-          <button
-            type="button"
+          <Button
+            variant="link"
+            size="sm"
             onClick={() => {
               setPhase("idle");
               setMessage("");
             }}
-            className="mt-4 text-[12px] text-ink-2 underline transition-colors duration-150 hover:text-ink"
+            className="mt-4"
           >
             Use a different email
-          </button>
+          </Button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>

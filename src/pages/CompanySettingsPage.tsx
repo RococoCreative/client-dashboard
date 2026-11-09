@@ -50,7 +50,7 @@ export default function CompanySettingsPage() {
   return (
     <>
       <PageHeader eyebrow={company!.name} title="Settings" description="How the company appears in the hub." />
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
         <form onSubmit={handleSubmit}>
           <Section eyebrow="Identity" title="Company" actions={<Button type="submit" size="sm" disabled={busy}>{busy ? "Saving..." : "Save"}</Button>}>

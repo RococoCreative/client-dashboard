@@ -76,9 +76,11 @@ export default function PersonPage() {
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "reviews") ?? null;
   const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
-  // The role they are in, and whether it puts their figures on their dashboard.
+  // The role they are in, and whether it puts their figures on their dashboard. A retired role
+  // stays on their record but carries nothing, which is how the dashboard reads it too.
   const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
-  const figuresOnDashboard = jobRole?.dashboard_modules.includes("financials") ?? false;
+  const roleRetired = jobRole !== null && !jobRole.is_active;
+  const figuresOnDashboard = !roleRetired && (jobRole?.dashboard_modules.includes("financials") ?? false);
 
   const rows = reviewHistory(reviews, cycles, pillars, scores);
   // The newest review and the newest scored review are different rows once a monthly Goal
@@ -167,7 +169,7 @@ export default function PersonPage() {
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6">
           <Section eyebrow="Profile" title="Details">
             <div className="flex items-center gap-3">
@@ -213,6 +215,11 @@ export default function PersonPage() {
                   ))}
                 </select>
                 {jobRoles.length === 0 ? <p className="mt-1 text-[12px] text-ink-3">No job roles yet. Add them in Settings.</p> : null}
+                {roleRetired && jobRole ? (
+                  <p className="mt-1 text-[12px] text-warning">
+                    {jobRole.name} is retired, so it no longer puts its modules on their dashboard or offers its role goals. Pick a current role.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label htmlFor="person-phone" className={labelClass}>Phone</label>
@@ -329,9 +336,11 @@ export default function PersonPage() {
             description={
               figuresOnDashboard && jobRole
                 ? `The numbers this person owns, against target. On their dashboard, because ${jobRole.name} carries the module.`
-                : jobRole
-                  ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on in Settings.`
-                  : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
+                : roleRetired && jobRole
+                  ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} is retired. They come back once a current role that carries the module is set above.`
+                  : jobRole
+                    ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on in Settings.`
+                    : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
             }
           >
             <FinancialsTable employeeId={person.id} year={year} rows={financials} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, financials: update(prev.financials) } : prev))} onError={setError} />

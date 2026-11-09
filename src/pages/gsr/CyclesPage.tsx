@@ -2,7 +2,7 @@
 // (every scored cadence), one component keyed on the section. Progress per cycle, the team score
 // where a cycle carries one, the door to settings and company goals on the Reviews side, and the
 // new-cycle form offering only the cadences that belong to the section. The period math
-// (cadence -> dates -> name) lives in lib/gsr/cycles.ts.
+// (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Settings2, Target } from "lucide-react";
@@ -21,7 +21,19 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { createCycle, listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview } from "../../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, SECTION_LABEL, cycleProgress, cyclePath, defaultCycleName, periodEnd, periodStart, sectionOf, type HubSection } from "../../lib/gsr/cycles.ts";
+import {
+  CADENCE_LABELS,
+  SECTION_LABEL,
+  cycleProgress,
+  cyclePath,
+  defaultCycleName,
+  overlapMessage,
+  overlappingCycle,
+  periodEnd,
+  periodStart,
+  sectionOf,
+  type HubSection,
+} from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
 import type { Cadence, ReviewCycle } from "../../types/database.ts";
@@ -78,6 +90,14 @@ function NewCycleDialog({
     setBusy(true);
     setError("");
     try {
+      // Read fresh at submit rather than from the list behind the dialog, so a month another
+      // admin opened a minute ago counts too.
+      const existing = overlappingCycle(await listCycles(companyId), { cadence, period_start: start, period_end: end });
+      if (existing) {
+        setError(overlapMessage(existing));
+        setBusy(false);
+        return;
+      }
       const cycle = await createCycle({
         company_id: companyId,
         name: name.trim(),

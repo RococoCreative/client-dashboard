@@ -1,6 +1,8 @@
-// One review cycle: the team table. Every active person, their review status, and their
-// score, with the team average on top. Reviews are created on demand (or all at once) so
-// an admin can start scoring anyone with one click.
+// One review cycle: the team table. Every active person and their review status; on a scored
+// cycle their pillar scores and overall, with the team average on top; on a month (a Goal
+// Setting Review) the GSR score an admin locked in, where the company scores its GSRs. Which
+// columns a cycle carries is decided in lib/gsr/cycles.ts. Reviews are created on demand (or all
+// at once) so an admin can start anyone with one click.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Pencil, Trash2, Unlock, UsersRound } from "lucide-react";
@@ -26,6 +28,7 @@ import {
   ensureReview,
   getCycle,
   listCycleReviews,
+  listCycles,
   listPillars,
   listScoresForReviews,
   updateCycle,
@@ -33,16 +36,36 @@ import {
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore } from "../../lib/gsr/scoring.ts";
 import { scoreOfRecord } from "../../lib/gsr/history.ts";
-import { CADENCE_LABELS, SECTION_HOME, SECTION_LABEL, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
+import {
+  CADENCE_LABELS,
+  SECTION_HOME,
+  SECTION_LABEL,
+  cycleColumns,
+  overlapMessage,
+  overlappingCycle,
+  periodEnd,
+  periodStart,
+  reviewPath,
+  sectionOf,
+} from "../../lib/gsr/cycles.ts";
+import { monthLocked } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatPeriod } from "../../lib/format.ts";
+import { displayName, formatPeriod, parseDate } from "../../lib/format.ts";
 import { hasAccount } from "../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, type ReviewCycle } from "../../types/database.ts";
 
+// A month is a calendar month, here as in the New month form: the start snaps to the first and
+// the end follows it. Other cadences keep the dates the admin types.
+function monthOf(date: string): { start: string; end: string } {
+  const start = periodStart("monthly", parseDate(date) ?? new Date());
+  return { start, end: periodEnd("monthly", start) ?? start };
+}
+
 function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onClose: () => void; onSaved: (c: ReviewCycle) => void }) {
+  const monthly = cycle.cadence === "monthly";
   const [name, setName] = useState(cycle.name);
-  const [start, setStart] = useState(cycle.period_start);
-  const [end, setEnd] = useState(cycle.period_end);
+  const [start, setStart] = useState(() => (monthly ? monthOf(cycle.period_start).start : cycle.period_start));
+  const [end, setEnd] = useState(() => (monthly ? monthOf(cycle.period_start).end : cycle.period_end));
   const [theme, setTheme] = useState(cycle.theme ?? "");
   const [themeDescription, setThemeDescription] = useState(cycle.theme_description ?? "");
   const [busy, setBusy] = useState(false);
@@ -56,6 +79,13 @@ function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onCl
     setBusy(true);
     setError("");
     try {
+      // Read fresh, the way the New cycle form does, so the check sees every cycle as it is now.
+      const existing = overlappingCycle(await listCycles(cycle.company_id), { id: cycle.id, cadence: cycle.cadence, period_start: start, period_end: end });
+      if (existing) {
+        setError(overlapMessage(existing));
+        setBusy(false);
+        return;
+      }
       const next = await updateCycle(cycle.id, {
         name: name.trim(),
         period_start: start,
@@ -80,10 +110,21 @@ function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onCl
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Starts" htmlFor="edit-cycle-start">
-              <input id="edit-cycle-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} className={inputClass} />
+              <input
+                id="edit-cycle-start"
+                type="date"
+                value={start}
+                onChange={(e) => {
+                  if (!monthly) return setStart(e.target.value);
+                  const month = monthOf(e.target.value);
+                  setStart(month.start);
+                  setEnd(month.end);
+                }}
+                className={inputClass}
+              />
             </Field>
             <Field label="Ends" htmlFor="edit-cycle-end">
-              <input id="edit-cycle-end" type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
+              <input id="edit-cycle-end" type="date" value={end} min={start} disabled={monthly} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
             </Field>
           </div>
           <Field label="Theme (optional)" htmlFor="edit-cycle-theme">
@@ -131,6 +172,10 @@ export default function CyclePage() {
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { cycle, reviews, pillars, people, scores } = state.data;
+  // A scored cycle carries pillar columns, an overall and a team score; a month carries none of
+  // them, only the GSR score locked in on it where the company scores its GSRs.
+  const columns = cycleColumns(cycle.cadence, pillars);
+  const gsr = sectionOf(cycle.cadence) === "gsr";
   // Everyone active on the roster, whether or not they have signed in yet. A company sets its
   // reviews up before anyone has an account, which is exactly the state it is in on the day it
   // starts, so a cycle covers the whole team. The row says who cannot see theirs yet.
@@ -224,10 +269,16 @@ export default function CyclePage() {
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {actionError ? <Notice tone="error" className="mb-4">{actionError}</Notice> : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={`grid gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Stat label="People" value={team.length} />
-        <Stat label="Reviews complete" value={`${complete}/${team.length}`} hint={missing.length > 0 ? `${missing.length} not started` : "Everyone has a review"} />
-        <Stat label="Team score" value={<span className={bandClass(teamAverage)}>{teamAverage ?? "-"}</span>} hint="Average of scored reviews" />
+        <Stat
+          label={gsr ? "GSRs complete" : "Reviews complete"}
+          value={`${complete}/${team.length}`}
+          hint={missing.length > 0 ? `${missing.length} not started` : gsr ? "Everyone has a GSR" : "Everyone has a review"}
+        />
+        {columns.pillarScores ? (
+          <Stat label="Team score" value={<span className={bandClass(teamAverage)}>{teamAverage ?? "-"}</span>} hint="Average of scored reviews" />
+        ) : null}
       </div>
 
       <Section
@@ -244,8 +295,10 @@ export default function CyclePage() {
         padded={false}
       >
         {team.length === 0 ? (
+          // An account is never a precondition: the roster is what a cycle covers, and people are
+          // added to it with or without an invitation.
           <p className="p-5 text-sm text-ink-2">
-            Nobody here has signed in yet. <Link to="/people" className="text-accent hover:underline">Invite the team</Link> first.
+            Nobody on the roster yet. Add the team in <Link to="/people" className="text-accent hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -254,10 +307,15 @@ export default function CyclePage() {
                 <tr>
                   <th className={thClass}>Person</th>
                   <th className={thClass}>Status</th>
-                  {pillars.map((p) => (
-                    <th key={p.id} className={`${thClass} text-right`}>{p.name}</th>
-                  ))}
-                  <th className={`${thClass} text-right`}>Overall</th>
+                  {columns.pillarScores ? (
+                    <>
+                      {pillars.map((p) => (
+                        <th key={p.id} className={`${thClass} text-right`}>{p.name}</th>
+                      ))}
+                      <th className={`${thClass} text-right`}>Overall</th>
+                    </>
+                  ) : null}
+                  {columns.gsrScore ? <th className={`${thClass} text-right`}>GSR score</th> : null}
                   <th className={thClass}></th>
                 </tr>
               </thead>
@@ -281,24 +339,37 @@ export default function CyclePage() {
                         {review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}
                       </Badge>
                     </td>
-                    {pillars.map((p) => {
-                      const pillar = result?.pillars.find((x) => x.pillarId === p.id);
-                      return (
-                        <td key={p.id} className={`${tdClass} tnum text-right text-ink-2`}>
-                          {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
+                    {columns.pillarScores ? (
+                      <>
+                        {pillars.map((p) => {
+                          const pillar = result?.pillars.find((x) => x.pillarId === p.id);
+                          return (
+                            <td key={p.id} className={`${tdClass} tnum text-right text-ink-2`}>
+                              {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
+                            </td>
+                          );
+                        })}
+                        <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>
+                          {result ? result.overall : "-"}
                         </td>
-                      );
-                    })}
-                    <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>
-                      {result ? result.overall : "-"}
-                    </td>
+                      </>
+                    ) : null}
+                    {columns.gsrScore ? (
+                      <td className={`${tdClass} tnum text-right`}>
+                        {review && monthLocked(review) ? (
+                          <span className="font-medium text-ink">{review.gsr_score}%</span>
+                        ) : (
+                          <span className="text-[12px] text-ink-3">{review ? "Not locked in" : "-"}</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className={`${tdClass} text-right`}>
                       {review ? (
                         <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-accent hover:underline">Open</Link>
                       ) : (
-                        <button type="button" onClick={() => void openReview(person.id)} disabled={busy} className="text-[13px] text-accent hover:underline disabled:opacity-50">
+                        <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                           Start review
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -322,7 +393,7 @@ export default function CyclePage() {
       {deleting ? (
         <ConfirmDialog
           title={`Delete "${cycle.name}"?`}
-          body="Every review and score in this cycle is deleted with it. Closing the cycle keeps the history; deleting does not."
+          body="This deletes the cycle, every review and score in it, and the goals filed into it. Closing the cycle keeps the history; deleting does not."
           confirmLabel="Delete cycle"
           busy={busy}
           error={actionError}

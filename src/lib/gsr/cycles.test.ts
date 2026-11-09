@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, cyclesInPlay, defaultCycleName, monthsWithin, periodEnd, periodStart } from "./cycles.ts";
+import { activeCycles, currentCycle, cycleColumns, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -23,6 +23,58 @@ describe("cycle periods", () => {
     expect(defaultCycleName("quarterly", "2026-07-01")).toBe("Q3 2026");
     expect(defaultCycleName("annual", "2026-01-01")).toBe("2026");
     expect(defaultCycleName("custom", "2026-09-01", "2026-10-15")).toBe("Sep 1 to Oct 15, 2026");
+  });
+
+  it("names a custom cycle that crosses a year end with both years", () => {
+    // Without the start year, Dec 1 2026 to Jan 31 2027 read "Dec 1 to Jan 31, 2027", which
+    // says December 2027.
+    expect(defaultCycleName("custom", "2026-12-01", "2027-01-31")).toBe("Dec 1, 2026 to Jan 31, 2027");
+    expect(defaultCycleName("custom", "2026-12-01")).toBe("Dec 1, 2026");
+  });
+
+  it("finds the cycle a new or edited one would run on top of", () => {
+    const cycles = [
+      { id: "nov", name: "November 2026", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+      { id: "q4", name: "Q4 2026", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" },
+      { id: "oct", name: "October 2026", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+    ];
+    // A second November is refused, and so is any month that shares a day with it.
+    expect(overlappingCycle(cycles, { cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" })?.id).toBe("nov");
+    expect(overlappingCycle(cycles, { cadence: "monthly", period_start: "2026-10-31", period_end: "2026-11-01" })?.id).toBe("oct");
+    // A month inside a quarter is the normal shape: different cadences never collide.
+    expect(overlappingCycle(cycles, { cadence: "quarterly", period_start: "2026-07-01", period_end: "2026-09-30" })).toBeNull();
+    expect(overlappingCycle(cycles, { cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" })).toBeNull();
+    // An edited cycle is never in the way of itself.
+    expect(overlappingCycle(cycles, { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" })).toBeNull();
+    expect(overlapMessage(cycles[0])).toBe('"November 2026" already covers Nov 1 to Nov 30, 2026. Pick dates that do not overlap it, or open that month instead.');
+    expect(overlapMessage(cycles[1])).toMatch(/or open that cycle instead\.$/);
+  });
+
+  it("keeps an employee's month in play while a quarter covers today", () => {
+    // December 1: November is over but still open, December is not opened yet, and Q4 covers
+    // today. activeCycles returns only the quarter, so reading the month from it lost November.
+    const cycles = [
+      { id: "q4", cadence: "quarterly" as const, period_start: "2026-10-01", period_end: "2026-12-31", status: "open" },
+      { id: "nov", cadence: "monthly" as const, period_start: "2026-11-01", period_end: "2026-11-30", status: "open" },
+      { id: "oct", cadence: "monthly" as const, period_start: "2026-10-01", period_end: "2026-10-31", status: "open" },
+      { id: "sep", cadence: "monthly" as const, period_start: "2026-09-01", period_end: "2026-09-30", status: "closed" },
+    ];
+    expect(gsrCycleInPlay(cycles, new Date(2026, 11, 1))?.id).toBe("nov");
+    // Once December is opened it leads, because it covers today.
+    const withDec = [...cycles, { id: "dec", cadence: "monthly" as const, period_start: "2026-12-01", period_end: "2026-12-31", status: "open" }];
+    expect(gsrCycleInPlay(withDec, new Date(2026, 11, 1))?.id).toBe("dec");
+    // Every month closed: nothing to work in.
+    expect(gsrCycleInPlay(cycles.map((c) => ({ ...c, status: c.cadence === "monthly" ? "closed" : c.status })), new Date(2026, 11, 1))).toBeNull();
+  });
+
+  it("gives a month no pillar columns, and the locked GSR score only where the company scores GSRs", () => {
+    const rating = { scoring_type: "rating", is_active: true };
+    const gsr = { scoring_type: "gsr_goals", is_active: true };
+    expect(cycleColumns("quarterly", [rating, gsr])).toEqual({ pillarScores: true, gsrScore: false });
+    expect(cycleColumns("custom", [rating])).toEqual({ pillarScores: true, gsrScore: false });
+    expect(cycleColumns("monthly", [rating])).toEqual({ pillarScores: false, gsrScore: false });
+    expect(cycleColumns("monthly", [rating, gsr])).toEqual({ pillarScores: false, gsrScore: true });
+    expect(cycleColumns("monthly", [rating, { ...gsr, is_active: false }])).toEqual({ pillarScores: false, gsrScore: false });
   });
 
   it("returns every open cycle covering today, shortest first", () => {

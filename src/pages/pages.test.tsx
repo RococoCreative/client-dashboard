@@ -181,12 +181,14 @@ describe("GSR", () => {
     expect(await screen.findByText(fraction)).toBeInTheDocument();
   });
 
-  it("shows the team table for a cycle with pillar columns", async () => {
-    renderWithHub(<CyclePage />, admin, { path: `/gsr/cycles/${currentCycle.id}`, pattern: "/gsr/cycles/:cycleId" });
-    expect(await screen.findByRole("heading", { name: currentCycle.name })).toBeInTheDocument();
+  it("shows the team table for a scored cycle with pillar columns", async () => {
+    // A scored cadence carries the pillar columns; a month never does (qa-b2.test.tsx).
+    const scored = RBA.cycles[0];
+    renderWithHub(<CyclePage />, rbaAdmin, { path: `/reviews/cycles/${scored.id}`, pattern: "/reviews/cycles/:cycleId" });
+    expect(await screen.findByRole("heading", { name: scored.name })).toBeInTheDocument();
     const table = await screen.findByRole("table");
-    expect(within(table).getByText("Brand Impact")).toBeInTheDocument();
-    expect(within(table).getByText("Sam Ortega")).toBeInTheDocument();
+    expect(within(table).getByText("Core Values")).toBeInTheDocument();
+    expect(within(table).getByText("Jamie Fox")).toBeInTheDocument();
     expect(within(table).getAllByText("Start review").length).toBeGreaterThan(0);
   });
 
