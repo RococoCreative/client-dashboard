@@ -8,7 +8,7 @@ import type { FieldMapEntry, FieldType, SourceConfig, SyncProvider, TargetModule
 export type { FieldType, FieldMapEntry, SourceConfig, SheetsSourceConfig, QuickBooksSourceConfig, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
-export type Role = "admin" | "employee";
+export type Role = "owner" | "admin" | "manager" | "employee";
 
 export interface Company {
   id: string;
@@ -478,7 +478,9 @@ export interface Resource {
 // Labels ------------------------------------------------------------------------------------
 
 export const ROLE_LABELS: Record<Role, string> = {
+  owner: "Owner",
   admin: "Admin",
+  manager: "Manager",
   employee: "Employee",
 };
 
