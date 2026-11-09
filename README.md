@@ -91,6 +91,11 @@ a reload resets the data.
 - **Personal email:** an admin creates an invitation on the People page and sends the
   sign-in link it produces. The gate admits the invited address; on first sign-in the
   profile inherits the invitation's company, role, and title.
+- **Invited by more than one company:** a person already on a company's roster takes that
+  company's invitation; otherwise the invitation naming them comes first, then the one from
+  the company that owns the email domain, then the newest. The rest are withdrawn at that
+  sign-in, since a person is in one company at a time and nothing can accept an invitation
+  once the account exists (0028).
 - **First sign-in:** the person gives their name and is in. Roles are `admin` (the whole
   hub for their company) or `employee` (own GSR data plus the libraries).
 - **Deactivating** a person on the People page removes all access immediately, including
