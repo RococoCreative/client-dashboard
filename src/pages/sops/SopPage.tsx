@@ -162,7 +162,7 @@ export default function SopPage() {
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {sop.summary ? <p className="mb-6 max-w-3xl text-sm leading-relaxed text-ink-2">{sop.summary}</p> : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Section
             eyebrow={shown && shown.version !== sop.current_version ? `Viewing version ${shown.version}` : "Current version"}
@@ -199,11 +199,11 @@ export default function SopPage() {
               <ul className="divide-y divide-line">
                 {attachments.map((a) => (
                   <li key={a.id} className="flex items-center justify-between gap-2 py-2">
-                    <button type="button" onClick={() => void openAttachment(a)} className="flex min-w-0 items-center gap-2 text-left text-sm text-ink hover:text-accent">
+                    <Button variant="row" onClick={() => void openAttachment(a)}>
                       <Paperclip size={14} className="shrink-0 text-ink-3" aria-hidden />
                       <span className="truncate">{a.file_name}</span>
                       <span className="shrink-0 text-[11px] text-ink-3">{formatBytes(a.size_bytes)}</span>
-                    </button>
+                    </Button>
                     <div className="flex shrink-0 items-center">
                       <IconButton label="Download" onClick={() => void openAttachment(a)}><Download size={14} aria-hidden /></IconButton>
                       {isAdmin ? <IconButton label="Remove attachment" onClick={() => setRemovingAttachment(a)}><Trash2 size={14} aria-hidden /></IconButton> : null}
@@ -217,13 +217,18 @@ export default function SopPage() {
             <ul className="divide-y divide-line">
               {versions.map((v) => (
                 <li key={v.id}>
-                  <button type="button" onClick={() => setSelectedVersion(v.version === sop.current_version ? null : v.version)} className={`flex w-full items-start justify-between gap-3 px-5 py-3 text-left transition-colors duration-150 hover:bg-surface-2/60 ${shown?.version === v.version ? "bg-surface-2/60" : ""}`}>
+                  <Button
+                    variant="row"
+                    aria-pressed={shown?.version === v.version}
+                    onClick={() => setSelectedVersion(v.version === sop.current_version ? null : v.version)}
+                    className="justify-between px-5 py-3"
+                  >
                     <span className="min-w-0">
-                      <span className="tnum block text-sm text-ink">Version {v.version}{v.version === sop.current_version ? " (current)" : ""}</span>
+                      <span className="tnum block">Version {v.version}{v.version === sop.current_version ? " (current)" : ""}</span>
                       <span className="block truncate text-[12px] text-ink-2">{v.change_note ?? "No change note"}</span>
                     </span>
                     <span className="shrink-0 text-[11px] text-ink-3">{formatDateTime(v.created_at)}</span>
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

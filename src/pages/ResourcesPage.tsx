@@ -205,9 +205,9 @@ export default function ResourcesPage() {
                   </div>
                 ) : null}
               </div>
-              <button type="button" onClick={() => void open(resource)} className="mt-3 text-left">
-                <span className="block text-sm font-medium text-ink hover:text-accent">{resource.title}</span>
-              </button>
+              <Button variant="row" onClick={() => void open(resource)} className="mt-3">
+                <span className="font-medium">{resource.title}</span>
+              </Button>
               {resource.description ? <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-ink-2">{resource.description}</p> : null}
               {resource.tags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1">

@@ -1,7 +1,7 @@
 // Review cycle period math for the New Cycle form: given a cadence and a start date, the
 // natural end date and a default name. Date-only strings in, date-only strings out, all in
 // local time so a September cycle never begins on August 31 in Chicago.
-import { parseDate, toDateOnly } from "../format.ts";
+import { formatPeriod, parseDate, toDateOnly } from "../format.ts";
 import type { Cadence } from "../../types/database.ts";
 
 export const CADENCE_LABELS: Record<Cadence, string> = {
@@ -43,7 +43,9 @@ export function periodEnd(cadence: Cadence, start: string): string | null {
   return toDateOnly(new Date(date.getFullYear(), date.getMonth() + months, 0));
 }
 
-// "September 2026", "Q3 2026", "H2 2026", "2026", or "Sep 1 to Oct 15, 2026" for custom.
+// "September 2026", "Q3 2026", "H2 2026", "2026", or "Sep 1 to Oct 15, 2026" for custom. A
+// custom period that crosses a year end names both years ("Dec 1, 2026 to Jan 31, 2027"), the
+// way formatPeriod does, so it never reads as a December a year later.
 export function defaultCycleName(cadence: Cadence, start: string, end?: string | null): string {
   const date = parseDate(start);
   if (!date) return "";
@@ -56,10 +58,8 @@ export function defaultCycleName(cadence: Cadence, start: string, end?: string |
     case "annual":
       return `${year}`;
     default: {
-      const finish = end ? parseDate(end) : null;
-      const startText = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      if (!finish) return `${startText}, ${year}`;
-      return `${startText} to ${finish.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+      if (!end || !parseDate(end)) return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${year}`;
+      return formatPeriod(start, end);
     }
   }
 }
@@ -117,6 +117,18 @@ export function cyclesInPlay<T extends { id: string; period_start: string; perio
   return [...current, ...ended];
 }
 
+// The month a person's own Goal Setting Review is worked in: the open monthly cycle covering
+// today, else the most recently ended month nobody has closed yet. Read from cyclesInPlay, never
+// activeCycles alone: on December 1, with November still open and December not opened yet, the
+// quarter covering today was all activeCycles returned, and the employee lost the month they still
+// had to finish. My GSR and the employee dashboard both read it here, so they agree.
+export function gsrCycleInPlay<T extends { id: string; cadence: Cadence; period_start: string; period_end: string; status: string }>(
+  cycles: T[],
+  today = new Date(),
+): T | null {
+  return cyclesInPlay(cycles, today).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
+}
+
 // The most pressing open cycle, for a caller that can genuinely only show one. Prefer
 // activeCycles anywhere a company's whole review state is being summarised.
 export function currentCycle<T extends { id: string; period_start: string; period_end: string; status: string }>(
@@ -143,6 +155,46 @@ export function cyclePath(cycle: { id: string; cadence: Cadence }): string {
 }
 export function reviewPath(reviewId: string, cadence: Cadence): string {
   return sectionOf(cadence) === "gsr" ? `/gsr/reviews/${reviewId}` : `/reviews/${reviewId}`;
+}
+
+// What a cycle's team table carries. A scored cycle has a column per pillar, an overall and a
+// team score. A month is a Goal Setting Review and has none of them: its rows say where each
+// person's GSR stands and, for a company that scores its GSRs (an active Monthly GSRs pillar), the
+// score an admin locked in on it. Decided here on cadence and pillar rows, never on the company.
+export function cycleColumns(
+  cadence: Cadence,
+  pillars: Array<{ scoring_type: string; is_active: boolean }>,
+): { pillarScores: boolean; gsrScore: boolean } {
+  if (sectionOf(cadence) === "reviews") return { pillarScores: true, gsrScore: false };
+  return { pillarScores: false, gsrScore: pillars.some((p) => p.scoring_type === "gsr_goals" && p.is_active) };
+}
+
+// The existing cycle a new or edited one would run on top of: the same cadence, with a period
+// that shares at least one day. Two Novembers split the month's GSRs across twins: the manager
+// works a person's GSR in one, My GSR opens the other, and the quarter lists November twice. So the
+// cycle dialogs refuse it and name the one already there. A month inside a quarter is a different
+// cadence and never collides. The earliest overlapping cycle is the one named, whatever the order.
+export function overlappingCycle<T extends { id: string; cadence: string; period_start: string; period_end: string }>(
+  cycles: T[],
+  candidate: { id?: string; cadence: string; period_start: string; period_end: string },
+): T | null {
+  return (
+    cycles
+      .filter(
+        (c) =>
+          c.id !== candidate.id &&
+          c.cadence === candidate.cadence &&
+          c.period_start <= candidate.period_end &&
+          candidate.period_start <= c.period_end,
+      )
+      .sort((a, b) => a.period_start.localeCompare(b.period_start) || a.id.localeCompare(b.id))[0] ?? null
+  );
+}
+
+// What the cycle dialogs say when overlappingCycle finds one.
+export function overlapMessage(existing: { name: string; cadence: string; period_start: string; period_end: string }): string {
+  const noun = existing.cadence === "monthly" ? "month" : "cycle";
+  return `"${existing.name}" already covers ${formatPeriod(existing.period_start, existing.period_end)}. Pick dates that do not overlap it, or open that ${noun} instead.`;
 }
 
 // How far one cycle has got, counted over the roster it covers rather than over the review rows

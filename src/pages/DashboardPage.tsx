@@ -1,8 +1,9 @@
 // The front door. Admins see the state of every module for their company at a glance:
 // people, the current review cycle's progress and team score, company goals for the year,
 // the libraries. Employees see their own latest score, open goals, what changed in the SOP
-// library, and the modules their job role carries (their own financial figures, for now).
-// Everything here is a summary with a link into the module that owns it.
+// library. Both see the modules their own job role carries (their own financial figures, for
+// now), so an owner placed in a role gets what the person page says they get. A retired role
+// carries nothing. Everything here is a summary with a link into the module that owns it.
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
@@ -29,7 +30,7 @@ import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, activeCycles, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, gsrCycleInPlay, reviewPath, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -41,6 +42,8 @@ import {
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
+  type EmployeeFinancial,
+  type JobRole,
   type Profile,
   type Review,
   type ReviewCycle,
@@ -129,13 +132,49 @@ function CycleProgress({
   );
 }
 
+// The person's own figures, when their job role carries the module. One block for both
+// dashboards, so an admin in a role and an employee in it see the same thing.
+function YourFigures({ jobRole, financials, year, className = "" }: { jobRole: JobRole; financials: EmployeeFinancial[]; year: number; className?: string }) {
+  return (
+    <Section eyebrow={`Financials ${year}`} title="Your figures" description={`What ${jobRole.name} owns this year, against target. Your manager keeps these on your profile.`} className={className}>
+      {financials.length === 0 ? (
+        <p className="text-sm text-ink-2">No figures set for {year} yet.</p>
+      ) : (
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {financials.map((row) => {
+            const progress = financialProgress(row);
+            return (
+              <li key={row.id}>
+                <ScoreBar
+                  label={row.metric}
+                  percent={progress === null ? null : progress * 100}
+                  detail={row.target === null ? formatMoney(row.current) : `${formatMoney(row.current)} of ${formatMoney(row.target)}`}
+                />
+                <p className="mt-1 text-[12px] text-ink-3">{FINANCIAL_SOURCE_LABELS[row.source]}</p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+// The modules a person's job role puts on their dashboard. Active roles only: a retired role
+// stays on the person's record but adds nothing. A person with no role skips both reads.
+async function loadOwnModules(companyId: string, profile: Pick<Profile, "id" | "job_role_id">, year: number) {
+  if (!profile.job_role_id) return { jobRole: null, financials: [] as EmployeeFinancial[] };
+  const [jobRoles, financials] = await Promise.all([listJobRoles(companyId), listEmployeeFinancials(companyId, profile.id, year)]);
+  return { jobRole: jobRoles.find((r) => r.id === profile.job_role_id) ?? null, financials };
+}
+
 function AdminDashboard() {
-  const { company } = useHub();
+  const { company, profile } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns] = await Promise.all([
+    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own] = await Promise.all([
       listCompanyProfiles(companyId),
       listCycles(companyId),
       listPillars(companyId),
@@ -145,6 +184,7 @@ function AdminDashboard() {
       listResources(companyId),
       listSnapshots(companyId),
       listCampaigns(companyId),
+      loadOwnModules(companyId, profile, year),
     ]);
     // Every cycle with reviews still owed: the ones covering today (a monthly Goal Setting Review
     // runs inside a quarterly scored review, so both are live) and any open cycle whose period
@@ -157,8 +197,8 @@ function AdminDashboard() {
       reviews = (await Promise.all(live.map((c) => listCycleReviews(c.id)))).flat();
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
-    return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns };
-  }, [companyId, year]);
+    return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, ...own };
+  }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
@@ -173,7 +213,7 @@ function AdminDashboard() {
     );
   }
 
-  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns } = state.data;
+  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, jobRole, financials } = state.data;
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
   // anyone else; the only difference is that they cannot open it until they sign in.
@@ -250,7 +290,7 @@ function AdminDashboard() {
         <Stat label="Library" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "resource")}`} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {live.length === 0 ? (
             <Section
@@ -298,6 +338,8 @@ function AdminDashboard() {
               </ul>
             )}
           </Section>
+
+          {jobRole?.dashboard_modules.includes("financials") ? <YourFigures jobRole={jobRole} financials={financials} year={year} /> : null}
         </div>
 
         <div className="space-y-6">
@@ -404,7 +446,7 @@ function EmployeeDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, jobRoles, financials] = await Promise.all([
+    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own] = await Promise.all([
       listEmployeeReviews(companyId, profile.id),
       listPillars(companyId),
       listCriteria(companyId),
@@ -413,13 +455,12 @@ function EmployeeDashboard() {
       listRecentSops(companyId, 5),
       listCycles(companyId),
       listCompanyGoals(companyId, year),
-      listJobRoles(companyId),
-      listEmployeeFinancials(companyId, profile.id, year),
+      // The person's job role decides which optional blocks this dashboard carries. The role is
+      // a row the company set up, so a new module is a new entry in its list, never a branch on
+      // who the company is.
+      loadOwnModules(companyId, profile, year),
     ]);
-    // The person's job role decides which optional blocks this dashboard carries. The role is
-    // a row the company set up, so a new module is a new entry in its list, never a branch on
-    // who the company is.
-    const jobRole = jobRoles.find((r) => r.id === profile.job_role_id) ?? null;
+    const { jobRole, financials } = own;
     // Latest by the period the review covers, the same rule My GSR and the person page use.
     // The service orders by row creation time, which puts a review started out of order first.
     //
@@ -435,7 +476,9 @@ function EmployeeDashboard() {
     // review; the current GSR is this month's Goal Setting Review, if the manager has opened it.
     const baseline = previousCompletedReview(history);
     const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
-    const gsrCycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
+    // The month covering today, else the latest one still open after its period ended: a quarter
+    // covering today must not hide a GSR the person still has to finish (the same month My GSR opens).
+    const gsrCycle = gsrCycleInPlay(cycles);
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
     return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
   }, [companyId, profile.id, profile.job_role_id, year]);
@@ -479,7 +522,7 @@ function EmployeeDashboard() {
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {ratingPillars.length > 0 ? (
           <Section
             eyebrow="Impact score"
@@ -606,29 +649,7 @@ function EmployeeDashboard() {
           )}
         </Section>
 
-        {showFinancials && jobRole ? (
-          <Section eyebrow={`Financials ${year}`} title="Your figures" description={`What ${jobRole.name} owns this year, against target. Your manager keeps these on your profile.`} className="lg:col-span-3">
-            {financials.length === 0 ? (
-              <p className="text-sm text-ink-2">No figures set for {year} yet.</p>
-            ) : (
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {financials.map((row) => {
-                  const progress = financialProgress(row);
-                  return (
-                    <li key={row.id}>
-                      <ScoreBar
-                        label={row.metric}
-                        percent={progress === null ? null : progress * 100}
-                        detail={row.target === null ? formatMoney(row.current) : `${formatMoney(row.current)} of ${formatMoney(row.target)}`}
-                      />
-                      <p className="mt-1 text-[12px] text-ink-3">{FINANCIAL_SOURCE_LABELS[row.source]}</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Section>
-        ) : null}
+        {showFinancials && jobRole ? <YourFigures jobRole={jobRole} financials={financials} year={year} className="lg:col-span-3" /> : null}
 
         {companyGoals.length > 0 ? (
           <Section eyebrow={`Company goals ${year}`} title="What the team is chasing" className="lg:col-span-3" padded={false}>

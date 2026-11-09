@@ -15,7 +15,7 @@ import { SkeletonRows } from "../../components/ui/Skeleton.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { ensureReview, listCycles, listEmployeeReviews } from "../../services/gsr.ts";
-import { activeCycles, sectionOf } from "../../lib/gsr/cycles.ts";
+import { gsrCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { MY_TABS } from "./myTabs.ts";
 import ReviewPage from "./ReviewPage.tsx";
@@ -28,8 +28,9 @@ export default function MyGsrPage() {
 
   const state = useAsync(async () => {
     const [cycles, reviews] = await Promise.all([listCycles(companyId), listEmployeeReviews(companyId, profile.id)]);
-    // The live month: the first GSR among the cycles covering today.
-    const cycle = activeCycles(cycles).find((c) => sectionOf(c.cadence) === "gsr") ?? null;
+    // The month to work in: the one covering today, else the latest month still open after its
+    // period ended, so a quarter covering today never hides a GSR the person still has to finish.
+    const cycle = gsrCycleInPlay(cycles);
     const review = cycle ? (reviews.find((r) => r.cycle_id === cycle.id) ?? null) : null;
     return { cycle, review };
   }, [companyId, profile.id]);

@@ -93,7 +93,7 @@ function SopForm({ existing }: { existing: ExistingSop | null }) {
         }
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Section eyebrow="Content" title="Procedure">
             <Field label="Title" htmlFor="sop-title">
