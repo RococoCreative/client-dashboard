@@ -125,13 +125,14 @@ revoke execute on function public.guard_goal_frozen() from public, anon, authent
 -- ---------------------------------------------------------------------------------------
 -- Same as 0021, with three changes. Monthly goals are picked by scope rather than by a null
 -- cycle, so a goal in the months never moves (and 0028 keeps it with its month's company).
--- Anyone who is not in the new company stops reporting to the person. And the old company's
--- pending invitation for them is settled: while they have no account and the address is theirs,
--- it moves to the new company, because the sign-in gate (0002) only admits a personal address
--- with a pending invitation; otherwise it is withdrawn. Left where it was, it stayed pending
--- for good on the old company's portfolio card, where nobody could see or cancel it.
+-- Anyone who is not in the new company stops reporting to the person. And a pending invitation
+-- the old company made for them is settled: while they have no account and the address is
+-- theirs, it moves to the new company, because the sign-in gate (0002) only admits a personal
+-- address with a pending invitation; otherwise it is withdrawn. Left where it was, it stayed
+-- pending for good on the old company's portfolio card, where nobody could see or cancel it.
 -- invitations_company_email_key allows one invitation per company and address, so the move
--- only happens when the new company has none of its own for them.
+-- only happens when the new company has none of its own for them. Setting someone to No company
+-- moves nothing, invitations included; placing them afterwards settles all of it.
 create or replace function public.move_employee_company()
 returns trigger
 language plpgsql
@@ -162,25 +163,37 @@ begin
     update public.deliverable_tasks    set company_id = new.company_id where employee_id = new.id;
     delete from public.impact_scores where employee_id = new.id;
 
-    -- Placing someone who had no company is not a move: handle_new_user does it at first
-    -- sign-in and settles the invitation itself.
-    if old.company_id is not null then
+    -- The invitations to settle: any pending one in another company that names this person,
+    -- and the old company's for their address that names nobody. Naming them covers a move
+    -- made in two steps through No company on the Users page, where the second step no longer
+    -- knows the old company. At most one moves (the newest), since a company holds one
+    -- invitation per address; the rest are withdrawn. Placing someone who had no company at
+    -- first sign-in is handle_new_user's own write, with nobody signed in, and it settles the
+    -- invitation itself.
+    if old.company_id is not null or (select auth.uid()) is not null then
       update public.invitations i
          set company_id = new.company_id,
              profile_id = new.id
-       where i.company_id = old.company_id
-         and i.accepted_at is null
-         and i.email = lower(new.email)
-         and (i.profile_id is null or i.profile_id = new.id)
+       where i.id = (
+               select c.id from public.invitations c
+                where c.accepted_at is null
+                  and c.company_id is distinct from new.company_id
+                  and c.email = lower(new.email)
+                  and (c.profile_id = new.id
+                       or (c.profile_id is null and c.company_id = old.company_id))
+                order by c.created_at desc, c.id
+                limit 1
+             )
          and new.user_id is null
          and not exists (
            select 1 from public.invitations j
-            where j.company_id = new.company_id and j.email = i.email
+            where j.company_id = new.company_id and j.email = lower(new.email)
          );
       delete from public.invitations i
-       where i.company_id = old.company_id
-         and i.accepted_at is null
-         and (i.profile_id = new.id or (i.profile_id is null and i.email = lower(new.email)));
+       where i.accepted_at is null
+         and i.company_id is distinct from new.company_id
+         and (i.profile_id = new.id
+              or (i.profile_id is null and i.company_id = old.company_id and i.email = lower(new.email)));
     end if;
   end if;
   return new;
@@ -307,15 +320,41 @@ create unique index if not exists review_cycles_period_key
 -- branch never looked at is_rococo_admin: its admin could deactivate them, which ends their
 -- access to every company. And a deactivated person still matched the update policy's "own row"
 -- branch, so a live session could rename them on every roster.
+-- One write is let through ahead of both: a foreign key clearing job_role_id or reports_to
+-- because the role or the person it named is being deleted. That runs as whoever made the
+-- delete, which their own policy already allowed, so without this a company admin could not
+-- delete a job role a Rococo admin holds, or remove someone a Rococo admin reports to. The row
+-- it named is gone only during that delete, so clearing a link by hand is still checked.
 create or replace function public.guard_profile_fields()
 returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_probe   public.profiles%rowtype;
+  v_cleared boolean := false;
 begin
   new.email := old.email;
   if (select auth.uid()) is null or private.is_rococo_admin() then
+    return new;
+  end if;
+
+  v_probe := new;
+  v_probe.updated_at := old.updated_at;
+  if new.reports_to is null
+     and old.reports_to is not null
+     and not exists (select 1 from public.profiles m where m.id = old.reports_to) then
+    v_probe.reports_to := old.reports_to;
+    v_cleared := true;
+  end if;
+  if new.job_role_id is null
+     and old.job_role_id is not null
+     and not exists (select 1 from public.job_roles j where j.id = old.job_role_id) then
+    v_probe.job_role_id := old.job_role_id;
+    v_cleared := true;
+  end if;
+  if v_cleared and v_probe is not distinct from old then
     return new;
   end if;
 
