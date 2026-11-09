@@ -1,11 +1,13 @@
-// The sync routes. They run inside the connections function so it stays the only reader of
-// connection_tokens (rule 6). Sync now is authorised by the caller's own one-row write under row
-// level security (private.can_sync_source), never by a role check here; the hourly tick is
-// authorised by a shared secret that can only start a sync; describe is for a company admin
-// choosing a tab. The database side of the runner and the token store live here, over the
-// service role; everything else a sync does is in the pure modules under _shared/sync.
+// The sync routes for Google Sheets and QuickBooks Online, both read-only. They run inside the
+// connections function so it stays the only reader of connection_tokens (rule 6). Sync now is
+// authorised by the caller's own one-row write under row level security
+// (private.can_sync_source), never by a role check here; the hourly tick is authorised by a
+// shared secret that can only start a sync; describe is for a company admin choosing a Google
+// Sheets tab. The database side of the runner and the token store live here, over the service
+// role; everything else a sync does is in the pure modules under _shared/sync.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
+import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
 import { runSync, type RunOutcome, type SyncStore } from "../_shared/sync/runner.ts";
 import { isDue } from "../_shared/sync/schedule.ts";
 import type { AdapterRegistry, ProviderAdapter, ProviderTokens, SyncProvider, SyncSourceSpec, TokenStore } from "../_shared/sync/types.ts";
@@ -169,12 +171,27 @@ function unconfigured(provider: SyncProvider, label: string): ProviderAdapter {
   };
 }
 
-// QuickBooks is registered here once its adapter exists; until then a QuickBooks source fails
-// with the runner's "Provider not supported yet".
+function quickBooksKeys(): { clientId: string; clientSecret: string } | null {
+  const clientId = Deno.env.get("QBO_CLIENT_ID");
+  const clientSecret = Deno.env.get("QBO_CLIENT_SECRET");
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+// Both providers, each read-only; one whose app keys are missing fails its sources with a plain line.
 export function adaptersFor(tokens: TokenStore): AdapterRegistry {
-  const keys = googleKeys();
+  const google = googleKeys();
+  const qbo = quickBooksKeys();
   return {
-    google_sheets: keys ? createGoogleSheetsAdapter({ ...keys, tokens, fetch, now: () => new Date() }) : unconfigured("google_sheets", "Google Sheets"),
+    google_sheets: google ? createGoogleSheetsAdapter({ ...google, tokens, fetch, now: () => new Date() }) : unconfigured("google_sheets", "Google Sheets"),
+    quickbooks: qbo
+      ? createQuickBooksAdapter({
+          ...qbo,
+          tokens,
+          fetch,
+          environment: Deno.env.get("QBO_ENVIRONMENT") === "production" ? "production" : "sandbox",
+          now: () => new Date(),
+        })
+      : unconfigured("quickbooks", "QuickBooks Online"),
   };
 }
 
