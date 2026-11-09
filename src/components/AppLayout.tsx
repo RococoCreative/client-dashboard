@@ -1,11 +1,11 @@
 // Signed-in application shell: a quiet sidebar with the company's identity, the nav for the
-// person's role, and the account footer. Rococo admins get the portfolio nav when no company
-// is active, and inside a company a way back plus the switcher. Collapses to a top bar on
-// small screens. The content area remounts when the active company changes so every page
+// person's role (flat, or in sections under the switchboard module), and the account footer.
+// Rococo admins get the portfolio nav when no company is active, and inside a company a way
+// back plus the switcher. Collapses to a top bar on small screens. The content area remounts when the active company changes so every page
 // refetches for the new tenant.
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { ArrowLeft, BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, LayoutDashboard, LayoutGrid, LogOut, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeft, LogOut } from "lucide-react";
 import Avatar from "./ui/Avatar.tsx";
 import IconButton from "./ui/IconButton.tsx";
 import { labelClass, selectClass } from "./ui/forms.ts";
@@ -13,43 +13,8 @@ import { useHub } from "../context/HubContext.tsx";
 import { signOut } from "../services/auth.ts";
 import { displayName } from "../lib/format.ts";
 import { applyTheme } from "../lib/theme.ts";
+import { PORTFOLIO_NAV, navFor, type NavItem, type NavLayout, type NavSection } from "../lib/navigation.ts";
 import { ROLE_LABELS } from "../types/database.ts";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-  end?: boolean;
-}
-
-const ADMIN_NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/gsr", label: "GSRs", icon: CalendarCheck },
-  { to: "/reviews", label: "Reviews", icon: ClipboardCheck },
-  { to: "/goals", label: "Goals", icon: Target },
-  { to: "/people", label: "People", icon: Users },
-  { to: "/sops", label: "SOPs", icon: BookOpen },
-  { to: "/resources", label: "Resources", icon: FolderOpen },
-  { to: "/financials", label: "Financials", icon: CircleDollarSign },
-  { to: "/marketing", label: "Marketing", icon: Megaphone },
-  { to: "/my/gsr", label: "My GSR", icon: UserRound },
-  { to: "/settings", label: "Settings", icon: Settings },
-];
-
-const PORTFOLIO_NAV: NavItem[] = [
-  { to: "/rococo", label: "Portfolio", icon: LayoutGrid, end: true },
-  { to: "/rococo/companies", label: "Companies", icon: Building2 },
-  { to: "/rococo/people", label: "People", icon: Users },
-];
-
-const EMPLOYEE_NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/my/gsr", label: "My GSR", icon: CalendarCheck },
-  { to: "/my/reviews", label: "My Reviews", icon: ClipboardCheck },
-  { to: "/my/goals", label: "My Goals", icon: Target },
-  { to: "/sops", label: "SOPs", icon: BookOpen },
-  { to: "/resources", label: "Resources", icon: FolderOpen },
-];
 
 function NavEntry({ item }: { item: NavItem }) {
   const Icon = item.icon;
@@ -68,6 +33,27 @@ function NavEntry({ item }: { item: NavItem }) {
   );
 }
 
+// One section of the grouped sidebar. Its heading shows only at lg, so the small-screen bar
+// stays one horizontal row; the utility group has no heading and a hairline instead.
+function NavSectionGroup({ section }: { section: NavSection }) {
+  const utility = section.heading === null;
+  return (
+    <div
+      role="group"
+      aria-label={section.heading ?? "More"}
+      className={
+        "flex shrink-0 gap-1 lg:flex-col lg:not-first:mt-3 " +
+        (utility ? "border-l border-line pl-1 lg:border-t lg:border-l-0 lg:pt-3 lg:pl-0" : "")
+      }
+    >
+      {section.heading ? <p className="eyebrow hidden px-3 pt-1 pb-0.5 text-[10px] text-ink-3 lg:block">{section.heading}</p> : null}
+      {section.items.map((item) => (
+        <NavEntry key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
 export default function AppLayout() {
   const { profile, company, companies, isRococo, isAdmin, setActiveCompanyId } = useHub();
   const location = useLocation();
@@ -75,8 +61,10 @@ export default function AppLayout() {
   // or no company is active. That keeps entering a company (state change plus navigation,
   // which React Router commits separately) free of any in-between flicker or bounce.
   const portfolio = isRococo && (company === null || location.pathname.startsWith("/rococo"));
-  // Rococo admins have no company of their own, so "My GSR" would be empty for them.
-  const nav = portfolio ? PORTFOLIO_NAV : isAdmin ? ADMIN_NAV.filter((item) => !(isRococo && item.to.startsWith("/my"))) : EMPLOYEE_NAV;
+  // The registry decides what this person sees here, flat or in sections (lib/navigation.ts).
+  const layout: NavLayout = portfolio
+    ? { kind: "flat", items: [...PORTFOLIO_NAV] }
+    : company ? navFor(company, isAdmin, isRococo) : { kind: "flat", items: [] };
 
   // The shell owns the theme once signed in: Rococo on the portfolio, the company's inside.
   useEffect(() => {
@@ -131,9 +119,9 @@ export default function AppLayout() {
         ) : null}
 
         <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-1 lg:flex-col lg:overflow-visible" aria-label="Primary">
-          {nav.map((item) => (
-            <NavEntry key={item.to} item={item} />
-          ))}
+          {layout.kind === "flat"
+            ? layout.items.map((item) => <NavEntry key={item.id} item={item} />)
+            : layout.sections.map((section) => <NavSectionGroup key={section.group} section={section} />)}
         </nav>
 
         <footer className="hidden items-center gap-3 border-t border-line px-4 py-3 lg:flex">

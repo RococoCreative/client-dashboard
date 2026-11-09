@@ -23,7 +23,8 @@ vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
-import { COMPANIES, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import { COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
@@ -509,6 +510,41 @@ describe("admin", () => {
 });
 
 describe("navigation and modules", () => {
+  it("groups a Kingdom admin's sidebar into sections with Home first", () => {
+    renderWithHub(<AppLayout />, makeHub("admin", KINGDOM.company));
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    for (const name of ["Home", "Sales & Finance", "People / HR", "More"]) {
+      expect(within(nav).getByRole("group", { name })).toBeInTheDocument();
+    }
+    expect(within(nav).getByRole("link", { name: "Home" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("groups a Kingdom employee's sidebar without Sales & Finance", () => {
+    renderWithHub(<AppLayout />, makeHub("employee", KINGDOM.company));
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).queryByRole("group", { name: "Sales & Finance" })).not.toBeInTheDocument();
+    for (const name of ["Home", "People / HR", "More"]) {
+      expect(within(nav).getByRole("group", { name })).toBeInTheDocument();
+    }
+    for (const name of ["My GSR", "My Reviews", "My Goals"]) {
+      expect(within(nav).getByRole("link", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps Klasik's flat sidebar exactly as it was", () => {
+    renderWithHub(<AppLayout />, admin);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).queryAllByRole("group")).toHaveLength(0);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Dashboard", "GSRs", "Reviews", "Goals", "People", "SOPs", "Resources", "Financials", "Marketing", "My GSR", "Settings"]);
+  });
+
+  it("titles the dashboard Home under the switchboard module", async () => {
+    renderWithHub(<DashboardPage />, makeHub("admin", KINGDOM.company));
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
   it("switches modules per company on the Companies tab", async () => {
     const user = userEvent.setup();
     renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });

@@ -17,6 +17,7 @@ import { useSession } from "./hooks/useSession.ts";
 import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
+import { hasModule, type ModuleKey } from "./lib/modules.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -98,6 +99,14 @@ function AdminOnly({ children }: { children: ReactNode }) {
   const { company, isAdmin } = useHub();
   if (!company) return <RedirectTo path="/rococo" />;
   return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// A module's pages exist only for a company that has the module on. Typing the URL elsewhere
+// lands on Home, the way AdminOnly does for employees.
+export function ModuleOnly({ module, children }: { module: ModuleKey; children: ReactNode }) {
+  const { company } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function RococoOnly({ children }: { children: ReactNode }) {

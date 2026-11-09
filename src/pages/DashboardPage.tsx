@@ -34,6 +34,7 @@ import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, s
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
 import { financialProgress, hasAccount } from "../lib/people.ts";
+import { hasModule } from "../lib/modules.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
   FINANCIAL_SOURCE_LABELS,
@@ -220,7 +221,7 @@ function AdminDashboard() {
     <>
       <PageHeader
         eyebrow={company!.name}
-        title="Dashboard"
+        title={hasModule(company, "switchboard") ? "Home" : "Dashboard"}
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
       />
 
