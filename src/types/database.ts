@@ -598,8 +598,9 @@ export const CAMPAIGN_CHANNELS = [
 
 // A company's connection to an outside system, made by its own admin signing in to that system
 // from Company Hub. The status row is all the browser sees; tokens live in connection_tokens,
-// which only the connections Edge Function reads. A new provider is a new key here and a new
-// entry in that function's registry.
+// and each sign-in's single-use nonce in connection_states, which only the connections Edge
+// Function reads, so neither has a type here. A new provider is a new key here and a new entry
+// in that function's registry.
 export type ConnectionProvider = "gohighlevel" | "quickbooks";
 export const CONNECTION_PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   gohighlevel: "GoHighLevel",
