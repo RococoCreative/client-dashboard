@@ -1,7 +1,9 @@
 // Controls for a company with data sources on: invoice, payment and balance checks read from
-// QuickBooks. Which controls to show and the rules behind them are not agreed yet, so the page
-// says what it is waiting on and shows no figure.
+// QuickBooks. A source that feeds Controls shows its state and its read-only values; which
+// controls to show and the rules behind them are not agreed yet, so with no source the page says
+// what it is waiting on and shows no figure.
 import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
+import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import { useHub } from "../../context/HubContext.tsx";
@@ -10,7 +12,7 @@ import { SALES_FINANCE_TABS } from "./salesFinanceTabs.ts";
 export default function ControlsPage() {
   const { company } = useHub();
 
-  const quickBooksControls = (
+  const controlsScaffold = (
     <ScaffoldCard
       eyebrow="Sales & Finance"
       title="QuickBooks controls"
@@ -26,7 +28,7 @@ export default function ControlsPage() {
     <>
       <PageHeader eyebrow={company!.name} title="Controls" description="Invoice, payment and balance checks from QuickBooks, read-only." />
       <Tabs items={SALES_FINANCE_TABS} />
-      {quickBooksControls}
+      <SourcePanel companyId={company!.id} targetModule="controls" scaffold={controlsScaffold} />
     </>
   );
 }

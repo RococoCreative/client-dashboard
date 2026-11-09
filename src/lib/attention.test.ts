@@ -1,9 +1,11 @@
 // Pins the Attention card's rules: one line for everyone not signed in yet, one per open cycle
-// whose period has ended, one per live campaign with no budget, one per connection in error, the
-// danger items first, and nothing invented beyond those four signals.
+// whose period has ended, one per live campaign with no budget, one per connection in error, one
+// per enabled data source whose sync failed or went stale, the danger items first, and nothing
+// invented beyond those signals.
 import { describe, expect, it } from "vitest";
-import type { CompanyConnection, MarketingCampaign, Profile, ReviewCycle } from "../types/database.ts";
+import type { CompanyConnection, MarketingCampaign, Profile, ReviewCycle, SyncSource } from "../types/database.ts";
 import { attentionItems, type AttentionInput } from "./attention.ts";
+import { formatDateTime } from "./format.ts";
 
 const STAMP = "2026-01-01T00:00:00Z";
 let seq = 0;
@@ -90,6 +92,37 @@ function connection(overrides: Partial<CompanyConnection> = {}): CompanyConnecti
     last_synced_at: null,
     last_error: null,
     settings: {},
+    created_at: STAMP,
+    updated_at: STAMP,
+    ...overrides,
+  };
+}
+
+function source(overrides: Partial<SyncSource> = {}): SyncSource {
+  seq += 1;
+  return {
+    id: `source-${seq}`,
+    company_id: "co",
+    connection_id: "sheets",
+    provider: "google_sheets",
+    name: `Source ${seq}`,
+    target_module: "sales_reporting",
+    config: { spreadsheet_id: "sheet", sheet_gid: 0, range: null, header_row: 1 },
+    field_map: [],
+    record_key: [],
+    sync_weekday: null,
+    sync_time: null,
+    sync_timezone: null,
+    stale_after_hours: null,
+    enabled: true,
+    current_run_id: null,
+    last_attempt_at: null,
+    last_success_at: null,
+    last_status: null,
+    last_error: null,
+    sync_requested_at: null,
+    created_by: null,
+    updated_by: null,
     created_at: STAMP,
     updated_at: STAMP,
     ...overrides,
@@ -219,5 +252,46 @@ describe("attentionItems", () => {
       expect(item.title).not.toContain("\u2014");
       expect(item.detail).not.toContain("\u2014");
     }
+  });
+
+  describe("data sources", () => {
+    const now = new Date("2026-09-15T12:00:00Z");
+    const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600000).toISOString();
+    const sheets = connection({ id: "sheets", provider: "google_sheets", status: "connected" });
+
+    it("flags a failed enabled source with its own error", () => {
+      const failed = source({ name: "Sales tab", last_status: "failed", last_success_at: hoursAgo(2), last_error: "The column \"Gross profit\" is missing." });
+      expect(attentionItems(input({ connections: [sheets], sources: [failed], now }))).toEqual([
+        { kind: "sync_failed", title: "Sales tab: sync failed", detail: "The column \"Gross profit\" is missing.", to: "/settings", severity: "danger" },
+      ]);
+      const silent = source({ name: "Other tab", last_status: "failed" });
+      expect(attentionItems(input({ connections: [sheets], sources: [silent], now })).map((i) => i.detail)).toEqual(["The last attempt did not finish."]);
+    });
+
+    it("flags a stale enabled source with its last success time", () => {
+      const lastSuccess = hoursAgo(30);
+      const stale = source({ name: "Stale tab", last_status: "succeeded", last_success_at: lastSuccess, stale_after_hours: 24 });
+      expect(attentionItems(input({ connections: [sheets], sources: [stale], now }))).toEqual([
+        { kind: "sync_stale", title: "Stale tab: stale data", detail: `Last synced ${formatDateTime(lastSuccess)}.`, to: "/settings", severity: "warning" },
+      ]);
+    });
+
+    it("says nothing about a disabled source", () => {
+      const off = source({ enabled: false, last_status: "failed", last_error: "Broken" });
+      expect(attentionItems(input({ connections: [sheets], sources: [off], now }))).toEqual([]);
+    });
+
+    it("puts a failed source before warnings", () => {
+      const stale = source({ name: "Stale tab", last_status: "succeeded", last_success_at: hoursAgo(30), stale_after_hours: 24 });
+      const failed = source({ name: "Failed tab", last_status: "failed" });
+      const items = attentionItems(input({ people: [person({ user_id: null })], connections: [sheets], sources: [stale, failed], now }));
+      expect(items.map((i) => i.kind)).toEqual(["sync_failed", "not_signed_in", "sync_stale"]);
+    });
+
+    it("changes nothing without sources", () => {
+      const base = { people: [person({ user_id: null })], connections: [connection({ status: "error" })] };
+      expect(attentionItems(input({ ...base, sources: [] }))).toEqual(attentionItems(input(base)));
+      expect(attentionItems(input(base)).map((i) => i.kind)).toEqual(["connection_error", "not_signed_in"]);
+    });
   });
 });

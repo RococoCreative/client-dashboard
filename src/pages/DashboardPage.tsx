@@ -15,6 +15,7 @@ import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
 import GsrQuarterLine from "../components/gsr/GsrQuarterLine.tsx";
 import AttentionCard from "../components/home/AttentionCard.tsx";
+import FreshnessCard from "../components/home/FreshnessCard.tsx";
 import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
 import WinsCard from "../components/home/WinsCard.tsx";
 import Stat from "../components/ui/Stat.tsx";
@@ -266,6 +267,7 @@ function AdminDashboard() {
           <div className="space-y-6">
             {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
             {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+            {hasModule(company!, "switchboard") && hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
           </div>
         </div>
       ) : null}

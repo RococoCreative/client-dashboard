@@ -23,6 +23,7 @@ vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts
 vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
+vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
@@ -30,6 +31,9 @@ import * as auditService from "../services/audit.ts";
 import * as companiesService from "../services/companies.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as winsService from "../services/wins.ts";
+import * as syncService from "../services/sync.ts";
+import { formatDateTime } from "../lib/format.ts";
+import { syncState } from "../lib/sync/state.ts";
 import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
@@ -1513,5 +1517,121 @@ describe("scaffolds", () => {
       const region = await screen.findByRole("region", { name });
       expect(within(region).queryAllByRole("button")).toHaveLength(0);
     }
+  });
+});
+
+describe("data sources", () => {
+  // Read-only cases first, then Settings, which syncs and adds a source in the shared mock store.
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const source = (name: string) => KINGDOM.syncSources.find((s) => s.name === name)!;
+  const card = (title: string) => screen.getByRole("heading", { name: title }).closest("section") as HTMLElement;
+  const salesRoute = { path: "/sales-finance", pattern: "/sales-finance" };
+
+  it("carries one Kingdom source in each sync state", () => {
+    const states = KINGDOM.syncSources.map((s) => syncState(s, KINGDOM.connections.find((c) => c.id === s.connection_id) ?? null));
+    expect([...states].sort()).toEqual(["awaiting_first_sync", "failed", "not_connected", "stale", "synced", "syncing"]);
+  });
+
+  it("shows synced values read-only, with blanks as a hyphen", async () => {
+    renderWithHub(<SalesFinancePage />, kingdomAdmin, salesRoute);
+    await screen.findByRole("heading", { name: "Sample sales tab" });
+    const sales = card("Sample sales tab");
+    expect(within(sales).getByText("Synced")).toBeInTheDocument();
+    const headers = within(sales).getAllByRole("columnheader").map((th) => th.textContent);
+    expect(headers).toEqual(["Job", "Contract amount (USD)", "Margin", "Units", "Signed on", "Notes", "Source"]);
+    for (const text of ["Sample job 101", "$250,000", "25.0%", "Aug 14, 2026"]) expect(within(sales).getByText(text)).toBeInTheDocument();
+    const blankRow = within(sales).getByText("Sample job 102").closest("tr") as HTMLElement;
+    expect(within(blankRow).getAllByRole("cell").filter((td) => td.textContent === "-")).toHaveLength(5);
+    const links = within(sales).getAllByRole("link", { name: "Open in Google Sheets" });
+    expect(links).toHaveLength(2);
+    expect(links[0].getAttribute("href")).toContain("docs.google.com/spreadsheets/d/sample-sheet-1");
+    expect(links[0].getAttribute("href")).toContain("range=A2");
+    expect(links[0]).toHaveAttribute("target", "_blank");
+    expect(links[0].getAttribute("rel")).toContain("noopener");
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    for (const cell of screen.getAllByRole("cell")) expect(["$0", "0%", "0.0%"]).not.toContain(cell.textContent);
+  });
+
+  it("keeps the last good values and their time when a sync fails, never a 0", async () => {
+    renderWithHub(<SalesFinancePage />, kingdomAdmin, salesRoute);
+    await screen.findByRole("heading", { name: "Sample financial tab" });
+    const financial = card("Sample financial tab");
+    expect(within(financial).getByText("Sync failed")).toBeInTheDocument();
+    const when = formatDateTime(source("Sample financial tab").last_success_at);
+    expect(within(financial).getByText((text) => text.includes(`Showing data from ${when}`))).toBeInTheDocument();
+    expect(within(financial).getByText((text) => text.includes('The column "Gross profit" is missing.'))).toBeInTheDocument();
+    expect(within(financial).getByText("$120,000")).toBeInTheDocument();
+    expect(financial.textContent).not.toContain("$0");
+  });
+
+  it("keeps the last good values visible while a sync runs", async () => {
+    renderWithHub(<SalesFinancePage />, kingdomAdmin, salesRoute);
+    await screen.findByRole("heading", { name: "Sample syncing tab" });
+    const syncing = card("Sample syncing tab");
+    expect(within(syncing).getByText("Syncing")).toBeInTheDocument();
+    expect(within(syncing).getByText("$80,000")).toBeInTheDocument();
+  });
+
+  it("marks stale data with its age", async () => {
+    renderWithHub(<SalesFinancePage />, kingdomAdmin, salesRoute);
+    await screen.findByRole("heading", { name: "Sample stale tab" });
+    const stale = card("Sample stale tab");
+    expect(within(stale).getByText("Stale data")).toBeInTheDocument();
+    expect(within(stale).getByText(/^Stale: last synced /)).toBeInTheDocument();
+  });
+
+  it("shows a QuickBooks source that is not connected yet", async () => {
+    renderWithHub(<ControlsPage />, kingdomAdmin, { path: "/sales-finance/controls", pattern: "/sales-finance/controls" });
+    await screen.findByRole("heading", { name: "Sample invoices" });
+    const invoices = card("Sample invoices");
+    expect(within(invoices).getByText("Not connected")).toBeInTheDocument();
+    expect(within(invoices).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(within(invoices).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("shows the PM capacity source's state to admins only", async () => {
+    const productionRoute = { path: "/production", pattern: "/production" };
+    const { unmount } = renderWithHub(<ProductionPage />, kingdomAdmin, productionRoute);
+    await screen.findByRole("heading", { name: "Sample capacity tab" });
+    const capacity = card("Sample capacity tab");
+    expect(within(capacity).getByText("Awaiting first sync")).toBeInTheDocument();
+    expect(within(capacity).getByText("Connected. No data yet.")).toBeInTheDocument();
+    unmount();
+
+    renderWithHub(<ProductionPage />, kingdomEmployee, productionRoute);
+    const region = await screen.findByRole("region", { name: "PM capacity" });
+    expect(within(region).getByText("Not configured")).toBeInTheDocument();
+    expect(screen.queryByText("Sample capacity tab")).not.toBeInTheDocument();
+  });
+
+  it("lists every source's freshness on Kingdom Home", async () => {
+    renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Freshness" });
+    const freshness = card("Freshness");
+    const names = ["Sample capacity tab", "Sample financial tab", "Sample invoices", "Sample sales tab", "Sample stale tab", "Sample syncing tab"];
+    for (const name of names) expect(await within(freshness).findByRole("link", { name })).toBeInTheDocument();
+    expect(within(freshness).getByRole("link", { name: "Sample sales tab" })).toHaveAttribute("href", "/sales-finance");
+    expect(within(freshness).getByRole("link", { name: "Sample invoices" })).toHaveAttribute("href", "/sales-finance/controls");
+    expect(within(freshness).getByRole("link", { name: "Sample capacity tab" })).toHaveAttribute("href", "/production");
+    const financialRow = within(freshness).getByRole("link", { name: "Sample financial tab" }).closest("li") as HTMLElement;
+    expect(financialRow.textContent).toContain(formatDateTime(source("Sample financial tab").last_success_at));
+    const attention = card("Needs attention");
+    expect(await within(attention).findByText("Sample financial tab: sync failed")).toBeInTheDocument();
+    expect(within(attention).getByText("Sample stale tab: stale data")).toBeInTheDocument();
+  });
+
+  it("adds nothing to a company without data sources", async () => {
+    const spy = vi.spyOn(syncService, "listSyncSources");
+    onTestFinished(() => spy.mockRestore());
+    const { unmount } = renderWithHub(<DashboardPage />, admin);
+    expect(await screen.findByText("Closed sales")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Freshness" })).not.toBeInTheDocument();
+    unmount();
+    renderWithHub(<CompanySettingsPage />, admin);
+    expect(await screen.findByText("Connections")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Data sources" })).not.toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
+import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Field from "../../components/ui/Field.tsx";
@@ -19,6 +20,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
+import { hasModule } from "../../lib/modules.ts";
 import { milestoneCounts, nextTargetDate } from "../../lib/milestones.ts";
 import { createProject, listCompanyMilestones, listProjects } from "../../services/projects.ts";
 import type { Project, ProjectMilestone } from "../../types/database.ts";
@@ -154,7 +156,13 @@ export default function ProductionPage() {
         />
         <ScaffoldCard eyebrow="Production" title="Job health" pending={["Which signals make a job healthy or at risk", "Where those signals come from"]} />
         <ScaffoldCard eyebrow="Production" title="Warranty" pending={["Where warranty items are tracked today", "What the hub should show about them"]} />
-        {pmCapacity}
+        {/* PM capacity shows its source's state only until the PM mapping slice (S11). Members
+            cannot read sources under RLS, so they get the scaffold without a pointless call. */}
+        {isAdmin && hasModule(company!, "data_sources") ? (
+          <SourcePanel companyId={company!.id} targetModule="pm_capacity" scaffold={pmCapacity} showRecords={false} />
+        ) : (
+          pmCapacity
+        )}
       </div>
 
       {creating ? (
