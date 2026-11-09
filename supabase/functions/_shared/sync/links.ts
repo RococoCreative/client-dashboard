@@ -1,5 +1,6 @@
-// Links from a synced record back to where it came from, so anyone who doubts a figure can open
-// the source and change it there. Shared by the app and the connections Edge Function.
+// Links from a synced record back to where it came from, a sheet's row or a QuickBooks invoice, so
+// anyone who doubts a figure can open the source and change it there. Shared by the app and the
+// connections Edge Function.
 
 const SHEET_ID = /\/spreadsheets\/d\/([A-Za-z0-9_-]+)/;
 const GID = /gid=(\d+)/;
@@ -31,6 +32,12 @@ export function recordLink(ref: Record<string, unknown>): { href: string; label:
   if (typeof ref.spreadsheet_id === "string" && typeof ref.sheet_gid === "number") {
     const row = typeof ref.row === "number" ? ref.row : null;
     return { href: sheetsUrl(ref.spreadsheet_id, ref.sheet_gid, row), label: "Open in Google Sheets", note: null };
+  }
+  // QuickBooks invoices only: the invoice deep link is documented by the community rather than by
+  // Intuit, and it opens behind the company's own QuickBooks sign-in, so the row says so.
+  if (ref.entity === "Invoice" && typeof ref.Id === "string" && ref.Id.trim() && typeof ref.realmId === "string") {
+    const host = ref.sandbox === true ? "https://app.sandbox.qbo.intuit.com" : "https://app.qbo.intuit.com";
+    return { href: `${host}/app/invoice?txnId=${encodeURIComponent(ref.Id)}`, label: "Open in QuickBooks", note: "Opens QuickBooks, sign-in required" };
   }
   return null;
 }

@@ -1,5 +1,5 @@
 // Proves the links back to a record's source: reading a spreadsheet URL, building one, and a
-// record's link from where it came from.
+// record's link from where it came from, a sheet's row or a QuickBooks invoice.
 import { describe, expect, it } from "vitest";
 import { parseSpreadsheetUrl, recordLink, sheetsUrl } from "../../../supabase/functions/_shared/sync/links.ts";
 
@@ -33,7 +33,19 @@ describe("recordLink", () => {
     });
   });
 
-  it("has no link for anything else yet", () => {
+  it("links a QuickBooks invoice back to QuickBooks, with a note that it needs a sign-in", () => {
+    expect(recordLink({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true })).toEqual({
+      href: "https://app.sandbox.qbo.intuit.com/app/invoice?txnId=101",
+      label: "Open in QuickBooks",
+      note: "Opens QuickBooks, sign-in required",
+    });
+    expect(recordLink({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: false })?.href).toBe("https://app.qbo.intuit.com/app/invoice?txnId=101");
+  });
+
+  it("has no link for a payment, an invoice without an id, or anything else", () => {
+    expect(recordLink({ entity: "Payment", Id: "7", realmId: "sample-realm", sandbox: true })).toBeNull();
+    expect(recordLink({ entity: "Invoice", realmId: "sample-realm" })).toBeNull();
+    expect(recordLink({ entity: "Invoice", Id: " ", realmId: "sample-realm" })).toBeNull();
     expect(recordLink({ entity: "Invoice", Id: "1" })).toBeNull();
     expect(recordLink({})).toBeNull();
   });

@@ -1,7 +1,7 @@
 // Every page renders real content against the mocked data layer, for an admin and, where it
 // differs, an employee. The mocks mirror the services module for module, so a page calling a
 // service that does not exist fails here rather than in someone's browser.
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -66,6 +66,7 @@ import WinsPage from "./WinsPage.tsx";
 import SalesFinancePage from "./salesFinance/SalesFinancePage.tsx";
 import ControlsPage from "./salesFinance/ControlsPage.tsx";
 import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
+import MappedTable from "../components/sync/MappedTable.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -1590,6 +1591,28 @@ describe("data sources", () => {
     expect(within(invoices).getByText("Not connected")).toBeInTheDocument();
     expect(within(invoices).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     expect(within(invoices).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("links a QuickBooks invoice row to QuickBooks with a sign-in note", () => {
+    const invoices = source("Sample invoices");
+    const record = {
+      id: "sample-record",
+      company_id: KINGDOM.company.id,
+      source_id: invoices.id,
+      run_id: "sample-run",
+      record_key: '["1001"]',
+      data: { doc_number: "1001" },
+      source_ref: { entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true },
+      created_at: "2026-11-09T14:00:00.000Z",
+    };
+    render(<MappedTable source={{ ...invoices, current_run_id: "sample-run" }} records={[record]} />);
+    const link = screen.getByRole("link", { name: "Open in QuickBooks" });
+    expect(link).toHaveAttribute("href", "https://app.sandbox.qbo.intuit.com/app/invoice?txnId=101");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    expect(screen.getByText("Opens QuickBooks, sign-in required")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "1001" })).toBeInTheDocument();
+    expect(screen.getByText("Read-only, from QuickBooks Online.")).toBeInTheDocument();
   });
 
   it("shows the PM capacity source's state to admins only", async () => {
