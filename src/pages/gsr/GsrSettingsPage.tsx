@@ -1,8 +1,10 @@
 // How this company scores people: pillars, their weights and scoring type, and the criteria
 // a rating pillar rates. Everything edits in place and saves on blur. Weights should total
-// 100; the page shows the running total and the scoring engine normalizes either way.
+// 100; the page shows the running total and the scoring engine normalizes either way. The
+// focus topic calendar sits below the pillars, as the one other setting reviews read.
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import FocusTopicCalendar from "../../components/gsr/FocusTopicCalendar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -338,6 +340,10 @@ export default function GsrSettingsPage() {
         {pillars.length === 0 ? (
           <Notice tone="info">No pillars yet. Add the first one; a typical setup is three or four pillars whose weights add up to 100%.</Notice>
         ) : null}
+      </div>
+
+      <div className="mt-6">
+        <FocusTopicCalendar companyId={companyId} />
       </div>
 
       {deletingPillar ? (

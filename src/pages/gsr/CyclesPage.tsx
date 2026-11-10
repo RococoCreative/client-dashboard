@@ -1,11 +1,12 @@
 // The cycles list behind two sidebar entries: GSRs (monthly Goal Setting Reviews) and Reviews
 // (every scored cadence), one component keyed on the section. Progress per cycle, the team score
 // where a cycle carries one, the door to settings and company goals on the Reviews side, and the
-// new-cycle form offering only the cadences that belong to the section. The period math
-// (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
+// new-cycle form offering only the cadences that belong to the section. A new month starts
+// with that month's topic from the focus topic calendar, which the GSR side links to. The period
+// math (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Settings2, Target } from "lucide-react";
+import { CalendarDays, Plus, Settings2, Target } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
@@ -18,6 +19,7 @@ import { inputClass, selectClass, textareaClass } from "../../components/ui/form
 import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
+import { listFocusTopics } from "../../services/focusTopics.ts";
 import { createCycle, listCompanyReviews, listCycleOmissions, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview } from "../../lib/gsr/scoring.ts";
@@ -62,8 +64,21 @@ function NewCycleDialog({
   const [end, setEnd] = useState(() => periodEnd(first, periodStart(first, new Date())) ?? todayIso());
   const [name, setName] = useState(() => defaultCycleName(first, periodStart(first, new Date())));
   const [nameTouched, setNameTouched] = useState(false);
+  // A monthly cycle starts from the month's calendar topic. The theme and description shown are
+  // the calendar's until the admin types their own: typing a theme freezes both, so changing
+  // the month afterwards keeps what they wrote. A description typed under a calendar theme stays
+  // too while the theme still follows the month.
   const [theme, setTheme] = useState("");
   const [themeDescription, setThemeDescription] = useState("");
+  const [ownTheme, setOwnTheme] = useState(false);
+  const [ownDescription, setOwnDescription] = useState(false);
+  const calendar = useAsync(
+    async () => (cadence === "monthly" ? ((await listFocusTopics(companyId, start, start))[0] ?? null) : null),
+    [companyId, cadence, start],
+  );
+  const topic = calendar.data ?? null;
+  const shownTheme = ownTheme ? theme : (topic?.theme ?? "");
+  const shownDescription = ownDescription ? themeDescription : (topic?.description ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -105,8 +120,8 @@ function NewCycleDialog({
         cadence,
         period_start: start,
         period_end: end,
-        theme: theme.trim() || null,
-        theme_description: themeDescription.trim() || null,
+        theme: shownTheme.trim() || null,
+        theme_description: shownTheme.trim() ? shownDescription.trim() || null : null,
       });
       onCreated(cycle);
     } catch (err) {
@@ -170,12 +185,37 @@ function NewCycleDialog({
               className={inputClass}
             />
           </Field>
-          <Field label="Theme (optional)" htmlFor="cycle-theme" hint="A company-wide focus for the period, like a core value or a process push.">
-            <input id="cycle-theme" type="text" value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Core value: Integrity" className={inputClass} />
+          <Field
+            label="Theme (optional)"
+            htmlFor="cycle-theme"
+            hint={!ownTheme && topic ? "From the focus topic calendar. Change it here for this month only." : "A company-wide focus for the period, like a core value or a process push."}
+          >
+            <input
+              id="cycle-theme"
+              type="text"
+              value={shownTheme}
+              onChange={(e) => {
+                if (!ownDescription) setThemeDescription(shownDescription);
+                setOwnDescription(true);
+                setOwnTheme(true);
+                setTheme(e.target.value);
+              }}
+              placeholder="Core value: Integrity"
+              className={inputClass}
+            />
           </Field>
-          {theme.trim() ? (
+          {shownTheme.trim() ? (
             <Field label="Theme description" htmlFor="cycle-theme-description">
-              <textarea id="cycle-theme-description" value={themeDescription} onChange={(e) => setThemeDescription(e.target.value)} className={textareaClass} rows={3} />
+              <textarea
+                id="cycle-theme-description"
+                value={shownDescription}
+                onChange={(e) => {
+                  setOwnDescription(true);
+                  setThemeDescription(e.target.value);
+                }}
+                className={textareaClass}
+                rows={3}
+              />
             </Field>
           ) : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
@@ -221,7 +261,11 @@ export default function CyclesPage({ section }: { section: HubSection }) {
         }
         actions={
           <>
-            {gsr ? null : (
+            {gsr ? (
+              <Link to="/reviews/settings#focus-topics">
+                <Button variant="secondary" size="sm"><CalendarDays size={14} aria-hidden /> Focus topics</Button>
+              </Link>
+            ) : (
               <>
                 <Link to="/reviews/company-goals">
                   <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
