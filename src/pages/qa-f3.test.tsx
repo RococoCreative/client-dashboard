@@ -119,7 +119,7 @@ describe("a Rococo admin's person page", () => {
 describe("a signed-off review with nothing scored on it", () => {
   it("reads its Monthly GSRs bar on My reviews the way the review page does", async () => {
     // Someone set up and reviewed before any rating or month was recorded: the review is signed
-    // off, so the score of record counted that pillar as zero, and the card says so.
+    // off with no month locked in, so that pillar sat out of the score of record, and the card says so.
     const gsrPillar = await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
     const fresh = { ...rbaEmployee.profile, id: "rba-fresh-person", full_name: "Robin Fresh" };
     const review = await ensureReview(q3.id, RBA.company.id, fresh.id);
@@ -127,8 +127,8 @@ describe("a signed-off review with nothing scored on it", () => {
     try {
       renderWithHub(<MyReviewsPage />, { ...rbaEmployee, profile: fresh });
       const card = await sectionFor(q3.name);
-      const bar = within(card).getByText("Monthly GSRs (20%)").parentElement as HTMLElement;
-      expect(within(bar).getByText("0%, no month locked in")).toBeInTheDocument();
+      const bar = within(card).getByText("Monthly GSRs (left out)").parentElement as HTMLElement;
+      expect(within(bar).getByText("No month locked in")).toBeInTheDocument();
       expect(within(bar).queryByText("Not scored")).not.toBeInTheDocument();
     } finally {
       await updateReview(review.id, { status: "in_progress", completed_at: null });

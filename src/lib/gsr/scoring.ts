@@ -11,6 +11,12 @@
 // An unscored pillar contributes 0 (faithful to the original tool: an incomplete review
 // reads low, never high); `complete` and per-pillar item counts let the UI say so.
 //
+// One exception: a 'gsr_goals' pillar with nothing scored is left out of the review, and the
+// other pillars carry its weight. Its line item exists only once an admin has locked a month in,
+// and a GSR score is never applied before then (Justin's rule), so an empty quarter, a quarter
+// the person was left out of, or one whose months are not locked yet, adds nothing rather than
+// a zero. Every other pillar keeps the rule above.
+//
 // Three kinds of line-item pillar share that arithmetic and differ only in where the line items
 // come from: 'deliverables' are typed into the review (label, target, actual);
 // 'deliverables_module' is one line item the app writes at sign-off from the deliverables module
@@ -62,6 +68,8 @@ interface PillarResult {
   // For rating pillars: how many criteria exist (when the caller knows); for deliverable
   // pillars: the number of line items entered.
   totalItems: number;
+  // A Monthly GSRs pillar with nothing scored: out of this review's weight total (see above).
+  leftOut: boolean;
 }
 
 export interface ReviewScoreResult {
@@ -130,7 +138,6 @@ export function computeReviewScore(
   criteriaCount: Record<string, number> = {},
 ): ReviewScoreResult {
   const active = activePillars(pillars);
-  const total = weightTotal(active);
   const results: PillarResult[] = active.map((pillar) => {
     const own = scores.filter((s) => s.pillar_id === pillar.id);
     const score = pillarScore(pillar, own);
@@ -148,17 +155,25 @@ export function computeReviewScore(
       score,
       scoredItems,
       totalItems,
+      leftOut: pillarLeftOut(pillar, score),
     };
   });
 
-  const weighted = results.reduce((sum, r) => sum + (r.score ?? 0) * r.weight, 0);
+  const applied = results.filter((r) => !r.leftOut);
+  const total = weightTotal(active.filter((pillar) => applied.some((r) => r.pillarId === pillar.id)));
+  const weighted = applied.reduce((sum, r) => sum + (r.score ?? 0) * r.weight, 0);
   const overall = total > 0 ? Math.round(weighted / total) : 0;
   return {
     overall,
     weightTotal: total,
     pillars: results,
-    complete: results.length > 0 && results.every((r) => r.score !== null),
+    complete: applied.length > 0 && applied.every((r) => r.score !== null),
   };
+}
+
+// Whether a pillar sits out this review: a Monthly GSRs pillar with no locked month to score.
+export function pillarLeftOut(pillar: Pick<PillarConfig, "scoring_type">, score: number | null): boolean {
+  return pillar.scoring_type === "gsr_goals" && score === null;
 }
 
 // Whether a set of rows scores anything at all: a rating, or a line item with a target and an
@@ -226,14 +241,15 @@ export function pillarsForReview(review: { status: string; pillar_snapshot?: Pil
 
 // What a pillar's bar says on a signed-off review when its own figure would mislead, or undefined
 // to show the figure. A Monthly GSRs pillar signed off with no month locked in carries no line
-// item, so its score is null, and the unscored-is-zero rule counted it as zero in the score of
-// record. "Not scored" there reads as if the pillar had been left out of a number it pulled down.
-// The review page and My reviews both draw these bars, so both ask here and say the same thing.
+// item, so its score is null and it sat out of the score of record (pillarLeftOut), the other
+// pillars carrying its weight. "Not scored" there reads as if the review were unfinished; this
+// says why it is empty. The review page and My reviews both draw these bars, so both ask here and
+// say the same thing.
 export function signedOffBarDetail(
   review: { status: string },
   pillar: { scoringType?: ScoringType; score: number | null },
 ): string | undefined {
-  return review.status === "complete" && pillar.scoringType === "gsr_goals" && pillar.score === null ? "0%, no month locked in" : undefined;
+  return review.status === "complete" && pillar.scoringType === "gsr_goals" && pillar.score === null ? "No month locked in" : undefined;
 }
 
 // Team average over reviews that have any score at all; null for an unscored team.

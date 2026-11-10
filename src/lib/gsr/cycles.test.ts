@@ -1,7 +1,7 @@
 // Pins the cycle rules every GSR screen shares: periods, cadences, which cycles are in play,
 // default names, and the months inside a quarter.
 import { describe, expect, it } from "vitest";
-import { activeCycles, currentCycle, cycleColumns, cycleRoster, cyclesInPlay, defaultCycleName, gsrCycleInPlay, monthsWithin, overlapMessage, overlappingCycle, periodEnd, periodStart, scoredCycleInPlay } from "./cycles.ts";
+import { activeCycles, currentCycle, cycleColumns, cycleOmitted, cycleProgress, cycleRoster, cyclesInPlay, defaultCycleName, gsrCycleInPlay, isOmitted, monthsWithin, omittedCycleIdsFor, overlapMessage, overlappingCycle, periodEnd, periodStart, scoredCycleInPlay } from "./cycles.ts";
 
 describe("cycle periods", () => {
   it("snaps fixed cadences to the containing period", () => {
@@ -186,6 +186,29 @@ describe("cycle periods", () => {
     expect(cyclesInPlay([], today)).toEqual([]);
   });
 
+  it("covers everybody active in a cycle, less anyone an admin left out of it", () => {
+    const people = [
+      { id: "ana", is_active: true },
+      { id: "ben", is_active: true },
+      { id: "cy", is_active: true },
+      { id: "dee", is_active: false },
+    ];
+    const omissions = [{ cycle_id: "oct", employee_id: "ben" }, { cycle_id: "nov", employee_id: "cy" }];
+    // Progress counts only the people in the cycle: everyone October covers has signed off, and
+    // the review set aside for the person left out is not owed.
+    const reviews = [
+      { employee_id: "ana", cycle_id: "oct", status: "complete" },
+      { employee_id: "cy", cycle_id: "oct", status: "complete" },
+      { employee_id: "ben", cycle_id: "oct", status: "in_progress" },
+    ];
+    expect(cycleRoster(people, reviews, "oct", omissions).map((p) => p.id)).toEqual(["ana", "cy"]);
+    expect(cycleRoster(people, reviews, "nov", omissions).map((p) => p.id)).toEqual(["ana", "ben"]);
+    expect(cycleRoster(people, reviews, "dec", omissions).map((p) => p.id)).toEqual(["ana", "ben", "cy"]);
+    expect(isOmitted(omissions, "oct", "ben")).toBe(true);
+    expect(isOmitted(omissions, "nov", "ben")).toBe(false);
+    expect(cycleProgress(cycleRoster(people, reviews, "oct", omissions), reviews, "oct")).toEqual({ complete: 2, total: 2 });
+  });
+
   it("finds the months that ran inside a scored period, oldest first", () => {
     const cycles = [
       { id: "q3", cadence: "quarterly", period_start: "2026-07-01", period_end: "2026-09-30" },
@@ -229,5 +252,56 @@ describe("cycleRoster", () => {
     expect(cycleRoster(people, reviews, "q3").map((p) => p.id)).toEqual(["a", "b", "d"]);
     expect(cycleRoster(people, reviews, "q2").map((p) => p.id)).toEqual(["a", "c", "d"]);
     expect(cycleRoster(people, reviews, "q4").map((p) => p.id)).toEqual(["a", "d"]);
+  });
+
+  it("takes out anyone omitted from this cycle, and only from this cycle", () => {
+    const omissions = [
+      { cycle_id: "q3", employee_id: "d" },
+      { cycle_id: "q2", employee_id: "a" },
+    ];
+    expect(cycleRoster(people, reviews, "q3", omissions).map((p) => p.id)).toEqual(["a", "b"]);
+    expect(cycleRoster(people, reviews, "q4", omissions).map((p) => p.id)).toEqual(["a", "d"]);
+    // No omissions reads exactly as the deactivation rule alone.
+    expect(cycleRoster(people, reviews, "q3", [])).toEqual(cycleRoster(people, reviews, "q3"));
+  });
+
+  it("keeps a person whose review in this cycle is signed off, whatever the omission rows say", () => {
+    // The database refuses to omit a signed-off review, so a row like this is stale: the signed-off
+    // review is the record and stays counted, active or deactivated since.
+    const omissions = [
+      { cycle_id: "q3", employee_id: "a" },
+      { cycle_id: "q3", employee_id: "b" },
+      { cycle_id: "q3", employee_id: "c" },
+    ];
+    expect(cycleRoster(people, reviews, "q3", omissions).map((p) => p.id)).toEqual(["a", "b", "d"]);
+    expect(cycleProgress(cycleRoster(people, reviews, "q3", omissions), reviews, "q3")).toEqual({ complete: 2, total: 3 });
+    // An omitted person whose review is still open is out, so it is not owed.
+    const open = [{ employee_id: "d", cycle_id: "q3", status: "in_progress" }];
+    expect(cycleRoster(people, [...reviews, ...open], "q3", [{ cycle_id: "q3", employee_id: "d" }]).map((p) => p.id)).toEqual(["a", "b"]);
+  });
+
+  it("lists who is left out: active, omitted here, and not kept in by a signed-off review", () => {
+    const omissions = [
+      { cycle_id: "q3", employee_id: "a" },
+      { cycle_id: "q3", employee_id: "c" },
+      { cycle_id: "q3", employee_id: "d" },
+      { cycle_id: "q2", employee_id: "a" },
+    ];
+    // a is signed off (stays in the cycle), c is deactivated (out of it either way), d is out.
+    expect(cycleOmitted(people, reviews, "q3", omissions).map((p) => p.id)).toEqual(["d"]);
+    expect(cycleOmitted(people, reviews, "q2", omissions).map((p) => p.id)).toEqual(["a"]);
+    expect(cycleOmitted(people, reviews, "q4", omissions)).toEqual([]);
+  });
+
+  it("reads the cycles one person is left out of the way the roster does", () => {
+    const omissions = [
+      { cycle_id: "q3", employee_id: "a" },
+      { cycle_id: "q4", employee_id: "a" },
+      { cycle_id: "q4", employee_id: "d" },
+    ];
+    // a's q3 review is signed off, so the q3 row never reaches it; q4 is still open to omit.
+    expect(omittedCycleIdsFor(omissions, reviews, "a")).toEqual(["q4"]);
+    expect(omittedCycleIdsFor(omissions, reviews, "d")).toEqual(["q4"]);
+    expect(omittedCycleIdsFor(omissions, reviews, "b")).toEqual([]);
   });
 });

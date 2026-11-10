@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -284,6 +284,8 @@ export interface CompanyBundle {
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
+  // Who an admin has left out of which cycle (0034). Empty: every cycle covers everyone active.
+  cycleOmissions: CycleOmission[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];
   deliverableCategories: DeliverableCategory[];
@@ -1218,7 +1220,7 @@ function build(company: Company): CompanyBundle {
     });
   });
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

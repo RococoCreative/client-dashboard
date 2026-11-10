@@ -219,6 +219,27 @@ describe("a month's GSRs, for a company that scores them", () => {
     }
   });
 
+  it("never counts a month the person was left out of", () => {
+    const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
+    const cycles = [
+      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+      { id: "dec", cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
+    ];
+    const goals = [g("oct-1", "role", 100, 1, "oct"), g("nov-1", "professional", 90, 1, "nov")];
+    const reviews = [
+      { cycle_id: "oct", status: "complete", gsr_score: 80 },
+      { cycle_id: "nov", status: "complete", gsr_score: 90 },
+    ] as Array<{ cycle_id: string; status: "complete" | "in_progress"; gsr_score: number | null }>;
+    const figure = scoreGsrMonths(quarter, cycles, goals, reviews, 2, ["nov"]);
+    expect(figure.months.map((m) => [m.cycle.id, m.omitted, m.locked])).toEqual([["oct", false, 80], ["nov", true, null], ["dec", false, null]]);
+    expect([figure.target, figure.actual]).toEqual([100, 80]);
+    // Left out of every month, there is nothing to count: no line item, so scoring leaves the
+    // pillar out of the review rather than scoring it zero.
+    const none = scoreGsrMonths(quarter, cycles, goals, reviews, 2, ["oct", "nov", "dec"]);
+    expect([none.target, none.actual]).toEqual([0, 0]);
+  });
+
   it("says when a month is locked in", () => {
     expect(monthLocked({ status: "complete", gsr_score: 80 })).toBe(true);
     expect(monthLocked({ status: "complete", gsr_score: null })).toBe(false);

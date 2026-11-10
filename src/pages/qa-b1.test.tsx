@@ -124,25 +124,26 @@ describe("a retired job role", () => {
 
 // Last, because it adds a pillar to RBA and signs Jamie's review off.
 describe("a review signed off with no month locked in", () => {
-  it("is headed as a score of record, and its Monthly GSRs bar reads zero like the pillar card", async () => {
+  it("is headed as a score of record, and its Monthly GSRs bar reads as sitting out like the pillar card", async () => {
     await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
     await updateReview(rbaReview.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: RBA.profiles[0].id });
     renderWithHub(<ReviewPage />, rbaAdmin, at(rbaReview));
     const overall = await sectionFor("Score");
     expect(screen.queryByRole("heading", { name: "Score so far" })).not.toBeInTheDocument();
-    expect(within(overall).getByText("0%, no month locked in")).toBeInTheDocument();
+    expect(within(overall).getByText("Monthly GSRs (left out)")).toBeInTheDocument();
+    expect(within(overall).getByText("No month locked in")).toBeInTheDocument();
     expect(within(overall).queryByText("Not scored")).not.toBeInTheDocument();
-    expect(within(await sectionFor("Monthly GSRs")).getByText(/so this pillar scored zero/)).toBeInTheDocument();
+    expect(within(await sectionFor("Monthly GSRs")).getByText(/so this pillar was left out and the other pillars carried its weight/)).toBeInTheDocument();
   });
 
-  it("reads the same zero on the person's My reviews card that links to it", async () => {
+  it("reads the same on the person's My reviews card that links to it", async () => {
     // Same state as above: the card is the score of record one click away from the review page,
-    // so it may not call "Not scored" the pillar that pulled that score down.
+    // so it says the pillar sat out rather than "Not scored".
     renderWithHub(<MyReviewsPage />, rbaEmployee);
     const card = await sectionFor(RBA.cycles[0].name);
     expect(within(card).getByText("Latest scored review")).toBeInTheDocument();
-    expect(within(card).getByText("Monthly GSRs (20%)")).toBeInTheDocument();
-    expect(within(card).getByText("0%, no month locked in")).toBeInTheDocument();
+    expect(within(card).getByText("Monthly GSRs (left out)")).toBeInTheDocument();
+    expect(within(card).getByText("No month locked in")).toBeInTheDocument();
     expect(within(card).queryByText("Not scored")).not.toBeInTheDocument();
   });
 });

@@ -27,7 +27,7 @@ vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { createGoal, createPillar, ensureReview, updatePillar, updateReview } from "../services/gsr.ts";
+import { addBackToCycle, createGoal, createPillar, ensureReview, listPillars, omitFromCycle, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
 import * as companiesService from "../services/companies.ts";
 import * as profilesService from "../services/profiles.ts";
@@ -1235,6 +1235,10 @@ describe("monthly GSRs, scored", () => {
     await user.click(await screen.findByRole("button", { name: /Reopen/ }));
     expect(await screen.findByText(/No month in this period is locked in yet/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Mark complete/ }));
+    // With no month locked in, Monthly GSRs sits out of the review, and sign-off asks first.
+    const confirm = await screen.findByRole("dialog");
+    expect(within(confirm).getByRole("heading", { name: "Sign off without Monthly GSRs?" })).toBeInTheDocument();
+    await user.click(within(confirm).getByRole("button", { name: "Mark complete" }));
     expect(await screen.findByText(/No month inside this period was locked in when it was signed off/)).toBeInTheDocument();
     expect(screen.queryByText(/locked-in month of GSRs, as signed off/)).not.toBeInTheDocument();
   });
@@ -1986,5 +1990,81 @@ describe("roles", () => {
   it("leaves Klasik's roster as it was, plus the Manager value", async () => {
     renderWithHub(<PeoplePage />, admin);
     expect(optionsOf(await screen.findByLabelText("Role for Sam Ortega"))).toEqual(["Admin", "Manager", "Employee"]);
+  });
+});
+
+describe("who is in a cycle", () => {
+  const september = KLASIK.cycles[0];
+  const quarter = KLASIK.cycles[2];
+  const avery = KLASIK.profiles.find((p) => p.full_name === "Avery Cole")!;
+  const taylor = KLASIK.profiles.find((p) => p.full_name === "Taylor Reed")!;
+  const averyHub = { ...employee, profile: { ...avery, user_id: "klasik-auth-avery" } };
+  beforeAll(async () => {
+    // Klasik scores its GSRs here, whether or not the scored-GSR tests above ran first.
+    const pillars = await listPillars(KLASIK.company.id);
+    if (!pillars.some((p) => p.scoring_type === "gsr_goals")) {
+      await createPillar({ company_id: KLASIK.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
+    }
+  });
+
+  it("lets an admin omit someone from a cycle and add them back, and the counts follow", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<CyclePage />, admin, { path: `/gsr/cycles/${september.id}`, pattern: "/gsr/cycles/:cycleId" });
+    // Read the roster off the page: tests above add and deactivate people in the shared mocks.
+    const roster = Number((await screen.findByText(/^\d+\/\d+$/)).textContent!.split("/")[1]);
+
+    await user.click(screen.getByRole("button", { name: `Omit ${taylor.full_name} from this cycle` }));
+    expect(screen.getByRole("heading", { name: `Omit ${taylor.full_name} from ${september.name}?` })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Reason (optional)"), "Started mid-month");
+    await user.click(screen.getByRole("button", { name: "Omit from this cycle" }));
+
+    // Out of the table and the fraction, into a list of their own with who, when and why.
+    expect(await screen.findByRole("heading", { name: "Not in this cycle" })).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`^\\d+/${roster - 1}$`))).toBeInTheDocument();
+    expect(screen.getByText("1 omitted from this cycle")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).queryByText(taylor.full_name!)).not.toBeInTheDocument();
+    expect(screen.getByText(/Omitted .* · Started mid-month/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: `Add ${taylor.full_name} back to this cycle` }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Not in this cycle" })).not.toBeInTheDocument());
+    expect(screen.getByText(new RegExp(`^\\d+/${roster}$`))).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getByText(taylor.full_name!)).toBeInTheDocument();
+  });
+
+  it("tells someone omitted from the month there is nothing to do, on My GSR and the dashboard", async () => {
+    await omitFromCycle({ cycle_id: september.id, employee_id: avery.id, company_id: KLASIK.company.id, reason: null });
+    const page = renderWithHub(<MyGsrPage />, averyHub);
+    expect(await screen.findByRole("heading", { name: `You're not part of the ${september.name} GSRs` })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start my GSR" })).not.toBeInTheDocument();
+    page.unmount();
+
+    renderWithHub(<DashboardPage />, averyHub);
+    expect(await screen.findByText(`You're not part of the ${september.name} GSRs. Nothing is needed from you this month.`)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /my GSR/ })).not.toBeInTheDocument();
+    await addBackToCycle(september.id, avery.id);
+  });
+
+  it("sets a review aside while its person is omitted, and leaves an empty Monthly GSRs pillar out", async () => {
+    const user = userEvent.setup();
+    const review = await ensureReview(quarter.id, KLASIK.company.id, avery.id);
+    await omitFromCycle({ cycle_id: quarter.id, employee_id: avery.id, company_id: KLASIK.company.id, reason: "On leave" });
+    const page = renderWithHub(<ReviewPage />, admin, { path: `/reviews/${review.id}`, pattern: "/reviews/:reviewId" });
+    expect(await screen.findByText(`${avery.full_name} is omitted from ${quarter.name}. This review is set aside as it is; add them back on the cycle page to finish it.`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mark complete/ })).toBeDisabled();
+    // No month inside the quarter is locked in for Avery, so the pillar sits out rather than
+    // scoring zero, and the others carry its weight.
+    expect(screen.getByText("Monthly GSRs (left out)")).toBeInTheDocument();
+    expect(screen.getByText("Left out of this review")).toBeInTheDocument();
+    page.unmount();
+
+    // Back in: sign-off works again, and asks before leaving Monthly GSRs out.
+    await addBackToCycle(quarter.id, avery.id);
+    renderWithHub(<ReviewPage />, admin, { path: `/reviews/${review.id}`, pattern: "/reviews/:reviewId" });
+    const markComplete = await screen.findByRole("button", { name: /Mark complete/ });
+    await waitFor(() => expect(markComplete).toBeEnabled());
+    await user.click(markComplete);
+    expect(await screen.findByRole("heading", { name: "Sign off without Monthly GSRs?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Sign off without Monthly GSRs?" })).not.toBeInTheDocument();
   });
 });

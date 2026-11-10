@@ -234,28 +234,69 @@ export function overlapMessage(existing: { name: string; cadence: string; period
   return `"${existing.name}" already covers ${formatPeriod(existing.period_start, existing.period_end)}. Pick dates that do not overlap it, or open that ${noun} instead.`;
 }
 
-// How far one cycle has got, counted over the roster it covers rather than over the review rows
-// that happen to exist.
-//
-// A cycle covers everybody active, and a person with no review row yet is a review still owed.
-// Counting rows put that person in neither half of the fraction, so a cycle owing four reviews
-// read "0 of 0 complete" and a cycle with three rows all signed off read "3 of 3" while a fourth
-// person had no row at all. Starting the missing reviews then moved the denominator instead of
-// the progress, which is backwards.
 // Who a cycle covers: everyone active on the roster, signed in or not, plus anyone deactivated
-// since whose review in it was signed off. A signed-off review is the record, so deactivating a
-// person later never changes a closed cycle's counts or team score; a review they still owed
-// simply drops out with them.
+// since whose review in it was signed off, less anyone an admin has left out of it (0034). A
+// signed-off review is the record, so deactivating a person later never changes a closed cycle's
+// counts or team score; a review they still owed simply drops out with them. An omission never
+// reaches a signed-off review (the database refuses one), so a person whose review here is signed
+// off stays in whatever the omission rows say. Every screen that counts or scores a cycle reads
+// its roster here, so the dashboard, the cycle page, the cycles list and the portfolio never
+// disagree about who is in it.
 export function cycleRoster<P extends { id: string; is_active: boolean }>(
   people: P[],
   reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,
   cycleId: string,
+  omissions: Array<{ cycle_id: string; employee_id: string }> = [],
 ): P[] {
-  return people.filter(
-    (p) => p.is_active || reviews.some((r) => r.cycle_id === cycleId && r.employee_id === p.id && r.status === "complete"),
-  );
+  return people.filter((p) => {
+    if (reviews.some((r) => r.cycle_id === cycleId && r.employee_id === p.id && r.status === "complete")) return true;
+    return p.is_active && !isOmitted(omissions, cycleId, p.id);
+  });
 }
 
+// The people an admin has left out of a cycle who would otherwise be in it: active, omitted,
+// and not kept in by a signed-off review. The complement of cycleRoster among the active, so the
+// cycle page's "not in this cycle" list and its team table never overlap or miss anyone.
+export function cycleOmitted<P extends { id: string; is_active: boolean }>(
+  people: P[],
+  reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,
+  cycleId: string,
+  omissions: Array<{ cycle_id: string; employee_id: string }>,
+): P[] {
+  const roster = cycleRoster(people, reviews, cycleId, omissions);
+  return people.filter((p) => p.is_active && isOmitted(omissions, cycleId, p.id) && !roster.includes(p));
+}
+
+// The cycles one person is left out of, read the way cycleRoster reads them: an omission never
+// reaches a review of theirs that is signed off. Their own screens (My GSR, the dashboard, the
+// person page, the review) ask this rather than the omission rows, so they agree with the roster.
+export function omittedCycleIdsFor(
+  omissions: Array<{ cycle_id: string; employee_id: string }>,
+  reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,
+  employeeId: string,
+): string[] {
+  return omissions
+    .filter(
+      (o) =>
+        o.employee_id === employeeId &&
+        !reviews.some((r) => r.cycle_id === o.cycle_id && r.employee_id === employeeId && r.status === "complete"),
+    )
+    .map((o) => o.cycle_id);
+}
+
+// Whether an admin has left this person out of this cycle.
+export function isOmitted(omissions: Array<{ cycle_id: string; employee_id: string }>, cycleId: string, employeeId: string): boolean {
+  return omissions.some((o) => o.cycle_id === cycleId && o.employee_id === employeeId);
+}
+
+// How far one cycle has got, counted over the roster it covers rather than over the review rows
+// that happen to exist.
+//
+// A cycle covers its roster (cycleRoster above), and a person with no review row yet is a review still owed.
+// Counting rows put that person in neither half of the fraction, so a cycle owing four reviews
+// read "0 of 0 complete" and a cycle with three rows all signed off read "3 of 3" while a fourth
+// person had no row at all. Starting the missing reviews then moved the denominator instead of
+// the progress, which is backwards.
 export function cycleProgress(
   roster: Array<{ id: string }>,
   reviews: Array<{ employee_id: string; cycle_id: string; status: string }>,

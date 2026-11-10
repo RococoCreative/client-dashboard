@@ -18,7 +18,7 @@ import { inputClass, selectClass, textareaClass } from "../../components/ui/form
 import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { createCycle, listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { createCycle, listCompanyReviews, listCycleOmissions, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview } from "../../lib/gsr/scoring.ts";
 import {
@@ -197,9 +197,15 @@ export default function CyclesPage({ section }: { section: HubSection }) {
   const gsr = section === "gsr";
 
   const state = useAsync(async () => {
-    const [cycles, reviews, pillars, people] = await Promise.all([listCycles(companyId), listCompanyReviews(companyId), listPillars(companyId), listCompanyProfiles(companyId)]);
+    const [cycles, reviews, pillars, people, omissions] = await Promise.all([
+      listCycles(companyId),
+      listCompanyReviews(companyId),
+      listPillars(companyId),
+      listCompanyProfiles(companyId),
+      listCycleOmissions(companyId),
+    ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { cycles, reviews, pillars, scores, people };
+    return { cycles, reviews, pillars, scores, people, omissions };
   }, [companyId]);
   const cycles = (state.data?.cycles ?? []).filter((c) => sectionOf(c.cadence) === section);
 
@@ -247,10 +253,12 @@ export default function CyclesPage({ section }: { section: HubSection }) {
       ) : (
         <ul className="space-y-3">
           {cycles.map((cycle) => {
-            // Counted the way the cycle page and the dashboard count it: over everybody active on
-            // the roster, so a person with no review row yet is a review still owed. Counting the
-            // rows that exist read "1/2 complete" here while the dashboard read "1 of 5".
-            const roster = cycleRoster(state.data!.people, state.data!.reviews, cycle.id);
+            // Counted the way the cycle page and the dashboard count it: over the cycle's roster
+            // (everybody active, plus anyone deactivated since whose review here was signed off,
+            // less anyone omitted from it), so a person with no review row yet is a review still
+            // owed. Counting the rows that exist read "1/2 complete" here while the dashboard read
+            // "1 of 5".
+            const roster = cycleRoster(state.data!.people, state.data!.reviews, cycle.id, state.data!.omissions);
             const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id && roster.some((p) => p.id === r.employee_id));
             const progress = cycleProgress(roster, reviews, cycle.id);
             const team = averageScore(

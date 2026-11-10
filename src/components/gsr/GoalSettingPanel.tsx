@@ -336,6 +336,7 @@ export default function GoalSettingPanel({
   gsrRequired = null,
   isAdmin,
   isOwn,
+  omitted = false,
   onGoals,
   onNotes,
   onError,
@@ -360,6 +361,9 @@ export default function GoalSettingPanel({
   gsrRequired?: number | null;
   isAdmin: boolean;
   isOwn: boolean;
+  // The person is omitted from this month (0034): the month is set aside as it is, read only,
+  // until an admin adds them back. The database freezes it too.
+  omitted?: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
   onNotes: NotesUpdate;
   onError: (message: string) => void;
@@ -372,7 +376,7 @@ export default function GoalSettingPanel({
   // notes, the why on last month. RLS is what keeps it to their own (goals are theirs to write
   // since 0013), and the database freezes a closed or locked month; this only decides what the
   // page offers.
-  const canEdit = (isAdmin || isOwn) && open && !locked;
+  const canEdit = (isAdmin || isOwn) && open && !locked && !omitted;
   const year = cycleYear(cycle);
   const { thisCycle, lastCycle } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
   const lastSettled = previousCycle ? cycleSettled(previousCycle) : true;

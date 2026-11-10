@@ -18,7 +18,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { latestScoredReview, reviewHistory } from "../../lib/gsr/history.ts";
-import { pillarsForReview, signedOffBarDetail } from "../../lib/gsr/scoring.ts";
+import { pillarLeftOut, pillarsForReview, signedOffBarDetail } from "../../lib/gsr/scoring.ts";
 import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
@@ -48,10 +48,10 @@ export default function MyReviewsPage() {
   const featured = latestScoredReview(rows) ?? rows[0] ?? null;
   // A review with no score of record yet still draws a bar per pillar: the pillars it was signed
   // off with, if it was, and each one's scoring type, so a signed-off Monthly GSRs pillar with no
-  // month locked in reads as the zero it counted for, the way the review page reads it.
+  // month locked in reads as sitting out (pillarLeftOut), the way the review page reads it.
   const bars = featured
     ? (featured.result?.pillars ??
-      pillarsForReview(featured.review, pillars).map((p) => ({ pillarId: p.id, name: p.name, weight: p.weight, scoringType: p.scoring_type, score: null })))
+      pillarsForReview(featured.review, pillars).map((p) => ({ pillarId: p.id, name: p.name, weight: p.weight, scoringType: p.scoring_type, score: null, leftOut: pillarLeftOut(p, null) })))
     : [];
 
   return (
@@ -77,7 +77,7 @@ export default function MyReviewsPage() {
                 </div>
                 <div className="space-y-3 md:col-span-2">
                   {bars.map((p) => (
-                    <ScoreBar key={p.pillarId} label={`${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p)} />
+                    <ScoreBar key={p.pillarId} label={p.leftOut ? `${p.name} (left out)` : `${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p)} />
                   ))}
                 </div>
               </div>

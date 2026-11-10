@@ -109,13 +109,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
   `connections` Edge Function live is main's version from before the Kingdom release; the
   version in this repo, with the sync routes, is not deployed yet.
 - **On `main`, not applied yet, in paste order:** `0026_projects_milestones`, `0027_wins`,
-  `0030_sync_engine`, `0031_external_links`, `0033_role_hierarchy`, then
-  `0032_sync_schedule`, which waits on its two Vault entries (`sync_cron_secret` and
+  `0030_sync_engine`, `0031_external_links`, `0033_role_hierarchy`, `0034_cycle_omissions`,
+  then `0032_sync_schedule`, which waits on its two Vault entries (`sync_cron_secret` and
   `sync_function_url`). `0026` and `0027` go in after `0029` even though their numbers are
-  lower, because they were written before `0028` existed. Applying this release, below, has
-  the steps.
-- **Waiting on an open branch, not applied:** `0034_cycle_omissions`
-  (`claude/sharp-meitner-7tpnez`, PR #3). Paste it only once its app code is on `main`.
+  lower, because they were written before `0028` existed. `0034` (cycle omissions, PR #3)
+  depends on none of `0026` to `0033`, only on `0029`, which it must follow; it is pasted after
+  `0033`. Applying this release, below, has the steps.
 - **Next free number:** `0035`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
@@ -346,6 +345,20 @@ the person's alone, and the database is what keeps them that way: they live in `
 and `goal_notes`, which only the owner can read for a yearly or BHAG goal (0021), and a trigger
 refuses them on the shared goal row. My Goals says so in a line at the top.
 
+## Who is in a cycle
+
+A cycle covers everybody active on the roster, plus anyone deactivated since whose review in it
+was signed off, unless an admin omits someone from it, from the cycle page, with an optional
+reason (`cycle_omissions`, 0034). Someone omitted stops counting toward that cycle's progress and
+team score everywhere (`cycleRoster` in `src/lib/gsr/cycles.ts`), is not asked for that month's
+GSR, and sees a line saying so. A signed-off review always counts, so neither deactivating a
+person nor an omission ever changes a closed cycle's counts after the fact. Omitting
+deletes nothing: a review already started is set aside as it is, and comes back when they are
+added back. The database refuses to open or sign off a review for someone omitted, freezes their
+goals and notes in that month, and refuses to omit anyone whose review is already signed off or
+to change the roster of a closed cycle. Every omission keeps who made it and when, and the
+person can see their own.
+
 ## GSR scoring
 
 Ported from the Klasik Executive Dashboard and made configurable per company. A company
@@ -366,11 +379,15 @@ defines pillars, each with a weight and a scoring type:
   an admin marking the month complete locks the score in (`reviews.gsr_score`, 0023), and only a
   locked month counts. The pillar is the average of the locked months in the period, written into
   the review as one line item on sign-off: a quarter's months are a third of its pillar each, and
-  across a year each month is a twelfth. A company without such a pillar sees none of this. The
-  rule is in `src/lib/gsr/goals.ts`.
+  across a year each month is a twelfth. With no month locked in (none ran, the person was
+  omitted from all of them, or none has been marked complete yet), the pillar sits out of that
+  review and the other pillars carry its weight, since a GSR score is never applied before it is
+  locked in; sign-off says so before it happens. A company without such a pillar sees none of
+  this. The rule is in `src/lib/gsr/goals.ts`.
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
-an incomplete review reads low, never high. The math is in `src/lib/gsr/scoring.ts` and
+an incomplete review reads low, never high; the one exception is the Monthly GSRs pillar
+above. The math is in `src/lib/gsr/scoring.ts` and
 is fully unit tested. Klasik was seeded at Deliverables 50, Brand Impact 25 and Character &
 Values 25; live it now runs Deliverables 40 (scored from the deliverables module), Brand Impact
 20, Character & Values 20 and Monthly GSRs 20. RBA was brought level with Klasik's live shape on
@@ -568,15 +585,16 @@ any change under `supabase/`. Every migration task adds `supabase/tests/<number>
 The Kingdom release is `0024` to `0027` and `0030` to `0033`, plus the `connections` function.
 `0024` and `0025` are already applied live (2026-11-09); the rest goes in only when someone
 pastes it by hand. Main's `0028` and `0029` are live too and sit between them: `0026` and `0027`
-were written before those existed and are pasted after them anyway. `0034` belongs to a separate
-change (cycle omissions) and does not depend on this release. `0033` extends `0029`'s
+were written before those existed and are pasted after them anyway. `0034` came from a separate
+change (cycle omissions) and does not depend on this release's migrations, only on `0029`; the
+app on `main` reads its table, so it goes in with them, after `0033`. `0033` extends `0029`'s
 `guard_profile_fields`, so it must never be pasted on a project without `0029`.
 
-1. Back up, then paste `0026`, `0027`, `0030`, `0031` and `0033`, in that order, in the SQL
-   editor, once each. Each is idempotent; go forwards only.
-2. Merge to `main` (Vercel deploys the app) only after those five are applied. The new app
+1. Back up, then paste `0026`, `0027`, `0030`, `0031`, `0033` and `0034`, in that order, in the
+   SQL editor, once each. Each is idempotent; go forwards only.
+2. Merge to `main` (Vercel deploys the app) only after those six are applied. The new app
    selects `companies.modules` every time it loads a company; `0024`, which adds it, is
-   already live.
+   already live. It also reads `cycle_omissions` on every cycle screen, which `0034` adds.
 3. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and
    deploy: `supabase functions deploy connections --no-verify-jwt`.
 4. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0032`.

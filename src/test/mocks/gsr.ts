@@ -3,6 +3,7 @@
 import type {
   ActionStep,
   CompanyGoal,
+  CycleOmission,
   Goal,
   GoalKind,
   GoalNote,
@@ -28,6 +29,7 @@ const goals = fromAll((b) => b.goals).map((x) => ({ ...x, action_steps: x.action
 const goalNotes = fromAll((b) => b.goalNotes).map((x) => ({ ...x }));
 const goalPrivate = fromAll((b) => b.goalPrivate).map((x) => ({ ...x, action_steps: x.action_steps.map((s) => ({ ...s })) }));
 const companyGoals = fromAll((b) => b.companyGoals).map((x) => ({ ...x }));
+const cycleOmissions = fromAll((b) => b.cycleOmissions).map((x) => ({ ...x }));
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-new-${++counter}`;
@@ -114,6 +116,7 @@ export async function getReview(id: string): Promise<Review> {
 export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
+  if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
   const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
@@ -121,6 +124,10 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
+  // Nobody signs off a review for someone left out of its cycle (0034).
+  if (before && before.status !== "complete" && patch.status === "complete" && omitted(before.cycle_id, before.employee_id)) {
+    throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
+  }
   const next = patchIn(reviews, id, { ...patch, updated_at: now() });
   // The database keeps the pillars a review was signed off with, and lets them go on reopen
   // (0022); the mock does the same.
@@ -207,6 +214,34 @@ export async function updateGoalNote(id: string, body: string): Promise<GoalNote
 }
 export async function deleteGoalNote(id: string): Promise<void> {
   removeFrom(goalNotes, id);
+}
+
+function omitted(cycleId: string, employeeId: string): boolean {
+  return cycleOmissions.some((o) => o.cycle_id === cycleId && o.employee_id === employeeId);
+}
+export async function listCycleOmissions(companyId: string): Promise<CycleOmission[]> {
+  return cycleOmissions.filter((o) => o.company_id === companyId);
+}
+export type OmissionInput = { cycle_id: string; employee_id: string; company_id: string; reason: string | null };
+// Stamped and refused the way the database does it (0034): the cycle decides the company, a
+// closed cycle keeps its roster, and a signed-off review has to be reopened first.
+export async function omitFromCycle(input: OmissionInput): Promise<CycleOmission> {
+  const cycle = cycles.find((c) => c.id === input.cycle_id);
+  if (!cycle) throw new Error("That review cycle does not exist.");
+  if (cycle.status === "closed") throw new Error("This review cycle is closed. Reopen it to change who is in it.");
+  if (reviews.some((r) => r.cycle_id === input.cycle_id && r.employee_id === input.employee_id && r.status === "complete")) {
+    throw new Error("Their review in this cycle is signed off. Reopen it before leaving them out.");
+  }
+  if (omitted(input.cycle_id, input.employee_id)) throw new Error("They are already left out of this cycle.");
+  const created: CycleOmission = { cycle_id: input.cycle_id, employee_id: input.employee_id, company_id: cycle.company_id, reason: input.reason?.trim() || null, omitted_by: null, created_at: now() };
+  cycleOmissions.push(created);
+  return created;
+}
+export async function addBackToCycle(cycleId: string, employeeId: string): Promise<void> {
+  const cycle = cycles.find((c) => c.id === cycleId);
+  if (cycle?.status === "closed") throw new Error("This review cycle is closed. Reopen it to change who is in it.");
+  const index = cycleOmissions.findIndex((o) => o.cycle_id === cycleId && o.employee_id === employeeId);
+  if (index !== -1) cycleOmissions.splice(index, 1);
 }
 
 export async function listGoalPrivate(companyId: string, employeeId: string): Promise<GoalPrivate[]> {

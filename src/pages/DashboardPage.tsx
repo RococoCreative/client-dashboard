@@ -25,7 +25,7 @@ import SkeletonRows from "../components/ui/SkeletonRows.tsx";
 import { CAMPAIGN_STATUS_TONE, GOAL_STATUS_TONE, REVIEW_STATUS_TONE } from "../components/status.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
-import { listCompanyGoals, listCriteria, listCycleReviews, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews } from "../services/gsr.ts";
+import { listCompanyGoals, listCriteria, listCycleOmissions, listCycleReviews, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews } from "../services/gsr.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
 import { listEmployeeFinancials } from "../services/employees.ts";
 import { listJobRoles } from "../services/jobRoles.ts";
@@ -36,7 +36,7 @@ import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { liveCampaignTotals } from "../lib/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, gsrCycleInPlay, reviewPath, scoredCycleInPlay, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, cycleOmitted, cycleProgress, cyclePath, cycleRoster, cycleSettled, cyclesInPlay, gsrCycleInPlay, omittedCycleIdsFor, reviewPath, scoredCycleInPlay, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -81,16 +81,21 @@ function RecentSops({ sops }: { sops: Sop[] }) {
   );
 }
 
-// One live review cycle's progress: every active person, their score where the cycle is scored,
-// and where their review stands. Scoped to the cycle by cycle_id, because a person has a review
-// in every live cycle at once and matching on the person alone picks whichever came back first.
+// One live review cycle's progress: everyone the cycle covers, their score where the cycle is
+// scored, and where their review stands. Scoped to the cycle by cycle_id, because a person has a
+// review in every live cycle at once and matching on the person alone picks whichever came back
+// first.
 function CycleProgress({
   cycle,
   people,
+  omittedCount,
   scored,
 }: {
   cycle: ReviewCycle;
+  // The cycle's roster (cycleRoster): everybody active, plus anyone deactivated since whose review
+  // in it was signed off, less anyone omitted from it.
   people: Profile[];
+  omittedCount: number;
   scored: Array<{ review: Review; score: number | null }>;
 }) {
   const own = scored.filter((s) => s.review.cycle_id === cycle.id);
@@ -105,14 +110,16 @@ function CycleProgress({
     <Section
       eyebrow={showScore ? CADENCE_LABELS[cycle.cadence] : `${CADENCE_LABELS[cycle.cadence]} · Goal Setting Review`}
       title={cycle.name}
-      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete${ended ? " · Period ended, still open" : ""}`}
+      description={`${formatPeriod(cycle.period_start, cycle.period_end)} · ${progress.complete} of ${progress.total} complete${omittedCount > 0 ? ` · ${omittedCount} omitted` : ""}${ended ? " · Period ended, still open" : ""}`}
       actions={
         <Link to={cyclePath(cycle)}>
           <Button variant="secondary" size="sm">Open cycle</Button>
         </Link>
       }
     >
-      {people.length === 0 ? (
+      {people.length === 0 && omittedCount > 0 ? (
+        <p className="text-sm text-ink-2">Everyone is omitted from this cycle.</p>
+      ) : people.length === 0 ? (
         <p className="text-sm text-ink-2">Nobody on the roster yet. Add the team in People and their reviews appear here.</p>
       ) : (
         <ul className="divide-y divide-line">
@@ -182,7 +189,7 @@ function AdminDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own] = await Promise.all([
+    const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own, omissions] = await Promise.all([
       listCompanyProfiles(companyId),
       listCycles(companyId),
       listPillars(companyId),
@@ -193,6 +200,7 @@ function AdminDashboard() {
       listSnapshots(companyId),
       listCampaigns(companyId),
       loadOwnModules(companyId, profile, year),
+      listCycleOmissions(companyId),
     ]);
     // Every cycle with reviews still owed: the ones covering today (a monthly Goal Setting Review
     // runs inside a quarterly scored review, so both are live) and any open cycle whose period
@@ -205,7 +213,7 @@ function AdminDashboard() {
       reviews = (await Promise.all(live.map((c) => listCycleReviews(c.id)))).flat();
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
-    return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, ...own };
+    return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
@@ -221,17 +229,21 @@ function AdminDashboard() {
     );
   }
 
-  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, jobRole, financials } = state.data;
+  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, jobRole, financials } = state.data;
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
   // anyone else; the only difference is that they cannot open it until they sign in.
-  const employees = activePeople;
   const notInvited = activePeople.filter((p) => !hasAccount(p)).length;
   const scored = reviews.map((r) => {
     const own = scores.filter((s) => s.review_id === r.id);
     return { review: r, score: r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, pillars), own).overall : null };
   });
-  // Every live cycle owes a review for everybody active, so a tile adds the per-cycle fractions
+  // Who each live cycle covers (cycleRoster: everybody active, plus anyone deactivated since whose
+  // review in it was signed off, less anyone omitted from it), read once and used by the tiles,
+  // the team score and the cycle cards alike.
+  const rosters = new Map(live.map((c) => [c.id, cycleRoster(people, reviews, c.id, omissions)]));
+  const rosterOf = (cycleId: string) => rosters.get(cycleId) ?? [];
+  // Every live cycle owes a review for everybody in it, so a tile adds the per-cycle fractions
   // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are
   // counted apart: they are different sections, and "3 of 8 reviews" with five of them GSRs
   // would have said something false under the wrong word.
@@ -240,7 +252,7 @@ function AdminDashboard() {
       .filter((c) => sectionOf(c.cadence) === section)
       .reduce(
         (sum, c) => {
-          const own = cycleProgress(activePeople, reviews, c.id);
+          const own = cycleProgress(rosterOf(c.id), reviews, c.id);
           return { complete: sum.complete + own.complete, total: sum.total + own.total, cycles: [...sum.cycles, c.name] };
         },
         { complete: 0, total: 0, cycles: [] as string[] },
@@ -248,9 +260,13 @@ function AdminDashboard() {
   const gsrs = standingOf("gsr");
   const scoredCycles = standingOf("reviews");
   // A monthly cycle is a Goal Setting Review and carries no scores, so averaging it in would
-  // drag the team score toward nothing. Only scored cycles count.
+  // drag the team score toward nothing. Only scored cycles count, and only the people each covers.
   const scoredCycleIds = new Set(live.filter((c) => c.cadence !== "monthly").map((c) => c.id));
-  const teamAverage = averageScore(scored.filter((s) => scoredCycleIds.has(s.review.cycle_id)).map((s) => s.score));
+  const teamAverage = averageScore(
+    scored
+      .filter((s) => scoredCycleIds.has(s.review.cycle_id) && rosterOf(s.review.cycle_id).some((p) => p.id === s.review.employee_id))
+      .map((s) => s.score),
+  );
   const published = allSops.filter((s) => s.status === "published").length;
   const goalsHit = companyGoals.filter((g) => g.is_hit).length;
   const latestMonth = snapshots.filter((s) => s.period_type === "month").sort((a, b) => b.period_start.localeCompare(a.period_start))[0] ?? snapshots[0] ?? null;
@@ -327,7 +343,15 @@ function AdminDashboard() {
               </p>
             </Section>
           ) : (
-            live.map((c) => <CycleProgress key={c.id} cycle={c} people={employees} scored={scored} />)
+            live.map((c) => (
+              <CycleProgress
+                key={c.id}
+                cycle={c}
+                people={rosterOf(c.id)}
+                omittedCount={cycleOmitted(people, reviews, c.id, omissions).length}
+                scored={scored}
+              />
+            ))
           )}
 
           <Section
@@ -466,7 +490,7 @@ function EmployeeDashboard() {
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
-    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own] = await Promise.all([
+    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own, omissions] = await Promise.all([
       listEmployeeReviews(companyId, profile.id),
       listPillars(companyId),
       listCriteria(companyId),
@@ -479,6 +503,8 @@ function EmployeeDashboard() {
       // a row the company set up, so a new module is a new entry in its list, never a branch on
       // who the company is.
       loadOwnModules(companyId, profile, year),
+      // Only the person's own rows come back (0034): the cycles they are omitted from.
+      listCycleOmissions(companyId),
     ]);
     const { jobRole, financials } = own;
     // Latest by the period the review covers, the same rule My GSR and the person page use.
@@ -500,13 +526,16 @@ function EmployeeDashboard() {
     // covering today must not hide a GSR the person still has to finish (the same month My GSR opens).
     const gsrCycle = gsrCycleInPlay(cycles);
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
-    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials };
+    const omitted = omittedCycleIdsFor(omissions, reviews, profile.id);
+    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials } = state.data;
+  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds } = state.data;
+  // An admin omitted this person from this month's GSR: nothing to start, and it says so.
+  const gsrOmitted = gsrCycle ? omittedCycleIds.includes(gsrCycle.id) : false;
   const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
   const cycle = featured?.cycle ?? null;
   const result = featured?.result ?? null;
@@ -526,7 +555,7 @@ function EmployeeDashboard() {
   // cycles first, so a month covering today never hides one that is over but still open.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = scoredCycleInPlay(cycles);
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
   const moves = criteria
@@ -592,7 +621,7 @@ function EmployeeDashboard() {
           title={gsrCycle ? gsrCycle.name : "No month open"}
           className={ratingPillars.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}
           actions={
-            gsrCycle ? (
+            gsrCycle && !gsrOmitted ? (
               <Link to="/my/gsr">
                 <Button variant="secondary" size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
               </Link>
@@ -601,6 +630,8 @@ function EmployeeDashboard() {
         >
           {!gsrCycle ? (
             <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
+          ) : gsrOmitted ? (
+            <p className="text-sm text-ink-2">You're not part of the {gsrCycle.name} GSRs. Nothing is needed from you this month.</p>
           ) : !gsrReview ? (
             <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Start it to fill in your goals before the meeting.</p>
           ) : monthGoals.length === 0 ? (

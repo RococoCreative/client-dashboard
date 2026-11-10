@@ -18,13 +18,13 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllDomains } from "../../services/companies.ts";
 import { listInvitations } from "../../services/invitations.ts";
-import { listCompanyReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listCompanyReviews, listCycleOmissions, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, weightTotal } from "../../lib/gsr/scoring.ts";
-import { cycleProgress, cyclesInPlay } from "../../lib/gsr/cycles.ts";
+import { cycleProgress, cycleRoster, cyclesInPlay } from "../../lib/gsr/cycles.ts";
 import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { liveCampaignTotals } from "../../lib/marketing.ts";
 import { hasAccount } from "../../lib/people.ts";
@@ -59,7 +59,7 @@ interface CompanySummary {
 }
 
 async function summarize(company: Company, domains: CompanyDomain[]): Promise<CompanySummary> {
-  const [people, cycles, reviews, pillars, sops, snapshots, campaigns, invitations] = await Promise.all([
+  const [people, cycles, reviews, pillars, sops, snapshots, campaigns, invitations, omissions] = await Promise.all([
     listCompanyProfiles(company.id),
     listCycles(company.id),
     listCompanyReviews(company.id),
@@ -68,19 +68,20 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     listSnapshots(company.id),
     listCampaigns(company.id),
     listInvitations(company.id),
+    listCycleOmissions(company.id),
   ]);
   const active = people.filter((p) => p.is_active);
-  // A cycle covers the whole active roster, signed in or not, so the fraction counts the same
-  // people the cycle page does.
-  const reviewable = active;
+  // A cycle covers the whole active roster, signed in or not, plus anyone deactivated since whose
+  // review in it was signed off, less anyone an admin omitted from it (cycleRoster), so the
+  // fraction counts the same people the cycle page does.
   const admins = active.filter((p) => isCompanyAdminRole(p.role));
   // Every cycle with reviews still owed, not one of them: a monthly Goal Setting Review runs
   // inside a quarterly scored review, and a cycle stays open after its period until an admin
   // closes it. Reading fewer reports finished reviews as missing. The same set the company
   // dashboard reads.
   const liveCycles = cyclesInPlay(cycles);
-  const liveCycleIds = new Set(liveCycles.map((c) => c.id));
-  const cycleReviews = reviews.filter((r) => liveCycleIds.has(r.cycle_id));
+  const rosters = new Map(liveCycles.map((c) => [c.id, cycleRoster(people, reviews, c.id, omissions)]));
+  const cycleReviews = reviews.filter((r) => rosters.get(r.cycle_id)?.some((p) => p.id === r.employee_id) ?? false);
   const scores = cycleReviews.length > 0 ? await listScoresForReviews(cycleReviews.map((r) => r.id)) : [];
   // A monthly cycle carries no scores by design, so only scored cycles reach the team score.
   const scoredIds = new Set(liveCycles.filter((c) => c.cadence !== "monthly").map((c) => c.id));
@@ -120,12 +121,12 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     notSignedIn: active.filter((p) => !hasAccount(p)).length,
     admins: admins.length,
     cycles: liveCycles,
-    // Both halves counted over the same set: every live cycle owes a review for everybody
-    // active. Summing completes across cycles against a single roster could otherwise print a
+    // Both halves counted over the same set: every live cycle owes a review for everybody in
+    // it. Summing completes across cycles against a single roster could otherwise print a
     // fraction above one on the portfolio card.
     ...liveCycles.reduce(
       (sum, c) => {
-        const own = cycleProgress(reviewable, cycleReviews, c.id);
+        const own = cycleProgress(rosters.get(c.id) ?? [], cycleReviews, c.id);
         return { reviewsComplete: sum.reviewsComplete + own.complete, reviewsTotal: sum.reviewsTotal + own.total };
       },
       { reviewsComplete: 0, reviewsTotal: 0 },
