@@ -112,11 +112,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys.
-- **The `connections` Edge Function** live is the version from before the Kingdom release (it
-  serves QuickBooks and GoHighLevel sign-ins for admins). The version in this repo, with Google
-  Sheets, the sync routes and owners allowed, deploys together with the Google keys and `0032`,
-  and before anyone is made an owner: until then the live function lets only admins manage
-  connections.
+- **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
+  owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
+  and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+  and `SYNC_CRON_SECRET` are set and `0032` is applied.
+- **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have none (their
+  screens are as before). Kingdom's owners are Maddie Cothran and marvin waters.
 - **Next free number:** `0035`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
