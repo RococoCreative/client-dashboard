@@ -54,7 +54,7 @@ a reload resets the data.
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
    `supabase/migrations/` in numeric order (`0001` through the highest number present; a gap
-   is not a missing file, as `0028` follows `0023` here), once each, on a fresh
+   is not a missing file, as `0028` follows `0025` here), once each, on a fresh
    project. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -82,6 +82,26 @@ a reload resets the data.
    lands on the portfolio: every company with its signals, and the tabs where companies,
    themes, domains, and users are managed. Opening a company switches the hub to that
    company's branding and nav, for that session only.
+
+### What is applied live
+
+Kept current by whoever pastes a migration, so the next session knows where it stands. Live
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
+
+- **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
+  `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`. The
+  `connections` Edge Function is on the version in this repo.
+- **Reserved, not on this branch yet:** `0026` and `0027` belong to
+  `claude/elegant-cray-bnb85m` (projects and milestones, wins). They go in after `0029`
+  even though their numbers are lower, because they were written before `0028` existed.
+- **Waiting on open branches, not applied, in paste order:** `0026_projects_milestones`,
+  `0027_wins`, then `0030_sync_engine`, `0031_external_links`, `0032_sync_schedule`,
+  `0033_role_hierarchy` (all `claude/elegant-cray-bnb85m`), then `0034_cycle_omissions`
+  (`claude/sharp-meitner-7tpnez`, PR #3). Paste each only once its app code is on `main`.
+- **Next free number:** `0035`.
+
+Two sessions working at once is how numbers collide. Before writing a migration, check this
+list and the open branches, take the next free number, and add it here in the same change.
 
 ## How people get in
 

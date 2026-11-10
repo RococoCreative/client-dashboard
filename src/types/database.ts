@@ -8,6 +8,8 @@ import type { ScoringType } from "../lib/gsr/scoring.ts";
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
 export type Role = "admin" | "employee";
 
+// Live but not read by this app yet: companies.modules (0024) and the audit_events table (0025)
+// arrive with their screens on claude/elegant-cray-bnb85m, which adds both types here.
 export interface Company {
   id: string;
   slug: string;
