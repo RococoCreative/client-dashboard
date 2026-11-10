@@ -69,7 +69,7 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
    `supabase/migrations/` in numeric order (`0001` through the highest number present; a gap
-   is not a missing file, as `0028` follows `0025` here), once each, on a fresh
+   in the numbers is not a missing file), once each, on a fresh
    project. Paste `0032` only after the two Vault entries in Data sources and Google setup
    exist. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into

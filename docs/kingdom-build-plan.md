@@ -78,18 +78,15 @@ Spec: `docs/kingdom-revamp-plan.md` and `CLAUDE.md` are the binding spec. Where 
     and a Deno type-check of the Edge Function for any task that touches `supabase/functions`
     (recipe: copy `supabase/functions` to a scratchpad dir and run
     `DENO_DIR=<scratch>/denocache <scratch>/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts`
-    from the copied `functions/connections`; Deno 2.9.6 is installed at
-    `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/denotry/node_modules/.bin/deno`).
+    from the copied `functions/connections`, with Deno 2.9.6 installed under the scratch dir).
 16. UI tasks also do a visual check: run `npm run demo`, open the relevant screens with Playwright
     (pre-installed; `require('playwright')`, `chromium.launch()`), as
     `?persona=admin&company=kingdom`, `?persona=employee&company=kingdom` and
     `?persona=admin&company=klasik`, screenshot them at deviceScaleFactor 1, look at the PNGs, and fix
     layout defects. Screenshots go to the plan workspace, never into the repo.
 17. Commits: descriptive plain-sentence subjects in the style of `git log` (no "feat:" prefixes), one
-    or more commits per task, each message ending with exactly these two lines:
-    `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
-    `Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7`
-    No AI model identifiers anywhere else (code, comments, copy, docs).
+    or more commits per task, each message ending with the session's standard attribution
+    trailer lines. No AI model identifiers anywhere else (code, comments, copy, docs).
 
 ## Rulings
 
@@ -1451,7 +1448,7 @@ checkout, never in the repo) stops the run with `Migration <name> failed.`.
 #### Drift report (once, not committed)
 
 Write it to
-`/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/drift-report.md`,
+`<scratch>/drift-report.md`,
 with raw dumps under `.../scratchpad/drift/`. Never in the repo.
 
 1. Harness side: `SQL_THROUGH=0023 SQL_KEEP=1 npm run test:sql`, then run the four catalog queries
@@ -1510,11 +1507,7 @@ No UI, no TypeScript. Keep the scripts plain bash and SQL, no new tooling.
 
 Subject: `Add a local SQL harness that applies every migration and tests the company wall`
 
-Message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Message ends with the session's standard attribution trailer lines.
 
 ### Task 2: Module gate and four-section navigation
 
@@ -1533,7 +1526,7 @@ fixture bundle, and `LinkNavGroup`.
 
 #### Before you start
 
-Read `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/drift-report.md`
+Read `<scratch>/drift-report.md`
 (from Task 1). If it reports that live `public.guard_company_fields()` differs from the 0009 body
 beyond whitespace, stop and report; do not guess a merged body.
 
@@ -1900,7 +1893,7 @@ only, never shown); "Modules"; "Modules for <company name>"; the five `MODULE_LA
   `http://localhost:4173/?persona=admin&company=kingdom`, `?persona=employee&company=kingdom`,
   `?persona=admin&company=klasik`, and `?persona=rococo` then `/rococo/companies` (same tab, the demo
   remembers the persona in sessionStorage). Save PNGs to
-  `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task-2/`,
+  `<scratch>/shots/task-2/`,
   look at every one, and fix layout defects (section spacing, the utility hairline, the phone bar
   scrolling horizontally, checkbox grid). The Klasik shot must match today's sidebar exactly.
 
@@ -1928,11 +1921,7 @@ only, never shown); "Modules"; "Modules for <company name>"; the five `MODULE_LA
 2. `The sidebar reads one registry and groups into four sections under the switchboard module`
    (`navigation.ts` and its test, AppLayout, `ModuleOnly`, the Home heading, page and app tests).
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ### Task 3: Audit log
 
@@ -2191,7 +2180,7 @@ actor kinds "Company user", "Rococo", "System". No em dashes.
   opens `?persona=rococo` then `/rococo/activity`, plus `?persona=admin&company=kingdom`,
   `?persona=employee&company=kingdom` and `?persona=admin&company=klasik` home pages (to confirm
   nothing else moved). PNGs to
-  `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task-3/`;
+  `<scratch>/shots/task-3/`;
   look at each and fix table overflow or spacing.
 
 #### Must NOT do
@@ -2213,11 +2202,7 @@ actor kinds "Company user", "Rococo", "System". No em dashes.
 2. `Rococo reads the audit log on a new Activity tab` (service, mock, `lib/audit.ts` and test, page,
    route, nav, tabs, fixture, demo alias, test mocks).
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ### Task 4: Projects, milestones and letters
 
@@ -2598,7 +2583,7 @@ existing primitives already apply.
   with `?persona=admin&company=kingdom` then `/production` and `/production/projects/kingdom-project-1`;
   `?persona=employee&company=kingdom` then the same two; `?persona=admin&company=klasik` then
   `/production` (must land on Home) and its sidebar (unchanged). PNGs to
-  `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task-4/`;
+  `<scratch>/shots/task-4/`;
   look at each and fix row wrapping, control widths and the phone layout of milestone rows.
 
 #### Must NOT do
@@ -2622,11 +2607,7 @@ existing primitives already apply.
 2. `A Production section lists projects and edits their milestones and letters` (service, mock,
    `lib/milestones.ts` and test, pages, component, nav, routes, fixtures, demo alias, tests).
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ### Task 5: Manual wins and Home cards
 
@@ -2930,7 +2911,7 @@ save-on-blur field; no hex colors.
   `deviceScaleFactor: 1`): `?persona=admin&company=kingdom` (Home) then `/wins`;
   `?persona=employee&company=kingdom` (Home) then `/wins`; `?persona=admin&company=klasik` (Home
   must look exactly as before this task) then `/wins` (lands on Home). PNGs to
-  `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task-5/`;
+  `<scratch>/shots/task-5/`;
   look at each and fix card balance, row wrapping and phone stacking.
 
 #### Must NOT do
@@ -2955,11 +2936,7 @@ save-on-blur field; no hex colors.
 2. `Home gains Attention, Shortcuts and recent Wins cards under the company's modules`
    (`lib/attention.ts` and test, the three cards, DashboardPage, tests).
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 
 ### Task 6: Scaffolds and the Sales & Finance pages
@@ -3070,10 +3047,10 @@ Theme tokens only (`border-line`, `text-ink-2`, `bg-surface`; never a hex). Empt
 - `npx vitest run`
 - `npm run build`
 - No SQL and no `supabase/functions` change, so no `npm run test:sql` and no Deno check.
-- Visual check: `npm run demo` (port 4173), then a Playwright script saved in the plan workspace (`/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/`), never in the repo. Use a fresh browser context per URL (the demo remembers persona in sessionStorage), `deviceScaleFactor: 1`, viewport 1440x900, and repeat the first two at 390x844:
+- Visual check: `npm run demo` (port 4173), then a Playwright script saved in the plan workspace (`<scratch>/shots/`), never in the repo. Use a fresh browser context per URL (the demo remembers persona in sessionStorage), `deviceScaleFactor: 1`, viewport 1440x900, and repeat the first two at 390x844:
   ```js
   const { chromium } = require("playwright");
-  const out = "/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task6";
+  const out = "<scratch>/shots/task6";
   const shots = [
     ["sf-admin-kingdom", "/sales-finance?persona=admin&company=kingdom"],
     ["controls-admin-kingdom", "/sales-finance/controls?persona=admin&company=kingdom"],
@@ -3114,11 +3091,7 @@ Theme tokens only (`border-line`, `text-ink-2`, `bg-surface`; never a hex). Empt
 1. `Show honest Not configured cards for the pending Production modules`
 2. `Add the Sales & Finance reporting and Controls pages for companies with data sources`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -3480,7 +3453,7 @@ Precedence, first match wins: `not_connected` (connection null or status `not_co
 - `npm run test:sql` (needs a local PostgreSQL 16; every migration applied, 0024 and up applied twice, then every test file)
 - Deno type-check (this task adds files under `supabase/functions`):
   ```
-  S=/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad
+  S=<scratch>
   mkdir -p $S/denocheck/functions && cp -r /home/user/client-dashboard/supabase/functions/. $S/denocheck/functions/
   cd $S/denocheck/functions/connections && DENO_DIR=$S/denocache $S/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts ../_shared/sync/types.ts ../_shared/sync/parse.ts ../_shared/sync/keys.ts ../_shared/sync/schedule.ts ../_shared/sync/runner.ts ../_shared/sync/links.ts
   ```
@@ -3502,11 +3475,7 @@ Precedence, first match wins: `not_connected` (connection null or status `not_co
 2. `Parse, key, schedule and run syncs in shared modules with no provider attached`
 3. `Keep Google Sheets off the Connections card until a page asks for it`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -3681,7 +3650,7 @@ Theme tokens only; badges carry state colour through `SYNC_STATE_TONE` (the only
 - `npx vitest run`
 - `npm run build`
 - No SQL change and no `supabase/functions` change: no `npm run test:sql`, no Deno check.
-- Visual check: `npm run demo`, then the Playwright script from Task 6's pattern (fresh context per URL, `deviceScaleFactor: 1`, 1440x900, screenshots to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task8/`, never the repo) for: `/?persona=admin&company=kingdom`, `/?persona=employee&company=kingdom`, `/sales-finance?persona=admin&company=kingdom` (also at 390x844 for the table's horizontal scroll inside its wrapper, with no page-level horizontal scroll), `/sales-finance/controls?persona=admin&company=kingdom`, `/production?persona=admin&company=kingdom`, `/production?persona=employee&company=kingdom`, `/settings?persona=admin&company=kingdom` (plus one shot after clicking "Add source"), `/?persona=admin&company=klasik`, `/settings?persona=admin&company=klasik`. Check every PNG: badges readable, the failed source shows its last good values and time, no "0" stands in for a blank, Klasik shows nothing new.
+- Visual check: `npm run demo`, then the Playwright script from Task 6's pattern (fresh context per URL, `deviceScaleFactor: 1`, 1440x900, screenshots to `<scratch>/shots/task8/`, never the repo) for: `/?persona=admin&company=kingdom`, `/?persona=employee&company=kingdom`, `/sales-finance?persona=admin&company=kingdom` (also at 390x844 for the table's horizontal scroll inside its wrapper, with no page-level horizontal scroll), `/sales-finance/controls?persona=admin&company=kingdom`, `/production?persona=admin&company=kingdom`, `/production?persona=employee&company=kingdom`, `/settings?persona=admin&company=kingdom` (plus one shot after clicking "Add source"), `/?persona=admin&company=klasik`, `/settings?persona=admin&company=klasik`. Check every PNG: badges readable, the failed source shows its last good values and time, no "0" stands in for a blank, Klasik shows nothing new.
 
 #### Must NOT do
 
@@ -3700,11 +3669,7 @@ Theme tokens only; badges carry state colour through `SYNC_STATE_TONE` (the only
 2. `Show each data source's sync state, freshness and read-only values`
 3. `Configure data sources and sync them now from Settings`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -3841,7 +3806,7 @@ Quiet bordered rows, hairlines, the tenant accent only on hover and focus; theme
 - `npm run build`
 - `npm run test:sql`
 - No `supabase/functions` change, so no Deno check.
-- Visual check: `npm run demo`, Playwright as in Task 6's script (fresh context per URL, `deviceScaleFactor: 1`, 1440x900, output `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task9/`, never the repo) for `/?persona=admin&company=kingdom`, `/?persona=employee&company=kingdom`, `/sales-finance?persona=admin&company=kingdom`, `/production?persona=employee&company=kingdom` (also at 390x844: the embed must fit the column), `/settings?persona=admin&company=kingdom`, `/?persona=admin&company=klasik`, `/settings?persona=admin&company=klasik`. The demo iframe may try to load example.com; that is a local visual check only and no test depends on it. Fix layout defects before committing.
+- Visual check: `npm run demo`, Playwright as in Task 6's script (fresh context per URL, `deviceScaleFactor: 1`, 1440x900, output `<scratch>/shots/task9/`, never the repo) for `/?persona=admin&company=kingdom`, `/?persona=employee&company=kingdom`, `/sales-finance?persona=admin&company=kingdom`, `/production?persona=employee&company=kingdom` (also at 390x844: the embed must fit the column), `/settings?persona=admin&company=kingdom`, `/?persona=admin&company=klasik`, `/settings?persona=admin&company=klasik`. The demo iframe may try to load example.com; that is a local visual check only and no test depends on it. Fix layout defects before committing.
 
 #### Must NOT do
 
@@ -3860,11 +3825,7 @@ Quiet bordered rows, hairlines, the tenant accent only on hover and focus; theme
 2. `Show outside tools and approved public embeds in each section and on Home`
 3. `Keep each company's external links in Settings`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -4095,12 +4056,12 @@ Settings keeps its quiet layout: the Google row is the same `ConnectionsPanel` r
 - `npm run test:sql` (0032 is applied twice by the harness, then `0032_sync_schedule.test.sql` runs with every earlier test file).
 - Deno type-check of the function:
   ```
-  S=/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad
+  S=<scratch>
   rm -rf $S/denocheck/functions && mkdir -p $S/denocheck/functions && cp -r /home/user/client-dashboard/supabase/functions/. $S/denocheck/functions/
   cd $S/denocheck/functions/connections && DENO_DIR=$S/denocache $S/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts
   ```
   `index.ts` pulls in `http.ts`, `sync.ts` and every `_shared` module it uses; it must pass with no errors.
-- Visual check: `npm run demo`, then a Playwright script (`const { chromium } = require('playwright')`, `chromium.launch()`, a fresh context per URL with `deviceScaleFactor: 1` at 1440x900, screenshots to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task10/`, never the repo) for `/settings?persona=admin&company=kingdom` (the Connections card with its three rows), the same page after clicking "Add source", typing the sample link and clicking "Read headers", `/settings?persona=employee&company=kingdom` (redirected away; no Settings), and `/settings?persona=admin&company=klasik` (two connection rows, unchanged). Look at each PNG and fix any layout defect.
+- Visual check: `npm run demo`, then a Playwright script (`const { chromium } = require('playwright')`, `chromium.launch()`, a fresh context per URL with `deviceScaleFactor: 1` at 1440x900, screenshots to `<scratch>/shots/task10/`, never the repo) for `/settings?persona=admin&company=kingdom` (the Connections card with its three rows), the same page after clicking "Add source", typing the sample link and clicking "Read headers", `/settings?persona=employee&company=kingdom` (redirected away; no Settings), and `/settings?persona=admin&company=klasik` (two connection rows, unchanged). Look at each PNG and fix any layout defect.
 
 #### Must NOT do
 
@@ -4120,11 +4081,7 @@ Settings keeps its quiet layout: the Google row is the same `ConnectionsPanel` r
 4. `Schedule the hourly sync tick with Supabase Cron`
 5. `Read a sheet's headers into a new data source from Settings`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -4227,7 +4184,7 @@ No new screen or component. The only visible change is a link label and its note
 - No SQL change: no `npm run test:sql`.
 - Deno type-check (this task touches `supabase/functions`):
   ```
-  S=/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad
+  S=<scratch>
   rm -rf $S/denocheck/functions && mkdir -p $S/denocheck/functions && cp -r /home/user/client-dashboard/supabase/functions/. $S/denocheck/functions/
   cd $S/denocheck/functions/connections && DENO_DIR=$S/denocache $S/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts ../_shared/sync/quickbooks.ts ../_shared/sync/links.ts
   ```
@@ -4247,11 +4204,7 @@ No new screen or component. The only visible change is a link label and its note
 1. `Read QuickBooks invoices and payments through a GET-only client that saves each new sign-in first`
 2. `Link QuickBooks invoice rows back to QuickBooks with a sign-in note`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -4465,8 +4418,8 @@ No new component. Selects stay the existing `selectClass` controls; a locked sel
 - `npm run build`.
 - `npm run test:sql` (0033 applied twice; every test file from 0001 to 0033 green).
 - `grep -n "role === \"admin\"\|role === 'admin'" -r src supabase/functions` shows no remaining admin test outside `isCompanyAdminRole` and `http.ts`'s owner-or-admin check (fixtures and tests that build data excepted).
-- Read `supabase/functions/connections/http.ts` `requireAdmin` and confirm it accepts `owner` and `admin` and checks `is_active` (Task 10 wrote it; change nothing unless it does not). If it does need a change, run the Deno check: copy `supabase/functions` to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/denocheck/functions` and run `DENO_DIR=<scratch>/denocache <scratch>/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts` from the copied `functions/connections`.
-- Visual check: `npm run demo`, then Playwright (`require('playwright')`, `chromium.launch()`, fresh context per URL, `deviceScaleFactor: 1`, 1440x900, screenshots to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task12/`, never the repo) for `/?persona=owner&company=kingdom`, `/people?persona=owner&company=kingdom`, `/people?persona=admin&company=kingdom` (Marcus's role locked), `/people/kingdom-user-1?persona=admin&company=kingdom`, `/?persona=manager&company=kingdom` (employee dashboard), `/?persona=employee&company=kingdom`, `/people?persona=admin&company=klasik`, `/rococo/people?persona=rococo`. Check the sidebar shows "Owner" or the title, the role column fits, and Klasik looks as before apart from the Manager option.
+- Read `supabase/functions/connections/http.ts` `requireAdmin` and confirm it accepts `owner` and `admin` and checks `is_active` (Task 10 wrote it; change nothing unless it does not). If it does need a change, run the Deno check: copy `supabase/functions` to `<scratch>/denocheck/functions` and run `DENO_DIR=<scratch>/denocache <scratch>/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts` from the copied `functions/connections`.
+- Visual check: `npm run demo`, then Playwright (`require('playwright')`, `chromium.launch()`, fresh context per URL, `deviceScaleFactor: 1`, 1440x900, screenshots to `<scratch>/shots/task12/`, never the repo) for `/?persona=owner&company=kingdom`, `/people?persona=owner&company=kingdom`, `/people?persona=admin&company=kingdom` (Marcus's role locked), `/people/kingdom-user-1?persona=admin&company=kingdom`, `/?persona=manager&company=kingdom` (employee dashboard), `/?persona=employee&company=kingdom`, `/people?persona=admin&company=klasik`, `/rococo/people?persona=rococo`. Check the sidebar shows "Owner" or the title, the role column fits, and Klasik looks as before apart from the Manager option.
 
 #### Must NOT do
 
@@ -4483,11 +4436,7 @@ No new component. Selects stay the existing `selectClass` controls; a locked sel
 2. `Treat owners as admins in the app and offer Owner only to owners and Rococo`
 3. `Add owner and manager personas to the fixtures and the demo`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 ---
 
@@ -4594,11 +4543,7 @@ Plain, calm, confident; no em dashes; no AI model identifiers; industry neutral 
 1. `Document modules, data sources, roles and how to apply the Kingdom release`
 2. `Mark the built Kingdom slices and record the rulings`
 
-Each message ends with exactly:
-```
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
-```
+Each message ends with the session's standard attribution trailer lines.
 
 
 ## Open contract issues
