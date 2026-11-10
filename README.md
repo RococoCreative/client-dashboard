@@ -105,16 +105,18 @@ Kept current by whoever pastes a migration, so the next session knows where it s
 project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
-  `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`. The
-  `connections` Edge Function live is main's version from before the Kingdom release; the
-  version in this repo, with the sync routes, is not deployed yet.
-- **On `main`, not applied yet, in paste order:** `0026_projects_milestones`, `0027_wins`,
-  `0030_sync_engine`, `0031_external_links`, `0033_role_hierarchy`, `0034_cycle_omissions`,
-  then `0032_sync_schedule`, which waits on its two Vault entries (`sync_cron_secret` and
-  `sync_function_url`). `0026` and `0027` go in after `0029` even though their numbers are
-  lower, because they were written before `0028` existed. `0034` (cycle omissions, PR #3)
-  depends on none of `0026` to `0033`, only on `0029`, which it must follow; it is pasted after
-  `0033`. Applying this release, below, has the steps.
+  `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
+  `0026_projects_milestones`, then `0027_wins`, `0030_sync_engine`, `0031_external_links`,
+  `0033_role_hierarchy` and `0034_cycle_omissions` together in one transaction (2026-11-10).
+  `0026` and `0027` went in after `0029` even though their numbers are lower, because they
+  were written before `0028` existed.
+- **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
+  (`sync_cron_secret` and `sync_function_url`) and the Google keys.
+- **The `connections` Edge Function** live is the version from before the Kingdom release (it
+  serves QuickBooks and GoHighLevel sign-ins for admins). The version in this repo, with Google
+  Sheets, the sync routes and owners allowed, deploys together with the Google keys and `0032`,
+  and before anyone is made an owner: until then the live function lets only admins manage
+  connections.
 - **Next free number:** `0035`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
