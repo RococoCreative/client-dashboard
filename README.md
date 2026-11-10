@@ -107,27 +107,20 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
   `0026_projects_milestones`, then `0027_wins`, `0030_sync_engine`, `0031_external_links`,
-  `0033_role_hierarchy` and `0034_cycle_omissions` together in one transaction (2026-11-10).
+  `0033_role_hierarchy` and `0034_cycle_omissions` together in one transaction (2026-11-10),
+  then `0035_scorecards_divisions_focus_calendar` (2026-11-10, after `0034`).
   `0026` and `0027` went in after `0029` even though their numbers are lower, because they
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
-  (`sync_cron_secret` and `sync_function_url`) and the Google keys; and
-  `0035_scorecards_divisions_focus_calendar` (focus topic calendar, role scorecards, the review's
-  opening discussion and project notes, the goals lock, divisions, projects per person), which
-  follows `0034` and does not depend on `0032`. Once it is in, run
-  `supabase/seeds/rba_scorecards.sql` once for RBA's divisions, roles and metrics; it is safe to
-  run again and ends with a check row (2 divisions, the 8 named roles, 33 metrics across 6 roles).
-  The app on this branch reads 0035's tables and columns, so it reaches `main` only after 0035 is
-  live; 0035 itself is safe under the app on `main` today (that app never sends
-  `goals.created_by`, and an employee there writes only their reflection on a review).
+  (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
+- **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
+  (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   and `SYNC_CRON_SECRET` are set and `0032` is applied.
-- **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have none (their
-  screens are as before). Kingdom's owners are Maddie Cothran and marvin waters. Klasik and RBA
-  get `external_links` (Links on Resources and the Home card) once 0035 goes in; it is a data
-  change made with it, in Rococo > Companies or in the same paste.
+- **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have
+  `external_links` only. Kingdom's owners are Maddie Cothran and marvin waters.
 - **Next free number:** `0036`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
