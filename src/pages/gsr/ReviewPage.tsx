@@ -162,7 +162,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       // The month's notes logs. The database hands an admin only the notes on monthly goals; the
       // person gets all of theirs, and the panel shows each goal its own.
       cycle.cadence === "monthly" ? listGoalNotes(review.company_id, review.employee_id) : Promise.resolve([]),
-      // Which cycles the person is omitted from (0024): this one, and the months inside it.
+      // Which cycles the person is omitted from (0034): this one, and the months inside it.
       listCycleOmissions(review.company_id),
     ]);
     return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, year };
@@ -172,7 +172,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   if (!state.data) return <SkeletonRows rows={8} />;
 
   const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, year } = state.data;
-  // Omitted from this cycle (0024): the review is set aside as it is, and nothing scores or signs
+  // Omitted from this cycle (0034): the review is set aside as it is, and nothing scores or signs
   // it off until the person is added back on the cycle page.
   const omittedHere = isOmitted(omissions, review.cycle_id, review.employee_id);
   const omittedMonthIds = omissions.filter((o) => o.employee_id === review.employee_id).map((o) => o.cycle_id);

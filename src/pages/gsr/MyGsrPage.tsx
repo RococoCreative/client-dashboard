@@ -5,7 +5,7 @@
 // An admin opens the month (the cycle); either side can start the person's review inside it.
 // The employee starts theirs to prefill their goals before the meeting (0020 lets them, for
 // their own row in an open monthly cycle and nothing else), so the meeting opens on their draft.
-// A person an admin omitted from the month has nothing to start, and the page says so (0024).
+// A person an admin omitted from the month has nothing to start, and the page says so (0034).
 import { useState } from "react";
 import { PencilLine } from "lucide-react";
 import Button from "../../components/ui/Button.tsx";

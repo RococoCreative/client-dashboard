@@ -350,7 +350,7 @@ export async function deleteGoalNote(id: string): Promise<void> {
 const OMISSION_COLUMNS = "cycle_id, employee_id, company_id, reason, omitted_by, created_at";
 
 // Who is left out of which cycle, for one company. An admin reads every row; an employee reads
-// only their own (0024), which is all their own screens need.
+// only their own (0034), which is all their own screens need.
 export async function listCycleOmissions(companyId: string): Promise<CycleOmission[]> {
   const { data, error } = await db().from("cycle_omissions").select(OMISSION_COLUMNS).eq("company_id", companyId);
   if (error) throw error;

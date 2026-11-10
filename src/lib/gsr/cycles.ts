@@ -145,7 +145,7 @@ export function reviewPath(reviewId: string, cadence: Cadence): string {
   return sectionOf(cadence) === "gsr" ? `/gsr/reviews/${reviewId}` : `/reviews/${reviewId}`;
 }
 
-// Who a cycle covers: everybody active, less anyone an admin has left out of it (0024). Every
+// Who a cycle covers: everybody active, less anyone an admin has left out of it (0034). Every
 // screen that counts or scores a cycle reads its roster here, so the dashboard, the cycle page,
 // the cycles list and the portfolio never disagree about who is in it.
 export function cycleRoster<P extends { id: string; is_active: boolean }>(

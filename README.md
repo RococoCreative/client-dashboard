@@ -53,11 +53,12 @@ a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0024`), once each, on a fresh
-   project. Each file is idempotent in the sense that it can be applied to a project that
-   already has part of it, but the set is a history, not a menu: later files move helpers into
-   the `private` schema and rewrite policies, so re-running an earlier file on an
-   already-migrated project either errors or reinstates a superseded rule. Go forwards only,
+   `supabase/migrations/` in numeric order (`0001` through the highest number present; a gap is
+   not a missing file, as `0028` follows `0025` once main is merged in), once each, on a fresh project. Each file is idempotent in the sense that it
+   can be applied to a project that already has part of it, but the set is a history, not a
+   menu: later files move helpers into the `private` schema and rewrite policies, so
+   re-running an earlier file on an already-migrated project either errors or reinstates a
+   superseded rule. Go forwards only,
    and write a new numbered file rather than re-running an old one. `0006` seeds the three
    companies, their sign-in domains
    (`beklasik.com`, `rbaprojects.com`, `kingdomcustomconstruction.com`), and a starting
@@ -234,7 +235,7 @@ refuses them on the shared goal row. My Goals says so in a line at the top.
 ## Who is in a cycle
 
 A cycle covers everybody active on the roster unless an admin omits someone from it, from the
-cycle page, with an optional reason (`cycle_omissions`, 0024). Someone omitted stops counting
+cycle page, with an optional reason (`cycle_omissions`, 0034). Someone omitted stops counting
 toward that cycle's progress and team score everywhere (`cycleRoster` in
 `src/lib/gsr/cycles.ts`), is not asked for that month's GSR, and sees a line saying so. Omitting
 deletes nothing: a review already started is set aside as it is, and comes back when they are

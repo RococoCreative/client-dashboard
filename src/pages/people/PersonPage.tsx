@@ -62,7 +62,7 @@ export default function PersonPage() {
       listJobRoles(companyId, true),
       // Their goals, for where this quarter's GSRs stand when the company scores them.
       listGoals(companyId, profileId),
-      // The months they are omitted from never count toward that (0024).
+      // The months they are omitted from never count toward that (0034).
       listCycleOmissions(companyId),
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));

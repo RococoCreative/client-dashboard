@@ -382,7 +382,7 @@ export interface GoalPrivate {
   updated_at: string;
 }
 
-// A person an admin has left out of one review cycle (0024). Everyone active is in a cycle
+// A person an admin has left out of one review cycle (0034). Everyone active is in a cycle
 // unless a row here says otherwise; adding them back deletes the row.
 export interface CycleOmission {
   cycle_id: string;

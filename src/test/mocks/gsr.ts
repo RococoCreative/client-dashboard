@@ -122,7 +122,7 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
-  // Nobody signs off a review for someone left out of its cycle (0024).
+  // Nobody signs off a review for someone left out of its cycle (0034).
   if (before && before.status !== "complete" && patch.status === "complete" && omitted(before.cycle_id, before.employee_id)) {
     throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
   }
@@ -221,7 +221,7 @@ export async function listCycleOmissions(companyId: string): Promise<CycleOmissi
   return cycleOmissions.filter((o) => o.company_id === companyId);
 }
 export type OmissionInput = { cycle_id: string; employee_id: string; company_id: string; reason: string | null };
-// Stamped and refused the way the database does it (0024): the cycle decides the company, a
+// Stamped and refused the way the database does it (0034): the cycle decides the company, a
 // closed cycle keeps its roster, and a signed-off review has to be reopened first.
 export async function omitFromCycle(input: OmissionInput): Promise<CycleOmission> {
   const cycle = cycles.find((c) => c.id === input.cycle_id);

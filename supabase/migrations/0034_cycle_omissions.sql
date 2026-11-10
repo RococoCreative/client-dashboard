@@ -1,5 +1,15 @@
--- 0024_cycle_omissions.sql
--- An admin chooses who is in each review cycle. Paste after 0023; idempotent.
+-- 0034_cycle_omissions.sql
+-- An admin chooses who is in each review cycle. Paste after 0029; idempotent.
+--
+-- Written as 0024, before 0028 and 0029 were applied live, and renumbered to follow them. Live
+-- holds 0001 to 0023, 0024 and 0025 (claude/elegant-cray-bnb85m), then 0028 and 0029; that
+-- branch keeps 0026, 0027 and 0030 to 0033, and none of them touches what this file does, so it
+-- can go before or after them, as long as it follows 0029. Two functions here are
+-- also defined on main, so they are rebuilt on the version live now rather than on 0023:
+-- guard_goal_frozen is 0029's, and guard_goal_note_frozen is 0023's (0028 and 0029 leave it
+-- alone), each with the omission check added. An omission never stops the delete of the cycle,
+-- the person or the company it hangs on, so deleting a cycle (which takes its goals and their
+-- notes since 0029), a person or a company works exactly as it does after 0029.
 --
 -- A cycle covers everybody active on the roster, which is right for most cycles and wrong for
 -- some: a company of five where three do GSRs this month, someone on leave for a quarter, a new
@@ -91,8 +101,9 @@ end;
 $$;
 revoke execute on function public.stamp_cycle_omission() from public, anon, authenticated;
 
--- Adding someone back is a roster change too, so a closed cycle refuses it. A cycle being
--- deleted takes its rows with it: by then the cycle is gone, and nothing here stops that.
+-- Adding someone back is a roster change too, so a closed cycle refuses it. A row going because
+-- its cycle, its person or its company is being deleted goes with them: the parent is already
+-- gone when the cascade arrives, and nothing here stops that.
 create or replace function public.guard_cycle_omission_delete()
 returns trigger
 language plpgsql
@@ -100,6 +111,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if not exists (select 1 from public.profiles p where p.id = old.employee_id)
+     or not exists (select 1 from public.companies co where co.id = old.company_id) then
+    return old;
+  end if;
   if exists (
     select 1 from public.review_cycles c
      where c.id = old.cycle_id and c.status = 'closed'
@@ -181,8 +196,11 @@ create trigger reviews_guard_omitted
 -- ---------------------------------------------------------------------------------------
 -- 3. A month someone is left out of is frozen for them
 -- ---------------------------------------------------------------------------------------
--- guard_goal_frozen as 0023 left it, plus the same check for a month the person is left out
--- of. The why still passes on its own.
+-- guard_goal_frozen as 0029 left it, plus the same check for a month the person is left out
+-- of. 0029's two pass-throughs come first and are kept as they are: a goal going because its
+-- cycle is being deleted, and a carried_from_goal_id the foreign key clears. The why still passes
+-- on its own. An omission whose person or company is being deleted no longer counts, so it never
+-- stops that delete; the closed and locked checks are 0029's, unchanged.
 
 create or replace function public.guard_goal_frozen()
 returns trigger
@@ -196,10 +214,20 @@ declare
   v_whose uuid := case when tg_op = 'DELETE' then old.employee_id else new.employee_id end;
   v_probe public.goals%rowtype;
 begin
+  if tg_op = 'DELETE'
+     and old.cycle_id is not null
+     and not exists (select 1 from public.review_cycles c where c.id = old.cycle_id) then
+    return old;
+  end if;
   if tg_op = 'UPDATE' then
     v_probe := new;
     v_probe.outcome_note := old.outcome_note;
     v_probe.updated_at := old.updated_at;
+    if new.carried_from_goal_id is null
+       and old.carried_from_goal_id is not null
+       and not exists (select 1 from public.goals g where g.id = old.carried_from_goal_id) then
+      v_probe.carried_from_goal_id := old.carried_from_goal_id;
+    end if;
     if v_probe is not distinct from old then
       return new;
     end if;
@@ -225,6 +253,8 @@ begin
     select 1 from public.cycle_omissions o
     where o.cycle_id in (v_from, v_to)
       and o.employee_id = v_whose
+      and exists (select 1 from public.profiles p where p.id = o.employee_id)
+      and exists (select 1 from public.companies co where co.id = o.company_id)
   ) then
     raise exception 'This person is not part of this month''s GSRs. Add them back to change its goals.'
       using errcode = 'check_violation';
@@ -237,7 +267,10 @@ end;
 $$;
 revoke execute on function public.guard_goal_frozen() from public, anon, authenticated;
 
--- guard_goal_note_frozen as 0023 left it, plus the month the goal's person is left out of.
+-- guard_goal_note_frozen as 0023 left it (0028 and 0029 do not change it), plus the month the
+-- goal's person is left out of, with the same pass-through for an omission whose person or
+-- company is being deleted. A cycle delete reaches a note only after its goal is gone, so none of
+-- these checks finds a row and the note goes with the goal.
 create or replace function public.guard_goal_note_frozen()
 returns trigger
 language plpgsql
@@ -273,6 +306,8 @@ begin
     select 1
       from public.goals g
       join public.cycle_omissions o on o.cycle_id = g.cycle_id and o.employee_id = g.employee_id
+      join public.profiles p on p.id = o.employee_id
+      join public.companies co on co.id = o.company_id
      where g.id in (v_from, v_to)
   ) then
     raise exception 'This person is not part of this month''s GSRs. Add them back to change its notes.'

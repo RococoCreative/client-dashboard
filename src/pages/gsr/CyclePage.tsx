@@ -2,7 +2,7 @@
 // score, with the team average on top. Reviews are created on demand (or all at once) so
 // an admin can start scoring anyone with one click. An admin also chooses who is in the cycle:
 // a person omitted from it leaves its progress, its team score and its Start all, and sits in
-// a list of their own until they are added back (0024).
+// a list of their own until they are added back (0034).
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Pencil, Trash2, Unlock, UserMinus, UserPlus, UsersRound } from "lucide-react";

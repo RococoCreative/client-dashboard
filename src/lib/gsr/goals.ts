@@ -157,7 +157,7 @@ export function scoreMonth(goals: Array<Pick<Goal, "progress">>, required: numbe
 export interface GsrMonthsFigure<C> {
   // Every month in the period. `locked` is the score its GSR was locked in at, or null while the
   // month is still open to change; `live` is where it stands now, for reading, never for scoring.
-  // `omitted` is a month an admin left the person out of (0024): shown, never counted.
+  // `omitted` is a month an admin left the person out of (0034): shown, never counted.
   months: Array<{ cycle: C; locked: number | null; live: number; omitted: boolean }>;
   target: number;
   actual: number;

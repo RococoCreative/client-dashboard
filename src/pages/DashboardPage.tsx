@@ -432,7 +432,7 @@ function EmployeeDashboard() {
       listCompanyGoals(companyId, year),
       listJobRoles(companyId),
       listEmployeeFinancials(companyId, profile.id, year),
-      // Only the person's own rows come back (0024): the cycles they are omitted from.
+      // Only the person's own rows come back (0034): the cycles they are omitted from.
       listCycleOmissions(companyId),
     ]);
     // The person's job role decides which optional blocks this dashboard carries. The role is

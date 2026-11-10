@@ -137,7 +137,7 @@ export interface CompanyBundle {
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
-  // Who an admin has left out of which cycle (0024). Empty: every cycle covers everyone active.
+  // Who an admin has left out of which cycle (0034). Empty: every cycle covers everyone active.
   cycleOmissions: CycleOmission[];
   companyGoals: CompanyGoal[];
   kpis: EmployeeKpi[];

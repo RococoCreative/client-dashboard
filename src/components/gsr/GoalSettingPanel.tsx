@@ -355,7 +355,7 @@ export default function GoalSettingPanel({
   gsrRequired?: number | null;
   isAdmin: boolean;
   isOwn: boolean;
-  // The person is omitted from this month (0024): the month is set aside as it is, read only,
+  // The person is omitted from this month (0034): the month is set aside as it is, read only,
   // until an admin adds them back. The database freezes it too.
   omitted?: boolean;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
