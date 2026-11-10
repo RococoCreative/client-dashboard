@@ -4,7 +4,7 @@
 // the one action that moves them along. Inviting is still a row plus a link, because the hub
 // holds no mail-sending key, so the admin shares the sign-in link and the signup gate lets that
 // address through. Deactivating, inviting and removing someone ranked above you is refused by
-// the database (0031), so those rows offer none of the three.
+// the database (0033), so those rows offer none of the three.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Send, Trash2, UserPlus } from "lucide-react";

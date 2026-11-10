@@ -22,10 +22,10 @@ export interface Company {
   updated_at: string;
 }
 
-// The four nav sections. 0029's external_links.nav_group check uses the same four values.
+// The four nav sections. 0031's external_links.nav_group check uses the same four values.
 export type LinkNavGroup = "home" | "sales_finance" | "production" | "people_hr";
 
-// A company's links to its own outside tools (0029). The audience is enforced by RLS, never by a screen.
+// A company's links to its own outside tools (0031). The audience is enforced by RLS, never by a screen.
 export type LinkProvider = "monday" | "quickbooks" | "google_sheets" | "other";
 export type LinkAudience = "admins" | "everyone";
 export const LINK_PROVIDER_LABELS: Record<LinkProvider, string> = { monday: "Monday", quickbooks: "QuickBooks", google_sheets: "Google Sheets", other: "Other" };
@@ -647,7 +647,7 @@ export interface CompanyConnection {
 
 // Data sources
 // What a company reads from its own accounts, each run of a sync, and the records a run brought
-// in (0028). Records are read-only; only the sync writes them. The shapes a sync works with live
+// in (0030). Records are read-only; only the sync writes them. The shapes a sync works with live
 // in supabase/functions/_shared/sync/types.ts, shared with the connections function.
 export const TARGET_MODULE_LABELS: Record<TargetModule, string> = {
   sales_reporting: "Sales reporting",

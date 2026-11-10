@@ -1,5 +1,5 @@
--- 0029_external_links.sql
--- Links to a company's own outside tools, such as Monday boards. Paste after 0028; idempotent.
+-- 0031_external_links.sql
+-- Links to a company's own outside tools, such as Monday boards. Paste after 0030; idempotent.
 --
 -- Why: a company with the external_links module keeps a short list of links to the tools it
 -- already runs elsewhere, shown in the section of the hub where people work. These are links and

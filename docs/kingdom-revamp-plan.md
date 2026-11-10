@@ -43,7 +43,7 @@ These were ruled during the build (`docs/kingdom-build-plan.md`). Where this pla
 - **R7.** Members read Production and Wins; Sales & Finance stays admin-only. *Cost if wrong: one policy and route guard each.*
 - **R8.** The QuickBooks adapter is read-only and unconfigured, with no aging, escalation, "not sent", partial-payment or cash-basis logic. *Cost if wrong: none if never configured.*
 - **R9.** The SQL harness is committed and not in CI. *Cost if wrong: remove a folder and a script.*
-- **R10.** Kingdom's modules are switched on by a Rococo admin after the migrations; no migration seeds modules or roles. Maddie Cothran and marvin waters are set to Owner by hand after 0031. *Cost if wrong: none.*
+- **R10.** Kingdom's modules are switched on by a Rococo admin after the migrations; no migration seeds modules or roles. Maddie Cothran and marvin waters are set to Owner by hand after 0033. *Cost if wrong: none.*
 - **R11.** Field types are `text`, `number`, `currency`, `percent` and `date` only. *Cost if wrong: add a type later.*
 - **R12.** A sync is all-or-nothing; all-blank rows are skipped and counted. *Cost if wrong: a stricter-than-needed first run.*
 - **R13.** One attempt per weekly slot. *Cost if wrong: a transient failure waits a week unless someone presses Sync now.*
@@ -247,7 +247,7 @@ Known defects, recorded only:
 | 4 | Local editing of future client-score and cleanliness inputs | Defer pending input | | Waits on input 28 (S14) |
 | 4 | Reuse existing local structures for dashboard-owned data | Reuse as-is (none apply) | Assessment 2.4 | No milestone, letter or win structure exists. The shelved Project assistant is not reused |
 | 4 | Imported values never overwritten; source shown | Add missing | Separate tables, source badge pattern (`FINANCIAL_SOURCE_LABELS`) | |
-| 5 | Live authenticated read-only Sheets access | Modify existing | `connections` registry gains a `google_sheets` ProviderDef | One key everywhere: function, types, 0028 check, 0029 check |
+| 5 | Live authenticated read-only Sheets access | Modify existing | `connections` registry gains a `google_sheets` ProviderDef | One key everywhere: function, types, 0030 check, 0031 check |
 | 5 | Configure spreadsheet, tabs and ranges | Add missing | `sync_sources.config` | Several sources per connection |
 | 5 | Map source fields to dashboard fields | Add missing | `sync_sources.field_map` | The actual mappings come from Kingdom |
 | 5 | Multiple tabs or spreadsheets | Add missing | `sync_sources` rows | |
@@ -436,7 +436,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Status.** Built.
 - **As built.** The sync routes live in `supabase/functions/connections/sync.ts`, with the pure modules in `supabase/functions/_shared/sync/`. `external_people` is deferred (R4).
 - **Purpose.** Everything a live source needs except the provider adapters.
-- **Migration.** `0028_sync_engine.sql`.
+- **Migration.** `0030_sync_engine.sql`.
 - **New files.**
   - `supabase/functions/connections/sync/run.ts`: the sync routes the `connections` function serves:
     - `/sync/run` (user JWT), `/sync/tick` (cron secret) and `/sync/describe`
@@ -451,7 +451,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
   - `src/components/home/FreshnessCard.tsx`: one FreshnessLine and SyncStateBadge per enabled `sync_sources` row, with its last successful sync time and a link to the module it feeds.
 - **Edited files.**
   - `supabase/functions/connections/index.ts`: dispatches `/sync/*` paths to `sync/run.ts`.
-  - `src/types/database.ts`: row types for `sync_sources`, `sync_runs`, `sync_records` and `external_people`, plus `ConnectionProvider` and `CONNECTION_PROVIDER_LABELS` gaining `google_sheets`, in step with 0028.
+  - `src/types/database.ts`: row types for `sync_sources`, `sync_runs`, `sync_records` and `external_people`, plus `ConnectionProvider` and `CONNECTION_PROVIDER_LABELS` gaining `google_sheets`, in step with 0030.
   - `src/components/status.ts`: `SYNC_STATE_TONE`.
   - `src/lib/attention.ts`: adds Sync failed and Stale.
   - `src/lib/csv.ts`: imports `normalizeHeader` from the shared module.
@@ -468,13 +468,13 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 #### S7. External links registry and Monday entry points
 - **Status.** Built.
 - **Purpose.** Configurable shortcuts and approved embeds.
-- **Migration.** `0029_external_links.sql`.
+- **Migration.** `0031_external_links.sql`.
 - **Files.**
   - `src/services/externalLinks.ts` and its mock.
   - `src/components/links/ExternalLinkButton.tsx`: shows the label, the host, "Opens in a new tab" and what the link is for; opens with `noopener`.
   - `src/components/links/EmbedFrame.tsx`: sandboxed iframe, only when `embed_is_public`, captioned "Public share view", always with the direct link beside it.
   - `src/components/settings/ExternalLinksPanel.tsx`.
-  - `src/types/database.ts`: `ExternalLink`, in step with 0029.
+  - `src/types/database.ts`: `ExternalLink`, in step with 0031.
   - ShortcutsCard reads the registry.
   - `src/pages/CompanySettingsPage.tsx`: ExternalLinksPanel under `external_links`.
   - SalesFinancePage, ProductionPage and the People section list the links whose `nav_group` matches, so Monday CRM links appear under Sales & Finance.
@@ -485,21 +485,21 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Status.** Built.
 - **As built.** `requireAdmin` checks `is_active` and accepts owner and admin.
 - **Purpose.** A real, live connection.
-- **Migration.** `0030_sync_schedule.sql`. It runs after your setup steps in 6.6.
+- **Migration.** `0032_sync_schedule.sql`. It runs after your setup steps in 6.6.
 - **Edited files.**
   - `supabase/functions/connections/index.ts`: `google_sheets` added to the `Provider` union, the `PROVIDERS` map and `providerFor()`, and `requireAdmin` fixed to check `is_active`.
   - `supabase/functions/connections/sync/`: the Google adapter and `/sync/describe`.
   - `ConnectionsPanel.tsx`: the Google row shows only under `data_sources`.
 - **Tests.**
   - Parser tests on stored `batchGet` JSON, and schedule tests across a DST change.
-  - A unit test that every ProviderDef key appears in the 0028 provider check list.
+  - A unit test that every ProviderDef key appears in the 0030 provider check list.
 - **Does not:** populate any module. That needs the mappings.
 
 #### S9. Role hierarchy foundation
 - **Status.** Built.
 - **As built.** `my_team_ids` is deferred (R5).
 - **Purpose.** Owner and Manager as values, a ranked grant guard, `reports_to` integrity, and the team helper.
-- **Migration.** `0031_role_hierarchy.sql`.
+- **Migration.** `0033_role_hierarchy.sql`.
 - **Edited files.**
   - `src/types/database.ts`: `Role`, `ROLE_LABELS`.
   - `src/lib/people.ts`: `isCompanyAdminRole()`.
@@ -510,7 +510,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 - **Tests.**
   - Role helper.
   - Page tests: an owner sees what an admin sees; a manager sees the employee dashboard.
-  - SQL checks: a cycle, a cross-company `reports_to`, and an admin granting owner are all rejected. A simulated new `@rocococreative.io` auth user insert still succeeds after 0031.
+  - SQL checks: a cycle, a cross-company `reports_to`, and an admin granting owner are all rejected. A simulated new `@rocococreative.io` auth user insert still succeeds after 0033.
 - **Does not:** give managers any team access, restrict admins, or create the capability table.
 
 ### Slices that need mappings or definitions
@@ -520,7 +520,7 @@ Every slice ends on `npm run lint`, `npx vitest run` and `npm run build`, plus a
 | S10 Sales & Finance reporting | Configure sources for sales and financial reporting, render them in MappedTable, check the figures against the sheet | Sheet links, tabs, fields, period conventions | none | Waiting on inputs |
 | S11 PM capacity | Map PMs to `profiles.id` in `external_people`, show the capacity card; unmapped PMs flagged, never dropped | Capacity sheet, PM key, PMs on the roster | none | Waiting on inputs |
 | S12 QuickBooks controls | Refresh with token rotation inside the lock, GET-only Invoice and Payment queries, deep links, mapped fields only (the confirmed subset from input 22) plus `source_ref` {entity, Id, realmId}. QuickBooks runs go through the same sync engine, so all six UI states, the last-good pointer and the run log apply unchanged | Kingdom connects QuickBooks, confirmed fields and definitions, production Intuit keys | none | Waiting on inputs. The read-only adapter is built (R8) |
-| S13 Capability matrix and Manager scope | `role_capabilities` seeded to today's behavior, `private.can(cid, cap)`, view and edit policy split, `can_sync_source` body changed to the sync capability, team policies via `my_team_ids()`, company-admin audit read if the matrix grants it | The completed matrix, team definition (input 30a) | 0032 onward | Waiting on inputs |
+| S13 Capability matrix and Manager scope | `role_capabilities` seeded to today's behavior, `private.can(cid, cap)`, view and edit policy split, `can_sync_source` body changed to the sync capability, team policies via `my_team_ids()`, company-admin audit read if the matrix grants it | The completed matrix, team definition (input 30a) | 0025 onward | Waiting on inputs |
 | S14 Client score and cleanliness inputs | Tables and entry UI | Definitions, scale, subject, thresholds decision, permissions | later | Waiting on inputs |
 
 ---
@@ -593,8 +593,8 @@ General rules for every new migration:
 - Guard trigger: browser writes always get `source_type='manual'` and a null `source_ref`.
 - RLS: select for members, insert and update for `can_manage_company`, no delete.
 
-### 0028_sync_engine
-- Widen `company_connections_provider_check` to `('gohighlevel','quickbooks','google_sheets')`. This drops and re-adds the constraint and leaves 0019 untouched. `google_sheets` is the one key used in the function, the types and 0029.
+### 0030_sync_engine
+- Widen `company_connections_provider_check` to `('gohighlevel','quickbooks','google_sheets')`. This drops and re-adds the constraint and leaves 0019 untouched. `google_sheets` is the one key used in the function, the types and 0031.
 - `private.can_sync_source(cid uuid)`: stable, SECURITY DEFINER, returns `private.can_manage_company(cid)` today. It is the only predicate behind Sync now. S13 changes its body to the sync capability without touching the view policy.
 - `sync_sources`:
   - `id`, `company_id uuid not null references companies(id) on delete cascade` (indexed), `connection_id` (FK; same-company check by trigger), `provider`, `name`, `target_module`
@@ -622,7 +622,7 @@ General rules for every new migration:
   - `sync_runs` and `sync_records`: **no write policies at all.** Only the `connections` function's service role writes them, so imported values cannot be edited locally. RLS enforces this, not the UI.
 - **Existing companies:** nothing visible. The new rows exist only when a source is configured.
 
-### 0029_external_links
+### 0031_external_links
 - `external_links`:
   - `id`, `company_id uuid not null references companies(id) on delete cascade` (indexed), `nav_group check (home, sales_finance, production, people_hr)`, `label`, `destination_note`
   - `url check (url ~ '^https://')`, `provider check ('monday','quickbooks','google_sheets','other')`
@@ -633,11 +633,11 @@ General rules for every new migration:
   - write: `can_manage_company`
   - audit trigger
 
-### 0030_sync_schedule
+### 0032_sync_schedule
 - `create extension if not exists pg_cron` and `pg_net`.
 - Unschedule `hub-sync-tick` if it exists, then schedule it at `'7 * * * *'`. The job calls `net.http_post` with the URL (the `connections` function's `/sync/tick` route) and an `x-sync-secret` header, both read from `vault.decrypted_secrets` by name. No secret appears in the file.
 
-### 0031_role_hierarchy
+### 0033_role_hierarchy
 - Drop and re-add `profiles_role_check` and `invitations_role_check` as `('owner','admin','manager','employee')`.
 - `private.is_company_admin()` is rebuilt from the **0013** body, with only the role test widened: `select coalesce((select role in ('owner','admin') from public.profiles where user_id = auth.uid() and is_active), false)`. The 0001 body compares `profiles.id = auth.uid()` and must not be used.
 - What keeps today's meaning for existing admins: `can_manage_company` (82 policies), the profiles UPDATE policy "Users update own, admins update company profiles" (calls `is_company_admin` directly), and the two guards that read the helpers (`guard_profile_fields`, `guard_review_employee_fields`).
@@ -666,7 +666,7 @@ General rules for every new migration:
 | Manager | `role = 'manager'` (new) | employee-level | team scope through `my_team_ids()` |
 | Employee | `role = 'employee'` | unchanged | unchanged unless the matrix says otherwise |
 
-- **No existing row is rewritten.** Maddie Cothran and marvin waters become Kingdom's Owners. Their admin rows today are test setups; they are set to `owner` by hand on the People page once 0031 is applied, never by a migration that names them. Klasik's owner can stay `admin` with no difference in behavior.
+- **No existing row is rewritten.** Maddie Cothran and marvin waters become Kingdom's Owners. Their admin rows today are test setups; they are set to `owner` by hand on the People page once 0033 is applied, never by a migration that names them. Klasik's owner can stay `admin` with no difference in behavior.
 - **Manager scope (S13)** adds policies beside the existing ones, of the form `employee_id in (select private.my_team_ids())`. It never widens `goal_private` or the owner-only `goal_notes`.
 - **Built now:** role values, ranking guard, `reports_to` integrity, team helper, audit log, the separate sync predicate.
 - **Waits for the matrix:** capability rows, restricted Admin, view and edit splits, Manager policies, sync and integration permissions, company-admin audit read, the Austin-only tier.
@@ -680,8 +680,8 @@ General rules for every new migration:
 - **A new INSERT guard without the sign-up bypass.** It would raise inside `handle_new_user` and break first sign-in. The 0018 bypass line opens both guards, and the SQL check above proves it.
 - **Silent `COLUMNS` omission.** A missing `modules` in the `companies.ts` `COLUMNS` makes the module silently invisible. A test asserts that the column is selected.
 - **Migration tracking is out of step.** 0001 to 0008 and 0014 to 0016 have no tracking rows. Keep pasting numbered files; do not run a tool's "apply pending".
-- **A role value the UI does not know.** Owner and Manager must be in `ROLE_LABELS` before 0031 is applied, or the sidebar shows a blank role.
-- **A provider key spelled two ways.** The function, `ConnectionProvider`, 0028 and 0029 all use `google_sheets`; the S8 unit test guards it.
+- **A role value the UI does not know.** Owner and Manager must be in `ROLE_LABELS` before 0033 is applied, or the sidebar shows a blank role.
+- **A provider key spelled two ways.** The function, `ConnectionProvider`, 0030 and 0031 all use `google_sheets`; the S8 unit test guards it.
 
 ---
 
@@ -778,7 +778,7 @@ The last successful sync time is shown on every module and on the Home Freshness
 10. In the SQL editor:
     - `select vault.create_secret('<same value as SYNC_CRON_SECRET>', 'sync_cron_secret');`
     - `select vault.create_secret('https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/sync/tick', 'sync_function_url');`
-11. Paste `0030_sync_schedule.sql`. Check it with `select jobname, schedule from cron.job;` and, after the next hour, `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
+11. Paste `0032_sync_schedule.sql`. Check it with `select jobname, schedule from cron.job;` and, after the next hour, `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
 
 **Intuit**
 
@@ -937,7 +937,7 @@ Every migration also gets an SQL-editor check: apply it twice, show it is idempo
 | 5 Person, not account | Responsible people, PM mapping, creators | Every reference goes to `profiles.id`, stamped with `auth_profile_id()`. No filter on `hasAccount`. `is_company_admin` keeps the 0013 `user_id` match. The new INSERT guards bypass the sign-up path |
 | 6 Connections | Google, QuickBooks, cron | Kingdom's own accounts through the app's OAuth flow. Tokens are read only by the `connections` function, which also serves the sync routes. The cron secret is not a service key. Nothing goes into Vercel |
 | 7 Scoring in one place | Client score, cleanliness, capacity | No new scoring. `scoring.ts`, `goals.ts`, `deliverables.ts` and the bands are untouched and not reused for scaffolds. Client score is not a pillar `scoring_type` |
-| 8 Append-only | Guards, constraints and types | New files 0024 to 0031. Functions rebuilt from their latest bodies (0009, 0013, 0018). `move_employee_company` left alone, with small separate triggers instead. `database.ts` updated in the same slice as each migration (S1, S2, S3, S4, S6, S7, S9) |
+| 8 Append-only | Guards, constraints and types | New files 0024 to 0033. Functions rebuilt from their latest bodies (0009, 0013, 0018). `move_employee_company` left alone, with small separate triggers instead. `database.ts` updated in the same slice as each migration (S1, S2, S3, S4, S6, S7, S9) |
 | 11 File style | All new files | A header comment on why each file exists, PascalCase default exports, sub-components above the export, no barrels, BlurInput for milestone fields |
 | 12 Shape is data | Nav, modules, Google row, data sources | `companies.modules` on every company, Rococo-only to change. No slug or theme branch. Shared registries (nav, modules, sync states) change all three companies equally but appear only when a module is on |
 

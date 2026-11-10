@@ -1,11 +1,11 @@
--- 0031_role_hierarchy.test.sql
--- Proves the role hierarchy (0031): owner and manager are role values, an owner is an admin
+-- 0033_role_hierarchy.test.sql
+-- Proves the role hierarchy (0033): owner and manager are role values, an owner is an admin
 -- everywhere and a manager is employee-level, grants are ranked (only an owner or Rococo grants
 -- owner, nobody grants above their own rank or changes, invites or removes someone ranked above
 -- them, signed in or not), an invitation only names someone on its own company's roster who has
 -- not signed in yet, the insert guards on profiles and invitations keep sign-up working, and
 -- reports_to never points at oneself, another company or round in a loop, is cleared when a
--- person changes company, and is judged only when it changes, so a line saved before 0031 never
+-- person changes company, and is judged only when it changes, so a line saved before 0033 never
 -- blocks a first sign-in.
 --
 -- Runs inside one transaction the harness opens and rolls back; never begin or commit here.
@@ -358,8 +358,9 @@ select tests.assert_raises(
 update public.invitations set email = 'sample.invite1.fixed@example.com' where email = 'sample.invite1@example.com';
 select tests.act_as(tests.id('k_owner'));
 update public.invitations set email = 'sample.offer.owner2@example.com' where email = 'sample.offer.owner@example.com';
+-- A roster-bound invitation stays at its person's address (0028), so Rococo changes its title.
 select tests.act_as(tests.id('rococo'));
-update public.invitations set email = 'sample.roster.owner2@example.com' where email = 'sample.roster.owner@example.com';
+update public.invitations set title = 'Owner' where email = 'sample.roster.owner@example.com';
 reset role;
 select set_config('request.jwt.claims', '', true);
 select tests.assert(
@@ -368,7 +369,8 @@ select tests.assert(
 );
 select tests.assert(
   (select count(*) from public.invitations
-    where email in ('sample.offer.owner2@example.com', 'sample.roster.owner2@example.com')) = 2,
+    where email = 'sample.offer.owner2@example.com'
+       or (email = 'sample.roster.owner@example.com' and title = 'Owner')) = 2,
   'invitation_update_guarded: an owner or Rococo could not change an owner invitation'
 );
 select tests.assert(
@@ -377,12 +379,13 @@ select tests.assert(
 );
 update public.invitations set email = 'sample.invite1@example.com' where email = 'sample.invite1.fixed@example.com';
 delete from public.invitations
- where email in ('sample.offer.owner2@example.com', 'sample.roster.owner2@example.com');
+ where email in ('sample.offer.owner2@example.com', 'sample.roster.owner@example.com');
 
 -- case: invitation_names_an_unclaimed_roster_row
 -- The same claim makes an invitation that names someone already signed in, or someone in
 -- another company, a way into their account, so an admin can only name a person on their own
--- company's roster who has not signed in yet.
+-- company's roster who has not signed in yet. That rule is 0028's guard_invitation_target, which
+-- this migration leaves to it, so the refusals read as 0028 words them.
 with p as (
   insert into public.profiles (id, email, full_name, company_id, role)
   values (gen_random_uuid(), 'sample.roster.emp@example.com', 'Sample Roster Employee', tests.company('kingdom'), 'employee')
@@ -404,7 +407,7 @@ select tests.assert_raises(
        values (%L, 'sample.taker5@example.com', 'employee', %L)$q$,
     tests.company('kingdom'), tests.id('k_emp')
   ),
-  'That person has already signed in.'
+  'An invitation can only be for someone on this company''s roster who has not signed in yet%'
 );
 select tests.assert_raises(
   format(
@@ -412,12 +415,12 @@ select tests.assert_raises(
        values (%L, 'sample.taker6@example.com', 'employee', %L)$q$,
     tests.company('kingdom'), tests.id('l_roster_emp')
   ),
-  'That person is in another company.'
+  'An invitation can only be for someone on this company''s roster who has not signed in yet%'
 );
 select tests.assert_raises(
   $q$update public.invitations set accepted_at = null, email = 'sample.taker7@example.com'
       where email = 'sample.accepted@example.com'$q$,
-  'That person has already signed in.'
+  'An invitation is accepted by signing in%'
 );
 -- An accepted invitation is history and can still be tidied; the roster row gets its invite.
 update public.invitations set title = 'Carpenter' where email = 'sample.accepted@example.com';
@@ -581,9 +584,9 @@ select tests.assert(
 update public.profiles set company_id = tests.company('kingdom') where id = tests.id('k_emp');
 
 -- case: legacy_line_does_not_block_sign_in
--- A line saved before 0031 that crosses companies or loops is what the pre-check lists. Signing
+-- A line saved before 0033 that crosses companies or loops is what the pre-check lists. Signing
 -- in claims a roster row with an update that names company_id, so if an unchanged line were
--- judged again those people could never sign in. Set up with the guard off, as 0031 finds them.
+-- judged again those people could never sign in. Set up with the guard off, as 0033 finds them.
 with p as (
   insert into public.profiles (id, email, full_name, company_id, role)
   values (gen_random_uuid(), 'sample.legacy.cross@example.com', 'Sample Legacy Cross', tests.company('kingdom'), 'employee')

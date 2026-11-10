@@ -1,4 +1,4 @@
--- 0028_sync_engine.sql
+-- 0030_sync_engine.sql
 -- The sync engine's tables: the sources a company reads from its own accounts, every run of a
 -- sync, and the records each run brought in. Paste after 0027; idempotent.
 --

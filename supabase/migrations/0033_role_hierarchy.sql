@@ -1,4 +1,4 @@
--- 0031_role_hierarchy.sql
+-- 0033_role_hierarchy.sql
 -- Adds two role values, Owner and Manager, with ranked grants, and makes reports_to sound.
 --
 -- What changes:
@@ -10,20 +10,26 @@
 --     someone an owner, nobody grants a role above their own, and nobody changes the role or
 --     access of someone ranked above them. The same rule guards roster inserts and invitations.
 --   * The rule holds for people who have not signed in yet, which is how an owner usually
---     starts: nobody removes someone ranked above them, and an invitation that names a roster
---     row counts as a grant of that person's rank, because signing in with it claims the row.
---     An invitation only names someone on its own company's roster who has not signed in yet,
---     and every change to an invitation is checked, not only a change of role.
+--     starts: nobody removes someone ranked above them, and an invitation for a roster row
+--     counts as a grant of that person's rank, because signing in with it claims the row. Since
+--     0028 the claim goes by address, so an invitation is for the row it names or, naming
+--     nobody, for the unclaimed row at its address. An invitation only names someone on its own
+--     company's roster who has not signed in yet (0028's guard_invitation_target), and every
+--     change to an invitation is checked, not only a change of role.
 --   * reports_to can no longer point at the person themselves, at another company, or round in
 --     a loop, and a move to another company clears the reporting lines that would cross it. A
 --     line is judged when it changes, so one saved before this never blocks a first sign-in.
 --
 -- No existing row is rewritten: owners are set by hand once this is applied. Every rebuilt body
--- is copied from its latest version (is_company_admin from 0013, guard_profile_fields from 0018)
--- with only the lines named below added.
+-- is copied from its latest version (is_company_admin from 0013, guard_profile_fields from 0029)
+-- with only the lines named below added. Main's 0028 (guard_invitation_target, the address
+-- rule, claim by address) and 0029 (move_employee_company, clear_manager_on_move) stay as they
+-- are; the guards here add the rank rules on top and refuse nothing those two let the app do.
 --
--- Paste after 0029. It does not depend on 0030, so it may go before or after it; the README's
--- release checklist pastes it first. Idempotent.
+-- Numbered 0033 to follow main's 0028 and 0029, which are applied live, and this branch's 0030
+-- to 0032. Paste after 0031, and so after main's 0028 and 0029, whose guard_profile_fields body
+-- section 5 extends. It does not depend on 0032, so it may go before or after it; the
+-- README's release checklist pastes it first. Idempotent.
 
 -- 1. Pre-check ------------------------------------------------------------------------------
 -- Reports only, fixes nothing. The reports_to guard below judges a line only when it changes,
@@ -124,17 +130,50 @@ revoke all on function private.auth_role_rank() from public, anon;
 grant execute on function private.auth_role_rank() to authenticated;
 
 -- 5. Ranked role changes --------------------------------------------------------------------
--- The 0018 body, with the ranked grant checks added inside the company-admin branch.
+-- The 0029 body (main's latest: the foreign key clear pass-through, the refusal of a Rococo
+-- admin's row, and the refusal of a deactivated person's own row, all ahead of the company-admin
+-- branch), with only the ranked grant checks added inside the company-admin branch, after the
+-- refusal to change your own role. Built on 0029 rather than 0018 so pasting this after 0029
+-- keeps every one of its protections.
 create or replace function public.guard_profile_fields()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
+declare
+  v_probe   public.profiles%rowtype;
+  v_cleared boolean := false;
 begin
   new.email := old.email;
-  if auth.uid() is null or private.is_rococo_admin() then
+  if (select auth.uid()) is null or private.is_rococo_admin() then
     return new;
+  end if;
+
+  v_probe := new;
+  v_probe.updated_at := old.updated_at;
+  if new.reports_to is null
+     and old.reports_to is not null
+     and not exists (select 1 from public.profiles m where m.id = old.reports_to) then
+    v_probe.reports_to := old.reports_to;
+    v_cleared := true;
+  end if;
+  if new.job_role_id is null
+     and old.job_role_id is not null
+     and not exists (select 1 from public.job_roles j where j.id = old.job_role_id) then
+    v_probe.job_role_id := old.job_role_id;
+    v_cleared := true;
+  end if;
+  if v_cleared and v_probe is not distinct from old then
+    return new;
+  end if;
+
+  if old.is_rococo_admin then
+    raise exception 'A Rococo admin''s profile can only be changed by Rococo.';
+  end if;
+
+  if old.user_id = (select auth.uid()) and not old.is_active then
+    raise exception 'This account is inactive, so its profile cannot be changed.';
   end if;
 
   if new.user_id is distinct from old.user_id then
@@ -147,7 +186,7 @@ begin
   end if;
 
   if private.is_company_admin() and old.company_id = private.auth_company_id() then
-    if old.user_id = auth.uid()
+    if old.user_id = (select auth.uid())
        and (new.role is distinct from old.role or new.is_active is distinct from old.is_active) then
       raise exception 'You cannot change your own role or deactivate your own account.';
     end if;
@@ -166,7 +205,7 @@ begin
     return new;
   end if;
 
-  if old.user_id is distinct from auth.uid() then
+  if old.user_id is distinct from (select auth.uid()) then
     raise exception 'You can only edit your own profile.';
   end if;
   if new.role is distinct from old.role or new.is_active is distinct from old.is_active then
@@ -234,11 +273,16 @@ create trigger profiles_guard_delete
   for each row execute function public.guard_profile_delete();
 
 -- 7. Ranked invitations ---------------------------------------------------------------------
--- Signing in with a pending invitation that names a roster row claims that row, role and all
--- (handle_new_user, 0014), so naming one grants that person's rank and hands over their profile.
--- A pending invitation therefore only names someone on its own company's roster who has not
--- signed in yet, nobody names someone ranked above them, and every insert and update is
+-- Signing in with a pending invitation for a roster row claims that row, role and all
+-- (handle_new_user, 0028), so inviting one grants that person's rank. Since 0028 the row is found
+-- by its address, never by profile_id: an invitation is for the unclaimed row it names or, naming
+-- nobody, for the unclaimed row at its address, on its own company's roster or parked in No
+-- company. Nobody invites someone ranked above them, either way. Every insert and update is
 -- checked, so moving an invitation to another address is judged like sending a new one.
+-- Who an invitation may name at all (an unclaimed person on this company's roster at the same
+-- address, or a parked one for Rococo), the address rule and the accepted_at rule are 0028's
+-- guard_invitation_target, which fires after this one; they are not repeated here, so a refusal
+-- reads the same whichever guard is the reason.
 create or replace function public.guard_invitation_role()
 returns trigger
 language plpgsql
@@ -255,19 +299,15 @@ begin
   if private.role_rank(new.role) > private.auth_role_rank() then
     raise exception 'You cannot grant a role above your own.';
   end if;
-  if new.profile_id is not null and new.accepted_at is null then
-    if not exists (
-      select 1 from public.profiles p where p.id = new.profile_id and p.company_id = new.company_id
-    ) then
-      raise exception 'That person is in another company.';
-    end if;
-    if exists (select 1 from public.profiles p where p.id = new.profile_id and p.user_id is not null) then
-      raise exception 'That person has already signed in.';
-    end if;
-  end if;
-  if new.profile_id is not null
-     and private.role_rank((select p.role from public.profiles p where p.id = new.profile_id))
-         > private.auth_role_rank() then
+  if new.accepted_at is null
+     and exists (
+       select 1 from public.profiles p
+        where p.user_id is null
+          and (p.company_id = new.company_id or p.company_id is null)
+          and (p.id = new.profile_id
+               or (new.profile_id is null and lower(p.email) = lower(new.email)))
+          and private.role_rank(p.role) > private.auth_role_rank()
+     ) then
     raise exception 'You cannot invite someone ranked above you.';
   end if;
   if tg_op = 'UPDATE' and private.role_rank(old.role) > private.auth_role_rank() then
@@ -284,7 +324,9 @@ create trigger invitations_guard_role
 
 -- 8. Sound reporting lines ------------------------------------------------------------------
 -- No auth bypass: nobody, Rococo included, can save a reporting line that is broken. A move to
--- another company drops the mover's own line when their manager stays behind. A line is judged
+-- another company drops the mover's own line when their manager stays behind. 0029's
+-- clear_manager_on_move does the same and fires first (same timing, earlier name), so this finds
+-- the line already cleared; it stays here so the guard never refuses a move whatever the order. A line is judged
 -- only when it or the person's company changes: signing in claims a roster row with an update
 -- that names company_id (handle_new_user, 0014), and a line the pre-check lists must never stop
 -- that person from signing in.
@@ -337,8 +379,10 @@ create trigger profiles_guard_reports_to
   for each row execute function public.guard_reports_to();
 
 -- 9. A move clears the lines that would cross companies --------------------------------------
--- The people who reported to the mover and stay behind lose that line. Kept apart from
--- move_employee_company (0014, latest body 0017), which is left alone.
+-- The people who reported to the mover and stay behind lose that line. move_employee_company
+-- (latest body 0029, main) clears the same lines in the same write, and this trigger fires just
+-- before it (same timing, earlier name), so whichever runs second finds nothing left to clear.
+-- Kept apart from move_employee_company, which is left alone.
 create or replace function public.clear_reports_to_on_move()
 returns trigger
 language plpgsql

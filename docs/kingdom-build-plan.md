@@ -38,8 +38,8 @@ Spec: `docs/kingdom-revamp-plan.md` and `CLAUDE.md` are the binding spec. Where 
 5. Section names, exactly: "Home", "Sales & Finance", "Production", "People / HR". The utility group has
    no heading (a hairline separates it). A section with no visible items is hidden.
 6. Migration files, exactly: `0024_company_modules.sql`, `0025_audit_log.sql`,
-   `0026_projects_milestones.sql`, `0027_wins.sql`, `0028_sync_engine.sql`, `0029_external_links.sql`,
-   `0030_sync_schedule.sql`, `0031_role_hierarchy.sql`. Each is idempotent (safe to run twice), never
+   `0026_projects_milestones.sql`, `0027_wins.sql`, `0030_sync_engine.sql`, `0031_external_links.sql`,
+   `0032_sync_schedule.sql`, `0033_role_hierarchy.sql`. Each is idempotent (safe to run twice), never
    edits 0001 to 0023, and rebuilds an existing function from its LATEST body (check the drift report
    from Task 1 for live differences before rebuilding).
 7. Nothing is applied to the live Supabase project and the Edge Function is not deployed in this run.
@@ -118,7 +118,7 @@ Spec: `docs/kingdom-revamp-plan.md` and `CLAUDE.md` are the binding spec. Where 
   PostgreSQL 16+, and is not part of CI. Cost: remove a folder and a script.
 - R10. Kingdom's modules are switched on by a Rococo admin in Rococo > Companies after the migrations
   are applied. No migration seeds modules or roles for a named company or person. Maddie Cothran and
-  marvin waters are set to Owner by hand after 0031. Cost: none.
+  marvin waters are set to Owner by hand after 0033. Cost: none.
 - R11. Field types are `text`, `number`, `currency`, `percent`, `date`. No `period` or `person` type
   until Kingdom's period and PM conventions arrive. Cost: add a type later.
 - R12. A sync is all-or-nothing: any validation error (missing required header, wrong type, required
@@ -388,7 +388,7 @@ export interface ExternalLink {
   created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
 }
 ```
-Note: `LinkNavGroup` lands in Task 2 (with a one-line comment that 0029 uses the same four values),
+Note: `LinkNavGroup` lands in Task 2 (with a one-line comment that 0031 uses the same four values),
 because `navigation.ts` derives `NavGroup` from it.
 
 Task 12:
@@ -497,7 +497,7 @@ export async function updateExternalLink(id: string, patch: ExternalLinkPatch): 
 export async function deleteExternalLink(id: string): Promise<void>;
 ```
 The mock returns every row of the company (it cannot know the caller); audience filtering is
-proven by the 0029 SQL test, never by UI code.
+proven by the 0031 SQL test, never by UI code.
 
 #### 1.6 `src/components/status.ts` (Task 8)
 
@@ -697,7 +697,7 @@ export function recordLink(ref: Record<string, unknown>): { href: string; label:
 
 `supabase/functions/_shared/providers.ts` (Task 10): `export const PROVIDER_KEYS = ["gohighlevel", "quickbooks", "google_sheets"] as const; export type ProviderKey = (typeof PROVIDER_KEYS)[number];`
 `connections/index.ts` derives `Provider` from it, and `src/lib/sync/providers.test.ts` asserts
-every key appears in the 0028 check (reads the SQL file with `node:fs`) and equals
+every key appears in the 0030 check (reads the SQL file with `node:fs`) and equals
 `keysOf(CONNECTION_PROVIDER_LABELS)`.
 
 `googleSheets.ts` (Task 10): `GOOGLE_SCOPES`, `googleAuthorizeUrl(args)`, `emailFromIdToken(idToken: string): string | null`,
@@ -822,7 +822,7 @@ Indexes `project_milestones_project_idx (project_id, sort_order)`, `project_mile
   'That project belongs to another company.'. Plus `wins_stamp_actor`, `wins_set_updated_at`.
 - Policies `"Members read wins"`, `"Admins create wins"`, `"Admins update wins"`. No delete. Grants select, insert, update.
 
-#### 0028_sync_engine.sql (Task 7)
+#### 0030_sync_engine.sql (Task 7)
 - `alter table public.company_connections drop constraint if exists company_connections_provider_check;`
   then add `company_connections_provider_check check (provider in ('gohighlevel','quickbooks','google_sheets'))` (0019 untouched).
 - `private.can_sync_source(cid uuid) returns boolean language sql stable security definer set search_path = public as $$ select private.can_manage_company(cid) $$;`
@@ -887,7 +887,7 @@ Indexes `project_milestones_project_idx (project_id, sort_order)`, `project_mile
   (`revoke insert, update, delete ... from authenticated`). The service role writes them.
 - No `external_people` table (R4).
 
-#### 0029_external_links.sql (Task 9)
+#### 0031_external_links.sql (Task 9)
 `public.external_links`: `id`, `company_id uuid not null references public.companies (id) on delete cascade`,
 `nav_group text not null`, `label text not null`, `destination_note text`, `url text not null`,
 `provider text not null default 'other'`, `embed_url text`, `embed_is_public boolean not null default false`,
@@ -906,7 +906,7 @@ Policies `"Members read external links"` select using
 `"Admins create external links"`, `"Admins update external links"`, `"Admins delete external links"`
 via `private.can_manage_company(company_id)`. Grants select, insert, update, delete.
 
-#### 0030_sync_schedule.sql (Task 10)
+#### 0032_sync_schedule.sql (Task 10)
 `create extension if not exists pg_cron with schema pg_catalog;`
 `create extension if not exists pg_net with schema extensions;` (the harness strips exactly these
 two lines and stubs `cron` and `net`). Neither extension is installed live today (checked).
@@ -914,7 +914,7 @@ two lines and stubs `cron` and `net`). Neither extension is installed live today
 then `select cron.schedule('hub-sync-tick', '7 * * * *', $job$ select net.http_post(url := (select decrypted_secret from vault.decrypted_secrets where name = 'sync_function_url'), headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'sync_cron_secret')), body := '{}'::jsonb, timeout_milliseconds := 10000) $job$);`
 No secret or URL literal in the file.
 
-#### 0031_role_hierarchy.sql (Task 12)
+#### 0033_role_hierarchy.sql (Task 12)
 - Drop and re-add `profiles_role_check` and `invitations_role_check` as
   `check (role in ('owner','admin','manager','employee'))` (live today: `admin, employee`, checked).
 - `private.is_company_admin()` rebuilt from the **0013** body, only the test widened:
@@ -953,14 +953,14 @@ No secret or URL literal in the file.
 | Object | Latest body today | Rebuilt by | Live check (2026-11-09, read-only) |
 | --- | --- | --- | --- |
 | `public.guard_company_fields()` | 0009 (earlier 0001) | 0024 | no `modules` in live body; full-text diff is Task 1's |
-| `private.is_company_admin()` | 0013 (0001 public version moved by 0009) | 0031 | live compares `user_id = auth.uid()`, no `owner` (matches 0013) |
-| `public.guard_profile_fields()` | 0018 (0001, 0009, 0012, 0013) | 0031 | live has `job_role_id` and `user_id = auth.uid()` (matches 0018) |
-| `company_connections_provider_check` | 0019 | 0028 | live `('gohighlevel','quickbooks')` |
-| `profiles_role_check`, `invitations_role_check` | 0001 | 0031 | live `('admin','employee')` |
+| `private.is_company_admin()` | 0013 (0001 public version moved by 0009) | 0033 | live compares `user_id = auth.uid()`, no `owner` (matches 0013) |
+| `public.guard_profile_fields()` | 0018 (0001, 0009, 0012, 0013) | 0033 | live has `job_role_id` and `user_id = auth.uid()` (matches 0018) |
+| `company_connections_provider_check` | 0019 | 0030 | live `('gohighlevel','quickbooks')` |
+| `profiles_role_check`, `invitations_role_check` | 0001 | 0033 | live `('admin','employee')` |
 
 Relied on, never rebuilt: `private.can_manage_company`, `private.is_company_member` (0009),
 `private.auth_profile_id`, `private.auth_company_id`, `private.is_rococo_admin` (0013),
-`public.handle_new_user` (0014; exercised by the 0031 sign-up test), `public.move_employee_company`
+`public.handle_new_user` (0014; exercised by the 0033 sign-up test), `public.move_employee_company`
 (0014, latest body 0017; left alone, new move triggers are separate), `public.guard_review_employee_fields` (0023),
 `public.set_updated_at` (0001). 0006 seeds companies `kingdom`, `klasik`, `rba` and their domains,
 so SQL tests look companies up by slug rather than creating them.
@@ -1107,7 +1107,7 @@ Page tests for modules use `makeHub("admin", KINGDOM.company)` and `makeHub("emp
 | --- | --- |
 | `package.json` | 1 `test:sql` script only |
 | `CLAUDE.md` | none (proposed wording only) |
-| `README.md` | 2 a short `## Modules` section after `## Branding`; 13 expands it into the module table and moves it to directly after `## Supabase setup`, plus migration order 0001 to 0031, Data sources and Google setup, SQL harness, applying checklist |
+| `README.md` | 2 a short `## Modules` section after `## Branding`; 13 expands it into the module table and moves it to directly after `## Supabase setup`, plus migration order 0001 to 0033, Data sources and Google setup, SQL harness, applying checklist |
 | `supabase/tests/*` | 1 creates harness and `0001_tenancy.test.sql`; 2, 3, 4, 5, 7, 9, 10, 12 each add `00NN_*.test.sql` only |
 | `src/types/database.ts` | 2 `Company.modules`, `LinkNavGroup`; 3 audit types; 4 project types; 5 win types; 7 provider union, sync types; 9 link types; 12 `Role`, `ROLE_LABELS` |
 | `src/App.tsx` | 2 `ModuleOnly`; 3 `/rococo/activity`; 4 production routes; 5 `/wins`; 6 sales-finance routes; 12 `isAdmin` via `isCompanyAdminRole` |
@@ -1189,7 +1189,7 @@ score, cleanliness, job health, warranty, PM capacity) on ProductionPage; SalesF
 ControlsPage (admin-only, `data_sources`) with tabs and scaffold content; nav items. Must not add
 any table, number, scale, average, ranking, colour band or digit in a scaffold.
 
-**Task 7. Sync engine core.** 0028; `_shared/sync/{types,parse,keys,schedule,runner,links}.ts`;
+**Task 7. Sync engine core.** 0030; `_shared/sync/{types,parse,keys,schedule,runner,links}.ts`;
 `csv.ts` re-import; `lib/sync/state.ts`; tests in `src/lib/sync/` with a fake store and adapter;
 sync row types and the `google_sheets` provider union and label; ConnectionsPanel `providers` prop
 so no Google row appears yet. Must not add UI beyond that prop, services, Edge Function code, or
@@ -1202,7 +1202,7 @@ FreshnessCard, source panels on the Sales & Finance, Controls and PM capacity pl
 `SYNC_STATE_TONE`, attention sync items, fixtures. Must not compute any figure from records,
 render a blank as 0, or call any provider.
 
-**Task 9. External links and Monday entry points.** 0029, `externalLinks.ts` and mock,
+**Task 9. External links and Monday entry points.** 0031, `externalLinks.ts` and mock,
 ExternalLinkButton, EmbedFrame, ExternalLinksList, ExternalLinksPanel, ShortcutsCard links, section
 lists per section 3, fixtures. Must not call the Monday API, copy any record, embed anything not
 flagged public, or filter audience in the UI.
@@ -1211,7 +1211,7 @@ flagged public, or filter audience in the UI.
 `/sync/tick`, `/sync/describe`, `createSyncStore`, `createTokenStore`, `_shared/providers.ts`,
 `_shared/sync/googleSheets.ts` (+ fake-fetch tests in `src/lib/sync/`), Google ProviderDef,
 `requireAdmin` (`is_active`, owner or admin), `describeSpreadsheet` service and mock and the panel
-button, Google row under `data_sources`, 0030. Deno check passes. Must not deploy, apply 0030,
+button, Google row under `data_sources`, 0032. Deno check passes. Must not deploy, apply 0032,
 write to Google, or let any other function read `connection_tokens`.
 
 **Task 11. QuickBooks read-only adapter.** `_shared/sync/quickbooks.ts` (GET-only client, token
@@ -1220,7 +1220,7 @@ the field map, `source_ref` {entity, Id, realmId, sandbox}), the Invoice branch 
 registration in `adaptersFor`, fake-fetch tests. Must not pull reports or implement aging,
 escalation, "not sent", partial payments or cash basis.
 
-**Task 12. Role hierarchy foundation.** 0031 per section 2; `Role`, `ROLE_LABELS`; `lib/people.ts`
+**Task 12. Role hierarchy foundation.** 0033 per section 2; `Role`, `ROLE_LABELS`; `lib/people.ts`
 role helpers; `isAdmin` in App.tsx; counts at `DashboardPage.tsx:228` and `PortfolioPage.tsx:70`;
 the role hint at `PeoplePage.tsx:86`; role selects in PeoplePage (lines 87 and 273), PersonPage
 (line 223) and UsersPage (line 103) offer Owner only to an owner or Rococo; fixtures and personas.
@@ -1229,7 +1229,7 @@ existing row.
 
 **Task 13. Docs and handoff.** README, proposed CLAUDE.md wording (report only, R1),
 `docs/kingdom-revamp-plan.md` status and
-rulings, and an "Applying this release" checklist (apply 0024 to 0031 in order, deploy
+rulings, and an "Applying this release" checklist (apply 0024 to 0033 in order, deploy
 `connections`, secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`, vault entries
 `sync_cron_secret` and `sync_function_url`, turn on Kingdom's modules in Rococo > Companies, set
 Owners by hand). Must not change code or migrations.
@@ -1550,7 +1550,7 @@ Modify:
 - `src/types/database.ts`: `Company` (lines 11 to 19) gains `modules: string[];` after `logo_url`
   with the comment `// Module keys a Rococo admin switched on (0024). Raw text[]: unknown keys are allowed and ignored; read only through lib/modules.ts.`
   Add, near `Company`, `export type LinkNavGroup = "home" | "sales_finance" | "production" | "people_hr";`
-  with the comment `// The four nav sections. 0029's external_links.nav_group check uses the same four values.`
+  with the comment `// The four nav sections. 0031's external_links.nav_group check uses the same four values.`
 - `src/services/companies.ts`: line 7 becomes
   `const COLUMNS = "id, slug, name, theme_key, logo_url, modules, created_at, updated_at";`
   (this is the COLUMNS trap: without it the module is silently invisible); line 28 becomes
@@ -1945,7 +1945,7 @@ the portfolio to read it.
 
 Where it fits: builds on Task 1 (SQL harness and `tests.*` helpers) and Task 2 (`companies.modules`,
 which this task watches; `src/lib/navigation.ts` with `PORTFOLIO_NAV`; `navigation.test.ts`, whose
-portfolio assertion this task updates). Later migrations (0028 `sync_sources_audit`, 0029
+portfolio assertion this task updates). Later migrations (0030 `sync_sources_audit`, 0031
 `external_links_audit`) attach `private.audit_change()` from this task to their own tables.
 
 #### Files
@@ -2232,7 +2232,7 @@ Where it fits: builds on Task 1 (SQL harness), Task 2 (`hasModule`, `NAV_ITEMS`/
 exported `ModuleOnly` guard in `src/App.tsx`, the `KINGDOM` fixture bundle, the route test tables in
 `src/App.rococo.test.tsx`) and Task 3 (`private.audit_change()` exists, but projects are content and
 get no audit trigger). This migration introduces `public.stamp_actor()` and `public.pin_company_id()`,
-which 0027 (wins), 0028 and 0029 reuse. Task 5's `wins.project_id` references `projects`; Task 6
+which 0027 (wins), 0030 and 0031 reuse. Task 5's `wins.project_id` references `projects`; Task 6
 adds scaffold cards to ProductionPage; Task 9 adds production links to it.
 
 #### Files
@@ -3126,7 +3126,7 @@ Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
 
 #### Goal and fit
 
-Build everything a live data source needs except the screens and the Edge Function wiring: migration `0028_sync_engine.sql` (sources, runs, read-only records, the overlap lock, the separate Sync now predicate), the pure shared modules under `supabase/functions/_shared/sync/` that parse, key, schedule and run a sync against injected store and adapter interfaces, and `src/lib/sync/state.ts`, which turns a source into one of six honest UI states. Everything is test-first and hermetic.
+Build everything a live data source needs except the screens and the Edge Function wiring: migration `0030_sync_engine.sql` (sources, runs, read-only records, the overlap lock, the separate Sync now predicate), the pure shared modules under `supabase/functions/_shared/sync/` that parse, key, schedule and run a sync against injected store and adapter interfaces, and `src/lib/sync/state.ts`, which turns a source into one of six honest UI states. Everything is test-first and hermetic.
 
 Builds on:
 - Task 1: the SQL harness (`npm run test:sql` runs `bash supabase/tests/run.sh`; helpers in `supabase/tests/helpers.sql`: `tests.company(slug)`, `tests.create_person(name, company, role default 'employee', rococo default false)`, `tests.id(name)`, `tests.act_as(profile_id)`, `tests.assert(ok, message)`, `tests.assert_raises(sql, like)`, the `tests.fixture(name, id)` table; return to system with `reset role; select set_config('request.jwt.claims', '', true);`; each test file runs in its own transaction that is rolled back).
@@ -3137,8 +3137,8 @@ Builds on:
 #### Files
 
 Create:
-- `supabase/migrations/0028_sync_engine.sql`
-- `supabase/tests/0028_sync_engine.test.sql`
+- `supabase/migrations/0030_sync_engine.sql`
+- `supabase/tests/0030_sync_engine.test.sql`
 - `supabase/functions/_shared/sync/types.ts`, `parse.ts`, `keys.ts`, `schedule.ts`, `runner.ts`, `links.ts`
 - `src/lib/sync/state.ts`
 - Tests: `src/lib/sync/parse.test.ts`, `src/lib/sync/keys.test.ts`, `src/lib/sync/schedule.test.ts`, `src/lib/sync/runner.test.ts`, `src/lib/sync/links.test.ts`, `src/lib/sync/state.test.ts` (they import the `_shared` modules with paths like `../../../supabase/functions/_shared/sync/parse.ts`).
@@ -3179,7 +3179,7 @@ Modify:
 - `src/components/settings/ConnectionsPanel.tsx`: props become `{ companyId: string; providers?: ConnectionProvider[] }` with default `DEFAULT_PROVIDERS` (a module-level, non-exported `const DEFAULT_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks"];`); line 72 maps `providers` instead of `keysOf(CONNECTION_PROVIDER_LABELS)` (drop `keysOf` from the line 16 import if unused); `PROVIDER_BLURBS` (lines 20-23) gains `google_sheets: "Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule."`. With the default, no Google row appears anywhere yet; Task 10 passes the list from the Settings page under `data_sources`.
 - `src/pages/pages.test.tsx`: one new case in `describe("connections")` (below).
 
-#### Migration `0028_sync_engine.sql`
+#### Migration `0030_sync_engine.sql`
 
 Header comment: what it adds and why imported values are read-only; "Paste after 0027; idempotent." Object list, in file order:
 
@@ -3272,7 +3272,7 @@ Header comment: what it adds and why imported values are read-only; "Paste after
 - No `external_people` table (R4). No seed rows, no row naming a company.
 - Idempotency: `if not exists` on tables and indexes, `create or replace` on functions, `drop ... if exists` before every trigger, policy and the provider constraint, the `pg_constraint` check around the pointer FK, re-runnable grants. The harness applies every file from 0024 up twice.
 
-#### SQL tests to write first: `supabase/tests/0028_sync_engine.test.sql`
+#### SQL tests to write first: `supabase/tests/0030_sync_engine.test.sql`
 
 Setup as system: `tests.create_person('k_admin', tests.company('kingdom'), 'admin')`, `('k_emp', kingdom)`, `('l_admin', tests.company('klasik'), 'admin')`, `('rococo', null, 'employee', true)`; insert `company_connections` rows (system) for Kingdom `google_sheets` (status `connected`), Kingdom `quickbooks` (`not_connected`) and Klasik `google_sheets` (`connected`), recording their ids in `tests.fixture` as `k_sheets`, `k_qbo`, `l_sheets`. A minimal valid source body for inserts: provider `google_sheets`, name `Sample sales tab`, target_module `sales_reporting`, config `'{"spreadsheet_id":"sample-sheet","sheet_gid":0,"range":null,"header_row":1}'`, field_map `'[{"header":"Job","key":"job","label":"Job","type":"text","unit":null,"required":true}]'`, record_key `'{job}'`. Each case is a commented block (`-- case: <name>`) of DO blocks calling `tests.assert` / `tests.assert_raises`, acting through `tests.act_as(tests.id(...))` and returning to system between cases.
 1. `provider_check_accepts_google_sheets`: the setup inserts succeed; inserting provider `dropbox` raises like `%company_connections_provider_check%`; `pg_constraint` holds exactly one `company_connections_provider_check` and its definition mentions `google_sheets`.
@@ -3725,8 +3725,8 @@ Builds on:
 #### Files
 
 Create:
-- `supabase/migrations/0029_external_links.sql`
-- `supabase/tests/0029_external_links.test.sql`
+- `supabase/migrations/0031_external_links.sql`
+- `supabase/tests/0031_external_links.test.sql`
 - `src/services/externalLinks.ts` and `src/test/mocks/externalLinks.ts` (identical exports)
 - `src/components/links/ExternalLinkButton.tsx`, `src/components/links/EmbedFrame.tsx`, `src/components/links/ExternalLinksList.tsx`
 - `src/components/settings/ExternalLinksPanel.tsx`
@@ -3754,9 +3754,9 @@ Modify:
 - `src/App.rococo.test.tsx`: `vi.mock("./services/externalLinks.ts", () => import("./test/mocks/externalLinks.ts"));`.
 - `demo/vite.config.ts` line 19 (the `find:` regex): add `externalLinks` to the alias alternation.
 
-#### Migration `0029_external_links.sql`
+#### Migration `0031_external_links.sql`
 
-Header comment: links and approved public embeds only, no copied records, Monday's own sign-in applies; "Paste after 0028; idempotent."
+Header comment: links and approved public embeds only, no copied records, Monday's own sign-in applies; "Paste after 0030; idempotent."
 - `create table if not exists public.external_links`: `id uuid primary key default gen_random_uuid()`, `company_id uuid not null references public.companies (id) on delete cascade`, `nav_group text not null`, `label text not null`, `destination_note text`, `url text not null`, `provider text not null default 'other'`, `embed_url text`, `embed_is_public boolean not null default false`, `audience text not null default 'everyone'`, `sort_order integer not null default 0`, `created_by uuid references public.profiles (id) on delete set null`, `updated_by uuid references public.profiles (id) on delete set null`, `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()`.
 - Constraints: `external_links_nav_group_check check (nav_group in ('home', 'sales_finance', 'production', 'people_hr'))`, `external_links_label_check check (btrim(label) <> '')`, `external_links_url_check check (url ~ '^https://')`, `external_links_embed_url_check check (embed_url is null or embed_url ~ '^https://')`, `external_links_embed_public_check check (not embed_is_public or embed_url is not null)`, `external_links_provider_check check (provider in ('monday', 'quickbooks', 'google_sheets', 'other'))`, `external_links_audience_check check (audience in ('admins', 'everyone'))`.
 - Indexes: `external_links_company_group_idx (company_id, nav_group, sort_order)` (covers the company FK), `external_links_created_by_idx (created_by)`, `external_links_updated_by_idx (updated_by)`.
@@ -3768,7 +3768,7 @@ Header comment: links and approved public embeds only, no copied records, Monday
   - `"Admins delete external links"` for delete using `(private.can_manage_company(company_id))`.
 - Idempotency: `if not exists`, drop-then-create for triggers and policies, re-runnable grants; no seed rows.
 
-#### SQL tests to write first: `supabase/tests/0029_external_links.test.sql`
+#### SQL tests to write first: `supabase/tests/0031_external_links.test.sql`
 
 Setup as system: `k_admin` (Kingdom admin), `k_emp` (Kingdom employee), `l_admin` (Klasik admin), `rococo` (Rococo admin, no company). Link body: nav_group `sales_finance`, label `Sample sales board`, url `https://example.com/monday/sample-sales-board`, provider `monday`.
 1. `admin_creates_link`: as k_admin, insert an `everyone` link and an `admins` link (nav_group `home`); `created_by` is k_admin's profile id.
@@ -3848,7 +3848,7 @@ Quiet bordered rows, hairlines, the tenant accent only on hover and focus; theme
 - No Monday API call, no copied CRM or task record, no Monday table.
 - No iframe for a link not flagged `embed_is_public`; never a logged-in embed; never drop the direct link beside an embed.
 - No audience filtering in UI code or in the service (RLS decides); `home` and `people_hr` links appear only on ShortcutsCard (R19).
-- Do not add `frame-src` or `default-src` to `vercel.json`; do not touch any migration before 0029.
+- Do not add `frame-src` or `default-src` to `vercel.json`; do not touch any migration before 0031.
 - Global Constraint 7: nothing applied to the live Supabase project, nothing deployed; Supabase MCP read-only.
 - Global Constraint 8: fixtures plainly fictional, `example.com` hosts only.
 - Global Constraint 9: no undefined business logic (no signal routing to Monday destinations, no rules on which link shows when).
@@ -3873,7 +3873,7 @@ Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
 
 #### Goal and fit
 
-Make a data source live: the `connections` Edge Function gains three sync routes (`/sync/run` for Sync now, `/sync/tick` for the hourly schedule, `/sync/describe` for reading a sheet's tabs and headers), a supabase-js implementation of the runner's store, a token store over `connection_tokens`, and a real Google Sheets provider (OAuth connect and disconnect, plus a read-only adapter). Migration `0030_sync_schedule.sql` schedules the hourly tick with pg_cron and pg_net, reading its URL and secret from Vault. The function stays the only reader of `connection_tokens` (rule 6) and nothing is deployed or applied in this run.
+Make a data source live: the `connections` Edge Function gains three sync routes (`/sync/run` for Sync now, `/sync/tick` for the hourly schedule, `/sync/describe` for reading a sheet's tabs and headers), a supabase-js implementation of the runner's store, a token store over `connection_tokens`, and a real Google Sheets provider (OAuth connect and disconnect, plus a read-only adapter). Migration `0032_sync_schedule.sql` schedules the hourly tick with pg_cron and pg_net, reading its URL and secret from Vault. The function stays the only reader of `connection_tokens` (rule 6) and nothing is deployed or applied in this run.
 
 Builds on (restated so this section stands alone):
 - Task 1: the SQL harness. `npm run test:sql` runs `bash supabase/tests/run.sh`, which starts a throwaway PostgreSQL 16, loads `supabase/tests/stubs.sql` (Supabase stand-ins including schemas `vault` with `create_secret` and `decrypted_secrets`, `cron` with `schedule`, `unschedule` and `job`, and `net` with `http_post`), applies every migration in order after stripping exactly the `create extension ... pg_cron` and `create extension ... pg_net` lines, applies every file from 0024 up a second time, loads `supabase/tests/helpers.sql`, then runs each `supabase/tests/*.test.sql` in its own transaction that is rolled back. Helpers (schema `tests`): `tests.company(slug) returns uuid`, `tests.create_person(name, company uuid, role text default 'employee', rococo boolean default false) returns uuid`, `tests.id(name) returns uuid`, `tests.act_as(profile uuid)`, `tests.assert(ok boolean, message text)`, `tests.assert_raises(sql text, like text)`; return to system with `reset role; select set_config('request.jwt.claims', '', true);`.
@@ -3883,7 +3883,7 @@ Builds on (restated so this section stands alone):
   - `schedule.ts`: `isDue(source: Pick<SyncSourceSpec, "enabled" | "sync_weekday" | "sync_time" | "sync_timezone" | "last_attempt_at">, now: Date): boolean` (enabled, scheduled, and last attempt null or before the latest weekly slot; R13).
   - `links.ts`: `parseSpreadsheetUrl(url): { spreadsheetId: string; gid: number | null } | null`.
   - `parse.ts`: `normalizeHeader(header: string): string`.
-- Task 7 database (0028): `company_connections_provider_check` allows `('gohighlevel','quickbooks','google_sheets')`; `public.sync_sources` (columns `id, company_id, connection_id, provider, name, target_module, config, field_map, record_key, sync_weekday, sync_time, sync_timezone, stale_after_hours, enabled, current_run_id, last_attempt_at, last_success_at, last_status, last_error, sync_requested_at, created_by, updated_by, created_at, updated_at`), `public.sync_runs` (`id, company_id, source_id, connection_id, trigger_kind, requested_by, status, started_at, finished_at, rows_read, rows_applied, rows_blank, error_detail`), `public.sync_records` (`id, company_id, source_id, run_id, record_key, data, source_ref, created_at`), the lock `sync_runs_one_running_per_connection` (unique on `connection_id` where `status = 'running'`), `private.can_sync_source(cid)`, and the policy `"Admins and syncers update sync sources"` (update using and with check `private.can_manage_company(company_id) or private.can_sync_source(company_id)`), with a guard that lets a sync-only caller change `sync_requested_at` and nothing else. `sync_runs` and `sync_records` have no write policy for `authenticated`; the service role writes them.
+- Task 7 database (0030): `company_connections_provider_check` allows `('gohighlevel','quickbooks','google_sheets')`; `public.sync_sources` (columns `id, company_id, connection_id, provider, name, target_module, config, field_map, record_key, sync_weekday, sync_time, sync_timezone, stale_after_hours, enabled, current_run_id, last_attempt_at, last_success_at, last_status, last_error, sync_requested_at, created_by, updated_by, created_at, updated_at`), `public.sync_runs` (`id, company_id, source_id, connection_id, trigger_kind, requested_by, status, started_at, finished_at, rows_read, rows_applied, rows_blank, error_detail`), `public.sync_records` (`id, company_id, source_id, run_id, record_key, data, source_ref, created_at`), the lock `sync_runs_one_running_per_connection` (unique on `connection_id` where `status = 'running'`), `private.can_sync_source(cid)`, and the policy `"Admins and syncers update sync sources"` (update using and with check `private.can_manage_company(company_id) or private.can_sync_source(company_id)`), with a guard that lets a sync-only caller change `sync_requested_at` and nothing else. `sync_runs` and `sync_records` have no write policy for `authenticated`; the service role writes them.
 - Task 7 UI: `ConnectionsPanel` takes `{ companyId: string; providers?: ConnectionProvider[] }` (default `["gohighlevel", "quickbooks"]`) and already carries the blurb `google_sheets: "Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule."`; `ConnectionProvider` and `CONNECTION_PROVIDER_LABELS` already include `google_sheets: "Google Sheets"`.
 - Task 8: `src/services/invoke.ts` (`invokeFunction<T>(path, body)`, surfaces the function's JSON `error` line), `src/services/sync.ts` and its mock `src/test/mocks/sync.ts` (with `requestSync(sourceId)` calling `invokeFunction("connections/sync/run", { source_id })` and returning `SyncRunResult { status: "succeeded" | "failed" | "locked"; message: string | null; rows_applied: number }`), `src/lib/sync/draft.ts` (`FieldDraft { header; key; label; type; unit; required }`, `SourceDraft`, `fieldFromHeader(header)`), and `DataSourcesPanel` (`src/components/settings/DataSourcesPanel.tsx`), whose Google Sheets editor has the "Google Sheets link" input with the readout "Spreadsheet <id>, tab <gid>". `CompanySettingsPage` already imports `hasModule` and renders `DataSourcesPanel` under `data_sources`. The `vi.mock("../services/sync.ts", ...)` line and the demo alias entry for `sync` already exist. Fixtures: Kingdom has `kingdom-conn-sheets` (google_sheets, connected, `external_account_name: "sample-reports@example.com"`) and `kingdom-conn-qbo` (quickbooks, `not_connected`).
 - Task 2: `hasModule(company, key)` from `src/lib/modules.ts` is the only reader of `companies.modules`; module key `data_sources` gates the Google row. `KINGDOM` fixture bundle; `makeHub(persona, company)`.
@@ -3891,12 +3891,12 @@ Builds on (restated so this section stands alone):
 #### Files
 
 Create:
-- `supabase/functions/_shared/providers.ts`: `export const PROVIDER_KEYS = ["gohighlevel", "quickbooks", "google_sheets"] as const; export type ProviderKey = (typeof PROVIDER_KEYS)[number];` with a why-comment: the one list of provider keys the function, the 0028 check and `CONNECTION_PROVIDER_LABELS` must agree on.
+- `supabase/functions/_shared/providers.ts`: `export const PROVIDER_KEYS = ["gohighlevel", "quickbooks", "google_sheets"] as const; export type ProviderKey = (typeof PROVIDER_KEYS)[number];` with a why-comment: the one list of provider keys the function, the 0030 check and `CONNECTION_PROVIDER_LABELS` must agree on.
 - `supabase/functions/_shared/sync/googleSheets.ts`: Google's OAuth URL, id_token email, Sheets reads and the adapter (pure; `fetch` injected).
 - `supabase/functions/connections/http.ts`: the request helpers `index.ts` and `sync.ts` share (moved out of `index.ts`, see below), so `sync.ts` never imports `index.ts` (which calls `Deno.serve` at load).
 - `supabase/functions/connections/sync.ts`: `handleSyncRun(req)`, `handleSyncTick(req)`, `handleSyncDescribe(req)`, `createSyncStore(service)`, `createTokenStore(service)`, `adaptersFor(tokens)`.
-- `supabase/migrations/0030_sync_schedule.sql`.
-- `supabase/tests/0030_sync_schedule.test.sql`.
+- `supabase/migrations/0032_sync_schedule.sql`.
+- `supabase/tests/0032_sync_schedule.test.sql`.
 - `src/lib/sync/googleSheets.test.ts` (fake fetch).
 - `src/lib/sync/providers.test.ts`.
 
@@ -3986,9 +3986,9 @@ Imports: `./http.ts`, `../_shared/sync/runner.ts` (`runSync`, `type SyncStore`),
 - `export async function handleSyncTick(req)`: `const secret = Deno.env.get("SYNC_CRON_SECRET") ?? "";` empty: `HttpError(503, "Scheduled syncs are not set up yet.")`. Compare in constant time: SHA-256 both the header `x-sync-secret` (missing reads as "") and the secret with `crypto.subtle.digest`, then `sameBytes`; a mismatch throws `HttpError(401, "Not allowed.")`. With `service()`: enabled sources with a schedule (`.eq("enabled", true).not("sync_weekday", "is", null)`), their connections (`.in("id", ids)`), keep `isDue(source, now)`, drop sources whose connection is not `connected` (nothing is written for them), group by `connection_id`, and run one connection at a time and, within it, one source at a time (`runOne(..., "schedule", null)`), so sources sharing a connection never meet on the lock and a QuickBooks refresh token never rotates twice at once. Stop starting new sources after a private `TICK_BUDGET_MS = 100_000` of wall time; the rest stay due and run on the next hourly tick. One source's failure never stops the loop. Respond `json(200, { due: <count>, ran: [{ source_id, status }] })`. Log only ids and statuses.
 - `export async function handleSyncDescribe(req)`: body `{ connection_id, spreadsheet_id, gid }`; `connection_id` missing: `HttpError(400, "Missing connection.")`; `spreadsheet_id` not matching `^[A-Za-z0-9_-]+$`: `HttpError(400, "That does not look like a Google Sheets link.")`; `gid` must be null or a non-negative integer (else the same 400). Load the connection with `service()`; none: `HttpError(404, "That connection was not found.")`; `await requireAdmin(req, connection.company_id)`; not `google_sheets` or not `connected`: `HttpError(409, "Connect Google Sheets in Settings first.")`. Then `describeSheet({ clientId, clientSecret, tokens: createTokenStore(service), fetch, now }, connection, spreadsheetId, gid)` (Google keys missing: `HttpError(503, "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.")`); an `Error` thrown by it becomes `HttpError(502, error.message)`. Respond `json(200, description)`.
 
-#### Migration `0030_sync_schedule.sql`
+#### Migration `0032_sync_schedule.sql`
 
-Header comment: what it schedules and why (an hourly tick at minute 7 calls the `connections` function's `/sync/tick`; the function works out which sources are due from each source's own weekday, time and zone); "Paste after 0029 and after the two Vault entries exist; idempotent."; the URL and secret live in Vault by name and never in this file; neither extension is installed on the live project today. Exactly:
+Header comment: what it schedules and why (an hourly tick at minute 7 calls the `connections` function's `/sync/tick`; the function works out which sources are due from each source's own weekday, time and zone); "Paste after 0031 and after the two Vault entries exist; idempotent."; the URL and secret live in Vault by name and never in this file; neither extension is installed on the live project today. Exactly:
 ```sql
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
@@ -4018,10 +4018,10 @@ select cron.schedule(
 ```
 Idempotency: unschedule first, so a second run leaves exactly one job. The harness strips exactly the two `create extension` lines and supplies stub `cron`, `net` and `vault` schemas. Accepted trade-off (state it in the comment): pg_net keeps the decrypted header in its request queue until it is sent; the cron secret can only start a sync.
 
-#### SQL tests to write first: `supabase/tests/0030_sync_schedule.test.sql`
+#### SQL tests to write first: `supabase/tests/0032_sync_schedule.test.sql`
 
 Each case a `-- case: <name>` block of DO blocks calling `tests.assert`:
-1. `job_scheduled_once`: `select count(*) from cron.job where jobname = 'hub-sync-tick'` is 1 (the harness applied 0030 twice, so this proves the unschedule).
+1. `job_scheduled_once`: `select count(*) from cron.job where jobname = 'hub-sync-tick'` is 1 (the harness applied 0032 twice, so this proves the unschedule).
 2. `hourly_at_minute_seven`: that job's `schedule` is `'7 * * * *'`.
 3. `secrets_read_from_vault_by_name`: its `command` contains `vault.decrypted_secrets`, `'sync_function_url'`, `'sync_cron_secret'` and `x-sync-secret`.
 4. `no_url_or_secret_in_job`: its `command` does not contain `https://` and does not contain `supabase.co`.
@@ -4030,7 +4030,7 @@ Each case a `-- case: <name>` block of DO blocks calling `tests.assert`:
 #### TypeScript tests to write first
 
 `src/lib/sync/providers.test.ts`:
-- every key in `PROVIDER_KEYS` appears inside the `company_connections_provider_check` list of `supabase/migrations/0028_sync_engine.sql`, read with `node:fs`. The app's `tsc -b` has no `@types/node`, so a static `import ... from "node:fs"` fails the build; load it dynamically through a non-literal specifier inside the test: `const fsModule = "node:fs"; const { readFileSync } = (await import(/* @vite-ignore */ fsModule)) as { readFileSync(path: URL, encoding: "utf8"): string };` and `readFileSync(new URL("../../../supabase/migrations/0028_sync_engine.sql", import.meta.url), "utf8")`; extract the list with `/company_connections_provider_check\s+check\s*\(\s*provider\s+in\s*\(([^)]*)\)/i` and compare the quoted values as a set to `PROVIDER_KEYS`.
+- every key in `PROVIDER_KEYS` appears inside the `company_connections_provider_check` list of `supabase/migrations/0030_sync_engine.sql`, read with `node:fs`. The app's `tsc -b` has no `@types/node`, so a static `import ... from "node:fs"` fails the build; load it dynamically through a non-literal specifier inside the test: `const fsModule = "node:fs"; const { readFileSync } = (await import(/* @vite-ignore */ fsModule)) as { readFileSync(path: URL, encoding: "utf8"): string };` and `readFileSync(new URL("../../../supabase/migrations/0030_sync_engine.sql", import.meta.url), "utf8")`; extract the list with `/company_connections_provider_check\s+check\s*\(\s*provider\s+in\s*\(([^)]*)\)/i` and compare the quoted values as a set to `PROVIDER_KEYS`.
 - `[...PROVIDER_KEYS].sort()` equals `keysOf(CONNECTION_PROVIDER_LABELS).sort()`.
 
 `src/lib/sync/googleSheets.test.ts` (imports `../../../supabase/functions/_shared/sync/googleSheets.ts`; a fake fetch built with `vi.fn` that records `{ url, method, headers, body }` for every call and answers from a queue with `new Response(JSON.stringify(body), { status })`; a fake `TokenStore` that records `save` calls into the same ordered log; fixed `now = () => new Date("2026-11-09T14:00:00Z")`):
@@ -4092,7 +4092,7 @@ Settings keeps its quiet layout: the Google row is the same `ConnectionsPanel` r
 - `npm run lint` (eslint also lints `supabase/functions/**`).
 - `npx vitest run`.
 - `npm run build`.
-- `npm run test:sql` (0030 is applied twice by the harness, then `0030_sync_schedule.test.sql` runs with every earlier test file).
+- `npm run test:sql` (0032 is applied twice by the harness, then `0032_sync_schedule.test.sql` runs with every earlier test file).
 - Deno type-check of the function:
   ```
   S=/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad
@@ -4104,13 +4104,13 @@ Settings keeps its quiet layout: the Google row is the same `ConnectionsPanel` r
 
 #### Must NOT do
 
-- Do not deploy the function, set secrets, create Vault entries or apply 0030 or any migration (Global Constraint 7). Supabase MCP use is read-only (SELECT and catalog queries on project `jjdcejevdqpwuastsmpq`).
+- Do not deploy the function, set secrets, create Vault entries or apply 0032 or any migration (Global Constraint 7). Supabase MCP use is read-only (SELECT and catalog queries on project `jjdcejevdqpwuastsmpq`).
 - Never write to Google: no Sheets method but `spreadsheets.get` and `values:batchGet`, no Drive scope, no Picker in the browser, no browser call to any provider (Global Constraint 10, rule 6).
 - No second reader of `connection_tokens`: no new Edge Function, no Vercel cron, no service-role key in the app or Vercel.
 - No role check in TypeScript for Sync now; RLS (`private.can_sync_source`) decides.
 - No `period` or `person` field type, no figure computed from records, no guessing a header row (Global Constraint 9).
 - No live-looking data: fictional names only ("Sample reporting workbook", "sample-reports@example.com") (Global Constraint 8).
-- Do not edit 0001 to 0029, the harness files other than adding `0030_sync_schedule.test.sql`, or the QuickBooks provider (Task 11).
+- Do not edit 0001 to 0031, the harness files other than adding `0032_sync_schedule.test.sql`, or the QuickBooks provider (Task 11).
 
 #### Commits
 
@@ -4259,7 +4259,7 @@ Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
 
 #### Goal and fit
 
-Add Owner and Manager as role values with a ranked grant guard, without reinterpreting anyone: `owner` and `admin` both keep today's admin meaning everywhere, `manager` is employee-level until Kingdom's capability matrix arrives, only an owner or Rococo grants owner, nobody grants above their own rank or changes someone ranked above them, and `reports_to` can no longer point at oneself, another company or round in a loop. The app's role type, labels, admin test, counts, hints and role selects follow. No existing row is rewritten; Maddie Cothran and marvin waters are set to Owner by hand after 0031 is applied (R10).
+Add Owner and Manager as role values with a ranked grant guard, without reinterpreting anyone: `owner` and `admin` both keep today's admin meaning everywhere, `manager` is employee-level until Kingdom's capability matrix arrives, only an owner or Rococo grants owner, nobody grants above their own rank or changes someone ranked above them, and `reports_to` can no longer point at oneself, another company or round in a loop. The app's role type, labels, admin test, counts, hints and role selects follow. No existing row is rewritten; Maddie Cothran and marvin waters are set to Owner by hand after 0033 is applied (R10).
 
 Builds on (restated):
 - Task 1 SQL harness (`npm run test:sql` -> `bash supabase/tests/run.sh`; every migration applied, 0024 and up applied twice; each `supabase/tests/*.test.sql` runs in its own rolled-back transaction; helpers `tests.company(slug)`, `tests.create_person(name, company uuid, role default 'employee', rococo default false)` (inserts `auth.users` so `handle_new_user` runs, then sets company, role and the Rococo flag as system), `tests.id(name)`, `tests.act_as(profile uuid)`, `tests.assert(ok, message)`, `tests.assert_raises(sql, like)`, back to system with `reset role; select set_config('request.jwt.claims', '', true);`). 0006 seeds companies `kingdom`, `klasik`, `rba`; look them up by slug.
@@ -4271,8 +4271,8 @@ Builds on (restated):
 #### Files
 
 Create:
-- `supabase/migrations/0031_role_hierarchy.sql`.
-- `supabase/tests/0031_role_hierarchy.test.sql`.
+- `supabase/migrations/0033_role_hierarchy.sql`.
+- `supabase/tests/0033_role_hierarchy.test.sql`.
 
 Modify:
 - `src/types/database.ts`: line 9 `export type Role = "owner" | "admin" | "manager" | "employee";`; lines 461-464 `export const ROLE_LABELS: Record<Role, string> = { owner: "Owner", admin: "Admin", manager: "Manager", employee: "Employee" };` (this key order is the order every select shows).
@@ -4287,9 +4287,9 @@ Modify:
 - `demo/vite.config.ts` line 4 (comment only): `/?persona=admin|employee|owner|manager|rococo&company=klasik|kingdom|rba`.
 - `src/pages/pages.test.tsx`: `describe("roles")`.
 
-#### Migration `0031_role_hierarchy.sql`
+#### Migration `0033_role_hierarchy.sql`
 
-Header comment: what it adds (two role values, ranked grants, `reports_to` integrity), that `owner` and `admin` both keep today's admin meaning and `manager` is employee-level until the capability matrix, that no row is rewritten and owners are set by hand, that every rebuilt body is copied from its latest version (0013, 0018); "Paste after 0030; idempotent." Object list, in file order:
+Header comment: what it adds (two role values, ranked grants, `reports_to` integrity), that `owner` and `admin` both keep today's admin meaning and `manager` is employee-level until the capability matrix, that no row is rewritten and owners are set by hand, that every rebuilt body is copied from its latest version (0013, 0018); "Paste after 0032; idempotent." Object list, in file order:
 
 1. Pre-check (reports only, fixes nothing): a `do` block that raises `NOTICE` for each profile whose `reports_to` points at a profile in another company (`'Cross-company reports_to: % reports to %'`), and for each profile that can reach itself by walking `reports_to` (recursive CTE, depth cap 50) (`'Reporting loop through %'`).
 2. Role values: `alter table public.profiles drop constraint if exists profiles_role_check;` `alter table public.profiles add constraint profiles_role_check check (role in ('owner', 'admin', 'manager', 'employee'));` and the same for `public.invitations` / `invitations_role_check`. (Live today both read `('admin','employee')`.)
@@ -4377,7 +4377,7 @@ Header comment: what it adds (two role values, ranked grants, `reports_to` integ
 - Not in this file: `private.my_team_ids()` (R5), any capability table, any policy change, any audit trigger change, any row naming a company or person.
 - Idempotency: drop-if-exists before each constraint and trigger, `create or replace` for functions, re-runnable grants; the harness applies the file twice.
 
-#### SQL tests to write first: `supabase/tests/0031_role_hierarchy.test.sql`
+#### SQL tests to write first: `supabase/tests/0033_role_hierarchy.test.sql`
 
 Setup as system: `tests.create_person('k_owner', tests.company('kingdom'), 'owner')`, `('k_admin', kingdom, 'admin')`, `('k_admin2', kingdom, 'admin')`, `('k_manager', kingdom, 'manager')`, `('k_emp', kingdom)`, `('k_emp2', kingdom)`, `('l_admin', tests.company('klasik'), 'admin')`, `('l_emp', klasik)`, `('rococo', null, 'employee', true)`. Each case a `-- case: <name>` block, acting through `tests.act_as(tests.id(...))` and returning to system between cases. The whole file is one transaction, so state carries from case to case: each case restores, as system, any role, `is_active` or `reports_to` it changed. An UPDATE that RLS filters out raises nothing and changes no row, so "changes no row" cases check `get diagnostics v_rows = row_count` is 0.
 1. `role_values_widened`: as system, `update profiles set role = 'manager'` on k_emp2 succeeds and back; `role = 'boss'` raises like `%profiles_role_check%`; an invitation with role `'boss'` raises like `%invitations_role_check%`; `pg_constraint` has exactly one `profiles_role_check` and one `invitations_role_check`.
@@ -4399,7 +4399,7 @@ Setup as system: `tests.create_person('k_owner', tests.company('kingdom'), 'owne
 17. `reports_to_no_loop`: as k_admin, k_emp reports to k_emp2 (succeeds), then k_emp2 reports to k_emp raises `That would make a reporting loop.`; a three-step loop (k_manager -> k_emp, then k_emp2 -> k_manager with k_emp -> k_emp2 in place) raises the same; a plain chain k_admin2 -> k_owner succeeds; setting `reports_to = null` succeeds; finally, as system, every `reports_to` set in this case goes back to null.
 18. `move_clears_reporting_lines`: as system set k_emp `reports_to = k_admin` and k_emp2 `reports_to = k_emp`; as rococo move k_emp to Klasik (`update profiles set company_id = klasik`): k_emp's `reports_to` is null (set by the guard, no error) and k_emp2's `reports_to` is null (cleared by `profiles_move_clears_reports_to`); k_emp2 is still in Kingdom.
 19. `audit_still_records_roles`: as k_owner change k_emp to manager; as system, the newest `audit_events` row for `profiles` and k_emp's id has `changed -> 'role'` equal to `{"old": "employee", "new": "manager"}`.
-Every earlier test file (0001, 0024 to 0030) must stay green.
+Every earlier test file (0001, 0024 to 0032) must stay green.
 
 #### TypeScript helpers and tests to write first
 
@@ -4463,7 +4463,7 @@ No new component. Selects stay the existing `selectClass` controls; a locked sel
 - `npm run lint`.
 - `npx vitest run`.
 - `npm run build`.
-- `npm run test:sql` (0031 applied twice; every test file from 0001 to 0031 green).
+- `npm run test:sql` (0033 applied twice; every test file from 0001 to 0033 green).
 - `grep -n "role === \"admin\"\|role === 'admin'" -r src supabase/functions` shows no remaining admin test outside `isCompanyAdminRole` and `http.ts`'s owner-or-admin check (fixtures and tests that build data excepted).
 - Read `supabase/functions/connections/http.ts` `requireAdmin` and confirm it accepts `owner` and `admin` and checks `is_active` (Task 10 wrote it; change nothing unless it does not). If it does need a change, run the Deno check: copy `supabase/functions` to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/denocheck/functions` and run `DENO_DIR=<scratch>/denocache <scratch>/denotry/node_modules/.bin/deno check --node-modules-dir=auto index.ts` from the copied `functions/connections`.
 - Visual check: `npm run demo`, then Playwright (`require('playwright')`, `chromium.launch()`, fresh context per URL, `deviceScaleFactor: 1`, 1440x900, screenshots to `/tmp/claude-0/-home-user-client-dashboard/9aaf418f-c7eb-50d8-8669-93d969b11fd2/scratchpad/shots/task12/`, never the repo) for `/?persona=owner&company=kingdom`, `/people?persona=owner&company=kingdom`, `/people?persona=admin&company=kingdom` (Marcus's role locked), `/people/kingdom-user-1?persona=admin&company=kingdom`, `/?persona=manager&company=kingdom` (employee dashboard), `/?persona=employee&company=kingdom`, `/people?persona=admin&company=klasik`, `/rococo/people?persona=rococo`. Check the sidebar shows "Owner" or the title, the role column fits, and Klasik looks as before apart from the Manager option.
@@ -4495,16 +4495,16 @@ Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
 
 #### Goal and fit
 
-Make the written record match what was built: the README gains the module table rows, the modules, the full migration order (0001 to 0031), Data sources and Google setup, the SQL harness and an "Applying this release" checklist; the proposed CLAUDE.md wording (including a verification gate line naming `npm run test:sql`) goes into the task report for approval (R1); `docs/kingdom-revamp-plan.md` marks which slices are built and records the rulings. No code or migration changes. It closes the run started by Tasks 1 to 12, whose results it describes (restated below so this section stands alone).
+Make the written record match what was built: the README gains the module table rows, the modules, the full migration order (0001 to 0033), Data sources and Google setup, the SQL harness and an "Applying this release" checklist; the proposed CLAUDE.md wording (including a verification gate line naming `npm run test:sql`) goes into the task report for approval (R1); `docs/kingdom-revamp-plan.md` marks which slices are built and records the rulings. No code or migration changes. It closes the run started by Tasks 1 to 12, whose results it describes (restated below so this section stands alone).
 
 What was built, for the docs (read the code to confirm each line before writing it):
 - Module gate: `companies.modules text[] not null default '{}'` (0024), read only through `hasModule()` in `src/lib/modules.ts`, changed only by a Rococo admin on Rococo > Companies. Keys and labels: `switchboard` "Switchboard" (four-section navigation, the Home heading, the Attention and Shortcuts cards), `production` "Production" (projects, milestones and letters, the Production cards), `wins` "Wins" (the wins page and the Home wins card), `data_sources` "Data sources" (connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness), `external_links` "External links" (shortcuts to outside tools, including Monday, in each section). Sections: "Home", "Sales & Finance", "Production", "People / HR", plus an unlabeled utility group (SOPs, Resources, Settings). Klasik and RBA have no modules and see no change.
-- Migrations: `0024_company_modules.sql`, `0025_audit_log.sql`, `0026_projects_milestones.sql`, `0027_wins.sql`, `0028_sync_engine.sql`, `0029_external_links.sql`, `0030_sync_schedule.sql`, `0031_role_hierarchy.sql`.
+- Migrations: `0024_company_modules.sql`, `0025_audit_log.sql`, `0026_projects_milestones.sql`, `0027_wins.sql`, `0030_sync_engine.sql`, `0031_external_links.sql`, `0032_sync_schedule.sql`, `0033_role_hierarchy.sql`.
 - Routes: `/production`, `/production/projects/:projectId` (production; members read, admins edit), `/wins` (wins; members read), `/sales-finance` and `/sales-finance/controls` (admin only, data_sources), `/rococo/activity` (Rococo only, the audit log).
-- Sync: sources in `sync_sources`, runs in `sync_runs`, read-only values in `sync_records` (no browser write; only the `connections` function's service role writes), six states (Not connected, Awaiting first sync, Syncing, Sync failed, Stale data, Synced), last good data kept on failure, blanks shown as "-". Routes on the `connections` function: `POST /sync/run` (user JWT; Sync now, allowed by `private.can_sync_source`), `POST /sync/tick` (header `x-sync-secret`, checked against `SYNC_CRON_SECRET`), `POST /sync/describe` (admin; a sheet's tabs and first row). Google Sheets connects through the same OAuth flow with scopes `openid email https://www.googleapis.com/auth/spreadsheets.readonly`; QuickBooks reads Invoice and Payment records through a GET-only client. 0030 schedules `hub-sync-tick` at `7 * * * *` with pg_cron and pg_net, reading `sync_function_url` and `sync_cron_secret` from Vault.
+- Sync: sources in `sync_sources`, runs in `sync_runs`, read-only values in `sync_records` (no browser write; only the `connections` function's service role writes), six states (Not connected, Awaiting first sync, Syncing, Sync failed, Stale data, Synced), last good data kept on failure, blanks shown as "-". Routes on the `connections` function: `POST /sync/run` (user JWT; Sync now, allowed by `private.can_sync_source`), `POST /sync/tick` (header `x-sync-secret`, checked against `SYNC_CRON_SECRET`), `POST /sync/describe` (admin; a sheet's tabs and first row). Google Sheets connects through the same OAuth flow with scopes `openid email https://www.googleapis.com/auth/spreadsheets.readonly`; QuickBooks reads Invoice and Payment records through a GET-only client. 0032 schedules `hub-sync-tick` at `7 * * * *` with pg_cron and pg_net, reading `sync_function_url` and `sync_cron_secret` from Vault.
 - Roles: `owner`, `admin`, `manager`, `employee`; owner and admin both carry admin access; manager is employee-level until the capability matrix; only an owner or Rococo makes someone an owner.
 - SQL harness: `npm run test:sql` runs `bash supabase/tests/run.sh`; it needs a local PostgreSQL 16 (`/usr/lib/postgresql/16/bin`, run as the `postgres` OS user via `runuser` when invoked as root), loads `supabase/tests/stubs.sql` (stand-ins for Supabase's roles and the `auth`, `storage`, `vault`, `cron` and `net` schemas), applies every migration in order (stripping only the pg_cron and pg_net `create extension` lines), applies 0024 and up a second time to prove idempotency, loads `supabase/tests/helpers.sql`, then runs each `supabase/tests/*.test.sql` in a transaction that is rolled back. It is not part of CI (R9).
-- Rulings R1 to R21 (record in the revamp plan): R1 `companies.modules` approved, the CLAUDE.md wording is proposed and applied only on Austin's explicit approval, README documents the modules meanwhile; R2 the utility group is unlabeled; R3 five module keys, not seven (`sectioned_nav` and `home_snapshot` became `switchboard`, `qbo_controls` folded into `data_sources`); R4 `external_people` deferred to the PM capacity slice; R5 `private.my_team_ids()` deferred to the capability-matrix slice; R6 `wins.team` deferred, wins carry an optional project; R7 members read Production and Wins, Sales & Finance stays admin-only; R8 the QuickBooks adapter is read-only and unconfigured, no aging, escalation, "not sent", partial-payment or cash-basis logic; R9 the SQL harness is committed and not in CI; R10 Kingdom's modules are switched on by a Rococo admin after the migrations, no migration seeds modules or roles, Maddie Cothran and marvin waters are set to Owner by hand after 0031; R11 field types `text`, `number`, `currency`, `percent`, `date` only; R12 a sync is all-or-nothing, all-blank rows are skipped and counted; R13 one attempt per weekly slot; R14 `target_module` values `sales_reporting`, `financial_reporting`, `controls`, `pm_capacity`; R15 projects are created by hand (`source = 'manual'`, `reference` holds the job number), the master list will not be Buildertrend; R16 the Home wins card shows the five most recent non-archived wins; R17 `audit_events` has no foreign keys, history outlives the company; R18 projects, milestones and wins are content and carry no audit trigger; R19 `people_hr` and `home` links show only on Home's Shortcuts card; R20 the known limitations accepted as built (a moved profile's audit row filed under its new company, a sync-only select path added with the capability matrix, providers.test.ts reading SQL through a dynamic `node:fs` import, Read headers reading row 1 only); R21 Kingdom's `admin` persona is Avery Stone and its `owner` persona Marcus Lee from Task 12 on.
+- Rulings R1 to R21 (record in the revamp plan): R1 `companies.modules` approved, the CLAUDE.md wording is proposed and applied only on Austin's explicit approval, README documents the modules meanwhile; R2 the utility group is unlabeled; R3 five module keys, not seven (`sectioned_nav` and `home_snapshot` became `switchboard`, `qbo_controls` folded into `data_sources`); R4 `external_people` deferred to the PM capacity slice; R5 `private.my_team_ids()` deferred to the capability-matrix slice; R6 `wins.team` deferred, wins carry an optional project; R7 members read Production and Wins, Sales & Finance stays admin-only; R8 the QuickBooks adapter is read-only and unconfigured, no aging, escalation, "not sent", partial-payment or cash-basis logic; R9 the SQL harness is committed and not in CI; R10 Kingdom's modules are switched on by a Rococo admin after the migrations, no migration seeds modules or roles, Maddie Cothran and marvin waters are set to Owner by hand after 0033; R11 field types `text`, `number`, `currency`, `percent`, `date` only; R12 a sync is all-or-nothing, all-blank rows are skipped and counted; R13 one attempt per weekly slot; R14 `target_module` values `sales_reporting`, `financial_reporting`, `controls`, `pm_capacity`; R15 projects are created by hand (`source = 'manual'`, `reference` holds the job number), the master list will not be Buildertrend; R16 the Home wins card shows the five most recent non-archived wins; R17 `audit_events` has no foreign keys, history outlives the company; R18 projects, milestones and wins are content and carry no audit trigger; R19 `people_hr` and `home` links show only on Home's Shortcuts card; R20 the known limitations accepted as built (a moved profile's audit row filed under its new company, a sync-only select path added with the capability matrix, providers.test.ts reading SQL through a dynamic `node:fs` import, Read headers reading row 1 only); R21 Kingdom's `admin` persona is Avery Stone and its `owner` persona Marcus Lee from Task 12 on.
 
 #### Files
 
@@ -4526,7 +4526,7 @@ CLAUDE.md is not modified (R1); see "Proposed CLAUDE.md wording" below.
    - Rococo portfolio row: add "and the Activity log of configuration and permission changes".
    Under the table, replace line 32 ("QuickBooks sync, automated data pulls, and email notifications are the next phase.") with: "Rows marked with a module key appear only for a company whose modules include it. Email notifications are the next phase."
 3. Demo mode (lines 49-55): add `/?persona=owner&company=kingdom` and `/?persona=manager&company=kingdom`, and say Kingdom's sample data has every module on while Klasik and RBA have none.
-4. Supabase setup step 2 (lines 60-61): "`0001` through `0031`", plus one sentence: "Paste `0030` only after the two Vault entries in Data sources and Google setup exist."
+4. Supabase setup step 2 (lines 60-61): "`0001` through `0033`", plus one sentence: "Paste `0032` only after the two Vault entries in Data sources and Google setup exist."
 5. Expand the `## Modules` section Task 2 added (move it to directly after `## Supabase setup`) into a table of the five keys with their labels and what each turns on (the wording above) (do not add a second Modules section), then: a module is a key in `companies.modules`, read only through `src/lib/modules.ts` and changed only by Rococo on Rococo > Companies; a company with no modules looks exactly as it did; turning a module off hides its screens and keeps its rows.
 6. New section "Roles" after "The roster and accounts": Owner and Admin both see everything for their company; Manager sees what an Employee sees until the capability matrix arrives; only an Owner or Rococo makes someone an Owner; nobody grants a role above their own or changes someone ranked above them; a person cannot report to themselves, to someone in another company, or round in a loop, and moving a person to another company clears the reporting lines that would cross it.
 7. "Connections to outside systems" (lines 169-179): add Google Sheets (shown only for a company with `data_sources`), and replace "The figures themselves are not synced yet" with two sentences: imported values land read-only in `sync_records`, written only by the `connections` function; a failed sync keeps the last good values with their time, and a blank shows as "-", never 0.
@@ -4535,19 +4535,19 @@ CLAUDE.md is not modified (R1); see "Proposed CLAUDE.md wording" below.
    - Google Cloud (Rococo-owned project): enable the Google Sheets API; OAuth consent screen External, app name "Company Hub", authorized domain `rocococreative.io`, homepage `https://companyhub.rocococreative.io`, privacy policy URL, scopes `openid`, `email`, `.../auth/spreadsheets.readonly`; publishing status In production (Testing mode issues refresh tokens that expire after 7 days); a Web application OAuth client with the redirect URI `https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/callback`; submit sensitive-scope verification.
    - Supabase secrets: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`; confirm `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_ENVIRONMENT`.
    - Vault, in the SQL editor: `select vault.create_secret('<same value as SYNC_CRON_SECRET>', 'sync_cron_secret');` and `select vault.create_secret('https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/sync/tick', 'sync_function_url');`.
-   - Paste `0030_sync_schedule.sql`; check with `select jobname, schedule from cron.job;` and, after the next hour, `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
+   - Paste `0032_sync_schedule.sql`; check with `select jobname, schedule from cron.job;` and, after the next hour, `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
    - Intuit: for real books, complete Intuit's production app assessment and set `QBO_ENVIRONMENT=production`.
    - In the hub: a company admin connects Google Sheets and QuickBooks from Settings > Connections, then adds sources in Settings > Data sources (paste the sheet link with the tab open, Read headers, map fields, pick the record key, the weekly day, time and zone, and the stale threshold if one is agreed), and presses Sync now once.
    - Say what is still pending from Kingdom: the sheet links and field mappings, the sync day, time, zone and stale threshold, the QuickBooks fields, and the capability matrix.
 10. New section "SQL harness": what `npm run test:sql` does (the paragraph above), that it needs a local PostgreSQL 16 and is not in CI, and that every migration task adds `supabase/tests/<number>_<name>.test.sql`.
 11. New section "Applying this release", a numbered checklist:
-    1. Back up, then paste `0024` to `0029` and `0031` in order in the SQL editor, once each (each is idempotent; go forwards only).
+    1. Back up, then paste `0024` to `0031` and `0033` in order in the SQL editor, once each (each is idempotent; go forwards only).
     2. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and deploy: `supabase functions deploy connections --no-verify-jwt`.
-    3. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0030`.
+    3. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0032`.
     4. Open Rococo > Companies and turn on Kingdom's modules (all five, or the ones Kingdom has agreed).
     5. On Kingdom's People page, set Maddie Cothran and marvin waters to Owner by hand.
     6. Check: Klasik and RBA look unchanged; Kingdom Home shows the four sections; Rococo > Activity shows the module change and the role changes; `select jobname, schedule from cron.job;` lists `hub-sync-tick`.
-    (Order note: 0031 may go before or after 0030; 0030 must follow the Vault entries.)
+    (Order note: 0033 may go before or after 0032; 0032 must follow the Vault entries.)
 12. "Layout" (lines 297-307): add `supabase/functions/`: the `connections` Edge Function and `_shared/` (provider keys and the pure sync modules: parse, keys, schedule, runner, links, Google Sheets, QuickBooks); and `supabase/tests/`: the SQL harness and one test file per migration.
 13. README "Quick start" (lines 34-43): add `npm run test:sql   # migrations against a local PostgreSQL 16 (not in CI)`.
 
@@ -4576,7 +4576,7 @@ Plain, calm, confident; no em dashes; no AI model identifiers; industry neutral 
 #### Verification
 
 - `npm run lint`, `npx vitest run`, `npm run build` (no code changed; they must still pass).
-- `ls supabase/migrations` lists exactly 0001 to 0031 and the README names that range.
+- `ls supabase/migrations` lists exactly 0001 to 0033 and the README names that range.
 - `grep -rnP "\x{2014}" README.md docs/kingdom-revamp-plan.md` (the em dash) finds nothing, and the proposed CLAUDE.md wording in the report has none either.
 - `grep -rn "GOOGLE_CLIENT_ID\|SYNC_CRON_SECRET\|sync_function_url\|hub-sync-tick" README.md supabase` shows the README naming the same secrets, Vault names and job name as the code.
 - No visual check (docs only).
@@ -4613,5 +4613,5 @@ Claude-Session: https://claude.ai/code/session_013YCDgnUj8ghLQDsuq54Vs7
 - Ruled: R20. `describeSpreadsheet(connectionId, spreadsheetId, gid)` carries no header row, so `/sync/describe` can only read row 1 of a tab; Task 10 says so in the panel hint. A `headerRow` argument would be needed for tabs whose headers are not on row 1.
 - ~~`connections/sync.ts` needs `HttpError`, `json`, `service` and `requireAdmin`, which live in `index.ts`; importing `index.ts` would run `Deno.serve`, so Task 10 adds `supabase/functions/connections/http.ts` (helpers moved out of `index.ts`), a file the contract's ownership map does not list. Task 12 verifies `requireAdmin` there.~~ Resolved: the ownership map lists `http.ts` (F13).
 - Ruled: R21. Section 4's Task 12 persona rule ("admin -> first admin") makes Kingdom's `admin` persona Avery Stone instead of Marcus Lee, for every earlier Kingdom page test and for `?persona=admin&company=kingdom`; harmless at commit 6d9bfc5, but any Task 2 to 9 assertion on the Kingdom admin's own name would break.
-- ~~The 0030 SQL test depends on Task 1's stub shapes (`cron.job` columns, `net.http_post` named arguments), which the harness contract does not fix ("cron (schedule, unschedule, job)", "net (http_post)"); Task 10 may only add test files, so its execute case is conditional.~~ Resolved: the execute case asserts the newest `net.requests` row (F18).
-- Ruled: R1 (CLAUDE.md wording is proposed in the task report only, F6). The ownership map gives Task 13 only the CLAUDE.md verification-gate line, but CLAUDE.md "What this is" says "Admins (owners and managers)", which 0031's `manager` value makes wrong, and rule 6 names only GoHighLevel and QuickBooks; Task 13 writes corrected wording for those two lines into its proposed CLAUDE.md wording (report only); no task edits CLAUDE.md.
+- ~~The 0032 SQL test depends on Task 1's stub shapes (`cron.job` columns, `net.http_post` named arguments), which the harness contract does not fix ("cron (schedule, unschedule, job)", "net (http_post)"); Task 10 may only add test files, so its execute case is conditional.~~ Resolved: the execute case asserts the newest `net.requests` row (F18).
+- Ruled: R1 (CLAUDE.md wording is proposed in the task report only, F6). The ownership map gives Task 13 only the CLAUDE.md verification-gate line, but CLAUDE.md "What this is" says "Admins (owners and managers)", which 0033's `manager` value makes wrong, and rule 6 names only GoHighLevel and QuickBooks; Task 13 writes corrected wording for those two lines into its proposed CLAUDE.md wording (report only); no task edits CLAUDE.md.

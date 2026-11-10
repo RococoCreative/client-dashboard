@@ -40,7 +40,7 @@ export function totalAnnual(items: Array<{ annual_amount: number }>): number {
   return items.reduce((sum, item) => sum + (Number.isFinite(item.annual_amount) ? item.annual_amount : 0), 0);
 }
 
-// The app's reading of the same role ranking the database enforces (0031). The database is the
+// The app's reading of the same role ranking the database enforces (0033). The database is the
 // wall; these only decide what a select offers and whether it is locked.
 const ROLE_RANK: Record<Role, number> = { employee: 1, manager: 2, admin: 3, owner: 4 };
 

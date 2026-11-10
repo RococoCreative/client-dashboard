@@ -212,7 +212,7 @@ create policy "Admins update milestones"
 -- ---------------------------------------------------------------------------------------
 -- 4. A person who moves company stops being responsible for the old company's milestones
 -- ---------------------------------------------------------------------------------------
--- move_employee_company (0014, latest body 0017) is left alone; this trigger covers every
+-- move_employee_company (0014, latest body 0029) is left alone; this trigger covers every
 -- path that changes a person's company, that function included.
 
 create or replace function public.clear_milestone_owner_on_move()

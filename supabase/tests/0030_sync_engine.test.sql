@@ -1,5 +1,5 @@
--- 0028_sync_engine.test.sql
--- Proves the sync engine's tables (0028): connections accept Google Sheets, Sync now has its own
+-- 0030_sync_engine.test.sql
+-- Proves the sync engine's tables (0030): connections accept Google Sheets, Sync now has its own
 -- predicate, only admins create and read sources, a source's connection must be its own company's
 -- and provider's, a schedule is all or nothing in a real time zone, the browser never writes sync
 -- results, a source's company is pinned, nobody deletes a source from the browser, runs and records

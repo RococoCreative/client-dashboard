@@ -1,5 +1,5 @@
--- 0029_external_links.test.sql
--- Proves the external links registry (0029): admins write a company's links, members read only
+-- 0031_external_links.test.sql
+-- Proves the external links registry (0031): admins write a company's links, members read only
 -- the links meant for everyone, admins and Rococo read them all, another company sees and writes
 -- nothing, links and embed links are https only, a public embed needs an embed link, the section,
 -- tool, audience and label are checked, a link's company is pinned, admins delete, and a change to

@@ -1,5 +1,5 @@
 // Links to a company's own outside tools, such as Monday boards. Links are rows a company admin
-// keeps (0029); who sees each one is decided by RLS on its audience, so this module never filters
+// keeps (0031); who sees each one is decided by RLS on its audience, so this module never filters
 // by audience. It reads and writes links only: nothing here calls an outside tool.
 import type { ExternalLink, LinkAudience, LinkNavGroup, LinkProvider } from "../types/database.ts";
 import { db } from "./supabase.ts";

@@ -1,5 +1,5 @@
--- 0030_sync_schedule.test.sql
--- Proves the hourly sync tick (0030): exactly one job even after the migration is pasted twice,
+-- 0032_sync_schedule.test.sql
+-- Proves the hourly sync tick (0032): exactly one job even after the migration is pasted twice,
 -- hourly at minute 7, the function's URL and the cron secret read from Vault by name and never
 -- written into the job, and the job's command posts to that URL with that secret.
 --
@@ -10,7 +10,7 @@ do $$
 begin
   perform tests.assert(
     (select count(*) from cron.job where jobname = 'hub-sync-tick') = 1,
-    'job_scheduled_once: there is not exactly one hub-sync-tick job after 0030 ran twice'
+    'job_scheduled_once: there is not exactly one hub-sync-tick job after 0032 ran twice'
   );
 end $$;
 

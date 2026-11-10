@@ -68,8 +68,9 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 
 1. **Create a Supabase project** (one project for all companies).
 2. **Apply the migrations.** Open the SQL editor and run each file in
-   `supabase/migrations/` in numeric order (`0001` through `0031`), once each, on a fresh
-   project. Paste `0030` only after the two Vault entries in Data sources and Google setup
+   `supabase/migrations/` in numeric order (`0001` through the highest number present; a gap
+   is not a missing file, as `0028` follows `0025` here), once each, on a fresh
+   project. Paste `0032` only after the two Vault entries in Data sources and Google setup
    exist. Each file is idempotent in the sense that it can be applied to a project that
    already has part of it, but the set is a history, not a menu: later files move helpers into
    the `private` schema and rewrite policies, so re-running an earlier file on an
@@ -157,7 +158,7 @@ redone when they finally arrive.
 
 ## Roles
 
-A person in a company is an Owner, an Admin, a Manager or an Employee (0031).
+A person in a company is an Owner, an Admin, a Manager or an Employee (0033).
 
 - **Owner and Admin** both see everything for their company: the whole hub, as an admin always
   has.
@@ -171,7 +172,7 @@ and the People page offers none of those actions on their row. Signing in with a
 names a person claims their profile, so an invitation only ever names someone on that company's
 roster who has not signed in yet. A person cannot report to themselves, to someone in another
 company, or round in a loop, and moving a person to another company clears the reporting lines
-that would cross it. A reporting line is checked when it changes, so one saved before 0031 never
+that would cross it. A reporting line is checked when it changes, so one saved before 0033 never
 stops anyone signing in.
 
 ## Personal KPIs and deliverables
@@ -439,7 +440,7 @@ through sources it configures. The steps, in order:
    select vault.create_secret('https://jjdcejevdqpwuastsmpq.supabase.co/functions/v1/connections/sync/tick', 'sync_function_url');
    ```
 
-9. Paste `0030_sync_schedule.sql`. It schedules `hub-sync-tick` at minute 7 of every hour
+9. Paste `0032_sync_schedule.sql`. It schedules `hub-sync-tick` at minute 7 of every hour
    (`7 * * * *`) with pg_cron and pg_net. Check it with `select jobname, schedule from cron.job;`
    and, after the next hour, with
    `select status, return_message from cron.job_run_details order by start_time desc limit 5;`.
@@ -482,17 +483,21 @@ any change under `supabase/`. Every migration task adds `supabase/tests/<number>
 
 ## Applying this release
 
-The Kingdom release is `0024` to `0031` plus the `connections` function. Nothing here is
-applied until someone does it by hand:
+The Kingdom release is `0024` to `0027` and `0030` to `0033`, plus the `connections` function.
+`0024` and `0025` are already applied live (2026-11-09); the rest goes in only when someone
+pastes it by hand. Main's `0028` and `0029` are live too and sit between them: `0026` and `0027`
+were written before those existed and are pasted after them anyway. `0034` belongs to a separate
+change (cycle omissions) and does not depend on this release. `0033` extends `0029`'s
+`guard_profile_fields`, so it must never be pasted on a project without `0029`.
 
-1. Back up, then paste `0024` to `0029` and `0031` in order in the SQL editor, once each. Each
-   is idempotent; go forwards only.
-2. Merge to `main` (Vercel deploys the app) only after `0024` to `0029` and `0031` are applied.
-   The new app selects `companies.modules` every time it loads a company, so until `0024` is in
-   it cannot load any company, Klasik and RBA included.
+1. Back up, then paste `0026`, `0027`, `0030`, `0031` and `0033`, in that order, in the SQL
+   editor, once each. Each is idempotent; go forwards only.
+2. Merge to `main` (Vercel deploys the app) only after those five are applied. The new app
+   selects `companies.modules` every time it loads a company; `0024`, which adds it, is
+   already live.
 3. Set the function secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SYNC_CRON_SECRET`) and
    deploy: `supabase functions deploy connections --no-verify-jwt`.
-4. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0030`.
+4. Create the Vault entries `sync_cron_secret` and `sync_function_url`, then paste `0032`.
 
 Steps 5 and 6 happen only once the new app (step 2) and the `connections` function (step 3) are
 live.
@@ -504,7 +509,7 @@ live.
    old app counts only `admin` as an admin, so an owner set while it is still live loses every
    admin screen.
 7. Run the reporting-line check below. It lists anyone whose Reports to crosses companies or
-   runs in a loop, the same lines `0031`'s pre-check prints as notices. `0031` judges a line
+   runs in a loop, the same lines `0033`'s pre-check prints as notices. `0033` judges a line
    only when it changes, so these never stop anyone signing in, but clear each one: on that
    person's page, set Reports to to someone in their own company, or to nobody. No rows means
    nothing to do.
@@ -530,8 +535,8 @@ live.
    Activity shows the module change and the role changes; `select jobname, schedule from
    cron.job;` lists `hub-sync-tick`.
 
-`0031` does not depend on `0030`, so either order works; its header says the same, and step 1
-pastes it first. `0030` must follow the Vault entries. No migration seeds modules or roles.
+`0033` does not depend on `0032`, so either order works; its header says the same, and step 1
+pastes it first. `0032` must follow the Vault entries. No migration seeds modules or roles.
 
 ## Deploy
 
