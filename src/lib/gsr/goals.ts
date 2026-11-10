@@ -205,3 +205,14 @@ export function scoreGsrMonths<C extends { id: string; cadence: string; period_s
 export function monthLocked(review: Pick<Review, "status" | "gsr_score"> | null | undefined): boolean {
   return review?.status === "complete" && review.gsr_score !== null;
 }
+
+// A goal someone else filed for a person is theirs to work, not to rewrite. The database enforces
+// it (0035, guard_goal_owner); screens mirror it so the fields read as fixed instead of failing on
+// save. For a viewer who is not an admin of the company, these fields are read-only and the goal
+// cannot be deleted; its completion, status, why, action steps and notes stay theirs. A goal with
+// no creator on file reads as the person's own. Shared by every company.
+export const LOCKED_GOAL_FIELDS = ["title", "description", "kind", "is_focus", "cycle_id", "scope", "year"] as const;
+
+export function goalLockedFor(goal: Pick<Goal, "created_by" | "employee_id">, viewerIsAdmin: boolean): boolean {
+  return !viewerIsAdmin && goal.created_by !== null && goal.created_by !== goal.employee_id;
+}

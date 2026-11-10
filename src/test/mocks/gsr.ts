@@ -117,16 +117,20 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
   if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
-  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, created_at: now(), updated_at: now() };
+  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
 }
-export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score">>;
+export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
   // Nobody signs off a review for someone left out of its cycle (0034).
   if (before && before.status !== "complete" && patch.status === "complete" && omitted(before.cycle_id, before.employee_id)) {
     throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
+  }
+  // A signed-off review keeps its opening discussion until it is reopened (0029 and 0035).
+  if (before?.status === "complete" && (patch.status === undefined || patch.status === "complete") && patch.support_discussion !== undefined && patch.support_discussion !== before.support_discussion) {
+    throw new Error("This review is signed off. Reopen it to change it.");
   }
   const next = patchIn(reviews, id, { ...patch, updated_at: now() });
   // The database keeps the pillars a review was signed off with, and lets them go on reopen

@@ -27,6 +27,8 @@ function person(overrides: Partial<Profile> = {}): Profile {
     department: null,
     reports_to: null,
     job_role_id: null,
+    division_id: null,
+    can_view_divisions: false,
     created_at: STAMP,
     updated_at: STAMP,
     ...overrides,

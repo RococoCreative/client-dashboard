@@ -111,14 +111,19 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
   `0026` and `0027` went in after `0029` even though their numbers are lower, because they
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
-  (`sync_cron_secret` and `sync_function_url`) and the Google keys.
+  (`sync_cron_secret` and `sync_function_url`) and the Google keys; and
+  `0035_scorecards_divisions_focus_calendar` (focus topic calendar, role scorecards, the review's
+  opening discussion and project notes, the goals lock, divisions, projects per person), which
+  follows `0034` and does not depend on `0032`. Once it is in, run
+  `supabase/seeds/rba_scorecards.sql` once for RBA's divisions, roles and metrics; it is safe to
+  run again and ends with a check row (2 divisions, the 8 named roles, 33 metrics across 6 roles).
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have none (their
   screens are as before). Kingdom's owners are Maddie Cothran and marvin waters.
-- **Next free number:** `0035`.
+- **Next free number:** `0036`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.

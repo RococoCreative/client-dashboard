@@ -1,6 +1,6 @@
 // Tenure wording, the compensation total, and the role ranking the selects offer.
 import { describe, expect, it } from "vitest";
-import { canGrantRole, formatTenure, grantableRoles, isCompanyAdminRole, totalAnnual } from "./people.ts";
+import { canGrantRole, canSeeDivisions, canSetDivisionAccess, formatTenure, grantableRoles, isCompanyAdminRole, totalAnnual } from "./people.ts";
 
 describe("formatTenure", () => {
   const today = new Date(2026, 8, 10);
@@ -66,5 +66,20 @@ describe("grantableRoles", () => {
     expect(grantableRoles({ role: "admin", is_rococo_admin: false })).toEqual(["admin", "manager", "employee"]);
     expect(grantableRoles({ role: "employee", is_rococo_admin: true })).toEqual(["owner", "admin", "manager", "employee"]);
     expect(grantableRoles({ role: "employee", is_rococo_admin: false })).toEqual(["employee"]);
+  });
+});
+
+describe("canSeeDivisions", () => {
+  const viewer = { role: "admin" as const, is_rococo_admin: false, can_view_divisions: false };
+  it("shows the split to owners, Rococo and anyone given access, and nobody else", () => {
+    expect(canSeeDivisions({ ...viewer, role: "owner" })).toBe(true);
+    expect(canSeeDivisions({ ...viewer, is_rococo_admin: true })).toBe(true);
+    expect(canSeeDivisions({ ...viewer, role: "employee", can_view_divisions: true })).toBe(true);
+    expect(canSeeDivisions(viewer)).toBe(false);
+  });
+  it("lets only owners and Rococo give that access", () => {
+    expect(canSetDivisionAccess({ role: "owner", is_rococo_admin: false })).toBe(true);
+    expect(canSetDivisionAccess({ role: "employee", is_rococo_admin: true })).toBe(true);
+    expect(canSetDivisionAccess({ role: "admin", is_rococo_admin: false })).toBe(false);
   });
 });

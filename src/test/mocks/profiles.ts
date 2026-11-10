@@ -39,6 +39,8 @@ export async function createStaffProfile(input: {
     department: null,
     reports_to: null,
     job_role_id: null,
+    division_id: null,
+    can_view_divisions: false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -64,11 +66,18 @@ export async function listAllProfiles(): Promise<Profile[]> {
   return [...profiles];
 }
 
-export type ProfilePatch = Partial<Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to">>;
+export type ProfilePatch = Partial<Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id" | "division_id" | "can_view_divisions">>;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);
   if (index === -1) throw new Error("Profile not found.");
-  profiles[index] = { ...profiles[index], ...patch, updated_at: new Date().toISOString() };
+  const next = { ...profiles[index], ...patch, updated_at: new Date().toISOString() };
+  // A move to another company leaves the division and the right to see the split behind, as
+  // guard_profile_division does (0035).
+  if (patch.company_id !== undefined && patch.company_id !== profiles[index].company_id) {
+    next.division_id = null;
+    next.can_view_divisions = false;
+  }
+  profiles[index] = next;
   return profiles[index];
 }

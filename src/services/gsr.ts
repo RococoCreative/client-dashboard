@@ -12,7 +12,7 @@ const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_or
 const CYCLE_COLUMNS =
   "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
-  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, created_at, updated_at";
+  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, support_discussion, created_at, updated_at";
 const SCORE_COLUMNS =
   "id, review_id, company_id, pillar_id, criterion_id, label, rating, target, actual, notes, sort_order, created_at, updated_at";
 const GOAL_COLUMNS =
@@ -187,6 +187,7 @@ export type ReviewPatch = Partial<
     | "reviewer_id"
     | "completed_at"
     | "gsr_score"
+    | "support_discussion"
   >
 >;
 

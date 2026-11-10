@@ -9,7 +9,7 @@ import { db } from "./supabase.ts";
 import type { Profile, Role } from "../types/database.ts";
 
 const COLUMNS =
-  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, created_at, updated_at";
+  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, can_view_divisions, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
@@ -53,8 +53,9 @@ export async function listAllProfiles(): Promise<Profile[]> {
   return (data as Profile[]) ?? [];
 }
 
+// division_id is an admin's to set; can_view_divisions an owner's or Rococo's (guard_profile_fields).
 export type ProfilePatch = Partial<
-  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id">
+  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id" | "division_id" | "can_view_divisions">
 >;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {

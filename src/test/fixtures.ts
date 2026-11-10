@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -303,6 +303,14 @@ export interface CompanyBundle {
   syncRuns: SyncRun[];
   syncRecords: SyncRecord[];
   externalLinks: ExternalLink[];
+  // 0035. The focus topic calendar (Klasik plans September and October), role scorecards,
+  // divisions, projects per person and review project notes (RBA). Empty elsewhere.
+  focusTopics: FocusTopic[];
+  divisions: CompanyDivision[];
+  roleMetrics: RoleMetric[];
+  metricEntries: MetricEntry[];
+  projectAssignments: ProjectAssignment[];
+  reviewProjectNotes: ReviewProjectNote[];
 }
 
 // Small deterministic generator so every run produces the same numbers.
@@ -354,6 +362,8 @@ function build(company: Company): CompanyBundle {
     department: isCompanyAdminRole(person.role) ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
     reports_to: i === 0 ? null : p("user-1"),
     job_role_id: null,
+    division_id: null,
+    can_view_divisions: false,
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -506,6 +516,7 @@ function build(company: Company): CompanyBundle {
       completed_at: i === 1 ? NOW : null,
       pillar_snapshot: i === 1 ? signedOffWith : null,
       gsr_score: null,
+      support_discussion: null,
       created_at: NOW,
       updated_at: NOW,
     };
@@ -1080,6 +1091,8 @@ function build(company: Company): CompanyBundle {
       department: "Field",
       reports_to: p("user-1"),
       job_role_id: null,
+      division_id: null,
+      can_view_divisions: false,
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1100,6 +1113,8 @@ function build(company: Company): CompanyBundle {
       department: "Production",
       reports_to: p("user-1"),
       job_role_id: null,
+      division_id: null,
+      can_view_divisions: false,
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1220,7 +1235,98 @@ function build(company: Company): CompanyBundle {
     });
   });
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks };
+  // 0035. Klasik plans its focus topics a month ahead. RBA scores two job roles monthly across two
+  // divisions: Noor Haddad is a Project Manager in RBA North with per-project job cost results;
+  // Avery Cole, who has not signed in yet, is a Site Superintendent in RBA South; Jamie Fox is in
+  // RBA South with no scorecard role; Alex Morgan, an admin, may see the division split.
+  const focusTopics: FocusTopic[] = [];
+  const divisions: CompanyDivision[] = [];
+  const roleMetrics: RoleMetric[] = [];
+  const metricEntries: MetricEntry[] = [];
+  const projectAssignments: ProjectAssignment[] = [];
+  const reviewProjectNotes: ReviewProjectNote[] = [];
+  if (company.slug === "klasik") {
+    focusTopics.push(
+      { id: p("focus-2026-09"), company_id: company.id, month: "2026-09-01", theme: "Core value: Integrity", description: "Say what you will do, do what you said, and speak up early when something slips.", created_by: profiles[0].id, updated_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("focus-2026-10"), company_id: company.id, month: "2026-10-01", theme: "Core value: Ownership", description: "Take a problem from noticed to fixed without being asked.", created_by: profiles[0].id, updated_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
+    );
+  }
+  if (company.slug === "rba") {
+    divisions.push(
+      { id: p("division-south"), company_id: company.id, name: "RBA South", sort_order: 1, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("division-north"), company_id: company.id, name: "RBA North", sort_order: 2, created_at: EARLIER, updated_at: EARLIER },
+    );
+    jobRoles.push(
+      { id: p("role-pm"), company_id: company.id, name: "Project Manager", description: null, dashboard_modules: [], sort_order: 2, is_active: true, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("role-super"), company_id: company.id, name: "Site Superintendent", description: null, dashboard_modules: [], sort_order: 3, is_active: true, created_at: EARLIER, updated_at: EARLIER },
+    );
+    const [alex, jamie, noor] = profiles;
+    const avery = pendingStaff[0];
+    Object.assign(alex, { division_id: p("division-south"), can_view_divisions: true });
+    Object.assign(jamie, { division_id: p("division-south") });
+    Object.assign(noor, { division_id: p("division-north"), job_role_id: p("role-pm") });
+    Object.assign(avery, { division_id: p("division-south"), job_role_id: p("role-super") });
+
+    const metric = (key: string, role: string, name: string, kind: RoleMetric["kind"], target: number | null, sort: number, extra: Partial<RoleMetric> = {}): RoleMetric => ({
+      id: p(`metric-${key}`), company_id: company.id, job_role_id: p(role), name, description: null, kind, target, scale_max: 5,
+      higher_is_better: true, per_project: false, sort_order: sort, is_active: true, created_at: EARLIER, updated_at: EARLIER, ...extra,
+    });
+    roleMetrics.push(
+      metric("pm-opt", "role-pm", "Optimization rate", "percent", 80, 1),
+      metric("pm-gp", "role-pm", "Job cost: gross profit", "percent", 30, 2, { per_project: true }),
+      metric("pm-np", "role-pm", "Job cost: net profit", "percent", null, 3, { per_project: true }),
+      metric("pm-client", "role-pm", "Client journey satisfaction", "rating", 4, 4),
+      metric("pm-sops", "role-pm", "Compliance to SOPs", "rating", null, 5),
+      metric("super-opt", "role-super", "Optimization rate", "percent", 90, 1),
+      metric("super-logs", "role-super", "Daily logs", "rating", 4, 2),
+      metric("super-safety", "role-super", "Safety compliance", "rating", null, 3),
+      metric("super-toolbox", "role-super", "Toolbox talks", "rating", 4, 4, { is_active: false }),
+    );
+
+    const rbaProjects: Array<[string, string, string]> = [["project-1", "Lakeside residence", "RBA-101"], ["project-2", "Island cottage", "RBA-102"], ["project-3", "Harbour house", "RBA-103"]];
+    for (const [key, name, reference] of rbaProjects) {
+      projects.push({ id: p(key), company_id: company.id, name, reference, notes: null, source: "manual", source_key: null, archived_at: null, created_by: profiles[0].id, updated_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER });
+    }
+    const assign = (key: string, project: string, employee: Profile, role: string | null): ProjectAssignment => ({ id: p(`assignment-${key}`), company_id: company.id, project_id: p(project), employee_id: employee.id, role, created_at: EARLIER, updated_at: EARLIER });
+    projectAssignments.push(
+      assign("noor-1", "project-1", noor, "Project manager"),
+      assign("noor-2", "project-2", noor, "Project manager"),
+      assign("avery-1", "project-1", avery, "Site superintendent"),
+      assign("jamie-3", "project-3", jamie, null),
+    );
+
+    const enter = (who: string, employee: Profile, key: string, month: string, value: number, project: string | null = null): MetricEntry => ({
+      id: p(`entry-${who}-${key}-${month.slice(0, 7)}${project ? `-${project}` : ""}`), company_id: company.id, employee_id: employee.id, metric_id: p(`metric-${key}`),
+      period_month: month, project_id: project ? p(project) : null, value, note: null, entered_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER,
+    });
+    metricEntries.push(
+      enter("noor", noor, "pm-opt", "2025-12-01", 70),
+      enter("noor", noor, "pm-opt", "2026-07-01", 76),
+      enter("noor", noor, "pm-opt", "2026-08-01", 82),
+      enter("noor", noor, "pm-opt", "2026-09-01", 85),
+      enter("noor", noor, "pm-gp", "2026-08-01", 28, "project-1"),
+      enter("noor", noor, "pm-gp", "2026-09-01", 31, "project-1"),
+      enter("noor", noor, "pm-gp", "2026-09-01", 26, "project-2"),
+      enter("noor", noor, "pm-np", "2026-09-01", 11, "project-1"),
+      enter("noor", noor, "pm-client", "2026-08-01", 4),
+      enter("noor", noor, "pm-client", "2026-09-01", 5),
+      enter("noor", noor, "pm-sops", "2026-09-01", 3),
+      enter("avery", avery, "super-opt", "2026-07-01", 92),
+      enter("avery", avery, "super-opt", "2026-08-01", 88),
+      enter("avery", avery, "super-opt", "2026-09-01", 91),
+      enter("avery", avery, "super-logs", "2026-08-01", 4),
+      enter("avery", avery, "super-logs", "2026-09-01", 3),
+      enter("avery", avery, "super-safety", "2026-09-01", 5),
+      enter("avery", avery, "super-toolbox", "2026-07-01", 4),
+    );
+    metricEntries.find((e) => e.id === p("entry-noor-pm-opt-2026-09"))!.note = "Two crews short for a week.";
+
+    const jamieReview = reviews.find((r) => r.id === p("review-current-1"));
+    if (jamieReview) jamieReview.support_discussion = "A second set of laser levels for the island crew.";
+    reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
+  }
+
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -1240,6 +1346,8 @@ const ROCOCO: Profile = {
   department: null,
   reports_to: null,
   job_role_id: null,
+  division_id: null,
+  can_view_divisions: false,
   created_at: EARLIER,
   updated_at: EARLIER,
 };

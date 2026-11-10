@@ -73,6 +73,11 @@ export interface Profile {
   reports_to: string | null;
   // The job they do here (job_roles), set by an admin. Null until placed.
   job_role_id: string | null;
+  // The part of the company they work in (company_divisions), set by an admin. Null for none.
+  division_id: string | null;
+  // Sees the division split (Combined / North / South) though not an owner. Only an owner of the
+  // company or a Rococo admin may set it (0035, guard_profile_fields).
+  can_view_divisions: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -315,6 +320,9 @@ export interface Review {
   // A monthly GSR's score, 0 to 100, locked in by an admin marking the month complete where the
   // company scores its GSRs; null otherwise, and cleared on reopen (0023).
   gsr_score: number | null;
+  // The opening discussion of a monthly review: "What would help you do your job better?". The
+  // person and their admins write it while the review is open; sign-off freezes it (0035).
+  support_discussion: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -371,6 +379,9 @@ export interface Goal {
   // The goal this one was carried forward from, when a missed goal was restated.
   carried_from_goal_id: string | null;
   sort_order: number;
+  // The profile of whoever filed it, stamped by the database (0035; an account id before that).
+  // A goal filed by someone other than its person is locked for that person: see goalLockedFor
+  // in lib/gsr/goals.ts. Null reads as the person's own.
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -411,6 +422,101 @@ export interface CycleOmission {
   // The admin who left them out; null once that profile is gone.
   omitted_by: string | null;
   created_at: string;
+}
+
+// A month's focus topic on a company's calendar (0035): one per company per month, planned ahead.
+// month is always the first of the month (YYYY-MM-01).
+export interface FocusTopic {
+  id: string;
+  company_id: string;
+  month: string;
+  theme: string;
+  description: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Role scorecards (0035) ----------------------------------------------------------------------
+
+// A percent is stored 0..100, a rating 1..scale_max, a number as is. The database checks it.
+export type MetricKind = "percent" | "rating" | "number";
+export const METRIC_KIND_LABELS: Record<MetricKind, string> = {
+  percent: "Percent",
+  rating: "Rating",
+  number: "Number",
+};
+
+// What a job role is scored on each month. company_id comes from the job role by trigger.
+export interface RoleMetric {
+  id: string;
+  company_id: string;
+  job_role_id: string;
+  name: string;
+  description: string | null;
+  kind: MetricKind;
+  // Null until the company sets one: shown, never judged.
+  target: number | null;
+  // The top of a rating's scale (2..10). Read only for kind 'rating'.
+  scale_max: number;
+  higher_is_better: boolean;
+  // Entered once per assigned project each month instead of once for the month.
+  per_project: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// A person's result on one metric for one month (and one project, for a per-project metric).
+// Unique per employee, metric, month and project (no project counts as one value).
+export interface MetricEntry {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  metric_id: string;
+  // Always the first of a month (YYYY-MM-01).
+  period_month: string;
+  project_id: string | null;
+  value: number;
+  note: string | null;
+  entered_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// One note per project on a review (0035). Admins write; the person reads their own.
+export interface ReviewProjectNote {
+  id: string;
+  company_id: string;
+  review_id: string;
+  project_id: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// A part of a company (RBA South, RBA North) that people belong to (0035).
+export interface CompanyDivision {
+  id: string;
+  company_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Who works on which project (0035). company_id comes from the project by trigger.
+export interface ProjectAssignment {
+  id: string;
+  company_id: string;
+  project_id: string;
+  employee_id: string;
+  // What they do on it, in the company's words ("Project manager"). Optional.
+  role: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CompanyGoal {

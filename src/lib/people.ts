@@ -1,6 +1,7 @@
 // People helpers shared by the review header, the people table, the person page, and the
 // dashboard: tenure from a hire date, the annual total of a compensation table, how far a
-// person's own financial figure is from its target, and which roles a person may hand out.
+// person's own financial figure is from its target, which roles a person may hand out, and who sees
+// the division split.
 import { formatDate, parseDate } from "./format.ts";
 import { ROLE_LABELS, keysOf, type EmployeeFinancial, type Profile, type Role } from "../types/database.ts";
 
@@ -59,4 +60,16 @@ export function canGrantRole(granter: Pick<Profile, "role" | "is_rococo_admin">,
 // The roles a select offers this granter, in ROLE_LABELS order.
 export function grantableRoles(granter: Pick<Profile, "role" | "is_rococo_admin">): Role[] {
   return keysOf(ROLE_LABELS).filter((r) => canGrantRole(granter, r));
+}
+
+// Who sees a company's division split (Combined / North / South) on the dashboard and the
+// Scorecards report: owners, Rococo admins, and anyone an owner or Rococo has let see it
+// (can_view_divisions, 0035). Everyone else sees the combined company only. Only those same two
+// may change can_view_divisions, so this is also who gets the toggle.
+export function canSeeDivisions(viewer: Pick<Profile, "role" | "is_rococo_admin" | "can_view_divisions">): boolean {
+  return viewer.is_rococo_admin || viewer.role === "owner" || viewer.can_view_divisions;
+}
+
+export function canSetDivisionAccess(viewer: Pick<Profile, "role" | "is_rococo_admin">): boolean {
+  return viewer.is_rococo_admin || viewer.role === "owner";
 }

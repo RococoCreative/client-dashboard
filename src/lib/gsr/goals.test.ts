@@ -1,7 +1,7 @@
 // The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
 // carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalOutcome, goalPeriodLabel, goalSettled, hitCount, lockedMonthsIn, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
+import { carryForward, goalLockedFor, goalOutcome, goalPeriodLabel, goalSettled, hitCount, lockedMonthsIn, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -245,5 +245,18 @@ describe("a month's GSRs, for a company that scores them", () => {
     expect(monthLocked({ status: "complete", gsr_score: null })).toBe(false);
     expect(monthLocked({ status: "in_progress", gsr_score: null })).toBe(false);
     expect(monthLocked(null)).toBe(false);
+  });
+});
+
+describe("goalLockedFor", () => {
+  it("locks a goal someone else filed, for a viewer who is not an admin", () => {
+    expect(goalLockedFor({ created_by: "admin", employee_id: "e" }, false)).toBe(true);
+  });
+  it("leaves the person's own goal, and a goal with no creator on file, open", () => {
+    expect(goalLockedFor({ created_by: "e", employee_id: "e" }, false)).toBe(false);
+    expect(goalLockedFor({ created_by: null, employee_id: "e" }, false)).toBe(false);
+  });
+  it("never locks anything for an admin", () => {
+    expect(goalLockedFor({ created_by: "admin", employee_id: "e" }, true)).toBe(false);
   });
 });
