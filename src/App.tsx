@@ -33,6 +33,7 @@ import CyclePage from "./pages/gsr/CyclePage.tsx";
 import ReviewPage from "./pages/gsr/ReviewPage.tsx";
 import GsrSettingsPage from "./pages/gsr/GsrSettingsPage.tsx";
 import CompanyGoalsPage from "./pages/gsr/CompanyGoalsPage.tsx";
+import ScorecardsPage from "./pages/gsr/ScorecardsPage.tsx";
 import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
 import PeoplePage from "./pages/people/PeoplePage.tsx";
@@ -336,6 +337,9 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="goals" element={<WithCompany>{isAdmin ? <GoalsPage /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
             <Route path="reviews/settings" element={<AdminOnly><GsrSettingsPage /></AdminOnly>} />
             <Route path="reviews/company-goals" element={<AdminOnly><CompanyGoalsPage /></AdminOnly>} />
+            {/* Leadership's scorecard report sits with the Reviews pages, at its own path so the sidebar
+                marks one item for it, not Reviews as well. */}
+            <Route path="scorecards" element={<AdminOnly><ScorecardsPage /></AdminOnly>} />
             <Route path="gsr/settings" element={<RedirectTo path="/reviews/settings" />} />
             <Route path="gsr/company-goals" element={<RedirectTo path="/reviews/company-goals" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />

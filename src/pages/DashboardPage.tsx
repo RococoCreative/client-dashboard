@@ -4,6 +4,13 @@
 // library. Both see the modules their own job role carries (their own financial figures, for
 // now), so an owner placed in a role gets what the person page says they get. A retired role
 // carries nothing. Everything here is a summary with a link into the module that owns it.
+//
+// For the people allowed to see the division split (an owner, Rococo, or someone given the view)
+// in a company that has divisions, a Combined / per-division switch narrows the people tiles and
+// the cycle cards to one division, and the compare strip sets each division next to the whole.
+// Everyone else reads the combined picture, exactly as before, and none of those reads is made.
+// An employee whose job role carries scorecard metrics reads their own scorecard here.
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
@@ -19,6 +26,11 @@ import AttentionCard from "../components/home/AttentionCard.tsx";
 import FreshnessCard from "../components/home/FreshnessCard.tsx";
 import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
 import WinsCard from "../components/home/WinsCard.tsx";
+import DivisionCompare from "../components/people/DivisionCompare.tsx";
+import DivisionSwitch from "../components/people/DivisionSwitch.tsx";
+import PersonScorecard from "../components/scorecards/PersonScorecard.tsx";
+import { COMBINED, divisionCompareRows, latestResultMonth, monthCycle, peopleInScope } from "../components/scorecards/compare.ts";
+import { monthLabel } from "../components/scorecards/months.ts";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonCard from "../components/ui/SkeletonCard.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
@@ -31,6 +43,11 @@ import { listEmployeeFinancials } from "../services/employees.ts";
 import { listJobRoles } from "../services/jobRoles.ts";
 import { listRecentSops, listSops } from "../services/sops.ts";
 import { listResources } from "../services/resources.ts";
+import { listDivisions } from "../services/divisions.ts";
+import { listProjectAssignments } from "../services/projectAssignments.ts";
+import { listProjects } from "../services/projects.ts";
+import { listMetricEntries, listRoleMetrics } from "../services/scorecards.ts";
+import { monthOf } from "../lib/scorecard.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
@@ -40,7 +57,7 @@ import { CADENCE_LABELS, cycleOmitted, cycleProgress, cyclePath, cycleRoster, cy
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
-import { financialProgress, hasAccount, isCompanyAdminRole } from "../lib/people.ts";
+import { canSeeDivisions, financialProgress, hasAccount, isCompanyAdminRole } from "../lib/people.ts";
 import { hasModule } from "../lib/modules.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
@@ -183,6 +200,45 @@ async function loadOwnModules(companyId: string, profile: Pick<Profile, "id" | "
   return { jobRole: jobRoles.find((r) => r.id === profile.job_role_id) ?? null, financials };
 }
 
+// The employee's own scorecard, when their (current) job role is scored: read only, the same grid
+// an admin fills in on their profile. A role with no active metrics shows nothing at all.
+function MyScorecard({ companyId, employeeId, jobRole }: { companyId: string; employeeId: string; jobRole: JobRole }) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const base = useAsync(async () => {
+    const metrics = await listRoleMetrics(companyId, true);
+    if (!metrics.some((m) => m.job_role_id === jobRole.id && m.is_active)) return null;
+    const [assignments, projects] = await Promise.all([listProjectAssignments(companyId, { employeeId }), listProjects(companyId, { includeArchived: true })]);
+    return { metrics, assignments, projects };
+  }, [companyId, employeeId, jobRole.id]);
+  const scored = base.data !== null;
+  const results = useAsync(() => (scored ? listMetricEntries(companyId, { employeeId, year }) : Promise.resolve([])), [companyId, employeeId, year, scored]);
+
+  if (base.error && !base.data) return <Notice tone="error" className="lg:col-span-3">Your scorecard did not load. {base.error}</Notice>;
+  if (!base.data) return null;
+  const names = new Map(base.data.projects.map((p) => [p.id, p.name]));
+  return (
+    <div className="lg:col-span-3">
+      {results.error && !results.data ? <Notice tone="error" className="mb-3">{results.error}</Notice> : null}
+      <PersonScorecard
+        companyId={companyId}
+        employeeId={employeeId}
+        roleId={jobRole.id}
+        roleName={jobRole.name}
+        year={year}
+        onYear={setYear}
+        metrics={base.data.metrics}
+        entries={results.data}
+        projectIds={base.data.assignments.map((a) => a.project_id)}
+        projectName={(id) => names.get(id) ?? "A project no longer listed"}
+        canEdit={false}
+        onEntries={() => undefined}
+        title="Your scorecard"
+        description="What your role is scored on each month, against target, with the year to date. Your manager enters the results."
+      />
+    </div>
+  );
+}
+
 function AdminDashboard() {
   const { company, profile, isAdmin, isRococo } = useHub();
   const companyId = company!.id;
@@ -216,6 +272,26 @@ function AdminDashboard() {
     return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
+  // The division split, read only for someone allowed to see it, and only past the divisions
+  // themselves when the company has some. Null means the combined picture alone.
+  const allowed = canSeeDivisions(profile);
+  const [scope, setScope] = useState(COMBINED);
+  const split = useAsync(async () => {
+    if (!allowed) return null;
+    const divisions = await listDivisions(companyId);
+    if (divisions.length === 0) return null;
+    const today = monthOf(new Date());
+    const [metrics, entries, cycles] = await Promise.all([
+      listRoleMetrics(companyId, true),
+      listMetricEntries(companyId, { year: Number(today.slice(0, 4)) }),
+      listCycles(companyId),
+    ]);
+    const month = latestResultMonth(entries, today);
+    const cycle = monthCycle(cycles, month);
+    const monthReviews = cycle ? await listCycleReviews(cycle.id) : [];
+    return { divisions, metrics, entries, month, cycle, monthReviews };
+  }, [companyId, allowed]);
+
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
     return (
@@ -229,7 +305,14 @@ function AdminDashboard() {
     );
   }
 
-  const { people, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, jobRole, financials } = state.data;
+  const { people: everyone, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, jobRole, financials } = state.data;
+  // The people every tile and cycle card below counts: the whole company, or one division.
+  const splitData = split.data;
+  const activeScope = splitData && (scope === COMBINED || splitData.divisions.some((d) => d.id === scope)) ? scope : COMBINED;
+  const people = peopleInScope(everyone, activeScope);
+  const compare = splitData
+    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions })
+    : [];
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
   // anyone else; the only difference is that they cannot open it until they sign in.
@@ -281,7 +364,9 @@ function AdminDashboard() {
         eyebrow={company!.name}
         title={hasModule(company, "switchboard") ? "Home" : "Dashboard"}
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
+        actions={splitData ? <DivisionSwitch divisions={splitData.divisions} value={activeScope} onChange={setScope} /> : undefined}
       />
+      {split.error && !split.data ? <Notice tone="warning" className="mb-4">The division split did not load, so this is the combined picture. {split.error}</Notice> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
@@ -308,6 +393,12 @@ function AdminDashboard() {
         />
         <Stat label="Library" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "resource")}`} />
       </div>
+
+      {splitData ? (
+        <div className="mt-4">
+          <DivisionCompare rows={compare} monthLabel={monthLabel(splitData.month)} active={activeScope} />
+        </div>
+      ) : null}
 
       {/* The Home cards, each under its own module. With neither module on, none mounts and
           none of their calls is made, so the dashboard is exactly what it always was. */}
@@ -709,6 +800,8 @@ function EmployeeDashboard() {
         </Section>
 
         {showFinancials && jobRole ? <YourFigures jobRole={jobRole} financials={financials} year={year} className="lg:col-span-3" /> : null}
+
+        {jobRole ? <MyScorecard companyId={companyId} employeeId={profile.id} jobRole={jobRole} /> : null}
 
         {companyGoals.length > 0 ? (
           <Section eyebrow={`Company goals ${year}`} title="What the team is chasing" className="lg:col-span-3" padded={false}>

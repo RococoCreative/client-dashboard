@@ -3,7 +3,8 @@
 // and their own financial figures, every review with its score, and their goals for this year,
 // next year and their BHAG (editable, so a manager can set goals in a one-on-one). A goal's
 // action steps and progress notes are the person's own and never show here; the month's goals
-// live in the GSR.
+// live in the GSR. Their role scorecard (the month-by-month results an admin enters against the
+// role's targets), the projects they are on, and the division they sit in are here too.
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -22,27 +23,155 @@ import CompensationTable from "../../components/people/CompensationTable.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import FinancialsTable from "../../components/people/FinancialsTable.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
+import PersonProjects from "../../components/people/PersonProjects.tsx";
+import PersonScorecard from "../../components/scorecards/PersonScorecard.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCriteria, listCycleOmissions, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
-import { listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
+import { listCompanyProfiles, updateProfile, type ProfilePatch } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoles } from "../../services/jobRoles.ts";
+import { listDivisions } from "../../services/divisions.ts";
+import { listProjectAssignments } from "../../services/projectAssignments.ts";
+import { listProjects } from "../../services/projects.ts";
+import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts";
+import { hasModule } from "../../lib/modules.ts";
 import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
 import { omittedCycleIdsFor, reviewPath, scoredCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
-import { canGrantRole, formatTenure, grantableRoles, hasAccount, totalAnnual } from "../../lib/people.ts";
+import { canGrantRole, canSetDivisionAccess, formatTenure, grantableRoles, hasAccount, totalAnnual } from "../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, ROLE_LABELS, type Profile, type Role } from "../../types/database.ts";
+
+// The person's division, and for an owner or Rococo, whether they see the division split. Shown
+// only once the company has divisions, so a company that does not split reads as it always has.
+// A Rococo admin's row is theirs to change, not a company admin's (0029), so it reads only.
+function DivisionFields({ companyId, person, me, onPatch }: { companyId: string; person: Profile; me: Profile; onPatch: (patch: ProfilePatch) => void }) {
+  const state = useAsync(() => listDivisions(companyId), [companyId]);
+  if (state.error && !state.data) return <p className="text-[12px] text-ink-3">Divisions did not load. {state.error}</p>;
+  // Nothing until the divisions are in, so the picker never reads "No division" for a moment.
+  if (!state.data) return null;
+  const divisions = state.data;
+  if (divisions.length === 0 && !person.division_id) return null;
+  const current = divisions.find((d) => d.id === person.division_id) ?? null;
+  if (person.is_rococo_admin) {
+    return current ? (
+      <div>
+        <p className={labelClass}>Division</p>
+        <p className="mt-1.5 text-sm text-ink">{current.name}</p>
+      </div>
+    ) : null;
+  }
+  const owner = person.role === "owner";
+  return (
+    <div className="space-y-2">
+      <div>
+        <label htmlFor="person-division" className={labelClass}>Division</label>
+        <select id="person-division" value={person.division_id ?? ""} onChange={(e) => onPatch({ division_id: e.target.value || null })} className={selectClass}>
+          <option value="">No division</option>
+          {divisions.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+      </div>
+      {canSetDivisionAccess(me) ? (
+        <div>
+          <label className="flex items-start gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              className={`${checkboxClass} mt-0.5`}
+              checked={owner || person.can_view_divisions}
+              disabled={owner}
+              onChange={(e) => onPatch({ can_view_divisions: e.target.checked })}
+            />
+            <span>Can view divisions</span>
+          </label>
+          <p className={helpClass}>
+            {owner ? "Owners always see the split." : "Sees each division next to the combined company on the dashboard and the Scorecards report."}
+          </p>
+        </div>
+      ) : person.can_view_divisions ? (
+        <p className={helpClass}>Sees the division split. Only an owner or Rococo can change that.</p>
+      ) : null}
+    </div>
+  );
+}
+
+// The person's scorecard and their projects, loaded together because a per-project metric has a
+// row for every project they are on: assigning one here gives it a row there straight away. The
+// year's results load on their own, so changing the year leaves the rest standing.
+function ScorecardAndProjects({
+  companyId,
+  person,
+  roleName,
+  canEdit,
+  linkProjects,
+  onError,
+}: {
+  companyId: string;
+  person: Profile;
+  roleName: string | null;
+  canEdit: boolean;
+  linkProjects: boolean;
+  onError: (message: string) => void;
+}) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const base = useAsync(async () => {
+    const [metrics, assignments, projects] = await Promise.all([
+      listRoleMetrics(companyId, true),
+      listProjectAssignments(companyId, { employeeId: person.id }),
+      listProjects(companyId, { includeArchived: true }),
+    ]);
+    return { metrics, assignments, projects };
+  }, [companyId, person.id]);
+  const results = useAsync(() => listMetricEntries(companyId, { employeeId: person.id, year }), [companyId, person.id, year]);
+
+  if (base.error && !base.data) return <Notice tone="error">{base.error}</Notice>;
+  if (!base.data) return <SkeletonRows rows={4} />;
+  const { metrics, assignments, projects } = base.data;
+  const names = new Map(projects.map((p) => [p.id, p.name]));
+  return (
+    <>
+      {results.error && !results.data ? <Notice tone="error">{results.error}</Notice> : null}
+      <PersonScorecard
+        companyId={companyId}
+        employeeId={person.id}
+        roleId={person.job_role_id}
+        roleName={roleName}
+        year={year}
+        onYear={setYear}
+        metrics={metrics}
+        entries={results.data}
+        projectIds={assignments.map((a) => a.project_id)}
+        projectName={(id) => names.get(id) ?? "A project no longer listed"}
+        canEdit={canEdit}
+        onEntries={(update) => results.setData((prev) => (prev ? update(prev) : prev))}
+        description={canEdit ? "The role's metrics, month by month, against target, with the year to date. Entered here by an admin; the person reads their own." : undefined}
+      />
+      <PersonProjects
+        companyId={companyId}
+        employeeId={person.id}
+        firstName={displayName(person).split(" ")[0]}
+        assignments={assignments}
+        projects={projects}
+        canEdit={canEdit}
+        linkProjects={linkProjects}
+        onAssignments={(update) => base.setData((prev) => (prev ? { ...prev, assignments: update(prev.assignments) } : prev))}
+        onProjects={(update) => base.setData((prev) => (prev ? { ...prev, projects: update(prev.projects) } : prev))}
+        onError={onError}
+      />
+    </>
+  );
+}
 
 export default function PersonPage() {
   const { profileId = "" } = useParams();
-  const { company, profile: me, refreshProfile } = useHub();
+  const { company, profile: me, isAdmin, refreshProfile } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
   const [error, setError] = useState("");
@@ -228,6 +357,7 @@ export default function PersonPage() {
                   </p>
                 ) : null}
               </div>
+              <DivisionFields companyId={companyId} person={person} me={me} onPatch={(next) => void patch(next)} />
               <div>
                 <label htmlFor="person-phone" className={labelClass}>Phone</label>
                 <BlurInput id="person-phone" value={person.phone ?? ""} placeholder="(555) 010-0000" onSave={(next) => void patch({ phone: next.trim() || null })} />
@@ -339,6 +469,16 @@ export default function PersonPage() {
               {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
             </Section>
           ) : null}
+          {rococo ? null : (
+            <ScorecardAndProjects
+              companyId={companyId}
+              person={person}
+              roleName={jobRole?.name ?? null}
+              canEdit={isAdmin}
+              linkProjects={hasModule(company, "production")}
+              onError={setError}
+            />
+          )}
           <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>
             <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
           </Section>
