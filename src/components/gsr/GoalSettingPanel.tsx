@@ -14,9 +14,12 @@
 // the quarterly and annual reviews, because a Goal Setting Review is the month and nothing else.
 // Every change saves on its own; a closed or locked month is read-only except for the why, which
 // is written the month after.
+// Employees add and own their goals for the month. A goal someone else set for them (goalLockedFor)
+// keeps what it is: its title, description and kind read only and it cannot be deleted, while its
+// agreed completion, action steps and notes stay theirs to work, as the database allows (0035).
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Lock, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
 import GoalNotes from "./GoalNotes.tsx";
 import Badge from "../ui/Badge.tsx";
@@ -29,7 +32,7 @@ import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, carryForward, goalOutcome, hitCount, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { GOAL_KIND_ORDER, carryForward, goalLockedFor, goalOutcome, hitCount, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
 import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
@@ -53,6 +56,7 @@ function GoalEditor({
   standing,
   canEdit,
   canTick,
+  setForThem,
   carriedFrom,
   onChange,
   onNotes,
@@ -68,6 +72,8 @@ function GoalEditor({
   standing: Standing | null;
   canEdit: boolean;
   canTick: boolean;
+  // Set for the person by someone else and read by that person: what the goal is stays as set.
+  setForThem: boolean;
   carriedFrom: string | null;
   onChange: (goal: Goal) => void;
   onNotes: NotesUpdate;
@@ -90,18 +96,20 @@ function GoalEditor({
     return run.catch((err: unknown) => onError(errorMessage(err)));
   }
   const { done, total } = stepsTaken(goal);
+  // Title, kind, description and delete. Completion, steps and notes follow canEdit and canTick.
+  const canDefine = canEdit && !setForThem;
 
   return (
     <li className="rounded-lg border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {canEdit ? (
+          {canDefine ? (
             <BlurInput value={goal.title} required ariaLabel={`Title for ${goal.title}`} onSave={(next) => void save({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
           ) : (
             <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-            {canEdit ? (
+            {canDefine ? (
               <select value={goal.kind} aria-label={`Kind for ${goal.title}`} onChange={(e) => void save({ kind: e.target.value as GoalKind })} className={`${selectClass} mt-0 w-auto py-0.5 text-[12px]`}>
                 {(goal.is_focus ? FOCUS_KINDS : GOAL_KIND_ORDER).map((k) => (
                   <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
@@ -117,9 +125,15 @@ function GoalEditor({
               </Badge>
             ) : null}
             {standing === "mandatory" && !goal.is_focus ? <Badge tone="info">Mandatory</Badge> : standing === "stretch" ? <Badge>Stretch</Badge> : null}
+            {setForThem ? (
+              <span className="inline-flex items-center gap-1">
+                <Lock size={11} aria-hidden />
+                Set by your manager
+              </span>
+            ) : null}
           </div>
         </div>
-        {canEdit ? (
+        {canDefine ? (
           <IconButton label={`Delete ${goal.title}`} onClick={onDelete}>
             <Trash2 size={14} aria-hidden />
           </IconButton>
@@ -134,7 +148,7 @@ function GoalEditor({
         <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => void save(progressPatch(next, goal.status))} />
       </div>
 
-      {canEdit ? (
+      {canDefine ? (
         <BlurInput multiline rows={1} value={goal.description ?? ""} placeholder="What does success look like?" ariaLabel={`Description for ${goal.title}`} onSave={(next) => void save({ description: next.trim() || null })} className={`${textareaClass} mt-3 min-h-[36px] text-[13px]`} />
       ) : goal.description ? (
         <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{goal.description}</p>
@@ -586,6 +600,7 @@ export default function GoalSettingPanel({
                 standing={standing(goal)}
                 canEdit={canEdit}
                 canTick={canEdit}
+                setForThem={goalLockedFor(goal, isAdmin)}
                 carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
                 onNotes={onNotes}

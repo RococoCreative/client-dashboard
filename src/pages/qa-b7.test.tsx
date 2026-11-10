@@ -41,6 +41,11 @@ vi.mock("../services/deliverables.ts", async () => {
   return { ...mock, deleteDeliverableCategory: vi.fn(mock.deleteDeliverableCategory) };
 });
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
+// The review page reads the role scorecard, project assignments and project notes (0035).
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
+vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
+vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 vi.mock("../services/connections.ts", async () => {
   const mock = await import("../test/mocks/connections.ts");
   return { ...mock, disconnectConnection: vi.fn(mock.disconnectConnection) };

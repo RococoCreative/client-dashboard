@@ -4,8 +4,10 @@
 // every quarterly review. Its action steps and progress notes are the person's alone: the
 // database keeps them in tables only the owner can read (0021), so this panel only asks for them,
 // and only shows them, when the owner is the one looking. Employees own their goals (this panel is
-// their My Goals page); admins see and edit the shared part on a person's page. Steps and
-// completion save as they change; text saves on blur.
+// their My Goals page); admins see and edit the shared part on a person's page. A goal an admin
+// set for the person (goalLockedFor) keeps what it is for them: no editing its title, kind,
+// description or period and no deleting it, while its completion, steps and notes stay theirs
+// (0035). Steps and completion save as they change; text saves on blur.
 import { useState, type FormEvent } from "react";
 import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
@@ -26,7 +28,7 @@ import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createGoal, deleteGoal, listGoalNotes, listGoalPrivate, listGoals, saveGoalSteps, updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, goalOutcome, goalPeriodLabel, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
+import { GOAL_KIND_ORDER, goalLockedFor, goalOutcome, goalPeriodLabel, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { GOAL_KIND_LABELS, type ActionStep, type Goal, type GoalKind, type GoalNote, type GoalPrivate } from "../../types/database.ts";
 
@@ -150,6 +152,7 @@ function GoalCard({
   goal,
   isOwner,
   canEdit,
+  setForThem,
   steps,
   notes,
   onChange,
@@ -162,6 +165,8 @@ function GoalCard({
   goal: Goal;
   isOwner: boolean;
   canEdit: boolean;
+  // Set for the person by someone else and read by that person: Edit and Delete are an admin's.
+  setForThem: boolean;
   // The owner's private steps for this goal; nobody else is given any.
   steps: ActionStep[];
   notes: GoalNote[];
@@ -189,6 +194,12 @@ function GoalCard({
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           <p className="mt-0.5 text-[12px] text-ink-3">{goalPeriodLabel(goal)}</p>
+          {setForThem ? (
+            <p className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-3">
+              <Lock size={11} aria-hidden />
+              Set by your manager
+            </p>
+          ) : null}
           {goal.description ? <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{goal.description}</p> : null}
         </div>
         <div className="flex items-center gap-1.5">
@@ -197,7 +208,7 @@ function GoalCard({
           ) : (
             <Badge tone={GOAL_OUTCOME_TONE[outcome]}>{outcome === "hit" ? "Achieved" : outcome === "miss" ? `Missed at ${goal.progress}%` : "In progress"}</Badge>
           )}
-          {canEdit ? (
+          {canEdit && !setForThem ? (
             <>
               <IconButton label="Edit goal" onClick={onEdit}><Pencil size={14} aria-hidden /></IconButton>
               <IconButton label="Delete goal" onClick={onDelete}><Trash2 size={14} aria-hidden /></IconButton>
@@ -251,7 +262,7 @@ export default function GoalsPanel({
   // The person's first name, for the line that tells anyone else what stays private.
   ownerName?: string;
 }) {
-  const { profile } = useHub();
+  const { profile, isAdmin } = useHub();
   // Steps and notes are the owner's alone. The database would hand anyone else no rows, so the
   // panel does not ask, and shows the shared part of each goal instead.
   const isOwner = profile.id === employeeId;
@@ -354,6 +365,7 @@ export default function GoalsPanel({
                       goal={goal}
                       isOwner={isOwner}
                       canEdit={canEdit}
+                      setForThem={goalLockedFor(goal, isAdmin)}
                       steps={stepsFor(goal)}
                       notes={notesFor(goal)}
                       onChange={upsert}
