@@ -117,12 +117,17 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
   follows `0034` and does not depend on `0032`. Once it is in, run
   `supabase/seeds/rba_scorecards.sql` once for RBA's divisions, roles and metrics; it is safe to
   run again and ends with a check row (2 divisions, the 8 named roles, 33 metrics across 6 roles).
+  The app on this branch reads 0035's tables and columns, so it reaches `main` only after 0035 is
+  live; 0035 itself is safe under the app on `main` today (that app never sends
+  `goals.created_by`, and an employee there writes only their reflection on a review).
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have none (their
-  screens are as before). Kingdom's owners are Maddie Cothran and marvin waters.
+  screens are as before). Kingdom's owners are Maddie Cothran and marvin waters. Klasik and RBA
+  get `external_links` (Links on Resources and the Home card) once 0035 goes in; it is a data
+  change made with it, in Rococo > Companies or in the same paste.
 - **Next free number:** `0036`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
