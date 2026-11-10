@@ -31,20 +31,17 @@ import GoalsPage from "./pages/gsr/GoalsPage.tsx";
 import MyReviewsPage from "./pages/gsr/MyReviewsPage.tsx";
 import CyclePage from "./pages/gsr/CyclePage.tsx";
 import ReviewPage from "./pages/gsr/ReviewPage.tsx";
-import GsrSettingsPage from "./pages/gsr/GsrSettingsPage.tsx";
-import CompanyGoalsPage from "./pages/gsr/CompanyGoalsPage.tsx";
 import ScorecardsPage from "./pages/gsr/ScorecardsPage.tsx";
 import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
 import PeoplePage from "./pages/people/PeoplePage.tsx";
 import PersonPage from "./pages/people/PersonPage.tsx";
-import SopListPage from "./pages/sops/SopListPage.tsx";
 import SopPage from "./pages/sops/SopPage.tsx";
 import SopEditPage from "./pages/sops/SopEditPage.tsx";
-import ResourcesPage from "./pages/ResourcesPage.tsx";
+import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
-import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
+import SettingsPage from "./pages/settings/SettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
 import WinsPage from "./pages/WinsPage.tsx";
@@ -54,6 +51,8 @@ import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
 import ActivityPage from "./pages/rococo/ActivityPage.tsx";
+import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
+import { SETTINGS_TABS } from "./pages/settings/settingsTabs.ts";
 import type { Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
@@ -113,7 +112,8 @@ function AdminOnly({ children }: { children: ReactNode }) {
 // the outcome on the query string. Connecting is a full page load, and a Rococo admin's company is
 // session-only state that does not survive one, so the path names the company the connection was
 // for. A Rococo admin has that company made active again, from the URL only with nothing stored;
-// anyone else is let through only to their own company. The outcome then lands on Settings.
+// anyone else is let through only to their own company. The outcome then lands on Settings >
+// Connections, which shows it and takes it off the address.
 function ConnectionReturn() {
   const { companyId } = useParams();
   const { companies, company, isRococo, setActiveCompanyId } = useHub();
@@ -124,7 +124,7 @@ function ConnectionReturn() {
   }, [stepIn, target, setActiveCompanyId]);
   if (!target) return <Navigate to={isRococo ? "/rococo" : "/"} replace />;
   if (stepIn) return null;
-  return <RedirectTo path="/settings" />;
+  return <RedirectTo path="/settings/connections" />;
 }
 
 // A module's pages exist only for a company that has the module on. Typing the URL elsewhere
@@ -329,19 +329,24 @@ function SignedIn({ session }: { session: Session }) {
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
             <Route path="wins" element={<ModuleOnly module="wins"><WinsPage /></ModuleOnly>} />
-            {/* Three sections keyed on cadence: GSRs (monthly), Reviews (every scored cadence), Goals
-                (the year's). A cycle and a review are reachable under either prefix so old links keep
+            {/* Two sections keyed on cadence: Monthly GSRs (monthly) and Reviews (every scored
+                cadence). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
             <Route path="gsr" element={<WithCompany>{isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />}</WithCompany>} />
             <Route path="reviews" element={<WithCompany>{isAdmin ? <CyclesPage section="reviews" /> : <RedirectTo path="/my/reviews" />}</WithCompany>} />
-            <Route path="goals" element={<WithCompany>{isAdmin ? <GoalsPage /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
-            <Route path="reviews/settings" element={<AdminOnly><GsrSettingsPage /></AdminOnly>} />
-            <Route path="reviews/company-goals" element={<AdminOnly><CompanyGoalsPage /></AdminOnly>} />
+            {/* Goals: one page, a route per tab, landing on Company. Employees keep My Goals. */}
+            <Route path="goals" element={<WithCompany>{isAdmin ? <RedirectTo path="/goals/company" /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
+            {GOALS_TABS.map((t) => (
+              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><GoalsPage tab={t.key} /></AdminOnly>} />
+            ))}
             {/* Leadership's scorecard report sits with the Reviews pages, at its own path so the sidebar
                 marks one item for it, not Reviews as well. */}
             <Route path="scorecards" element={<AdminOnly><ScorecardsPage /></AdminOnly>} />
-            <Route path="gsr/settings" element={<RedirectTo path="/reviews/settings" />} />
-            <Route path="gsr/company-goals" element={<RedirectTo path="/reviews/company-goals" />} />
+            {/* Where these used to live. Old bookmarks and links land on the tab that holds them now. */}
+            <Route path="reviews/settings" element={<RedirectTo path="/settings/reviews" />} />
+            <Route path="gsr/settings" element={<RedirectTo path="/settings/reviews" />} />
+            <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
+            <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
             <Route path="reviews/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
             <Route path="gsr/reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
@@ -354,16 +359,26 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
-            <Route path="sops" element={<WithCompany><SopListPage /></WithCompany>} />
+            {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
+                keeps its own address under /sops. */}
+            <Route path="resources" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
+            <Route path="resources/sops" element={<WithCompany><ResourcesPage tab="sops" /></WithCompany>} />
+            <Route path="resources/files" element={<WithCompany><ResourcesPage tab="files" /></WithCompany>} />
+            <Route path="resources/links" element={<WithCompany><ResourcesPage tab="links" /></WithCompany>} />
+            <Route path="sops" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="resources" element={<WithCompany><ResourcesPage /></WithCompany>} />
             <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
             <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
-            <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
+            {/* Settings: one page, a route per tab, landing on Company. The connection return path
+                has one more segment, so it never reads as the Connections tab. */}
+            <Route path="settings" element={<AdminOnly><RedirectTo path="/settings/company" /></AdminOnly>} />
+            {SETTINGS_TABS.map((t) => (
+              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsPage tab={t.key} /></AdminOnly>} />
+            ))}
             <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />

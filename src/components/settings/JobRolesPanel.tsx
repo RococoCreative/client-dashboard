@@ -1,9 +1,10 @@
-// The company's job roles, for an admin in Company Settings: the jobs people do here, the
-// dashboard modules each role gets, the goals a role brings into every month's Goal Setting
-// Review, and the metrics the role is scored on each month (its scorecard). Roles and metrics are
-// rows (rule 12): a company shapes its own set and nothing here knows a company by name. Every
-// change saves on its own.
+// The company's job roles, for an admin in Settings > Roles: the jobs people do here, the
+// dashboard modules each role gets, and the metrics the role is scored on each month (its
+// scorecard). The goals a role brings into every month are edited in Goals > By role; each card
+// lists them and links there. Roles and metrics are rows (rule 12): a company shapes its own set
+// and nothing here knows a company by name. Every change saves on its own.
 import { useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -15,10 +16,11 @@ import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { createJobRole, createJobRoleGoal, deleteJobRole, deleteJobRoleGoal, listJobRoleGoals, listJobRoles, updateJobRole, updateJobRoleGoal } from "../../services/jobRoles.ts";
+import { createJobRole, deleteJobRole, listJobRoleGoals, listJobRoles, updateJobRole } from "../../services/jobRoles.ts";
 import { createRoleMetric, deleteRoleMetric, listRoleMetrics, updateRoleMetric, type RoleMetricPatch } from "../../services/scorecards.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
+import { roleGoalsPath } from "../goals/roleGoalsAnchor.ts";
 import { DASHBOARD_MODULE_LABELS, METRIC_KIND_LABELS, keysOf, type DashboardModule, type JobRole, type JobRoleGoal, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
 const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
@@ -213,14 +215,13 @@ function RoleMetrics({
   );
 }
 
-// One role: its name and description, the modules its people see, its goal templates, and its
-// scorecard metrics.
+// One role: its name and description, the modules its people see, the role goals it brings (read
+// here, edited in Goals > By role), and its scorecard metrics.
 function RoleCard({
   role,
   goals,
   metrics,
   onRole,
-  onGoals,
   onDelete,
   onError,
 }: {
@@ -229,7 +230,6 @@ function RoleCard({
   // The scorecard half, or null when the metrics did not load (the rest of the card still works).
   metrics: ReactNode;
   onRole: (role: JobRole) => void;
-  onGoals: (update: (goals: JobRoleGoal[]) => JobRoleGoal[]) => void;
   onDelete: () => void;
   onError: (message: string) => void;
 }) {
@@ -244,31 +244,6 @@ function RoleCard({
     const next = on ? [...new Set([...role.dashboard_modules, module])] : role.dashboard_modules.filter((m) => m !== module);
     void save({ dashboard_modules: next });
   }
-  async function addGoal(title: string) {
-    try {
-      const created = await createJobRoleGoal({ job_role_id: role.id, title, sort_order: goals.length + 1 });
-      onGoals((list) => [...list, created]);
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  }
-  async function renameGoal(goal: JobRoleGoal, title: string) {
-    try {
-      const next = await updateJobRoleGoal(goal.id, { title: title.trim() });
-      onGoals((list) => list.map((g) => (g.id === next.id ? next : g)));
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  }
-  async function removeGoal(goal: JobRoleGoal) {
-    try {
-      await deleteJobRoleGoal(goal.id);
-      onGoals((list) => list.filter((g) => g.id !== goal.id));
-    } catch (err) {
-      onError(errorMessage(err));
-    }
-  }
-
   return (
     <li className={`rounded-lg border border-line bg-surface p-4 ${role.is_active ? "" : "opacity-70"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -305,23 +280,21 @@ function RoleCard({
       </div>
 
       <div className="mt-4">
-        <p className={eyebrowClass}>Role goals</p>
-        <p className="mt-0.5 text-[12px] text-ink-3">Offered in every month's Goal Setting Review for the people in this role, one click to file.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className={eyebrowClass}>Role goals</p>
+          <Link to={roleGoalsPath(role.id)} className="text-[12.5px] text-accent hover:underline">
+            {goals.length > 0 ? "Edit in Goals, By role" : "Add in Goals, By role"}
+          </Link>
+        </div>
         {goals.length > 0 ? (
-          <ul className="mt-2 divide-y divide-line">
+          <ul className="mt-1.5 space-y-1">
             {goals.map((goal) => (
-              <li key={goal.id} className="flex items-center gap-2 py-1.5">
-                <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => void renameGoal(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
-                <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void removeGoal(goal)}>
-                  <Trash2 size={14} aria-hidden />
-                </IconButton>
-              </li>
+              <li key={goal.id} className="text-[13px] text-ink">{goal.title}</li>
             ))}
           </ul>
-        ) : null}
-        <div className="mt-2">
-          <AddForm placeholder={`Add a goal for ${role.name}`} label="Add" onAdd={(title) => void addGoal(title)} />
-        </div>
+        ) : (
+          <p className="mt-0.5 text-[12px] text-ink-3">None yet. Role goals are offered in every month's Goal Setting Review for the people in this role, and are set in Goals, By role.</p>
+        )}
       </div>
       {metrics}
     </li>
@@ -448,7 +421,6 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
                     ) : null
                   }
                   onRole={(next) => state.setData((prev) => (prev ? { ...prev, roles: prev.roles.map((r) => (r.id === next.id ? next : r)) } : prev))}
-                  onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
                   onDelete={() => openDelete(role)}
                   onError={setError}
                 />

@@ -5,6 +5,7 @@
 // the person, where results are entered. The numbers all come from lib/scorecard.ts.
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import Button from "../../components/ui/Button.tsx";
 import Chip from "../../components/ui/Chip.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -249,7 +250,8 @@ export default function ScorecardsPage() {
         <EmptyState
           eyebrow="Scorecards"
           title="No scorecard metrics yet"
-          body="Add the metrics each job role is scored on in Settings, Job roles. Then enter each person's monthly results on their profile and they gather here."
+          body="An admin adds the metrics each job role is scored on in Settings, Roles. Then each person's monthly results are entered on their profile, and they gather here."
+          action={<Link to="/settings/roles"><Button variant="secondary">Open Settings, Roles</Button></Link>}
         />
       ) : !results.data && !results.error ? (
         <SkeletonRows rows={6} />

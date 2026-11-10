@@ -72,15 +72,22 @@ vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
+vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { KLASIK, makeHub } from "../test/fixtures.ts";
 import App from "../App.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
-import CompanyGoalsPage from "./gsr/CompanyGoalsPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
-import ResourcesPage from "./ResourcesPage.tsx";
+import ResourcesPage from "./resources/ResourcesPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -220,7 +227,7 @@ describe("goals", () => {
 
   it("keeps a company goal's delete dialog to its own failure, and clears a stale one", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanyGoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="company" />, admin);
     const hit = await screen.findAllByRole("button", { name: "Mark hit" });
     ctl.failures.set("updateCompanyGoal", new Error("The hit did not save."));
     await user.click(hit[0]);
@@ -270,7 +277,7 @@ describe("library files", () => {
 
   it("replaces a resource's file only once the row points at the new one", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ResourcesPage />, admin);
+    renderWithHub(<ResourcesPage tab="files" />, admin);
     const companyId = KLASIK.company.id;
     const first = new File(["one"], "First.pdf", { type: "application/pdf" });
     const second = new File(["two"], "Second.pdf", { type: "application/pdf" });

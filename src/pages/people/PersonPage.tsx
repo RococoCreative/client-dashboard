@@ -1,11 +1,11 @@
-// One person, for an admin: the profile the review opens with (position, hire date,
-// department, who they report to, their job role), their compensation table, this year's KPIs
-// and their own financial figures, every review with its score, and their goals for this year,
-// next year and their BHAG (editable, so a manager can set goals in a one-on-one). A goal's
-// action steps and progress notes are the person's own and never show here; the month's goals
-// live in the GSR. Their role scorecard (the month-by-month results an admin enters against the
-// role's targets), the projects they are on, and the division they sit in are here too.
-import { useState } from "react";
+// One person, for an admin, in one fixed order: Details (position, hire date, department, who
+// they report to, their job role and division), then their role Scorecard (the month-by-month
+// results an admin enters against the role's targets), their Goals for this year, next year and
+// their BHAG (editable, so a manager can set goals in a one-on-one), the Projects they are on,
+// this year's KPIs, financial figures and deliverables, their impact score, Compensation, and
+// Review history. A goal's action steps and progress notes are the person's own and never show
+// here; the month's goals live in the GSR. Each section header carries the one action it needs.
+import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
@@ -104,13 +104,15 @@ function DivisionFields({ companyId, person, me, onPatch }: { companyId: string;
 
 // The person's scorecard and their projects, loaded together because a per-project metric has a
 // row for every project they are on: assigning one here gives it a row there straight away. The
-// year's results load on their own, so changing the year leaves the rest standing.
+// year's results load on their own, so changing the year leaves the rest standing. Whatever sits
+// between the two on the page (their goals) is passed in, so the page keeps its one order.
 function ScorecardAndProjects({
   companyId,
   person,
   roleName,
   canEdit,
   linkProjects,
+  between,
   onError,
 }: {
   companyId: string;
@@ -118,6 +120,7 @@ function ScorecardAndProjects({
   roleName: string | null;
   canEdit: boolean;
   linkProjects: boolean;
+  between: ReactNode;
   onError: (message: string) => void;
 }) {
   const [year, setYear] = useState(() => new Date().getFullYear());
@@ -131,8 +134,22 @@ function ScorecardAndProjects({
   }, [companyId, person.id]);
   const results = useAsync(() => listMetricEntries(companyId, { employeeId: person.id, year }), [companyId, person.id, year]);
 
-  if (base.error && !base.data) return <Notice tone="error">{base.error}</Notice>;
-  if (!base.data) return <SkeletonRows rows={4} />;
+  if (base.error && !base.data) {
+    return (
+      <>
+        <Notice tone="error">{base.error}</Notice>
+        {between}
+      </>
+    );
+  }
+  if (!base.data) {
+    return (
+      <>
+        <SkeletonRows rows={4} />
+        {between}
+      </>
+    );
+  }
   const { metrics, assignments, projects } = base.data;
   const names = new Map(projects.map((p) => [p.id, p.name]));
   return (
@@ -153,6 +170,7 @@ function ScorecardAndProjects({
         onEntries={(update) => results.setData((prev) => (prev ? update(prev) : prev))}
         description={canEdit ? "The role's metrics, month by month, against target, with the year to date. Entered here by an admin; the person reads their own." : undefined}
       />
+      {between}
       <PersonProjects
         companyId={companyId}
         employeeId={person.id}
@@ -269,6 +287,16 @@ export default function PersonPage() {
   const tenure = formatTenure(person.hire_date);
   const manager = person.reports_to ? people.find((p) => p.id === person.reports_to) ?? null : null;
 
+  const goalsBlock = (
+    <section aria-labelledby="person-goals-heading">
+      <div className="mb-3">
+        <p className="eyebrow">Goals</p>
+        <h2 id="person-goals-heading" className="mt-1 font-display text-lg text-heading">This year, next year and the BHAG</h2>
+      </div>
+      <GoalsPanel companyId={companyId} employeeId={person.id} canEdit ownerName={displayName(person).split(" ")[0]} />
+    </section>
+  );
+
   async function patch(patchValue: Parameters<typeof updateProfile>[1]) {
     setError("");
     try {
@@ -350,7 +378,11 @@ export default function PersonPage() {
                     <option key={r.id} value={r.id}>{r.name}{r.is_active ? "" : " (retired)"}</option>
                   ))}
                 </select>
-                {jobRoles.length === 0 ? <p className="mt-1 text-[12px] text-ink-3">No job roles yet. Add them in Settings.</p> : null}
+                {jobRoles.length === 0 ? (
+                  <p className="mt-1 text-[12px] text-ink-3">
+                    No job roles yet. Admins add them in <Link to="/settings/roles" className="text-accent hover:underline">Settings, Roles</Link>.
+                  </p>
+                ) : null}
                 {roleRetired && jobRole ? (
                   <p className="mt-1 text-[12px] text-warning">
                     {jobRole.name} is retired, so it no longer puts its modules on their dashboard or offers its role goals. Pick a current role.
@@ -390,6 +422,42 @@ export default function PersonPage() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {rococo ? goalsBlock : (
+            <ScorecardAndProjects
+              companyId={companyId}
+              person={person}
+              roleName={jobRole?.name ?? null}
+              canEdit={isAdmin}
+              linkProjects={hasModule(company, "production")}
+              between={goalsBlock}
+              onError={setError}
+            />
+          )}
+          <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
+            <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
+          </Section>
+          <Section
+            eyebrow={String(year)}
+            title="Financial figures"
+            description={
+              figuresOnDashboard && jobRole
+                ? `The numbers this person owns, against target. On their dashboard, because ${jobRole.name} carries the module.`
+                : roleRetired && jobRole
+                  ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} is retired. They come back once a current role that carries the module is set above.`
+                  : jobRole
+                    ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on for the role in Settings, Roles.`
+                    : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
+            }
+          >
+            <FinancialsTable employeeId={person.id} year={year} rows={financials} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, financials: update(prev.financials) } : prev))} onError={setError} />
+          </Section>
+          <Section
+            eyebrow={String(year)}
+            title="Deliverables"
+            description="What this person owns, grouped the way the company thinks about it. Each heading is scored by the tasks under it: two points a task, so a Hit on every one lands on target."
+          >
+            <DeliverablesPanel companyId={companyId} employeeId={person.id} year={year} canEdit />
+          </Section>
           {ratingPillars.length > 0 ? (
             <Section
               eyebrow="Impact score"
@@ -427,7 +495,9 @@ export default function PersonPage() {
                         </span>
                       </div>
                       {own.length === 0 ? (
-                        <p className="mt-2 text-[12.5px] text-ink-3">No criteria yet. Add them in Reviews, Pillars and weights.</p>
+                        <p className="mt-2 text-[12.5px] text-ink-3">
+                          No criteria yet. Admins add them per pillar in <Link to="/settings/reviews" className="text-accent hover:underline">Settings, Reviews</Link>.
+                        </p>
                       ) : (
                         <ul className="divide-y divide-line">
                           {own.map(({ criterion, current, was, delta }) => (
@@ -469,51 +539,19 @@ export default function PersonPage() {
               {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
             </Section>
           ) : null}
-          {rococo ? null : (
-            <ScorecardAndProjects
-              companyId={companyId}
-              person={person}
-              roleName={jobRole?.name ?? null}
-              canEdit={isAdmin}
-              linkProjects={hasModule(company, "production")}
-              onError={setError}
-            />
-          )}
           <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>
             <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
           </Section>
-
-          <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
-            <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
-          </Section>
-
           <Section
-            eyebrow={String(year)}
-            title="Financial figures"
-            description={
-              figuresOnDashboard && jobRole
-                ? `The numbers this person owns, against target. On their dashboard, because ${jobRole.name} carries the module.`
-                : roleRetired && jobRole
-                  ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} is retired. They come back once a current role that carries the module is set above.`
-                  : jobRole
-                    ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on in Settings.`
-                    : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
-            }
+            eyebrow="Reviews"
+            title="Review history"
+            padded={false}
+            actions={<Link to="/reviews" className="text-[13px] text-accent hover:underline">Review cycles</Link>}
           >
-            <FinancialsTable employeeId={person.id} year={year} rows={financials} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, financials: update(prev.financials) } : prev))} onError={setError} />
-          </Section>
-
-          <Section
-            eyebrow={String(year)}
-            title="Deliverables"
-            description="What this person owns, grouped the way the company thinks about it. Each heading is scored by the tasks under it: two points a task, so a Hit on every one lands on target."
-          >
-            <DeliverablesPanel companyId={companyId} employeeId={person.id} year={year} canEdit />
-          </Section>
-
-          <Section eyebrow="Reviews" title="Review history" padded={false}>
             {rows.length === 0 ? (
-              <p className="p-5 text-sm text-ink-2">No reviews yet. Open a cycle and start one from the team table.</p>
+              <p className="p-5 text-sm text-ink-2">
+                No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-accent hover:underline">Reviews</Link> or <Link to="/gsr" className="text-accent hover:underline">Monthly GSRs</Link>, and everyone on the roster gets one.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className={tableClass}>
@@ -556,10 +594,6 @@ export default function PersonPage() {
               </div>
             </Section>
           ) : null}
-          <div>
-            <p className="eyebrow mb-3">Goals</p>
-            <GoalsPanel companyId={companyId} employeeId={person.id} canEdit ownerName={displayName(person).split(" ")[0]} />
-          </div>
         </div>
       </div>
     </>

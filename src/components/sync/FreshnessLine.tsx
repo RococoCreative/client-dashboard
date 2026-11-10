@@ -20,7 +20,7 @@ export default function FreshnessLine({ source, connection, now = new Date() }: 
       {state === "not_connected" ? (
         <>
           Not connected. Connect {CONNECTION_PROVIDER_LABELS[source.provider]} in{" "}
-          <Link to="/settings" className="text-accent hover:underline">Settings</Link>.
+          <Link to="/settings/connections" className="text-accent hover:underline">Settings</Link>.
         </>
       ) : state === "awaiting_first_sync" ? (
         "Connected. No data yet."

@@ -50,6 +50,9 @@ vi.mock("../services/connections.ts", async () => {
   const mock = await import("../test/mocks/connections.ts");
   return { ...mock, disconnectConnection: vi.fn(mock.disconnectConnection) };
 });
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCompany, deleteCompany } from "../services/companies.ts";
@@ -58,10 +61,10 @@ import { deleteCriterion, deletePillar, updatePillar } from "../services/gsr.ts"
 import { removeCompanyFiles } from "../services/storage.ts";
 import { disconnectConnection } from "../services/connections.ts";
 import { KLASIK, makeHub } from "../test/fixtures.ts";
-import GsrSettingsPage from "./gsr/GsrSettingsPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
-import CompanySettingsPage from "./CompanySettingsPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
 
 const admin = makeHub("admin");
@@ -106,10 +109,15 @@ describe("name boxes that cannot be emptied", () => {
     await expectClearRestores(user, "Line Base salary", "Base salary");
   });
 
-  it("puts back a cleared job role name or role goal in settings", async () => {
+  it("puts back a cleared job role name in Settings > Roles", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="roles" />, admin);
     await expectClearRestores(user, "Name for Production Manager", "Production Manager");
+  });
+
+  it("puts back a cleared role goal in Goals > By role", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<GoalsPage tab="roles" />, admin);
     await expectClearRestores(user, "Role goal Walk every active site once a week", "Walk every active site once a week");
   });
 
@@ -124,7 +132,7 @@ describe("name boxes that cannot be emptied", () => {
 describe("pillar weights", () => {
   it("refuses a weight outside 0 to 100, says so, and shows the stored weight again", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const section = (await screen.findByDisplayValue("Deliverables")).closest("section") as HTMLElement;
     const weight = within(section).getByLabelText("Weight %");
     expect(weight).toHaveValue(50);
@@ -160,7 +168,7 @@ describe("pillar weights", () => {
 describe("deleting a pillar or criterion", () => {
   it("says a pillar on a signed-off review cannot go, and shows the refusal inside the dialog", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const section = (await screen.findByDisplayValue("Brand Impact")).closest("section") as HTMLElement;
     await user.click(within(section).getByRole("button", { name: "Delete pillar" }));
     const dialog = screen.getByRole("dialog");
@@ -179,7 +187,7 @@ describe("deleting a pillar or criterion", () => {
 
   it("says the same of a criterion, and shows its refusal inside the dialog", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const row = (await screen.findByDisplayValue("Curiosity")).closest("li") as HTMLElement;
     await user.click(within(row).getByRole("button", { name: "Delete criterion" }));
     const dialog = screen.getByRole("dialog");
@@ -195,7 +203,7 @@ describe("deleting a pillar or criterion", () => {
 
   it("waits for a delete already sent, and the next dialog opens without its refusal", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const section = (await screen.findByDisplayValue("Brand Impact")).closest("section") as HTMLElement;
     await user.click(within(section).getByRole("button", { name: "Delete pillar" }));
     const dialog = screen.getByRole("dialog");
@@ -226,7 +234,7 @@ describe("deleting a pillar or criterion", () => {
 
   it("opens no second dialog from the page behind, so a refusal shows only in its own dialog", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const section = (await screen.findByDisplayValue("Brand Impact")).closest("section") as HTMLElement;
     await user.click(within(section).getByRole("button", { name: "Delete pillar" }));
     const dialog = screen.getByRole("dialog");
@@ -259,7 +267,7 @@ describe("deleting a pillar or criterion", () => {
 describe("retiring a job role", () => {
   it("says what retiring does, on the panel and on a retired role", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="roles" />, admin);
     expect(await screen.findByText(/Retiring a role keeps it on record/)).toBeInTheDocument();
     const card = (await screen.findByLabelText("Name for Production Manager")).closest("li") as HTMLElement;
     await user.click(within(card).getByRole("button", { name: "Retire" }));
@@ -275,7 +283,7 @@ describe("deliverable categories", () => {
 
   it("lists the company's categories in settings, renames one, and never to blank", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     expect(await screen.findByRole("heading", { name: "Deliverable categories" })).toBeInTheDocument();
     await expectClearRestores(user, "Category name BD & Sales", "BD & Sales");
     const production = screen.getByLabelText("Category name Production");
@@ -292,7 +300,7 @@ describe("deliverable categories", () => {
 
   it("reorders categories", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     await screen.findByLabelText("Category name Production & QA");
     const order = () => screen.getAllByLabelText(/^Category name /).map((el) => (el as HTMLInputElement).value);
     expect(order()).toEqual(["BD & Sales", "Production & QA"]);
@@ -303,7 +311,7 @@ describe("deliverable categories", () => {
 
   it("retires a category: settings mark it, and the person page stops offering it", async () => {
     const user = userEvent.setup();
-    const settings = renderWithHub(<CompanySettingsPage />, admin);
+    const settings = renderWithHub(<SettingsPage tab="reviews" />, admin);
     const row = (await screen.findByLabelText("Category name BD & Sales")).closest("li") as HTMLElement;
     await user.click(within(row).getByRole("button", { name: "Retire" }));
     expect(await within(row).findByText("Retired")).toBeInTheDocument();
@@ -326,13 +334,13 @@ describe("deliverable categories", () => {
     await user.type(screen.getByLabelText("Category name"), "BD & Sales");
     const form = screen.getByLabelText("New deliverable").closest("form") as HTMLElement;
     await user.click(within(form).getByRole("button", { name: /Add deliverable/ }));
-    expect(await screen.findByText("BD & Sales is retired. Restore it in Settings to file under it.")).toBeInTheDocument();
+    expect(await screen.findByText("BD & Sales is retired. Restore it in Settings, Reviews to file under it.")).toBeInTheDocument();
     expect(screen.getByLabelText("New deliverable")).toHaveValue("Referral program");
   });
 
   it("deletes a category: its headings move to Uncategorized and keep their tasks", async () => {
     const user = userEvent.setup();
-    const settings = renderWithHub(<CompanySettingsPage />, admin);
+    const settings = renderWithHub(<SettingsPage tab="reviews" />, admin);
     await screen.findByLabelText("Category name Production & QA");
     await user.click(screen.getByRole("button", { name: "Delete Production & QA" }));
     const dialog = screen.getByRole("dialog");
@@ -351,7 +359,7 @@ describe("deliverable categories", () => {
 
   it("waits for a category delete already sent, and opens the next dialog without its failure", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     await screen.findByLabelText("Category name BD & Sales");
     await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
     const dialog = screen.getByRole("dialog");
@@ -376,7 +384,7 @@ describe("deliverable categories", () => {
   it("opens no other category's dialog while a delete runs, so its failure stays in its own dialog", async () => {
     const user = userEvent.setup();
     await createDeliverableCategory({ company_id: KLASIK.company.id, name: "Estimating", sort_order: 9 });
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     await screen.findByLabelText("Category name Estimating");
     await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
     const dialog = screen.getByRole("dialog");

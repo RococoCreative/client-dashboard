@@ -1,0 +1,105 @@
+// Goals > People, for admins: everybody's goals for the year and their BHAGs, personal,
+// professional and role, with where each one stands. One list for the company rather than a panel
+// per person, so the page is three reads however large the roster. Editing happens on the
+// person's page. A goal's action steps and progress notes are its owner's alone, so this page
+// shows the shared part only: the goal, its kind, its period and its completion.
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import Badge from "../ui/Badge.tsx";
+import Button from "../ui/Button.tsx";
+import EmptyState from "../ui/EmptyState.tsx";
+import Notice from "../ui/Notice.tsx";
+import PanelHeader from "../ui/PanelHeader.tsx";
+import Section from "../ui/Section.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { selectClass } from "../ui/forms.ts";
+import { GOAL_OUTCOME_TONE } from "../status.ts";
+import { useHub } from "../../context/HubContext.tsx";
+import { useAsync } from "../../hooks/useAsync.ts";
+import { listCycles, listGoals } from "../../services/gsr.ts";
+import { listCompanyProfiles } from "../../services/profiles.ts";
+import { goalOutcome, goalSettled, rankGoals, type GoalOutcome } from "../../lib/gsr/goals.ts";
+import { displayName, pluralize } from "../../lib/format.ts";
+import { GOAL_KIND_LABELS, type Goal } from "../../types/database.ts";
+
+const OUTCOME_LABELS: Record<GoalOutcome, string> = { hit: "Hit", miss: "Missed", open: "In progress" };
+
+export default function PeopleGoalsPanel() {
+  const { company } = useHub();
+  const companyId = company!.id;
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState(thisYear);
+
+  const state = useAsync(async () => {
+    const [people, goals, cycles] = await Promise.all([listCompanyProfiles(companyId), listGoals(companyId), listCycles(companyId)]);
+    return { people, goals, cycles };
+  }, [companyId]);
+
+  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
+  if (!state.data) return <SkeletonRows rows={6} />;
+
+  const { people, goals, cycles } = state.data;
+  const yearly = goals.filter((g) => g.scope === "year");
+  // A BHAG has no year, so it shows whichever year is picked.
+  const bhags = goals.filter((g) => g.scope === "bhag");
+  const years = [...new Set([thisYear, ...yearly.map((g) => g.year ?? thisYear)])].sort((a, b) => b - a);
+  const shown = yearly.filter((g) => (g.year ?? thisYear) === year);
+  const outcome = (goal: Goal) => goalOutcome(goal, goalSettled(goal, cycles));
+  const hit = shown.filter((g) => outcome(g) === "hit").length;
+  const roster = people
+    .filter((p) => p.is_active)
+    .map((person) => ({ person, goals: [...rankGoals(shown.filter((g) => g.employee_id === person.id)), ...rankGoals(bhags.filter((g) => g.employee_id === person.id))] }));
+
+  return (
+    <>
+      <PanelHeader
+        eyebrow="Each person, for the year"
+        title="People's goals"
+        description="Personal, professional and role goals for the year, and each person's BHAG. Set with the person on their page, or by them on My Goals; read here. Action steps and progress notes stay private to each person."
+        actions={
+          <select aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={`${selectClass} mt-0 w-28`}>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        }
+      />
+      {shown.length === 0 && bhags.length === 0 ? (
+        <EmptyState
+          eyebrow={String(year)}
+          title="No yearly goals yet"
+          body="Each person's goals for the year are set on their page in People, by an admin in a one-on-one or by the person on My Goals. They show here and on every quarterly review."
+          action={<Link to="/people"><Button variant="secondary">Open People</Button></Link>}
+        />
+      ) : (
+        <div className="space-y-6">
+          <p className="text-sm text-ink-2">{shown.length === 0 ? `No goals filed for ${year} yet.` : `${hit} of ${pluralize(shown.length, "goal")} for ${year} hit so far.`}</p>
+          {roster.map(({ person, goals: own }) =>
+            own.length === 0 ? null : (
+              <Section key={person.id} eyebrow={person.title ?? ""} title={displayName(person)} padded={false} actions={<Link to={`/people/${person.id}`} className="text-[13px] text-accent hover:underline">Open profile</Link>}>
+                <ul className="divide-y divide-line">
+                  {own.map((goal) => {
+                    const result = outcome(goal);
+                    return (
+                      <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-ink">{goal.title}</p>
+                          <p className="text-[12px] text-ink-3">
+                            {goal.scope === "bhag" ? "BHAG · " : ""}
+                            {GOAL_KIND_LABELS[goal.kind]}
+                            {` · ${goal.progress}%`}
+                          </p>
+                        </div>
+                        <Badge tone={GOAL_OUTCOME_TONE[result]}>{OUTCOME_LABELS[result]}</Badge>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Section>
+            ),
+          )}
+        </div>
+      )}
+    </>
+  );
+}

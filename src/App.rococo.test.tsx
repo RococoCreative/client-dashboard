@@ -28,6 +28,11 @@ vi.mock("./services/projects.ts", () => import("./test/mocks/projects.ts"));
 vi.mock("./services/wins.ts", () => import("./test/mocks/wins.ts"));
 vi.mock("./services/sync.ts", () => import("./test/mocks/sync.ts"));
 vi.mock("./services/externalLinks.ts", () => import("./test/mocks/externalLinks.ts"));
+vi.mock("./services/focusTopics.ts", () => import("./test/mocks/focusTopics.ts"));
+vi.mock("./services/scorecards.ts", () => import("./test/mocks/scorecards.ts"));
+vi.mock("./services/divisions.ts", () => import("./test/mocks/divisions.ts"));
+vi.mock("./services/projectAssignments.ts", () => import("./test/mocks/projectAssignments.ts"));
+vi.mock("./services/reviewProjectNotes.ts", () => import("./test/mocks/reviewProjectNotes.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";
@@ -111,26 +116,41 @@ describe("routes land the same with modules on", () => {
   const companies: Array<[string, CompanyBundle]> = [["klasik", KLASIK], ["kingdom", KINGDOM]];
 
   const adminSelf = [
-    "/", "/gsr", "/reviews", "/goals", "/reviews/settings", "/reviews/company-goals",
+    "/", "/gsr", "/reviews", "/goals/company", "/goals/roles", "/goals/focus", "/goals/people", "/scorecards",
     "/gsr/cycles/:cycle", "/reviews/cycles/:cycle2", "/gsr/reviews/:review", "/reviews/:review",
-    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/:person", "/sops", "/sops/new",
-    "/sops/:sop", "/sops/:sop/edit", "/resources", "/financials", "/marketing", "/settings",
+    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/:person", "/sops/new",
+    "/sops/:sop", "/sops/:sop/edit", "/resources/sops", "/resources/files", "/financials", "/marketing",
+    "/settings/company", "/settings/roles", "/settings/reviews", "/settings/connections",
   ];
+  // Every address that moved in the reorganization lands on the tab that holds it now.
   const adminCases: Array<[string, string | null]> = [
     ...adminSelf.map((t): [string, null] => [t, null]),
-    ["/gsr/settings", "/reviews/settings"],
-    ["/gsr/company-goals", "/reviews/company-goals"],
+    ["/goals", "/goals/company"],
+    ["/reviews/settings", "/settings/reviews"],
+    ["/gsr/settings", "/settings/reviews"],
+    ["/reviews/company-goals", "/goals/company"],
+    ["/gsr/company-goals", "/goals/company"],
+    ["/settings", "/settings/company"],
+    ["/sops", "/resources/sops"],
+    ["/resources", "/resources/sops"],
     ["/my", "/my/gsr"],
     ["/rococo", "/"],
     ["/nope", "/"],
+    ["/settings/nope", "/"],
   ];
   const employeeCases: Array<[string, string]> = [
     ["/gsr", "/my/gsr"],
     ["/reviews", "/my/reviews"],
     ["/goals", "/my/goals"],
+    ["/goals/company", "/"],
     ["/people", "/"],
     ["/settings", "/"],
-    ["/sops", "/sops"],
+    ["/settings/reviews", "/"],
+    ["/reviews/settings", "/"],
+    ["/sops", "/resources/sops"],
+    ["/resources", "/resources/sops"],
+    ["/resources/files", "/resources/files"],
+    ["/sops/:sop", "/sops/:sop"],
   ];
 
   for (const [slug, bundle] of companies) {
@@ -141,19 +161,19 @@ describe("routes land the same with modules on", () => {
     });
 
     // The provider sends the browser to the company's own return path (App.tsx ConnectionReturn).
-    // It lands on Settings with the outcome shown, then the outcome is taken off the address so a
-    // reload does not report it again.
-    it(`admin at ${slug}: a connection return lands on Settings with its outcome`, async () => {
+    // It lands on Settings > Connections with the outcome shown, then the outcome is taken off the
+    // address so a reload does not report it again.
+    it(`admin at ${slug}: a connection return lands on Settings > Connections with its outcome`, async () => {
       const message = "The sign-in was cancelled or refused. Nothing changed.";
       const landed = await landing(`/settings/connections/${bundle.company.id}?connect_error=${encodeURIComponent(message)}`, "admin", slug);
-      expect(landed.pathname).toBe("/settings");
+      expect(landed.pathname).toBe("/settings/connections");
       expect(screen.getByText(message)).toBeInTheDocument();
       expect(new URLSearchParams(landed.search).get("connect_error")).toBeNull();
     });
 
-    it.each(employeeCases)(`employee at ${slug}: %s lands on %s`, async (path, expected) => {
-      const landed = await landing(path, "employee", slug);
-      expect(landed.pathname).toBe(expected);
+    it.each(employeeCases)(`employee at ${slug}: %s lands on %s`, async (template, expected) => {
+      const landed = await landing(fill(template, bundle), "employee", slug);
+      expect(landed.pathname).toBe(fill(expected, bundle));
     });
   }
 
@@ -167,6 +187,10 @@ describe("routes land the same with modules on", () => {
     ["/wins", "admin", "klasik", "/"],
     ["/wins", "employee", "kingdom", "/wins"],
     ["/wins", "employee", "klasik", "/"],
+    ["/resources/links", "admin", "kingdom", "/resources/links"],
+    ["/resources/links", "employee", "kingdom", "/resources/links"],
+    ["/resources/links", "admin", "klasik", "/resources/sops"],
+    ["/resources/links", "employee", "klasik", "/resources/sops"],
   ];
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
     const landed = await landing(path, persona, slug);
@@ -176,7 +200,7 @@ describe("routes land the same with modules on", () => {
   it.each(["/sales-finance", "/sales-finance/controls"])("keeps a company without data sources out of Sales & Finance: %s", async (path) => {
     window.history.pushState({}, "", `${path}?persona=admin&company=klasik`);
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Sales & Finance" })).not.toBeInTheDocument();
   });
 

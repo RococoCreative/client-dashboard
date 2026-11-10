@@ -30,14 +30,20 @@ vi.mock("../services/jobRoles.ts", async () => {
   return { ...mock, deleteJobRole: vi.fn(mock.deleteJobRole) };
 });
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
+vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { deleteCompanyGoal, updateCompanyGoal, updatePillar } from "../services/gsr.ts";
 import { deleteJobRole } from "../services/jobRoles.ts";
 import { makeHub } from "../test/fixtures.ts";
-import GsrSettingsPage from "./gsr/GsrSettingsPage.tsx";
-import CompanyGoalsPage from "./gsr/CompanyGoalsPage.tsx";
-import CompanySettingsPage from "./CompanySettingsPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
 
 const admin = makeHub("admin");
 
@@ -52,10 +58,10 @@ function pending() {
 
 const dropped = "The connection dropped. Check your signal and try again.";
 
-// Company settings with a second job role beside the seeded Production Manager. The mock keeps
+// Settings > Roles with a second job role beside the seeded Production Manager. The mock keeps
 // what a test adds for the rest of the file, so each test names its own.
 async function renderRolesWith(user: ReturnType<typeof userEvent.setup>, name: string) {
-  renderWithHub(<CompanySettingsPage />, admin);
+  renderWithHub(<SettingsPage tab="roles" />, admin);
   await screen.findByLabelText("Name for Production Manager");
   await user.type(screen.getByLabelText("Add a job role"), name);
   await user.click(screen.getByRole("button", { name: "Add role" }));
@@ -121,7 +127,7 @@ describe("deleting a job role", () => {
 describe("pillar weights", () => {
   it("clears the weight message once the box is back in use, holding the stored weight", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     const section = (await screen.findByDisplayValue("Deliverables")).closest("section") as HTMLElement;
     const weight = within(section).getByLabelText("Weight %");
     vi.mocked(updatePillar).mockClear();
@@ -155,7 +161,7 @@ describe("pillar weights", () => {
 describe("company goals notice", () => {
   it("goes when a delete starts", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanyGoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="company" />, admin);
     const row = (await screen.findByText("Closed sales")).closest("li") as HTMLElement;
     vi.mocked(updateCompanyGoal).mockRejectedValueOnce(new Error("The hit did not save."));
     await user.click(within(row).getByRole("button", { name: "Mark hit" }));
@@ -172,7 +178,7 @@ describe("company goals notice", () => {
 
   it("goes when the year changes", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanyGoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="company" />, admin);
     const row = (await screen.findByText("Closed sales")).closest("li") as HTMLElement;
     vi.mocked(updateCompanyGoal).mockRejectedValueOnce(new Error("The hit did not save."));
     await user.click(within(row).getByRole("button", { name: "Mark hit" }));
@@ -185,7 +191,7 @@ describe("company goals notice", () => {
 
   it("stays away when a toggle from the year before fails after the move", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanyGoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="company" />, admin);
     const row = (await screen.findByText("Closed sales")).closest("li") as HTMLElement;
     let fail: (err: Error) => void = () => undefined;
     vi.mocked(updateCompanyGoal).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
@@ -201,14 +207,14 @@ describe("company goals notice", () => {
 
 describe("connection outcome", () => {
   it("says a provider is connected only when its row reads connected", async () => {
-    renderWithHub(<CompanySettingsPage />, admin, { path: "/?connected=quickbooks" });
+    renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/?connected=quickbooks" });
     // QuickBooks is not connected for this company, whatever a hand-made link says.
     expect(await screen.findByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
     expect(screen.queryByText("QuickBooks Online is connected.")).not.toBeInTheDocument();
   });
 
   it("still says so when the row does read connected", async () => {
-    renderWithHub(<CompanySettingsPage />, admin, { path: "/?connected=gohighlevel" });
+    renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/?connected=gohighlevel" });
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect GoHighLevel" })).toBeInTheDocument();
   });

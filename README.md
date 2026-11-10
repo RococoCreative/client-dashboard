@@ -21,18 +21,18 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 
 | Module | Admins | Employees |
 | --- | --- | --- |
-| Dashboard | State of every module at a glance | Own score, goals, recent SOPs |
+| Home | State of every module at a glance | Own score, goals, recent SOPs |
 | Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback; goals with action steps and progress notes that stay private to them |
 | People | Add staff before inviting them, invite when ready, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
-| SOP library | Create, edit (versioned), publish, attach files | Read published documents |
-| Resource library | Add links, files, templates, videos with tags | Browse and open |
+| Resources: SOPs | Create, edit (versioned), publish, attach files | Read published documents |
+| Resources: Files & media | Add files, templates, videos and saved links with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
 | Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, mark done, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
 | Wins (`wins`) | Log, edit and archive wins; the five most recent on Home | Read; the five most recent on Home |
 | Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
 | Home cards (`switchboard`, `data_sources`) | Attention items, section shortcuts, data freshness | Shortcuts, wins |
-| External links (`external_links`) | Shortcuts to outside tools such as Monday boards, grouped by section; public share views embedded only when flagged public | Links shared with everyone |
+| Resources: Links (`external_links`) | Links to the programs where the work lives (name, link, what it is for, category, order, who sees it), managed on Resources > Links and shown there, on the Home card Where the work lives, and on the section page their category names; public share views embedded on section pages only when flagged public | Read on Resources > Links and on Home |
 | Rococo portfolio | Rococo admins only: every company with its health signals, plus companies, themes, sign-in domains, and every user, and the Activity log of configuration and permission changes | |
 
 Rows marked with a module key appear only for a company whose modules include it. Email
@@ -134,14 +134,15 @@ Some parts of the hub are modules a company has on or off. The keys:
 
 | Key | Label | What it turns on |
 | --- | --- | --- |
-| `switchboard` | Switchboard | Four-section navigation, the Home heading, and the Attention and Shortcuts cards. |
+| `switchboard` | Switchboard | The Attention and Shortcuts cards on Home, and Freshness with data sources. |
 | `production` | Production | Projects, milestones and letters, and the Production cards. |
 | `wins` | Wins | The wins page and the Home wins card. |
 | `data_sources` | Data sources | Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness. |
-| `external_links` | External links | Shortcuts to outside tools, including Monday, in each section. |
+| `external_links` | External links | Links to outside tools, such as Monday: Resources, Links, the Home card, and each section's page. |
 
-With `switchboard` on, the sidebar reads in four sections, Home, Sales & Finance, Production and
-People / HR, plus an unlabeled group for SOPs, Resources and Settings.
+Every company's sidebar reads in the same sections (see Where things live); a module adds or
+hides whole items in it, never a company name. `external_links` is the one that puts Links in
+Resources and the Where the work lives card on Home, so it has to be on for a company to see them.
 
 A module is a key in `companies.modules`, read only through `src/lib/modules.ts` (`hasModule`)
 and changed only by a Rococo admin on Rococo > Companies. A company with no modules on looks
@@ -247,7 +248,7 @@ name. A starter
 becomes a real category row the first moment a heading is filed under it, so nothing is created
 speculatively and a company can still name its categories anything. Every heading carries the
 same pulldown, which is how one is refiled and the only way out of Uncategorized. An admin
-corrects the categories themselves in Settings, Deliverable categories: rename, reorder, retire
+corrects the categories themselves in Settings > Reviews, Deliverable categories: rename, reorder, retire
 (no longer offered for new headings; the ones already filed keep it) or delete (its headings
 move to Uncategorized and keep their tasks and ratings).
 
@@ -258,12 +259,13 @@ nothing until sign-off.
 
 ## Job roles, role goals, and a person's own figures
 
-A job role is a row a company adds in Settings (Site Supervisor, Project Manager, Salesperson),
+A job role is a row a company adds in Settings > Roles (Site Supervisor, Project Manager, Salesperson),
 and a person is placed in one from their profile. The role carries two things. First, the
 dashboard modules its people get: today that is one module, their own financial figures, and a
 new module is a new entry in the list every company sees, never a branch on who the company is.
 Second, the goals the role brings into every month's Goal Setting Review: an admin writes them
-once on the role, and the review offers them to file for the month in one click, as goals of
+once for the role in Goals > By role (the role's card in Settings lists them and links there), and
+the review offers them to file for the month in one click, as goals of
 kind Role that the meeting then owns like any other. The template is never edited from a review.
 
 A person's financial figures live on their profile: what they own for the year (closed sales,
@@ -274,7 +276,7 @@ read them, and they appear on the person's dashboard when their job role carries
 
 ## Connections to outside systems
 
-Each company connects its own GoHighLevel and QuickBooks Online accounts from Settings,
+Each company connects its own GoHighLevel and QuickBooks Online accounts from Settings >
 Connections, and its own Google account for Google Sheets (the Google row shows only for a
 company with `data_sources` on). Connect sends the admin to the provider's own sign-in page;
 the provider sends the browser back to the `connections` Edge Function, which exchanges the code for tokens,
@@ -301,16 +303,45 @@ Mark complete freezes the ratings into that review in the database, so a complet
 dated snapshot and the next one measures against it. Reopening shows the working copy again;
 completing again freezes again. A review has no score of record until it is complete.
 
-## Sections
+## Where things live
 
-Three sidebar sections, keyed on cadence: GSRs (monthly Goal Setting Reviews: last month at a
-glance, this month's goals with their action steps and notes, the focus topic, and no pillar
-scores; where the company has a Monthly GSRs pillar, the month's score shows as it builds and an
-admin locks it in),
-Reviews (quarterly, annual and custom cycles: the scored review with the employee snapshot,
-deliverables, yearly goals and feedback) and Goals (personal, professional and role goals for the
-year and each person's BHAG, across the roster). Employees see the same three as My GSR, My
-Reviews and My Goals.
+The sidebar is the same for every company, in sections named for the job being done
+(`src/lib/navigation.ts`). Modules add or hide whole items (marked with their key):
+
+| Section | Admins and owners | Employees |
+| --- | --- | --- |
+| (top) | Home, Wins (`wins`) | Home, Wins (`wins`) |
+| Sales & Finance | Reporting and Controls (`data_sources`), Financials, Marketing | (not visible) |
+| Production | Projects (`production`) | Projects (`production`) |
+| People | People, Goals, Monthly GSRs, Reviews, Scorecards | My development: My GSR, My Reviews, My Goals |
+| Resources | SOPs, Files & media, Links (`external_links`) | the same |
+| (bottom) | My GSR, Settings | |
+
+Three pages are hubs with a route per tab, so a link can land on the right one:
+
+- **Goals** (`/goals`, lands on Company): `/goals/company` the year's company goals leadership
+  reviews monthly; `/goals/roles` the goals each job role brings into every month; `/goals/focus`
+  the focus topic calendar, the #1 GSR's topic each month; `/goals/people` each person's goals for
+  the year and their BHAG.
+- **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme and sign-in
+  domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
+  divisions; `/settings/reviews` pillars and weights, criteria, the Monthly GSRs rule and
+  deliverable categories; `/settings/connections` connections and data sources.
+  `/settings/connections/:companyId` is the OAuth return path, which lands on the Connections tab
+  with the outcome.
+- **Resources** (`/resources`, lands on SOPs): `/resources/sops`, `/resources/files`,
+  `/resources/links`. An SOP keeps its own address at `/sops/:id`.
+
+Old addresses redirect: `/reviews/settings` and `/gsr/settings` to `/settings/reviews`;
+`/reviews/company-goals` and `/gsr/company-goals` to `/goals/company`; `/settings` to
+`/settings/company`; `/sops` and `/resources` to `/resources/sops`.
+
+Monthly GSRs (`/gsr`) are the monthly Goal Setting Reviews: last month at a glance, this month's
+goals with their action steps and notes, the focus topic, and no pillar scores; where the company
+has a Monthly GSRs pillar, the month's score shows as it builds and an admin locks it in. Reviews
+(`/reviews`) are the quarterly, annual and custom cycles: the scored review with the employee
+snapshot, deliverables, yearly goals and feedback. Both page headers link to Goals and to
+Settings > Reviews. Employees see their own as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 
@@ -348,7 +379,7 @@ Quarterly, annual, and custom cycles keep the scoring-first layout for now. The 
 A person's goals outside the GSR belong to this year, next year, or their BHAG, the big goal three
 to five years out, which never settles and reads open until it is hit. The goal itself (title,
 description, kind, period and completion) is shared with the company's admins, who see it on the
-profile, on the Goals page and on every quarterly review. Its action steps and progress notes are
+profile, on Goals > People and on every quarterly review. Its action steps and progress notes are
 the person's alone, and the database is what keeps them that way: they live in `goal_private`
 and `goal_notes`, which only the owner can read for a yearly or BHAG goal (0021), and a trigger
 refuses them on the shared goal row. My Goals says so in a line at the top.
@@ -446,7 +477,7 @@ Each company has a `theme_key` (`klasik`, `kingdom`, `rba`, or the default `roco
 CSS for each lives in `src/index.css`; Tailwind utilities resolve to the active theme's
 tokens, so the whole app restyles from one attribute on `<html>`. The login screen applies
 a company's theme the moment its domain is recognized. Logos are a URL per company, set in
-Settings or the Rococo section.
+Settings > Company or the Rococo section.
 
 Brand type comes from Adobe Fonts. The Rococo Creative web project stylesheet linked in
 `index.html` serves Goldenbook and Halcom on any domain (Adobe no longer keeps a domain
@@ -460,7 +491,9 @@ and the RBA theme picks them up without a code change.
 
 - `src/App.tsx`: auth gate and router.
 - `src/components/`: login, onboarding, app shell, and the `ui/` primitives.
-- `src/pages/`: one folder per module.
+- `src/pages/`: one folder per module; the hubs are `gsr/GoalsPage.tsx`, `settings/SettingsPage.tsx`
+  and `resources/ResourcesPage.tsx`, each with a `*Tabs.ts` beside it naming its routes, and their
+  tab panels live in `src/components/goals/`, `settings/`, `resources/` and `links/`.
 - `src/services/`: the data layer, one module per table group; plain async functions.
 - `src/lib/`: pure logic (scoring, cycle periods, CSV, formatting, theme registry).
 - `src/test/`: fixtures and the mocked services the page tests render against.
@@ -560,7 +593,7 @@ through sources it configures. The steps, in order:
 **In the hub**
 
 11. A company admin connects Google Sheets and QuickBooks from Settings > Connections.
-12. They add sources in Settings > Data sources: paste the sheet link with the tab open, press
+12. They add sources in Settings > Connections, Data sources: paste the sheet link with the tab open, press
     Read headers, map the fields, pick the record key, set the weekly day, time and zone, and
     the stale threshold if one is agreed.
 13. They press Sync now once to see the first run land.

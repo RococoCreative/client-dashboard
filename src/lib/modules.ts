@@ -17,11 +17,11 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
 
 // One plain line each, shown under the checkbox on Rococo > Companies.
 export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
-  switchboard: "Four-section navigation, the Home heading, and the Attention and Shortcuts cards.",
+  switchboard: "The Attention and Shortcuts cards on Home, and Freshness with data sources.",
   production: "Projects, milestones and letters, and the Production cards.",
   wins: "The wins page and the Home wins card.",
   data_sources: "Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness.",
-  external_links: "Shortcuts to outside tools, including Monday, in each section.",
+  external_links: "Links to outside tools, such as Monday: Resources, Links, the Home card, and each section's page.",
 };
 
 export function isModuleKey(value: string): value is ModuleKey {

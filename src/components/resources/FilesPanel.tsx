@@ -1,26 +1,27 @@
-// The resource library: links, files, templates, videos, documents, found by search and
-// tags. Everyone browses; admins add, edit, and remove.
+// Resources > Files & media: the company's files, templates, videos, documents and saved links,
+// found by search and tags. Everyone browses; admins add, edit, and remove. Files live in the
+// private bucket and open through signed URLs only.
 import { useMemo, useState, type FormEvent } from "react";
 import { ExternalLink, FileText, Link2, Pencil, Plus, Search, Trash2, Video } from "lucide-react";
-import Badge from "../components/ui/Badge.tsx";
-import Button from "../components/ui/Button.tsx";
-import Chip from "../components/ui/Chip.tsx";
-import ConfirmDialog from "../components/ui/ConfirmDialog.tsx";
-import EmptyState from "../components/ui/EmptyState.tsx";
-import Field from "../components/ui/Field.tsx";
-import IconButton from "../components/ui/IconButton.tsx";
-import Modal from "../components/ui/Modal.tsx";
-import Notice from "../components/ui/Notice.tsx";
-import PageHeader from "../components/ui/PageHeader.tsx";
-import SkeletonCard from "../components/ui/SkeletonCard.tsx";
-import { inputClass, selectClass, textareaClass } from "../components/ui/forms.ts";
-import { useHub } from "../context/HubContext.tsx";
-import { useAsync } from "../hooks/useAsync.ts";
-import { createResource, deleteResource, listResources, parseTags, updateResource } from "../services/resources.ts";
-import { buildObjectPath, getSignedUrl, removeFile, uploadFile } from "../services/storage.ts";
-import { errorMessage } from "../lib/errors.ts";
-import { openSignedUrl } from "../lib/newTab.ts";
-import { RESOURCE_KIND_LABELS, keysOf, type Resource, type ResourceKind } from "../types/database.ts";
+import Badge from "../ui/Badge.tsx";
+import Button from "../ui/Button.tsx";
+import Chip from "../ui/Chip.tsx";
+import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import EmptyState from "../ui/EmptyState.tsx";
+import Field from "../ui/Field.tsx";
+import IconButton from "../ui/IconButton.tsx";
+import Modal from "../ui/Modal.tsx";
+import Notice from "../ui/Notice.tsx";
+import PanelHeader from "../ui/PanelHeader.tsx";
+import SkeletonCard from "../ui/SkeletonCard.tsx";
+import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
+import { useHub } from "../../context/HubContext.tsx";
+import { useAsync } from "../../hooks/useAsync.ts";
+import { createResource, deleteResource, listResources, parseTags, updateResource } from "../../services/resources.ts";
+import { buildObjectPath, getSignedUrl, removeFile, uploadFile } from "../../services/storage.ts";
+import { errorMessage } from "../../lib/errors.ts";
+import { openSignedUrl } from "../../lib/newTab.ts";
+import { RESOURCE_KIND_LABELS, keysOf, type Resource, type ResourceKind } from "../../types/database.ts";
 
 function KindIcon({ kind }: { kind: ResourceKind }) {
   const Icon = kind === "video" ? Video : kind === "link" ? Link2 : FileText;
@@ -127,7 +128,7 @@ function ResourceDialog({ companyId, resource, onClose, onSaved }: { companyId: 
   );
 }
 
-export default function ResourcesPage() {
+export default function FilesPanel() {
   const { company, isAdmin } = useHub();
   const companyId = company!.id;
   const [query, setQuery] = useState("");
@@ -184,10 +185,10 @@ export default function ResourcesPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow={company!.name}
-        title="Resources"
-        description="Links, files, templates, and videos the team reaches for. Tag things so they stay findable."
+      <PanelHeader
+        eyebrow="Everyone reads, admins add"
+        title="Files & media"
+        description="Templates, documents, videos and files the team reaches for. Tag things so they stay findable."
         actions={isAdmin ? <Button size="sm" onClick={() => setDialog({ resource: null })}><Plus size={14} aria-hidden /> Add resource</Button> : null}
       />
       <div className="mb-5 flex flex-wrap items-center gap-2">

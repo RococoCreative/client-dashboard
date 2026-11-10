@@ -83,7 +83,7 @@ export default function SopPage() {
       return;
     }
     await Promise.all(attachments.map((a) => removeFile(a.file_path).catch(() => undefined)));
-    navigate("/sops");
+    navigate("/resources/sops");
   }
 
   async function handleUpload(file: File) {
@@ -138,7 +138,7 @@ export default function SopPage() {
   return (
     <>
       <PageHeader
-        backTo="/sops"
+        backTo="/resources/sops"
         backLabel="SOP library"
         eyebrow={SOP_CATEGORY_LABELS[sop.category]}
         title={sop.title}

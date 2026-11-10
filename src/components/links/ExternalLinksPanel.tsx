@@ -1,6 +1,6 @@
-// The company's links to its own outside tools, for an admin in Company Settings: what each link
-// is called, where it goes, the section it shows in, who sees it, and whether it is a public share
-// view that may be embedded. Links are rows the company keeps (rule 12). The checks here only save
+// The company's links to its own outside tools, for an admin on Resources > Links: what each link
+// is called, where it goes, what it is for, its category (which also repeats it on that section's
+// page), who sees it, its order, and whether it is a public share view that may be embedded. Links are rows the company keeps (rule 12). The checks here only save
 // a round trip with a plain message; the database checks are the real guard, and who sees a link
 // is enforced by RLS on its audience, never by a screen. Every change saves on its own.
 import { useState, type FormEvent } from "react";
@@ -16,11 +16,10 @@ import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { NAV_GROUP_LABELS } from "../../lib/navigation.ts";
+import { LINK_GROUPS, LINK_GROUP_LABELS, groupLinks } from "../../lib/links.ts";
 import { createExternalLink, deleteExternalLink, listExternalLinks, updateExternalLink, type ExternalLinkPatch } from "../../services/externalLinks.ts";
 import { LINK_AUDIENCE_LABELS, LINK_PROVIDER_LABELS, keysOf, type ExternalLink, type LinkAudience, type LinkNavGroup, type LinkProvider } from "../../types/database.ts";
 
-const LINK_GROUPS: readonly LinkNavGroup[] = ["home", "sales_finance", "production", "people_hr"];
 const HTTPS_ONLY = "Links must start with https://.";
 const NEEDS_LABEL = "The link needs a label.";
 const NEEDS_EMBED = "Add the share view's embed link first.";
@@ -29,10 +28,6 @@ const cellSelect = `${selectClass} mt-1 py-1.5 text-[13px]`;
 
 function isHttps(url: string): boolean {
   return /^https:\/\//.test(url.trim());
-}
-
-function byOrder(a: ExternalLink, b: ExternalLink): number {
-  return a.sort_order - b.sort_order || a.label.localeCompare(b.label);
 }
 
 // A small caption over a control whose accessible name comes from its own aria-label.
@@ -105,9 +100,9 @@ function LinkRow({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label className="block">
-          <Caption>Section</Caption>
-          <select value={link.nav_group} aria-label={`Section for ${link.label}`} onChange={(e) => void save({ nav_group: e.target.value as LinkNavGroup })} className={cellSelect}>
-            {LINK_GROUPS.map((group) => <option key={group} value={group}>{NAV_GROUP_LABELS[group]}</option>)}
+          <Caption>Category</Caption>
+          <select value={link.nav_group} aria-label={`Category for ${link.label}`} onChange={(e) => void save({ nav_group: e.target.value as LinkNavGroup })} className={cellSelect}>
+            {LINK_GROUPS.map((group) => <option key={group} value={group}>{LINK_GROUP_LABELS[group]}</option>)}
           </select>
         </label>
         <label className="block">
@@ -151,9 +146,10 @@ function LinkRow({
   );
 }
 
-function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }) => Promise<boolean> }) {
+function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; destination_note: string | null; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }) => Promise<boolean> }) {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
   const [navGroup, setNavGroup] = useState<LinkNavGroup>("home");
   const [audience, setAudience] = useState<LinkAudience>("everyone");
   const [provider, setProvider] = useState<LinkProvider>("other");
@@ -163,11 +159,12 @@ function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; n
     event.preventDefault();
     if (busy) return;
     setBusy(true);
-    const added = await onAdd({ label, url, nav_group: navGroup, audience, provider });
+    const added = await onAdd({ label, url, destination_note: note.trim() || null, nav_group: navGroup, audience, provider });
     setBusy(false);
     if (added) {
       setLabel("");
       setUrl("");
+      setNote("");
     }
   }
 
@@ -180,11 +177,16 @@ function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; n
         <Field label="Link" htmlFor="new-link-url">
           <input id="new-link-url" type="text" inputMode="url" value={url} placeholder="https://" onChange={(e) => setUrl(e.target.value)} className={cellInput} />
         </Field>
+        <div className="sm:col-span-2">
+          <Field label="What it is for" htmlFor="new-link-note">
+            <input id="new-link-note" type="text" value={note} placeholder="A short line, such as Open tasks for active jobs" onChange={(e) => setNote(e.target.value)} className={cellInput} />
+          </Field>
+        </div>
       </div>
       <div className="mt-3 grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
-        <Field label="Section" htmlFor="new-link-section">
+        <Field label="Category" htmlFor="new-link-section">
           <select id="new-link-section" value={navGroup} onChange={(e) => setNavGroup(e.target.value as LinkNavGroup)} className={cellSelect}>
-            {LINK_GROUPS.map((group) => <option key={group} value={group}>{NAV_GROUP_LABELS[group]}</option>)}
+            {LINK_GROUPS.map((group) => <option key={group} value={group}>{LINK_GROUP_LABELS[group]}</option>)}
           </select>
         </Field>
         <Field label="Who sees it" htmlFor="new-link-audience">
@@ -214,7 +216,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
 
   const links = state.data ?? [];
 
-  async function add(draft: { label: string; url: string; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }): Promise<boolean> {
+  async function add(draft: { label: string; url: string; destination_note: string | null; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }): Promise<boolean> {
     const label = draft.label.trim();
     const problem = !label ? NEEDS_LABEL : !isHttps(draft.url) ? HTTPS_ONLY : "";
     if (problem) {
@@ -249,13 +251,13 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
     }
   }
 
-  const groups = LINK_GROUPS.map((group) => ({ group, links: links.filter((l) => l.nav_group === group).sort(byOrder) })).filter((g) => g.links.length > 0);
+  const groups = groupLinks(links);
 
   return (
     <Section
-      eyebrow="Shortcuts"
-      title="External links"
-      description="Links to the company's own outside tools, such as Monday boards, shown in the section you choose. People still sign in to those tools themselves."
+      eyebrow="Admins add, everyone reads"
+      title="Links to outside tools"
+      description="Where the work lives: the programs the team works in, such as Monday boards. Links show here and on Home for whoever they are for; a category other than General also puts a link on that section's page. People still sign in to those tools themselves."
     >
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={3} /> : null}
@@ -263,12 +265,12 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
       {state.data ? (
         <>
           {groups.length === 0 ? (
-            <p className="text-sm text-ink-2">No links yet. Add one below and choose the section it shows in.</p>
+            <p className="text-sm text-ink-2">No links yet. Add the programs the team works in below, with a line on what each is for.</p>
           ) : (
             <div className="space-y-5">
               {groups.map((g) => (
                 <div key={g.group}>
-                  <p className="eyebrow">{NAV_GROUP_LABELS[g.group]}</p>
+                  <p className="eyebrow">{LINK_GROUP_LABELS[g.group]}</p>
                   <ul className="mt-2 space-y-2">
                     {g.links.map((link) => (
                       <LinkRow

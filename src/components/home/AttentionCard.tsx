@@ -33,7 +33,7 @@ export default function AttentionCard({ company }: { company: Company }) {
   }, [companyId, withSources]);
 
   return (
-    <Section eyebrow="Attention" title="Needs attention" padded={false} className="h-full">
+    <Section eyebrow="Attention" title="Needs attention" padded={false}>
       {state.error && !state.data ? (
         <div className="p-5"><Notice tone="error">{state.error}</Notice></div>
       ) : !state.data ? (

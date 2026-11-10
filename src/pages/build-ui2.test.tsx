@@ -312,7 +312,7 @@ describe("dashboard division split", () => {
     const divisionsSpy = vi.spyOn(divisionsService, "listDivisions");
     const entriesSpy = vi.spyOn(scorecardsService, "listMetricEntries");
     renderWithHub(<DashboardPage />, plainAdmin);
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     await waitFor(() => expect(within(peopleTile()).getByText("4")).toBeInTheDocument());
     expect(screen.queryByRole("group", { name: "Division" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Division compare" })).not.toBeInTheDocument();

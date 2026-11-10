@@ -21,6 +21,13 @@ vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
+vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createSnapshot, listSnapshots } from "../services/financials.ts";
@@ -29,8 +36,7 @@ import { ALL_PROFILES, KLASIK, makeHub } from "../test/fixtures.ts";
 import { formatMoney } from "../lib/format.ts";
 import FinancialsPage from "./FinancialsPage.tsx";
 import MarketingPage from "./MarketingPage.tsx";
-import ResourcesPage from "./ResourcesPage.tsx";
-import SopListPage from "./sops/SopListPage.tsx";
+import ResourcesPage from "./resources/ResourcesPage.tsx";
 import PortfolioPage from "./rococo/PortfolioPage.tsx";
 import UsersPage from "./rococo/UsersPage.tsx";
 
@@ -187,13 +193,13 @@ describe("rococo portfolio", () => {
 
 describe("filter chips", () => {
   it("uses the shared chip for SOP categories", async () => {
-    renderWithHub(<SopListPage />, admin, { path: "/sops", pattern: "/sops" });
+    renderWithHub(<ResourcesPage tab="sops" />, admin, { path: "/resources/sops", pattern: "/resources/sops" });
     expect(await screen.findByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("filters resources by a tag from the row of chips or from a card", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ResourcesPage />, admin, { path: "/resources", pattern: "/resources" });
+    renderWithHub(<ResourcesPage tab="files" />, admin, { path: "/resources/files", pattern: "/resources/files" });
     const all = await screen.findByRole("button", { name: "All" });
     expect(all).toHaveAttribute("aria-pressed", "true");
     const [cardTag] = screen.getAllByRole("button", { name: /^Filter by tag / });

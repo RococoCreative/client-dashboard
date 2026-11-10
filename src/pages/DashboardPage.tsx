@@ -26,6 +26,7 @@ import AttentionCard from "../components/home/AttentionCard.tsx";
 import FreshnessCard from "../components/home/FreshnessCard.tsx";
 import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
 import WinsCard from "../components/home/WinsCard.tsx";
+import WhereWorkLivesCard from "../components/home/WhereWorkLivesCard.tsx";
 import DivisionCompare from "../components/people/DivisionCompare.tsx";
 import DivisionSwitch from "../components/people/DivisionSwitch.tsx";
 import PersonScorecard from "../components/scorecards/PersonScorecard.tsx";
@@ -362,7 +363,7 @@ function AdminDashboard() {
     <>
       <PageHeader
         eyebrow={company!.name}
-        title={hasModule(company, "switchboard") ? "Home" : "Dashboard"}
+        title="Home"
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
         actions={splitData ? <DivisionSwitch divisions={splitData.divisions} value={activeScope} onChange={setScope} /> : undefined}
       />
@@ -391,7 +392,7 @@ function AdminDashboard() {
                 : "Average of scored reviews"
           }
         />
-        <Stat label="Library" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "resource")}`} />
+        <Stat label="Resources" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "file")}`} />
       </div>
 
       {splitData ? (
@@ -400,20 +401,24 @@ function AdminDashboard() {
         </div>
       ) : null}
 
-      {/* The Home cards, each under its own module. With neither module on, none mounts and
+      {/* The Home cards, each under its own module. With none of the modules on, none mounts and
           none of their calls is made, so the dashboard is exactly what it always was. */}
-      {hasModule(company, "switchboard") || hasModule(company, "wins") ? (
+      {hasModule(company, "switchboard") ? (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {hasModule(company, "switchboard") ? (
-            <div className="lg:col-span-2">
-              <AttentionCard company={company!} />
-            </div>
-          ) : null}
-          <div className="space-y-6">
-            {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
-            {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
-            {hasModule(company!, "switchboard") && hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
+          <div className="space-y-6 lg:col-span-2">
+            <AttentionCard company={company!} />
+            {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin /> : null}
           </div>
+          <div className="space-y-6">
+            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} />
+            {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
+          </div>
+        </div>
+      ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin className={hasModule(company, "wins") ? "" : "lg:col-span-2"} /> : null}
+          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
         </div>
       ) : null}
 
@@ -450,7 +455,7 @@ function AdminDashboard() {
             title="Company goals"
             description={companyGoals.length > 0 ? `${goalsHit} of ${companyGoals.length} hit` : undefined}
             actions={
-              <Link to="/reviews/company-goals">
+              <Link to="/goals/company">
                 <Button variant="secondary" size="sm">Manage</Button>
               </Link>
             }
@@ -547,7 +552,7 @@ function AdminDashboard() {
             eyebrow="SOP library"
             title="Recently updated"
             actions={
-              <Link to="/sops">
+              <Link to="/resources/sops">
                 <Button variant="ghost" size="sm">All SOPs</Button>
               </Link>
             }
@@ -558,7 +563,7 @@ function AdminDashboard() {
             eyebrow="Resources"
             title={pluralize(resources.length, "resource")}
             actions={
-              <Link to="/resources">
+              <Link to="/resources/files">
                 <Button variant="ghost" size="sm">Browse</Button>
               </Link>
             }
@@ -663,8 +668,9 @@ function EmployeeDashboard() {
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
 
-      {hasModule(company, "wins") || hasModule(company, "switchboard") ? (
+      {hasModule(company, "external_links") || hasModule(company, "wins") || hasModule(company, "switchboard") ? (
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin={false} /> : null}
           {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
           {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
         </div>
@@ -826,7 +832,7 @@ function EmployeeDashboard() {
           title="Recently updated"
           className="lg:col-span-3"
           actions={
-            <Link to="/sops">
+            <Link to="/resources/sops">
               <Button variant="ghost" size="sm">All SOPs</Button>
             </Link>
           }

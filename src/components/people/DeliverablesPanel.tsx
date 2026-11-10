@@ -209,7 +209,7 @@ export default function DeliverablesPanel({
     // The table is unique on (company_id, name), so a name already taken is reused rather than
     // sent to the database to be refused.
     const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
-    if (existing && !existing.is_active) throw new Error(`${existing.name} is retired. Restore it in Settings to file under it.`);
+    if (existing && !existing.is_active) throw new Error(`${existing.name} is retired. Restore it in Settings, Reviews to file under it.`);
     if (existing) return existing.id;
     const created = await createDeliverableCategory({ company_id: companyId, name, sort_order: categories.length + 1 });
     state.setData((prev) => (prev ? { ...prev, categories: [...prev.categories, created] } : prev));

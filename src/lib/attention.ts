@@ -73,8 +73,8 @@ function brokenConnections(connections: CompanyConnection[]): AttentionItem[] {
     .map((connection) => ({
       kind: "connection_error",
       title: `${CONNECTION_PROVIDER_LABELS[connection.provider]} needs reconnecting`,
-      detail: connection.last_error || "The connection reported an error. Reconnect it in Settings.",
-      to: "/settings",
+      detail: connection.last_error || "The connection reported an error. Reconnect it in Settings, Connections.",
+      to: "/settings/connections",
       severity: "danger",
     }));
 }
@@ -86,9 +86,9 @@ function troubledSources(sources: SyncSource[], connections: CompanyConnection[]
     if (!source.enabled) continue;
     const state = syncState(source, connections.find((c) => c.id === source.connection_id) ?? null, now);
     if (state === "failed") {
-      items.push({ kind: "sync_failed", title: `${source.name}: sync failed`, detail: failureDetail(source, now), to: "/settings", severity: "danger" });
+      items.push({ kind: "sync_failed", title: `${source.name}: sync failed`, detail: failureDetail(source, now), to: "/settings/connections", severity: "danger" });
     } else if (state === "stale") {
-      items.push({ kind: "sync_stale", title: `${source.name}: stale data`, detail: `Last synced ${formatDateTime(source.last_success_at)}.`, to: "/settings", severity: "warning" });
+      items.push({ kind: "sync_stale", title: `${source.name}: stale data`, detail: `Last synced ${formatDateTime(source.last_success_at)}.`, to: "/settings/connections", severity: "warning" });
     }
   }
   return items;

@@ -1,9 +1,9 @@
 // Signed-in application shell: a quiet sidebar with the company's identity, the nav for the
-// person's role (flat, or in sections under the switchboard module), and the account footer.
+// person's role in its sections (the same sections for every company), and the account footer.
 // Rococo admins get the portfolio nav when no company is active, and inside a company a way
 // back plus the switcher. Collapses to a top bar on small screens. The content area remounts when the active company changes so every page
 // refetches for the new tenant.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ArrowLeft, LogOut } from "lucide-react";
 import Avatar from "./ui/Avatar.tsx";
@@ -13,37 +13,49 @@ import { useHub } from "../context/HubContext.tsx";
 import { signOut } from "../services/auth.ts";
 import { displayName } from "../lib/format.ts";
 import { applyTheme } from "../lib/theme.ts";
-import { PORTFOLIO_NAV, navFor, type NavItem, type NavLayout, type NavSection } from "../lib/navigation.ts";
+import { PORTFOLIO_NAV, alsoActiveFor, navFor, type NavItem, type NavLayout, type NavSection } from "../lib/navigation.ts";
 import { ROLE_LABELS } from "../types/database.ts";
 
+const entryClass = (active: boolean) =>
+  "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors duration-150 lg:py-1.5 " +
+  (active ? "bg-accent/10 font-medium text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink");
+
+// One sidebar link. An item that owns other paths too (SOPs owns /sops/:id) is marked current on
+// them as well, the way the router marks its own path.
 function NavEntry({ item }: { item: NavItem }) {
   const Icon = item.icon;
-  return (
-    <NavLink
-      to={item.to}
-      end={item.end}
-      className={({ isActive }) =>
-        "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors duration-150 " +
-        (isActive ? "bg-accent/10 font-medium text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink")
-      }
-    >
+  const { pathname } = useLocation();
+  const body = (
+    <>
       <Icon size={15} aria-hidden />
       <span>{item.label}</span>
+    </>
+  );
+  if (alsoActiveFor(item, pathname)) {
+    return (
+      <Link to={item.to} aria-current="page" className={entryClass(true)}>
+        {body}
+      </Link>
+    );
+  }
+  return (
+    <NavLink to={item.to} end={item.end} className={({ isActive }) => entryClass(isActive)}>
+      {body}
     </NavLink>
   );
 }
 
-// One section of the grouped sidebar. Its heading shows only at lg, so the small-screen bar
-// stays one horizontal row; the utility group has no heading and a hairline instead.
+// One section of the sidebar. Its heading shows only at lg, so the small-screen bar stays one
+// horizontal row; the bottom group has no heading and a hairline instead.
 function NavSectionGroup({ section }: { section: NavSection }) {
-  const utility = section.heading === null;
+  const utility = section.group === "utility";
   return (
     <div
       role="group"
-      aria-label={section.heading ?? "More"}
+      aria-label={section.heading ?? (section.group === "home" ? "Home" : "More")}
       className={
-        "flex shrink-0 gap-1 lg:flex-col lg:not-first:mt-3 " +
-        (utility ? "border-l border-line pl-1 lg:border-t lg:border-l-0 lg:pt-3 lg:pl-0" : "")
+        "flex shrink-0 gap-1 lg:flex-col lg:gap-0.5 " +
+        (utility ? "border-l border-line pl-1 lg:mt-auto lg:border-t lg:border-l-0 lg:pt-3 lg:pl-0" : "lg:not-first:mt-3")
       }
     >
       {section.heading ? <p className="eyebrow hidden px-3 pt-1 pb-0.5 text-[10px] text-ink-3 lg:block">{section.heading}</p> : null}
@@ -65,6 +77,19 @@ export default function AppLayout() {
   const layout: NavLayout = portfolio
     ? { kind: "flat", items: [...PORTFOLIO_NAV] }
     : company ? navFor(company, isAdmin, isRococo) : { kind: "flat", items: [] };
+
+  // The bar scrolls on its own (sideways on a phone, down on a short laptop screen), so the current
+  // page's item is brought into view within it, without moving the page itself.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !current) return;
+    const box = nav.getBoundingClientRect();
+    const item = current.getBoundingClientRect();
+    if (item.left < box.left || item.right > box.right) nav.scrollLeft += item.left - box.left - 12;
+    if (item.top < box.top || item.bottom > box.bottom) nav.scrollTop += item.top - box.top - 12;
+  }, [location.pathname]);
 
   // The shell owns the theme once signed in: Rococo on the portfolio, the company's inside.
   useEffect(() => {
@@ -118,7 +143,7 @@ export default function AppLayout() {
           </div>
         ) : null}
 
-        <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-1 lg:flex-col lg:overflow-visible" aria-label="Primary">
+        <nav ref={navRef} className="flex gap-1 overflow-x-auto px-3 py-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto" aria-label="Primary">
           {layout.kind === "flat"
             ? layout.items.map((item) => <NavEntry key={item.id} item={item} />)
             : layout.sections.map((section) => <NavSectionGroup key={section.group} section={section} />)}

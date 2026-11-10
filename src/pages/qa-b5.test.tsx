@@ -32,6 +32,9 @@ vi.mock("../services/connections.ts", async () => {
   const mock = await import("../test/mocks/connections.ts");
   return { ...mock, startConnection: vi.fn(mock.startConnection) };
 });
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { HubContext } from "../context/HubContext.tsx";
@@ -41,7 +44,7 @@ import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import App from "../App.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
-import CompanySettingsPage from "./CompanySettingsPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
 import DeliverablesPanel from "../components/people/DeliverablesPanel.tsx";
 import type { DeliverableScore } from "../lib/gsr/deliverables.ts";
 
@@ -61,10 +64,10 @@ function renderSettings(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
-            path="/settings"
+            path="/settings/connections"
             element={
               <>
-                <CompanySettingsPage />
+                <SettingsPage tab="connections" />
                 <LocationProbe />
               </>
             }
@@ -135,7 +138,7 @@ describe("connection outcome on settings", () => {
   it("sends the provider back to a path that names the company", async () => {
     const user = userEvent.setup();
     vi.mocked(startConnection).mockRejectedValueOnce(new Error("Stopped before leaving the page."));
-    renderSettings("/settings");
+    renderSettings("/settings/connections");
     await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
     expect(vi.mocked(startConnection)).toHaveBeenCalledWith(KLASIK.company.id, "quickbooks", `${window.location.origin}/settings/connections/${KLASIK.company.id}`);
   });
@@ -144,7 +147,7 @@ describe("connection outcome on settings", () => {
     const user = userEvent.setup();
     // The browser is on its way to the provider: startConnection's answer never comes back here.
     vi.mocked(startConnection).mockImplementationOnce(() => new Promise<string>(() => {}));
-    renderSettings("/settings");
+    renderSettings("/settings/connections");
     await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
     expect(await screen.findByText("Opening...")).toBeInTheDocument();
     // Back from the provider restores this page as it was left.
@@ -158,22 +161,22 @@ describe("connection outcome on settings", () => {
   });
 
   it("shows a known outcome and clears it from the address", async () => {
-    renderSettings(`/settings?connect_error=${encodeURIComponent("QuickBooks did not say which company was connected.")}`);
+    renderSettings(`/settings/connections?connect_error=${encodeURIComponent("QuickBooks did not say which company was connected.")}`);
     expect(await screen.findByText("QuickBooks did not say which company was connected.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings"));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
   });
 
   it("never shows words from the address that the connection service did not write", async () => {
-    renderSettings(`/settings?connect_error=${encodeURIComponent("Your session expired. Call IT at 555-0100.")}`);
+    renderSettings(`/settings/connections?connect_error=${encodeURIComponent("Your session expired. Call IT at 555-0100.")}`);
     expect(await screen.findByText("The connection did not finish. Try again.")).toBeInTheDocument();
     expect(screen.queryByText(/555-0100/)).not.toBeInTheDocument();
   });
 
   it("drops the connected notice once the provider is disconnected", async () => {
     const user = userEvent.setup();
-    renderSettings("/settings?connected=gohighlevel");
+    renderSettings("/settings/connections?connected=gohighlevel");
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings"));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
     await user.click(await screen.findByRole("button", { name: "Disconnect GoHighLevel" }));
     await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
     expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument();
@@ -188,9 +191,10 @@ describe("connection return trip", () => {
     render(<App />);
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("link", { name: "Connections" })).toHaveAttribute("aria-current", "page");
     expect(screen.getAllByText(RBA.company.name).length).toBeGreaterThan(0);
     expect(document.documentElement.dataset.theme).toBe(RBA.company.theme_key);
-    await waitFor(() => expect(window.location.pathname).toBe("/settings"));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/connections"));
     await waitFor(() => expect(window.location.search).not.toContain("connected"));
   });
 
@@ -206,13 +210,13 @@ describe("connection return trip", () => {
     render(<App />);
     expect(await screen.findByText("The sign-in was cancelled or refused. Nothing changed.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    await waitFor(() => expect(window.location.pathname).toBe("/settings"));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/connections"));
   });
 
   it("does not take a company admin into another company's return path", async () => {
     window.history.pushState({}, "", `/settings/connections/${RBA.company.id}?persona=admin&company=klasik&connected=quickbooks`);
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/");
     expect(screen.queryByText("QuickBooks Online is connected.")).not.toBeInTheDocument();
   });

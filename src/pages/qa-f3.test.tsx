@@ -42,6 +42,9 @@ vi.mock("../components/people/DeliverablesPanel.tsx", async () => {
     },
   };
 });
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCycle, createPillar, deleteCycle, deletePillar, ensureReview, updateReview } from "../services/gsr.ts";

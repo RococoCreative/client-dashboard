@@ -217,12 +217,12 @@ describe("attentionItems", () => {
       }),
     );
     expect(items).toEqual([
-      { kind: "connection_error", title: "GoHighLevel needs reconnecting", detail: "Token expired", to: "/settings", severity: "danger" },
+      { kind: "connection_error", title: "GoHighLevel needs reconnecting", detail: "Token expired", to: "/settings/connections", severity: "danger" },
       {
         kind: "connection_error",
         title: "QuickBooks Online needs reconnecting",
-        detail: "The connection reported an error. Reconnect it in Settings.",
-        to: "/settings",
+        detail: "The connection reported an error. Reconnect it in Settings, Connections.",
+        to: "/settings/connections",
         severity: "danger",
       },
     ]);
@@ -264,7 +264,7 @@ describe("attentionItems", () => {
     it("flags a failed enabled source with its own error", () => {
       const failed = source({ name: "Sales tab", last_status: "failed", last_success_at: hoursAgo(2), last_error: "The column \"Gross profit\" is missing." });
       expect(attentionItems(input({ connections: [sheets], sources: [failed], now }))).toEqual([
-        { kind: "sync_failed", title: "Sales tab: sync failed", detail: "The column \"Gross profit\" is missing.", to: "/settings", severity: "danger" },
+        { kind: "sync_failed", title: "Sales tab: sync failed", detail: "The column \"Gross profit\" is missing.", to: "/settings/connections", severity: "danger" },
       ]);
       const silent = source({ name: "Other tab", last_status: "failed" });
       expect(attentionItems(input({ connections: [sheets], sources: [silent], now })).map((i) => i.detail)).toEqual(["The last attempt did not finish."]);
@@ -274,7 +274,7 @@ describe("attentionItems", () => {
       const lastAttempt = new Date(now.getTime() - 2 * 3600000).toISOString();
       const cut = source({ name: "Cut tab", last_status: "running", last_attempt_at: lastAttempt, last_success_at: hoursAgo(170), last_error: "An older problem." });
       expect(attentionItems(input({ connections: [sheets], sources: [cut], now }))).toEqual([
-        { kind: "sync_failed", title: "Cut tab: sync failed", detail: "The last sync did not finish.", to: "/settings", severity: "danger" },
+        { kind: "sync_failed", title: "Cut tab: sync failed", detail: "The last sync did not finish.", to: "/settings/connections", severity: "danger" },
       ]);
       const running = source({ name: "Live tab", last_status: "running", last_attempt_at: new Date(now.getTime() - 60000).toISOString() });
       expect(attentionItems(input({ connections: [sheets], sources: [running], now }))).toEqual([]);
@@ -284,7 +284,7 @@ describe("attentionItems", () => {
       const lastSuccess = hoursAgo(30);
       const stale = source({ name: "Stale tab", last_status: "succeeded", last_success_at: lastSuccess, stale_after_hours: 24 });
       expect(attentionItems(input({ connections: [sheets], sources: [stale], now }))).toEqual([
-        { kind: "sync_stale", title: "Stale tab: stale data", detail: `Last synced ${formatDateTime(lastSuccess)}.`, to: "/settings", severity: "warning" },
+        { kind: "sync_stale", title: "Stale tab: stale data", detail: `Last synced ${formatDateTime(lastSuccess)}.`, to: "/settings/connections", severity: "warning" },
       ]);
     });
 

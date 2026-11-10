@@ -262,19 +262,17 @@ export default function CyclesPage({ section }: { section: HubSection }) {
         actions={
           <>
             {gsr ? (
-              <Link to="/reviews/settings#focus-topics">
+              <Link to="/goals/focus">
                 <Button variant="secondary" size="sm"><CalendarDays size={14} aria-hidden /> Focus topics</Button>
               </Link>
             ) : (
-              <>
-                <Link to="/reviews/company-goals">
-                  <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
-                </Link>
-                <Link to="/reviews/settings">
-                  <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Pillars and weights</Button>
-                </Link>
-              </>
+              <Link to="/goals/company">
+                <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
+              </Link>
             )}
+            <Link to="/settings/reviews">
+              <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Review settings</Button>
+            </Link>
             <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button>
           </>
         }

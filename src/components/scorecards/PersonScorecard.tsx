@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
+import { Link } from "react-router-dom";
 import Button from "../ui/Button.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
@@ -236,7 +237,12 @@ export default function PersonScorecard({
     <p className="p-5 text-sm text-ink-2">{canEdit ? "No job role set. Pick one in Details and its metrics show here." : "No job role set yet."}</p>
   ) : own.length === 0 ? (
     <p className="p-5 text-sm text-ink-2">
-      {roleName ?? "This role"} has no scorecard metrics yet.{canEdit ? " Add them to the role in Settings, Job roles." : ""}
+      {roleName ?? "This role"} has no scorecard metrics yet.
+      {canEdit ? (
+        <>
+          {" "}Admins add a role's metrics in <Link to="/settings/roles" className="text-accent hover:underline">Settings, Roles</Link>.
+        </>
+      ) : null}
     </p>
   ) : !grid ? (
     <div className="p-5">

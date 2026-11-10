@@ -225,11 +225,11 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
       <footer className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3">
         {[
           ["/people", "People"],
-          ["/gsr", "GSRs"],
+          ["/gsr", "Monthly GSRs"],
           ["/reviews", "Reviews"],
-          ["/sops", "SOPs"],
+          ["/resources/sops", "Resources"],
           ["/financials", "Financials"],
-          ["/settings", "Settings"],
+          ["/settings/company", "Settings"],
         ].map(([path, label]) => (
           <Button key={path} variant="ghost" size="sm" onClick={() => onEnter(path)}>
             {label}

@@ -1,24 +1,25 @@
-// The SOP library: every standard operating procedure, grouped by category, searchable.
-// Employees see published documents; admins also see drafts and archived ones and can add.
+// Resources > SOPs: every standard operating procedure, grouped by category, searchable.
+// Employees see published documents; admins also see drafts and archived ones and can add. Each
+// SOP opens at /sops/:id, with its version history.
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Search } from "lucide-react";
-import Badge from "../../components/ui/Badge.tsx";
-import Button from "../../components/ui/Button.tsx";
-import Chip from "../../components/ui/Chip.tsx";
-import EmptyState from "../../components/ui/EmptyState.tsx";
-import Notice from "../../components/ui/Notice.tsx";
-import PageHeader from "../../components/ui/PageHeader.tsx";
-import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { inputClass } from "../../components/ui/forms.ts";
-import { SOP_STATUS_TONE } from "../../components/status.ts";
+import Badge from "../ui/Badge.tsx";
+import Button from "../ui/Button.tsx";
+import Chip from "../ui/Chip.tsx";
+import EmptyState from "../ui/EmptyState.tsx";
+import Notice from "../ui/Notice.tsx";
+import PanelHeader from "../ui/PanelHeader.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { inputClass } from "../ui/forms.ts";
+import { SOP_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listSops } from "../../services/sops.ts";
 import { formatDate } from "../../lib/format.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, keysOf, type SopCategory } from "../../types/database.ts";
 
-export default function SopListPage() {
+export default function SopsPanel() {
   const { company, isAdmin } = useHub();
   const companyId = company!.id;
   const [query, setQuery] = useState("");
@@ -38,8 +39,8 @@ export default function SopListPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow={company!.name}
+      <PanelHeader
+        eyebrow="Everyone reads, admins write"
         title="SOP library"
         description="The company playbook: how we do things, by category, with every change kept in version history."
         actions={isAdmin ? <Link to="/sops/new"><Button size="sm"><Plus size={14} aria-hidden /> New SOP</Button></Link> : null}

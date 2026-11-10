@@ -572,7 +572,8 @@ export default function GoalSettingPanel({
           ) : canEdit && isAdmin ? (
             <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
               No focus topic for {cycle.name} yet.{" "}
-              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the month</Link>
+              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the month</Link>, or plan the year in{" "}
+              <Link to="/goals/focus" className="text-accent hover:underline">Goals, Monthly focus</Link>.
             </p>
           ) : null}
           {canEdit && pendingRoleGoals.length > 0 ? (

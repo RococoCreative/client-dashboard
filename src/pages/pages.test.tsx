@@ -47,19 +47,16 @@ import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
-import GsrSettingsPage from "./gsr/GsrSettingsPage.tsx";
-import CompanyGoalsPage from "./gsr/CompanyGoalsPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
 import MyReviewsPage from "./gsr/MyReviewsPage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
-import SopListPage from "./sops/SopListPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
 import SopEditPage from "./sops/SopEditPage.tsx";
-import ResourcesPage from "./ResourcesPage.tsx";
-import CompanySettingsPage from "./CompanySettingsPage.tsx";
+import ResourcesPage from "./resources/ResourcesPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
 import PortfolioPage from "./rococo/PortfolioPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
 import UsersPage from "./rococo/UsersPage.tsx";
@@ -93,7 +90,7 @@ const employeeProfile = KLASIK.profiles[1];
 describe("dashboard", () => {
   it("summarizes the company for an admin", async () => {
     renderWithHub(<DashboardPage />, admin);
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     // The name appears in its own block and again in the reviews-complete hint.
     expect((await screen.findAllByText(currentCycle.name)).length).toBeGreaterThan(0);
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
@@ -191,7 +188,8 @@ describe("GSR", () => {
     renderWithHub(<CyclesPage section="reviews" />, admin);
     expect(await screen.findByText(overlappingCycle.name)).toBeInTheDocument();
     expect(screen.queryByText(currentCycle.name)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Pillars and weights/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/settings/reviews");
+    expect(screen.getByRole("link", { name: /Company goals/ })).toHaveAttribute("href", "/goals/company");
   });
 
   it("reports the same completion on the cycles list as on the cycle itself", async () => {
@@ -351,14 +349,14 @@ describe("GSR", () => {
   });
 
   it("shows pillars, weights, and criteria in settings", async () => {
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Deliverables")).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Curiosity")).toBeInTheDocument();
   });
 
   it("lists company goals for the year", async () => {
-    renderWithHub(<CompanyGoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="company" />, admin);
     expect(await screen.findByText("Gross margin")).toBeInTheDocument();
     expect(await screen.findByText("Hit")).toBeInTheDocument();
   });
@@ -458,7 +456,7 @@ describe("people", () => {
 
 describe("library", () => {
   it("lists SOPs by category, drafts visible to admins only", async () => {
-    renderWithHub(<SopListPage />, admin);
+    renderWithHub(<ResourcesPage tab="sops" />, admin);
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
     expect(await screen.findByText("Weekly invoicing")).toBeInTheDocument();
     expect(screen.getByText("Draft")).toBeInTheDocument();
@@ -490,7 +488,7 @@ describe("library", () => {
 
   it("filters resources by tag", async () => {
     const user = userEvent.setup();
-    renderWithHub(<ResourcesPage />, employee);
+    renderWithHub(<ResourcesPage tab="files" />, employee);
     expect(await screen.findByText("Change order template")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "culture" }));
     expect(screen.queryByText("Change order template")).not.toBeInTheDocument();
@@ -500,7 +498,7 @@ describe("library", () => {
 
 describe("admin", () => {
   it("shows company settings with the managed theme and domains", async () => {
-    renderWithHub(<CompanySettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="company" />, admin);
     expect(await screen.findByDisplayValue("Klasik Construction")).toBeInTheDocument();
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
@@ -608,36 +606,49 @@ describe("navigation and modules", () => {
   it("groups a Kingdom admin's sidebar into sections with Home first", () => {
     renderWithHub(<AppLayout />, makeHub("admin", KINGDOM.company));
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    for (const name of ["Home", "Sales & Finance", "Production", "People / HR", "More"]) {
+    for (const name of ["Home", "Sales & Finance", "Production", "People", "Resources", "More"]) {
       expect(within(nav).getByRole("group", { name })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: "Home" })).toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(within(within(nav).getByRole("group", { name: "Resources" })).getAllByRole("link").map((l) => l.textContent)).toEqual(["SOPs", "Files & media", "Links"]);
   });
 
   it("groups a Kingdom employee's sidebar without Sales & Finance", () => {
     renderWithHub(<AppLayout />, makeHub("employee", KINGDOM.company));
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).queryByRole("group", { name: "Sales & Finance" })).not.toBeInTheDocument();
-    for (const name of ["Home", "People / HR", "More"]) {
+    for (const name of ["Home", "My development", "Resources"]) {
       expect(within(nav).getByRole("group", { name })).toBeInTheDocument();
     }
-    for (const name of ["My GSR", "My Reviews", "My Goals"]) {
+    for (const name of ["My GSR", "My Reviews", "My Goals", "SOPs", "Files & media", "Links"]) {
       expect(within(nav).getByRole("link", { name })).toBeInTheDocument();
     }
   });
 
-  it("keeps Klasik's flat sidebar exactly as it was", () => {
+  it("gives Klasik the same sections, with only the items its modules carry", () => {
     renderWithHub(<AppLayout />, admin);
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(within(nav).queryAllByRole("group")).toHaveLength(0);
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Dashboard", "GSRs", "Reviews", "Scorecards", "Goals", "People", "SOPs", "Resources", "Financials", "Marketing", "My GSR", "Settings"]);
+    expect(within(nav).getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual(["Home", "Sales & Finance", "People", "Resources", "More"]);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Home", "Financials", "Marketing", "People", "Goals", "Monthly GSRs", "Reviews", "Scorecards", "SOPs", "Files & media", "My GSR", "Settings",
+    ]);
   });
 
-  it("titles the dashboard Home under the switchboard module", async () => {
-    renderWithHub(<DashboardPage />, makeHub("admin", KINGDOM.company));
+  it("keeps SOPs marked in the sidebar while an SOP is open", () => {
+    renderWithHub(<AppLayout />, admin, { path: `/sops/${KLASIK.sops[0].id}`, pattern: "/sops/:sopId" });
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "SOPs" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Files & media" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("titles the dashboard Home for every company", async () => {
+    const { unmount } = renderWithHub(<DashboardPage />, makeHub("admin", KINGDOM.company));
     expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+    unmount();
+    renderWithHub(<DashboardPage />, admin);
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
   });
 
   it("switches modules per company on the Companies tab", async () => {
@@ -995,13 +1006,17 @@ describe("sign-off", () => {
 });
 
 describe("job roles", () => {
-  it("manages job roles, their modules, and their goals in settings", async () => {
-    renderWithHub(<CompanySettingsPage />, admin);
+  it("manages job roles and their modules in settings, and lists the goals each one brings", async () => {
+    renderWithHub(<SettingsPage tab="roles" />, admin);
     expect(await screen.findByText("Job roles")).toBeInTheDocument();
-    // Klasik's one role so far, with the module it carries and the goal it brings.
+    // Klasik's one role so far, with the module it carries and the goal it brings, which is edited
+    // in Goals > By role and linked from the card.
     expect(await screen.findByLabelText("Name for Production Manager")).toHaveValue("Production Manager");
     expect(screen.getByLabelText(/^Financial figures .* for Production Manager$/)).toBeChecked();
-    expect(screen.getByLabelText("Role goal Walk every active site once a week")).toBeInTheDocument();
+    const card = screen.getByLabelText("Name for Production Manager").closest("li") as HTMLElement;
+    expect(within(card).getByText("Walk every active site once a week")).toBeInTheDocument();
+    expect(within(card).queryByLabelText("Role goal Walk every active site once a week")).not.toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Edit in Goals, By role" })).toHaveAttribute("href", `/goals/roles#role-goals-${KLASIK.jobRoles[0].id}`);
     await userEvent.type(screen.getByLabelText("Add a job role"), "Estimator");
     await userEvent.click(screen.getByRole("button", { name: "Add role" }));
     expect(await screen.findByLabelText("Name for Estimator")).toHaveValue("Estimator");
@@ -1046,8 +1061,8 @@ describe("job roles", () => {
 
 describe("connections", () => {
   it("shows the company's own connections and disconnects one from settings", async () => {
-    renderWithHub(<CompanySettingsPage />, admin);
-    expect(await screen.findByText("Connections")).toBeInTheDocument();
+    renderWithHub(<SettingsPage tab="connections" />, admin);
+    expect(await screen.findByRole("heading", { name: "Connections" })).toBeInTheDocument();
     // HighLevel is connected by the owner, with the account it points at; QuickBooks is not.
     expect(await screen.findByText("Klasik Construction (HighLevel)", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();
@@ -1117,7 +1132,7 @@ describe("goals beyond the month", () => {
   });
 
   it("lists everyone's goals and BHAGs for admins, without their steps", async () => {
-    renderWithHub(<GoalsPage />, admin);
+    renderWithHub(<GoalsPage tab="people" />, admin);
     const row = (await screen.findByText("Get the OSHA 30 certification")).closest("li") as HTMLElement;
     expect(row).toHaveTextContent("Professional · 40%");
     expect(row).not.toHaveTextContent(/steps/);
@@ -1136,7 +1151,7 @@ describe("monthly GSRs, scored", () => {
   });
 
   it("offers the mandatory count in settings and says how the pillar scores", async () => {
-    renderWithHub(<GsrSettingsPage />, admin);
+    renderWithHub(<SettingsPage tab="reviews" />, admin);
     expect(await screen.findByLabelText("Mandatory a month")).toHaveValue("2");
     expect(screen.getByText(/Scored from the Goal Setting Reviews inside each review's period/)).toBeInTheDocument();
   });
@@ -1399,7 +1414,8 @@ describe("home cards", () => {
     expect(within(attention).getByRole("link", { name: "Open: People not signed in" })).toHaveAttribute("href", "/people");
     const shortcuts = card("Sections");
     expect(within(shortcuts).getByRole("link", { name: "Production" })).toHaveAttribute("href", "/production");
-    expect(within(shortcuts).getByRole("link", { name: "People / HR" })).toHaveAttribute("href", "/gsr");
+    expect(within(shortcuts).getByRole("link", { name: "People" })).toHaveAttribute("href", "/people");
+    expect(within(shortcuts).getByRole("link", { name: "Resources" })).toHaveAttribute("href", "/resources/sops");
     expect(within(shortcuts).getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/sales-finance");
     expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
     const wins = card("Recent wins");
@@ -1416,7 +1432,7 @@ describe("home cards", () => {
     expect(screen.getByRole("heading", { name: "Recent wins" })).toBeInTheDocument();
     const shortcuts = card("Sections");
     expect(within(shortcuts).getByRole("link", { name: "Production" })).toHaveAttribute("href", "/production");
-    expect(within(shortcuts).getByRole("link", { name: "People / HR" })).toHaveAttribute("href", "/my/gsr");
+    expect(within(shortcuts).getByRole("link", { name: "My development" })).toHaveAttribute("href", "/my/gsr");
     expect(within(shortcuts).queryByRole("link", { name: "Sales & Finance" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Needs attention" })).not.toBeInTheDocument();
   });
@@ -1629,7 +1645,7 @@ describe("data sources", () => {
     await screen.findByRole("heading", { name: "Sample invoices" });
     const invoices = card("Sample invoices");
     expect(within(invoices).getByText("Not connected")).toBeInTheDocument();
-    expect(within(invoices).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(within(invoices).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings/connections");
     expect(within(invoices).queryByRole("table")).not.toBeInTheDocument();
   });
 
@@ -1693,15 +1709,15 @@ describe("data sources", () => {
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Freshness" })).not.toBeInTheDocument();
     unmount();
-    renderWithHub(<CompanySettingsPage />, admin);
-    expect(await screen.findByText("Connections")).toBeInTheDocument();
+    renderWithHub(<SettingsPage tab="connections" />, admin);
+    expect(await screen.findByText("GoHighLevel")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Data sources" })).not.toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
   });
 
   it("configures sources and syncs one now from Settings", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     await screen.findByRole("heading", { name: "Data sources" });
     const panel = card("Data sources");
     for (const s of KINGDOM.syncSources) expect(await within(panel).findByText(s.name)).toBeInTheDocument();
@@ -1724,7 +1740,7 @@ describe("data sources", () => {
   });
 
   it("shows the Google Sheets connection only to a company with data sources", async () => {
-    const { unmount } = renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    const { unmount } = renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     await screen.findByRole("heading", { name: "Connections" });
     const connections = card("Connections");
     const row = (await within(connections).findByText("Google Sheets")).closest("li") as HTMLElement;
@@ -1733,19 +1749,19 @@ describe("data sources", () => {
     expect(within(row).getByRole("button", { name: "Disconnect Google Sheets" })).toBeInTheDocument();
     unmount();
 
-    renderWithHub(<CompanySettingsPage />, admin, { path: "/settings", pattern: "/settings" });
+    renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/settings/connections", pattern: "/settings/connections" });
     expect(await screen.findByText("GoHighLevel")).toBeInTheDocument();
     expect(screen.queryByText("Google Sheets")).not.toBeInTheDocument();
   });
 
   it("confirms a Google Sheets connection on the way back", async () => {
-    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings?connected=google_sheets", pattern: "/settings" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections?connected=google_sheets", pattern: "/settings/connections" });
     expect(await screen.findByText("Google Sheets is connected.")).toBeInTheDocument();
   });
 
   it("reads a sheet's headers into the field map", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     await screen.findByRole("heading", { name: "Data sources" });
     const panel = card("Data sources");
     await within(panel).findByText("Sample sales tab");
@@ -1764,7 +1780,7 @@ describe("data sources", () => {
 
   it("keeps Read headers off until the link names a tab", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     await screen.findByRole("heading", { name: "Data sources" });
     const panel = card("Data sources");
     await within(panel).findByText("Sample sales tab");
@@ -1812,36 +1828,61 @@ describe("external links", () => {
     expect(screen.getByRole("link", { name: "Sample production board, opens in a new tab" }).closest("figure")).toBeNull();
   });
 
-  it("groups every readable link under its section on Home", async () => {
+  it("groups every readable link by category in the Where the work lives card on Home", async () => {
     const { container } = renderWithHub(<DashboardPage />, kingdomAdmin);
-    await screen.findByRole("heading", { name: "Sections" });
-    const shortcuts = card("Sections");
-    const group = async (name: string) => within(shortcuts).findByRole("group", { name });
-    expect(within(await group("Home")).getByText("Sample owner report")).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Where the work lives" });
+    const links = card("Where the work lives");
+    const group = async (name: string) => within(links).findByRole("group", { name });
+    expect(within(await group("General")).getByText("Sample owner report")).toBeInTheDocument();
     expect(within(await group("Sales & Finance")).getByText("Sample sales board")).toBeInTheDocument();
     const production = await group("Production");
     expect(within(production).getByText("Sample production board")).toBeInTheDocument();
     expect(within(production).getByText("Sample schedule view")).toBeInTheDocument();
-    expect(within(shortcuts).getAllByRole("group")).toHaveLength(3);
+    expect(within(links).getAllByRole("group")).toHaveLength(3);
+    expect(within(links).getByRole("link", { name: "Manage links" })).toHaveAttribute("href", "/resources/links");
     expect(container.querySelector("iframe")).toBeNull();
+    // The Sections card is sections only now.
+    expect(within(card("Sections")).queryByText("Sample owner report")).not.toBeInTheDocument();
+  });
+
+  it("puts the same card on an employee's Home, reading only what they may see", async () => {
+    renderWithHub(<DashboardPage />, kingdomEmployee);
+    await screen.findByRole("heading", { name: "Where the work lives" });
+    const links = card("Where the work lives");
+    expect(await within(links).findByText("Sample production board")).toBeInTheDocument();
+    expect(within(links).getByRole("link", { name: "All links" })).toHaveAttribute("href", "/resources/links");
+  });
+
+  it("lists the links read-only for an employee on Resources > Links", async () => {
+    renderWithHub(<ResourcesPage tab="links" />, kingdomEmployee, { path: "/resources/links", pattern: "/resources/links" });
+    expect(await screen.findByRole("heading", { name: "Links" })).toBeInTheDocument();
+    const link = await screen.findByRole("link", { name: "Sample production board, opens in a new tab" });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("form", { name: "Add a link" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Label for Sample production board")).not.toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Resources" });
+    expect(within(tabs).getAllByRole("link").map((l) => l.textContent)).toEqual(["SOPs", "Files & media", "Links"]);
+    expect(within(tabs).getByRole("link", { name: "Links" })).toHaveAttribute("aria-current", "page");
   });
 
   it("shows no links to a company without the module", async () => {
     const { unmount } = renderWithHub(<DashboardPage />, admin);
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     expect(screen.queryByText("Outside tools")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Where the work lives" })).not.toBeInTheDocument();
     expect(screen.queryByText("Sample sales board")).not.toBeInTheDocument();
     unmount();
-    renderWithHub(<CompanySettingsPage />, admin);
-    expect(await screen.findByText("Connections")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "External links" })).not.toBeInTheDocument();
+    // Resources carries no Links tab and an address typed for it lands on the SOP library.
+    renderWithHub(<ResourcesPage tab="links" />, admin, { path: "/resources/links", pattern: "/resources/links" });
+    expect(await screen.findByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Links to outside tools" })).not.toBeInTheDocument();
   });
 
-  it("keeps the links in Settings", async () => {
+  it("manages the links on Resources > Links", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, kingdomAdmin, { path: "/settings", pattern: "/settings" });
-    await screen.findByRole("heading", { name: "External links" });
-    const panel = card("External links");
+    renderWithHub(<ResourcesPage tab="links" />, kingdomAdmin, { path: "/resources/links", pattern: "/resources/links" });
+    await screen.findByRole("heading", { name: "Links to outside tools" });
+    const panel = card("Links to outside tools");
     for (const label of ["Sample sales board", "Sample production board", "Sample owner report", "Sample schedule view"]) {
       expect(await within(panel).findByLabelText(`Label for ${label}`)).toHaveValue(label);
     }

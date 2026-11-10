@@ -1,5 +1,6 @@
-// The focus topic calendar, the New month dialog reading it, and the company's divisions in
-// settings, rendered against the mocked data layer the way pages.test.tsx renders every page.
+// The focus topic calendar (Goals > Monthly focus), the New month dialog reading it, and the
+// company's divisions in Settings > Roles, rendered against the mocked data layer the way
+// pages.test.tsx renders every page.
 // The mocks keep state for the whole file, so each test names the rows it starts from.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -37,9 +38,9 @@ import { getCycle, updateCycle } from "../services/gsr.ts";
 import { listFocusTopics } from "../services/focusTopics.ts";
 import { listDivisions } from "../services/divisions.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
-import GsrSettingsPage from "./gsr/GsrSettingsPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
-import CompanySettingsPage from "./CompanySettingsPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
 
 const klasikAdmin = makeHub("admin");
 const rbaAdmin = makeHub("admin", RBA.company);
@@ -56,7 +57,7 @@ async function calendar() {
 
 describe("focus topic calendar", () => {
   it("lists this month and the next twelve, with the planned topics filled in", async () => {
-    renderWithHub(<GsrSettingsPage />, klasikAdmin);
+    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
     const section = await calendar();
     expect(within(section).getByLabelText("Theme for September 2026")).toHaveValue("Core value: Integrity");
     expect(within(section).getByLabelText("Theme for October 2026")).toHaveValue("Core value: Ownership");
@@ -73,7 +74,7 @@ describe("focus topic calendar", () => {
   it("fills a month's GSR theme and description when the GSR has none", async () => {
     const user = userEvent.setup();
     expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
-    renderWithHub(<GsrSettingsPage />, rbaAdmin);
+    renderWithHub(<GoalsPage tab="focus" />, rbaAdmin);
     const section = await calendar();
     await user.type(within(section).getByLabelText("Theme for September 2026"), "Safety first");
     await user.tab();
@@ -90,7 +91,7 @@ describe("focus topic calendar", () => {
 
   it("never overwrites a theme typed on the GSR itself", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, klasikAdmin);
+    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
     const section = await calendar();
     const input = within(section).getByLabelText("Theme for September 2026");
     await user.clear(input);
@@ -108,7 +109,7 @@ describe("focus topic calendar", () => {
 
   it("removes a topic from the calendar only, leaving the GSR's theme", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GsrSettingsPage />, rbaAdmin);
+    renderWithHub(<GoalsPage tab="focus" />, rbaAdmin);
     const section = await calendar();
     expect(within(section).getByLabelText("Theme for September 2026")).toHaveValue("Safety first");
     await user.click(within(section).getByRole("button", { name: "Remove the September 2026 topic" }));
@@ -120,7 +121,7 @@ describe("focus topic calendar", () => {
   });
 
   it("offers Remove only on a month that has a topic", async () => {
-    renderWithHub(<GsrSettingsPage />, klasikAdmin);
+    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
     const section = await calendar();
     // A month with no topic has nothing to remove.
     expect(within(section).queryByRole("button", { name: "Remove the November 2026 topic" })).not.toBeInTheDocument();
@@ -158,11 +159,11 @@ describe("new month dialog", () => {
   it("links the GSR list to the calendar", async () => {
     renderWithHub(<CyclesPage section="gsr" />, klasikAdmin);
     const link = await screen.findByRole("link", { name: /Focus topics/ });
-    expect(link).toHaveAttribute("href", "/reviews/settings#focus-topics");
+    expect(link).toHaveAttribute("href", "/goals/focus");
   });
 });
 
-describe("divisions in company settings", () => {
+describe("divisions in Settings > Roles", () => {
   async function panel() {
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
@@ -172,7 +173,7 @@ describe("divisions in company settings", () => {
 
   it("lists, adds, renames and removes a company's divisions", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, rbaAdmin);
+    renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
     const section = await panel();
     expect(within(section).getByLabelText("Division name RBA North")).toBeInTheDocument();
     expect(within(section).getByText("3 people")).toBeInTheDocument();
@@ -201,7 +202,7 @@ describe("divisions in company settings", () => {
 
   it("says why a duplicate name will not save", async () => {
     const user = userEvent.setup();
-    renderWithHub(<CompanySettingsPage />, rbaAdmin);
+    renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
     await within(section).findByLabelText("Division name West office");
@@ -211,7 +212,7 @@ describe("divisions in company settings", () => {
   });
 
   it("starts empty for a company with no divisions", async () => {
-    renderWithHub(<CompanySettingsPage />, klasikAdmin);
+    renderWithHub(<SettingsPage tab="roles" />, klasikAdmin);
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
     expect(await within(section).findByText(/No divisions/)).toBeInTheDocument();

@@ -1,18 +1,19 @@
-// The handful of shared numbers leadership tracks for the year (revenue, closed sales,
-// jobs delivered). Display strings carry the units people say; numerics are optional.
+// Goals > Company: the handful of shared numbers leadership tracks for the year and reviews each
+// month (revenue, closed sales, jobs delivered). They show on everyone's dashboard. Display
+// strings carry the units people say; numerics are optional.
 import { useRef, useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import Badge from "../../components/ui/Badge.tsx";
-import Button from "../../components/ui/Button.tsx";
-import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
-import EmptyState from "../../components/ui/EmptyState.tsx";
-import Field from "../../components/ui/Field.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
-import Modal from "../../components/ui/Modal.tsx";
-import Notice from "../../components/ui/Notice.tsx";
-import PageHeader from "../../components/ui/PageHeader.tsx";
-import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, inputClass, selectClass } from "../../components/ui/forms.ts";
+import Badge from "../ui/Badge.tsx";
+import Button from "../ui/Button.tsx";
+import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import EmptyState from "../ui/EmptyState.tsx";
+import Field from "../ui/Field.tsx";
+import IconButton from "../ui/IconButton.tsx";
+import Modal from "../ui/Modal.tsx";
+import Notice from "../ui/Notice.tsx";
+import PanelHeader from "../ui/PanelHeader.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCompanyGoal, deleteCompanyGoal, listCompanyGoals, updateCompanyGoal } from "../../services/gsr.ts";
@@ -73,7 +74,7 @@ function GoalDialog({ companyId, year, goal, count, onClose, onSaved }: { compan
   );
 }
 
-export default function CompanyGoalsPage() {
+export default function CompanyGoalsPanel() {
   const { company } = useHub();
   const companyId = company!.id;
   const currentYear = new Date().getFullYear();
@@ -126,12 +127,10 @@ export default function CompanyGoalsPage() {
 
   return (
     <>
-      <PageHeader
-        backTo="/reviews"
-        backLabel="Review cycles"
-        eyebrow="Company goals"
+      <PanelHeader
+        eyebrow="Set by leadership, reviewed monthly"
         title={`Company goals ${year}`}
-        description="The shared numbers the whole team is chasing. They show on the dashboard for everyone."
+        description="The shared numbers the whole team is chasing this year. Admins set them here; they show on everyone's dashboard."
         actions={
           <>
             <select value={year} onChange={(e) => { setError(""); shownYear.current = Number(e.target.value); setYear(shownYear.current); }} aria-label="Year" className={`${selectClass} mt-0 w-auto`}>

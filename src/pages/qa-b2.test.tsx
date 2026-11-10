@@ -26,6 +26,9 @@ vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts")
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCycle, createPillar, deleteCycle, deletePillar, listCycles, updateReview } from "../services/gsr.ts";
@@ -227,7 +230,7 @@ describe("job role modules", () => {
     try {
       // Not in a role: the admin dashboard carries no figures of their own.
       const plain = renderWithHub(<DashboardPage />, admin);
-      expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
       expect(screen.queryByRole("heading", { name: "Your figures" })).not.toBeInTheDocument();
       plain.unmount();
 

@@ -6,7 +6,7 @@ import ExternalLinkButton from "./ExternalLinkButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { NAV_GROUP_LABELS } from "../../lib/navigation.ts";
+import { LINK_GROUP_LABELS } from "../../lib/links.ts";
 import { listExternalLinks } from "../../services/externalLinks.ts";
 import type { LinkNavGroup } from "../../types/database.ts";
 
@@ -15,7 +15,7 @@ export default function ExternalLinksList({ companyId, navGroup }: { companyId: 
   if (state.error && !state.data) return <Notice tone="error" className="mt-6">{state.error}</Notice>;
   if (!state.data || state.data.length === 0) return null;
   return (
-    <Section eyebrow={NAV_GROUP_LABELS[navGroup] ?? ""} title="Outside tools" className="mt-6">
+    <Section eyebrow={LINK_GROUP_LABELS[navGroup]} title="Outside tools" className="mt-6">
       <ul className="space-y-2">
         {state.data.map((link) => (
           <li key={link.id}>

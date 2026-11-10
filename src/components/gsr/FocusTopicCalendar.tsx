@@ -1,4 +1,4 @@
-// The focus topic calendar, for an admin in the review settings: one theme per month, planned
+// The focus topic calendar, for an admin on Goals > Monthly focus: one theme per month, planned
 // for this month and the twelve after it, so the topic is decided before the month's GSR opens.
 // Each row saves on blur. A topic saved for a month whose GSR already exists is copied onto that
 // GSR when the GSR has no theme of its own, and its description follows while the GSR still carries
@@ -98,9 +98,9 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
   return (
     <div id="focus-topics" className="scroll-mt-6">
       <Section
-        eyebrow="Monthly GSRs"
+        eyebrow="The whole company, one topic a month"
         title="Focus topic calendar"
-        description="Plan the theme for each month ahead. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is."
+        description="The topic each month's #1 GSR is built on, such as a core value or a process push. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is."
         padded={false}
       >
         {state.error && !state.data ? <Notice tone="error" className="m-5">{state.error}</Notice> : null}

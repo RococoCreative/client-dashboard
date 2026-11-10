@@ -80,14 +80,14 @@ function SopForm({ existing }: { existing: ExistingSop | null }) {
   return (
     <form onSubmit={handleSubmit}>
       <PageHeader
-        backTo={isNew ? "/sops" : `/sops/${sopId}`}
+        backTo={isNew ? "/resources/sops" : `/sops/${sopId}`}
         backLabel={isNew ? "SOP library" : "Back to SOP"}
         eyebrow="SOP library"
         title={isNew ? "New SOP" : `Edit: ${existing?.sop.title ?? ""}`}
         description={isNew ? "Write it in Markdown. Publish when it is ready for the team." : "Saving adds a new version; the current text stays in history."}
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={() => navigate(isNew ? "/sops" : `/sops/${sopId}`)}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={() => navigate(isNew ? "/resources/sops" : `/sops/${sopId}`)}>Cancel</Button>
             <Button type="submit" size="sm" disabled={busy}>{busy ? "Saving..." : isNew ? "Create SOP" : "Save version"}</Button>
           </>
         }

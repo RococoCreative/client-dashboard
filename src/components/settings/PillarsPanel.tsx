@@ -1,20 +1,21 @@
-// How this company scores people: pillars, their weights and scoring type, and the criteria
-// a rating pillar rates. Everything edits in place and saves on blur. Weights should total
-// 100; the page shows the running total and the scoring engine normalizes either way. The
-// focus topic calendar sits below the pillars, as the one other setting reviews read.
+// How this company scores people, for Settings > Reviews: pillars, their weights and scoring
+// type, the criteria a rating pillar rates, and on a Monthly GSRs pillar how many mandatory GSRs a
+// month carries. Everything edits in place and saves on blur. Weights should total 100; the panel
+// shows the running total and the scoring engine normalizes either way. The monthly focus topics
+// are planned in Goals > Monthly focus, which is where the GSR pillar's note points.
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import FocusTopicCalendar from "../../components/gsr/FocusTopicCalendar.tsx";
-import Badge from "../../components/ui/Badge.tsx";
-import BlurInput from "../../components/ui/BlurInput.tsx";
-import Button from "../../components/ui/Button.tsx";
-import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
-import Notice from "../../components/ui/Notice.tsx";
-import PageHeader from "../../components/ui/PageHeader.tsx";
-import Section from "../../components/ui/Section.tsx";
-import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import Badge from "../ui/Badge.tsx";
+import BlurInput from "../ui/BlurInput.tsx";
+import Button from "../ui/Button.tsx";
+import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import IconButton from "../ui/IconButton.tsx";
+import Notice from "../ui/Notice.tsx";
+import PanelHeader from "../ui/PanelHeader.tsx";
+import Section from "../ui/Section.tsx";
+import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { checkboxClass, inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import {
@@ -32,7 +33,7 @@ import { errorMessage } from "../../lib/errors.ts";
 import { formatNumber, pluralize } from "../../lib/format.ts";
 import { SCORING_TYPE_LABELS, keysOf, type GsrCriterion, type GsrPillar, type ScoringType } from "../../types/database.ts";
 
-export default function GsrSettingsPage() {
+export default function PillarsPanel() {
   const { company } = useHub();
   const companyId = company!.id;
   const [error, setError] = useState("");
@@ -206,12 +207,10 @@ export default function GsrSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        backTo="/reviews"
-        backLabel="Review cycles"
-        eyebrow="GSR settings"
+      <PanelHeader
+        eyebrow="Scoring"
         title="Pillars and weights"
-        description="Define what this company measures and how much each pillar counts. Rated pillars score their criteria 1 to N; target-vs-actual pillars score deliverables entered per review."
+        description="What this company measures in its reviews and how much each pillar counts. Rated pillars score their criteria 1 to N; target-vs-actual pillars score deliverables entered per review."
         actions={
           <>
             <Badge tone={total === 100 ? "success" : "warning"}>Weights total {formatNumber(total)}%</Badge>
@@ -295,7 +294,8 @@ export default function GsrSettingsPage() {
 
               {pillar.scoring_type === "gsr_goals" ? (
                 <p className="mt-5 border-t border-line pt-4 text-[13px] leading-relaxed text-ink-2">
-                  Scored from the Goal Setting Reviews inside each review's period. A month carries {pluralize(pillar.required_goals, "mandatory GSR")}, the focus topic's GSR first and then role and professional goals, and adds up the completion of all its goals up to {pillar.required_goals * 100}%: a stretch goal adds to the total and never lowers it. A month counts once an admin marks its GSR complete, which locks its score in. The months are written into the review as one line item when it is marked complete.
+                  Scored from the Goal Setting Reviews inside each review's period. A month carries {pluralize(pillar.required_goals, "mandatory GSR")}, the focus topic's GSR first and then role and professional goals, and adds up the completion of all its goals up to {pillar.required_goals * 100}%: a stretch goal adds to the total and never lowers it. A month counts once an admin marks its GSR complete, which locks its score in. The months are written into the review as one line item when it is marked complete. Each month's focus topic is planned in{" "}
+                  <Link to="/goals/focus" className="text-accent hover:underline">Goals, Monthly focus</Link>.
                 </p>
               ) : null}
               {pillar.scoring_type === "rating" ? (
@@ -340,10 +340,6 @@ export default function GsrSettingsPage() {
         {pillars.length === 0 ? (
           <Notice tone="info">No pillars yet. Add the first one; a typical setup is three or four pillars whose weights add up to 100%.</Notice>
         ) : null}
-      </div>
-
-      <div className="mt-6">
-        <FocusTopicCalendar companyId={companyId} />
       </div>
 
       {deletingPillar ? (
