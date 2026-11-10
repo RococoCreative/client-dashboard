@@ -15,8 +15,8 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
-import { hasAccount } from "../../lib/people.ts";
-import { ROLE_LABELS, keysOf, type Profile, type Role } from "../../types/database.ts";
+import { grantableRoles, hasAccount } from "../../lib/people.ts";
+import { ROLE_LABELS, type Profile, type Role } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
 export default function UsersPage() {
@@ -106,7 +106,7 @@ export default function UsersPage() {
                       </td>
                       <td className={tdClass}>
                         <select value={person.role} aria-label={`Role for ${person.email}`} onChange={(e) => void patch(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-                          {keysOf(ROLE_LABELS).map((r) => (
+                          {grantableRoles(me).map((r) => (
                             <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                           ))}
                         </select>

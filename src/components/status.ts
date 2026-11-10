@@ -1,6 +1,7 @@
 // One vocabulary for status badges across pages: which tone each status takes.
 import type { BadgeTone } from "./ui/Badge.tsx";
 import type { GoalOutcome } from "../lib/gsr/goals.ts";
+import type { SyncState } from "../lib/sync/state.ts";
 import type { CampaignStatus, CycleStatus, GoalStatus, PreviousStatus, ReviewStatus, SopStatus } from "../types/database.ts";
 
 export const REVIEW_STATUS_TONE: Record<ReviewStatus, BadgeTone> = {
@@ -46,4 +47,13 @@ export const CAMPAIGN_STATUS_TONE: Record<CampaignStatus, BadgeTone> = {
   active: "success",
   paused: "warning",
   complete: "neutral",
+};
+
+export const SYNC_STATE_TONE: Record<SyncState, BadgeTone> = {
+  not_connected: "neutral",
+  awaiting_first_sync: "info",
+  syncing: "info",
+  failed: "danger",
+  stale: "warning",
+  synced: "success",
 };

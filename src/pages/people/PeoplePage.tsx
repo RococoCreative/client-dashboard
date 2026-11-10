@@ -10,6 +10,8 @@
 // switching the row off is the one thing that keeps a person out before they ever sign in, and it
 // keeps everything set up for them on record, where Remove deletes it. A Rococo admin placed with
 // the company shows on the roster too, but their role and access are Rococo's to manage.
+// Deactivating, inviting and removing someone ranked above you is refused by the database
+// (0033), so those rows offer none of the three.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Send, Trash2, UserPlus } from "lucide-react";
@@ -32,15 +34,25 @@ import { createInvitation, deleteInvitation, inviteLink, listInvitations } from 
 import { errorMessage } from "../../lib/errors.ts";
 import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
 import { displayName, formatDate, pluralize } from "../../lib/format.ts";
-import { formatTenure, hasAccount } from "../../lib/people.ts";
-import { ROLE_LABELS, keysOf, type Invitation, type Profile, type Role } from "../../types/database.ts";
+import { canGrantRole, formatTenure, grantableRoles, hasAccount } from "../../lib/people.ts";
+import { ROLE_LABELS, type Invitation, type Profile, type Role } from "../../types/database.ts";
+
+// What each role opens up, shown under the Role select when adding someone.
+const ROLE_HINTS: Record<Role, string> = {
+  owner: "Owners see everything for this company. Only an owner or Rococo can make someone an owner.",
+  admin: "Admins see everything for this company.",
+  manager: "Managers see what employees see for now. Team access comes later.",
+  employee: "Employees see their own GSR plus the libraries.",
+};
 
 function AddStaffDialog({
   companyId,
+  granter,
   onClose,
   onCreated,
 }: {
   companyId: string;
+  granter: Profile;
   onClose: () => void;
   onCreated: (person: Profile) => void;
 }) {
@@ -89,9 +101,9 @@ function AddStaffDialog({
             <input id="staff-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" className={inputClass} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Role" htmlFor="staff-role" hint={role === "admin" ? "Admins see everything for this company." : "Employees see their own GSR plus the libraries."}>
+            <Field label="Role" htmlFor="staff-role" hint={ROLE_HINTS[role]}>
               <select id="staff-role" value={role} onChange={(e) => setRole(e.target.value as Role)} className={selectClass}>
-                {keysOf(ROLE_LABELS).map((r) => (
+                {grantableRoles(granter).map((r) => (
                   <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                 ))}
               </select>
@@ -257,6 +269,7 @@ export default function PeoplePage() {
                   {people.map((person) => {
                     const self = person.id === profile.id;
                     const rococo = person.is_rococo_admin;
+                    const canChange = canGrantRole(profile, person.role);
                     const invitation = pendingFor(person);
                     const account = hasAccount(person);
                     return (
@@ -286,8 +299,15 @@ export default function PeoplePage() {
                           {rococo ? (
                             <Badge>Rococo Creative</Badge>
                           ) : (
-                            <select value={person.role} disabled={self} aria-label={`Role for ${displayName(person)}`} onChange={(e) => void patchPerson(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-                              {keysOf(ROLE_LABELS).map((r) => (
+                            <select
+                              value={person.role}
+                              disabled={self || !canChange}
+                              aria-label={`Role for ${displayName(person)}`}
+                              title={!canChange && !self ? "Only an owner or Rococo can change this person's role." : undefined}
+                              onChange={(e) => void patchPerson(person, { role: e.target.value as Role })}
+                              className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}
+                            >
+                              {(canChange ? grantableRoles(profile) : [person.role]).map((r) => (
                                 <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                               ))}
                             </select>
@@ -306,7 +326,7 @@ export default function PeoplePage() {
                         </td>
                         <td className={`${tdClass} text-right`}>
                           <span className="flex items-center justify-end gap-1.5">
-                            {!self && !rococo ? (
+                            {!self && !rococo && canChange ? (
                               <Button variant="ghost" size="sm" aria-label={`${person.is_active ? "Deactivate" : "Reactivate"} ${displayName(person)}`} onClick={() => void patchPerson(person, { is_active: !person.is_active })}>
                                 {person.is_active ? "Deactivate" : "Reactivate"}
                               </Button>
@@ -323,7 +343,7 @@ export default function PeoplePage() {
                                 </IconButton>
                               </>
                             ) : null}
-                            {!account && !invitation ? (
+                            {!account && !invitation && canChange ? (
                               <>
                                 {person.is_active ? (
                                   <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
@@ -357,6 +377,7 @@ export default function PeoplePage() {
       {adding ? (
         <AddStaffDialog
           companyId={companyId}
+          granter={profile}
           onClose={() => setAdding(false)}
           onCreated={(person) => {
             state.setData((prev) => (prev ? { ...prev, people: [...prev.people, person] } : prev));

@@ -4,20 +4,37 @@
 // selects all agree on one vocabulary.
 
 import type { ScoringType } from "../lib/gsr/scoring.ts";
+import type { FieldMapEntry, FieldType, SourceConfig, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
+export type { FieldType, FieldMapEntry, SourceConfig, SheetsSourceConfig, QuickBooksSourceConfig, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
-export type Role = "admin" | "employee";
+export type Role = "owner" | "admin" | "manager" | "employee";
 
-// Live but not read by this app yet: companies.modules (0024) and the audit_events table (0025)
-// arrive with their screens on claude/elegant-cray-bnb85m, which adds both types here.
 export interface Company {
   id: string;
   slug: string;
   name: string;
   theme_key: ThemeKey;
   logo_url: string | null;
+  // Module keys a Rococo admin switched on (0024). Raw text[]: unknown keys are allowed and ignored; read only through lib/modules.ts.
+  modules: string[];
   created_at: string;
   updated_at: string;
+}
+
+// The four nav sections. 0031's external_links.nav_group check uses the same four values.
+export type LinkNavGroup = "home" | "sales_finance" | "production" | "people_hr";
+
+// A company's links to its own outside tools (0031). The audience is enforced by RLS, never by a screen.
+export type LinkProvider = "monday" | "quickbooks" | "google_sheets" | "other";
+export type LinkAudience = "admins" | "everyone";
+export const LINK_PROVIDER_LABELS: Record<LinkProvider, string> = { monday: "Monday", quickbooks: "QuickBooks", google_sheets: "Google Sheets", other: "Other" };
+export const LINK_AUDIENCE_LABELS: Record<LinkAudience, string> = { admins: "Admins only", everyone: "Everyone" };
+export interface ExternalLink {
+  id: string; company_id: string; nav_group: LinkNavGroup; label: string; destination_note: string | null;
+  url: string; provider: LinkProvider; embed_url: string | null; embed_is_public: boolean;
+  audience: LinkAudience; sort_order: number;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
 }
 
 // What the anonymous login screen may see of a company.
@@ -461,7 +478,9 @@ export interface Resource {
 // Labels ------------------------------------------------------------------------------------
 
 export const ROLE_LABELS: Record<Role, string> = {
+  owner: "Owner",
   admin: "Admin",
+  manager: "Manager",
   employee: "Employee",
 };
 
@@ -603,10 +622,11 @@ export const CAMPAIGN_CHANNELS = [
 // and each sign-in's single-use nonce in connection_states, which only the connections Edge
 // Function reads, so neither has a type here. A new provider is a new key here and a new entry
 // in that function's registry.
-export type ConnectionProvider = "gohighlevel" | "quickbooks";
+export type ConnectionProvider = "gohighlevel" | "quickbooks" | "google_sheets";
 export const CONNECTION_PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   gohighlevel: "GoHighLevel",
   quickbooks: "QuickBooks Online",
+  google_sheets: "Google Sheets",
 };
 export type ConnectionStatus = "not_connected" | "connected" | "error";
 export interface CompanyConnection {
@@ -624,4 +644,129 @@ export interface CompanyConnection {
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+// Data sources
+// What a company reads from its own accounts, each run of a sync, and the records a run brought
+// in (0030). Records are read-only; only the sync writes them. The shapes a sync works with live
+// in supabase/functions/_shared/sync/types.ts, shared with the connections function.
+export const TARGET_MODULE_LABELS: Record<TargetModule, string> = {
+  sales_reporting: "Sales reporting",
+  financial_reporting: "Financial reporting",
+  controls: "Controls",
+  pm_capacity: "PM capacity",
+};
+export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+  text: "Text",
+  number: "Number",
+  currency: "Currency",
+  percent: "Percent",
+  date: "Date",
+};
+export type SyncRunStatus = "running" | "succeeded" | "failed" | "abandoned";
+export type SyncTrigger = "schedule" | "manual";
+export interface SyncSource {
+  id: string;
+  company_id: string;
+  connection_id: string;
+  provider: SyncProvider;
+  name: string;
+  target_module: TargetModule;
+  config: SourceConfig;
+  field_map: FieldMapEntry[];
+  record_key: string[];
+  sync_weekday: number | null;
+  sync_time: string | null;
+  sync_timezone: string | null;
+  stale_after_hours: number | null;
+  enabled: boolean;
+  current_run_id: string | null;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_status: SyncRunStatus | null;
+  last_error: string | null;
+  sync_requested_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface SyncRun {
+  id: string;
+  company_id: string;
+  source_id: string;
+  connection_id: string;
+  trigger_kind: SyncTrigger;
+  requested_by: string | null;
+  status: SyncRunStatus;
+  started_at: string;
+  finished_at: string | null;
+  rows_read: number;
+  rows_applied: number;
+  rows_blank: number;
+  error_detail: unknown | null;
+}
+export interface SyncRecord {
+  id: string;
+  company_id: string;
+  source_id: string;
+  run_id: string;
+  record_key: string;
+  data: Record<string, string | number | null>;
+  source_ref: Record<string, unknown>;
+  created_at: string;
+}
+
+// Audit
+// One recorded change to a role, access, company setting, domain, connection, pillar weight or
+// job-role module (0025). The database writes these by trigger and only Rococo admins read them.
+// changed holds each watched column that moved, with its value before and after; an insert has
+// old null throughout and a delete has new null throughout.
+export type AuditAction = "insert" | "update" | "delete";
+export type AuditActorKind = "user" | "rococo" | "system";
+export const AUDIT_ACTOR_KIND_LABELS: Record<AuditActorKind, string> = { user: "Company user", rococo: "Rococo", system: "System" };
+export interface AuditEvent {
+  id: string;
+  company_id: string | null;
+  table_name: string;
+  row_id: string;
+  action: AuditAction;
+  changed: Record<string, { old: unknown; new: unknown }>;
+  actor_user_id: string | null;
+  actor_profile_id: string | null;
+  actor_kind: AuditActorKind;
+  created_at: string;
+}
+
+// Production
+// Projects a company enters by hand (0026), each with an ordered list of milestones and letters.
+// Members read them and admins write them; a milestone takes its company from its project by
+// trigger. There is no status: a milestone is complete when completed_on is set. Nothing is
+// deleted; both are archived.
+export type ProjectSource = "manual";
+export interface Project {
+  id: string; company_id: string; name: string; reference: string | null; notes: string | null;
+  source: ProjectSource; source_key: string | null; archived_at: string | null;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
+export type MilestoneKind = "milestone" | "letter";
+export const MILESTONE_KIND_LABELS: Record<MilestoneKind, string> = { milestone: "Milestone", letter: "Letter" };
+export interface ProjectMilestone {
+  id: string; company_id: string; project_id: string; title: string; description: string | null;
+  kind: MilestoneKind; sort_order: number; target_date: string | null;
+  responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
+  created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
+
+// Wins
+// Wins a company records by hand (0027). Members read them and admins write them. A write from
+// the browser is always manual: the database forces source_type and clears source_ref, so a
+// later import can be told apart. Nothing is deleted; a win is archived.
+export type WinSourceType = "manual";
+export const WIN_SOURCE_LABELS: Record<WinSourceType, string> = { manual: "Manual" };
+export interface Win {
+  id: string; company_id: string; title: string; description: string | null; won_on: string;
+  project_id: string | null; source_type: WinSourceType; source_ref: Record<string, unknown> | null;
+  archived_at: string | null; created_by: string | null; updated_by: string | null;
+  created_at: string; updated_at: string;
 }

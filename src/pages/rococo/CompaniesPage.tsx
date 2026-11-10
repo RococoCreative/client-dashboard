@@ -1,8 +1,9 @@
-// Companies tab of the Rococo portfolio: each company's name, theme, logo, and the sign-in
-// domains that decide who can self-serve an account. Convenience over RLS, which already
-// lets Rococo admins do all of this. Deleting a company also tidies what the database cannot
-// reach on its own: the grant each connected provider holds, and the company's stored files.
-import { useState } from "react";
+// Companies tab of the Rococo portfolio: each company's name, theme, logo, the modules it has
+// on, and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
+// which already lets Rococo admins do all of this. Deleting a company also tidies what the
+// database cannot reach on its own: the grant each connected provider holds, and the company's
+// stored files.
+import { useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
@@ -14,7 +15,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { checkboxClass, helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -23,6 +24,7 @@ import { disconnectConnection, listConnections } from "../../services/connection
 import { listAllProfiles } from "../../services/profiles.ts";
 import { removeCompanyFiles } from "../../services/storage.ts";
 import { THEMES, THEME_KEYS } from "../../lib/theme.ts";
+import { MODULE_DESCRIPTIONS, MODULE_KEYS, MODULE_LABELS, hasModule, withModule, type ModuleKey } from "../../lib/modules.ts";
 import { normalizeDomain } from "../../lib/email.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
@@ -45,6 +47,17 @@ export default function CompaniesPage() {
   const [deleteError, setDeleteError] = useState("");
   // Companies already deleted whose stored files did not all go, kept so each removal can be retried.
   const [strandedFiles, setStrandedFiles] = useState<StrandedFiles[]>([]);
+  // The module list each company has been asked for, until its saves settle. Every tick builds on
+  // this rather than on the last render's company, so a second quick tick never drops the first.
+  // The ref is the source for the next save (two ticks can land before a re-render); the state
+  // mirrors it for the checkboxes. savingModules counts saves in flight, and the module fieldset
+  // waits while any is. Each save writes the whole list, so a company's saves go out one after
+  // another, in the order they were asked for, and the last one asked for is the one that stays.
+  const pendingRef = useRef<Record<string, string[]>>({});
+  const savingRef = useRef<Record<string, number>>({});
+  const queueRef = useRef<Record<string, Promise<void>>>({});
+  const [pendingModules, setPendingModules] = useState<Record<string, string[]>>({});
+  const [savingModules, setSavingModules] = useState<Record<string, number>>({});
 
   const state = useAsync(async () => {
     const [companies, domains, profiles] = await Promise.all([listCompanies(), listAllDomains(), listAllProfiles()]);
@@ -66,6 +79,29 @@ export default function CompaniesPage() {
       state.setData((prev) => (prev ? { ...prev, companies: prev.companies.map((c) => (c.id === next.id ? next : c)) } : prev));
       await refreshCompanies();
     });
+  }
+
+  async function toggleModule(company: Company, key: ModuleKey, on: boolean) {
+    const id = company.id;
+    const modules = withModule(pendingRef.current[id] ?? company.modules, key, on);
+    pendingRef.current = { ...pendingRef.current, [id]: modules };
+    savingRef.current = { ...savingRef.current, [id]: (savingRef.current[id] ?? 0) + 1 };
+    setPendingModules(pendingRef.current);
+    setSavingModules(savingRef.current);
+    const save = (queueRef.current[id] ?? Promise.resolve()).then(() => patchCompany(company, { modules }));
+    queueRef.current[id] = save;
+    await save;
+    const left = (savingRef.current[id] ?? 1) - 1;
+    savingRef.current = { ...savingRef.current, [id]: left };
+    // Once the last save settles, the checkboxes read the company as stored again: the saved list,
+    // or the one before it if the save failed and the error is on screen.
+    if (left === 0) {
+      const rest = { ...pendingRef.current };
+      delete rest[id];
+      pendingRef.current = rest;
+      setPendingModules(rest);
+    }
+    setSavingModules(savingRef.current);
   }
 
   async function addDomain(company: Company) {
@@ -178,6 +214,7 @@ export default function CompaniesPage() {
           {companies.map((company) => {
             const ownDomains = domains.filter((d) => d.company_id === company.id);
             const members = profiles.filter((p) => p.company_id === company.id);
+            const shown = { modules: pendingModules[company.id] ?? company.modules };
             return (
               <Section
                 key={company.id}
@@ -203,6 +240,31 @@ export default function CompaniesPage() {
                     <label htmlFor={`co-logo-${company.id}`} className={labelClass}>Logo URL</label>
                     <BlurInput id={`co-logo-${company.id}`} value={company.logo_url ?? ""} placeholder="https://" onSave={(next) => void patchCompany(company, { logo_url: next.trim() || null })} />
                   </div>
+                  <fieldset aria-label={`Modules for ${company.name}`} disabled={(savingModules[company.id] ?? 0) > 0} className="md:col-span-12">
+                    <legend className={labelClass}>Modules</legend>
+                    <div className="mt-1.5 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {MODULE_KEYS.map((key) => {
+                        const id = `co-module-${company.id}-${key}`;
+                        return (
+                          <div key={key} className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              id={id}
+                              className={`${checkboxClass} mt-0.5`}
+                              checked={hasModule(shown, key)}
+                              aria-describedby={`${id}-help`}
+                              onChange={(e) => void toggleModule(company, key, e.target.checked)}
+                            />
+                            <div className="min-w-0">
+                              <label htmlFor={id} className="text-[13px] text-ink">{MODULE_LABELS[key]}</label>
+                              <p id={`${id}-help`} className={helpClass}>{MODULE_DESCRIPTIONS[key]}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className={helpClass}>With no modules on, the company sees the standard hub.</p>
+                  </fieldset>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">

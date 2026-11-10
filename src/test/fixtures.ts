@@ -3,15 +3,22 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, Profile, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDomain, CompanyGoal, CompensationItem, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MilestoneKind, Profile, Project, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewScore, Role, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
+import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
+import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
+import { MODULE_KEYS } from "../lib/modules.ts";
+import { isCompanyAdminRole } from "../lib/people.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
+// A sync that is running now started a moment before the clock the suite runs at
+// (src/test/setup.ts); one marked running for longer than the stale window reads as cut off.
+const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, created_at: NOW, updated_at: NOW },
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -32,6 +39,27 @@ interface CompanySpec {
   sops: SopSpec[];
   resources: ResourceSpec[];
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
+  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
+  wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
+  sync?: SyncSpec[];
+  links?: Array<Omit<ExternalLink, "id" | "company_id" | "created_by" | "updated_by" | "created_at" | "updated_at">>;
+}
+// A data source and how its last sync went: never run, running now, failed after a good run, or
+// succeeded. Records belong to the last good run.
+interface SyncSpec {
+  name: string;
+  provider: SyncProvider;
+  target_module: TargetModule;
+  outcome: "never" | "running" | "failed" | "succeeded";
+  stale_after_hours: number | null;
+  last_error?: string;
+  field_map: FieldMapEntry[];
+  record_key: string[];
+  records: Array<Record<string, ParsedValue>>;
+}
+
+function field(header: string, key: string, type: FieldMapEntry["type"], extra: Partial<FieldMapEntry> = {}): FieldMapEntry {
+  return { header, key, label: header, type, unit: null, required: false, ...extra };
 }
 
 const SPECS: Record<string, CompanySpec> = {
@@ -70,10 +98,13 @@ const SPECS: Record<string, CompanySpec> = {
     domain: "kingdomcustomconstruction.com",
     cadence: "monthly",
     people: [
-      { name: "Marcus Lee", title: "Owner", role: "admin" },
+      { name: "Marcus Lee", title: "Owner", role: "owner" },
       { name: "Dana Whitfield", title: "Superintendent", role: "employee" },
       { name: "Theo Brandt", title: "Estimator", role: "employee" },
       { name: "Priya Natarajan", title: "Project Coordinator", role: "employee" },
+      // Added last so every earlier id (kingdom-user-1 to 4) and everything built on them holds.
+      { name: "Avery Stone", title: "Office Manager", role: "admin" },
+      { name: "Jules Carter", title: "Field Manager", role: "manager" },
     ],
     pillars: [
       { name: "Field Execution", weight: 25, type: "rating", description: "Quality and pace of work on site.", criteria: ["Field Execution"] },
@@ -93,6 +124,119 @@ const SPECS: Record<string, CompanySpec> = {
     companyGoals: [
       { name: "Homes delivered", target: "6", current: "4", hit: false },
       { name: "Net promoter score", target: "70", current: "74", hit: true },
+    ],
+    projects: [
+      {
+        name: "Sample job 101",
+        reference: "101",
+        notes: null,
+        milestones: [
+          { title: "Contract signed", kind: "milestone", target_date: "2026-08-01", completed_on: "2026-07-30", responsible: 0 },
+          { title: "Welcome letter sent", kind: "letter", target_date: "2026-08-05", completed_on: "2026-08-04" },
+          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, responsible: 1 },
+          { title: "Final walkthrough", kind: "milestone", target_date: "2026-11-20", completed_on: null },
+        ],
+      },
+      {
+        name: "Sample job 102",
+        reference: "102",
+        notes: "Illustrative sample project.",
+        milestones: [
+          { title: "Permit approved", kind: "milestone", target_date: "2026-09-25", completed_on: null },
+          { title: "Foundation poured", kind: "milestone", target_date: "2026-10-15", completed_on: null },
+        ],
+      },
+    ],
+    wins: [
+      { title: "Sample win 1", won_on: "2026-09-12" },
+      { title: "Sample win 2", won_on: "2026-09-05" },
+      { title: "Sample win 3", won_on: "2026-08-28" },
+      { title: "Sample win 4", won_on: "2026-08-20", project: 0 },
+      { title: "Sample win 5", won_on: "2026-08-11", archived: true },
+      { title: "Sample win 6", won_on: "2026-07-30" },
+      { title: "Sample win 7", won_on: "2026-07-15" },
+    ],
+    // Links to the company's own outside tools, all plainly samples on example.com. The third is
+    // for admins only; the fourth is a view flagged as a public share, so it may be embedded.
+    links: [
+      { nav_group: "sales_finance", label: "Sample sales board", url: "https://example.com/monday/sample-sales-board", provider: "monday", audience: "everyone", destination_note: "The sales CRM board. Monday asks you to sign in.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "production", label: "Sample production board", url: "https://example.com/monday/sample-production-board", provider: "monday", audience: "everyone", destination_note: "Open tasks for active jobs.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "home", label: "Sample owner report", url: "https://example.com/reports/sample-owner", provider: "other", audience: "admins", destination_note: "For admins only.", embed_url: null, embed_is_public: false, sort_order: 1 },
+      { nav_group: "production", label: "Sample schedule view", url: "https://example.com/monday/sample-schedule", provider: "monday", audience: "everyone", destination_note: null, embed_url: "https://example.com/embed/sample-schedule", embed_is_public: true, sort_order: 2 },
+    ],
+    // One source in each state a source can show, all plainly samples.
+    sync: [
+      {
+        name: "Sample sales tab",
+        provider: "google_sheets",
+        target_module: "sales_reporting",
+        outcome: "succeeded",
+        stale_after_hours: null,
+        field_map: [
+          field("Job", "job", "text", { required: true }),
+          field("Contract amount", "contract_amount", "currency", { unit: "USD" }),
+          field("Margin", "margin", "percent"),
+          field("Units", "units", "number"),
+          field("Signed on", "signed_on", "date"),
+          field("Notes", "notes", "text"),
+        ],
+        record_key: ["job"],
+        records: [
+          { job: "Sample job 101", contract_amount: 250000, margin: 0.25, units: 3, signed_on: "2026-08-14", notes: "Sample note" },
+          { job: "Sample job 102", contract_amount: null, margin: null, units: null, signed_on: null, notes: null },
+        ],
+      },
+      {
+        name: "Sample financial tab",
+        provider: "google_sheets",
+        target_module: "financial_reporting",
+        outcome: "failed",
+        stale_after_hours: null,
+        last_error: 'The column "Gross profit" is missing.',
+        field_map: [field("Month", "month", "text", { required: true }), field("Revenue", "revenue", "currency")],
+        record_key: ["month"],
+        records: [{ month: "Sample month A", revenue: 120000 }],
+      },
+      {
+        name: "Sample stale tab",
+        provider: "google_sheets",
+        target_module: "sales_reporting",
+        outcome: "succeeded",
+        stale_after_hours: 24,
+        field_map: [field("Job", "job", "text", { required: true }), field("Contract amount", "contract_amount", "currency")],
+        record_key: ["job"],
+        records: [{ job: "Sample job 103", contract_amount: 90000 }],
+      },
+      {
+        name: "Sample syncing tab",
+        provider: "google_sheets",
+        target_module: "financial_reporting",
+        outcome: "running",
+        stale_after_hours: null,
+        field_map: [field("Month", "month", "text", { required: true }), field("Revenue", "revenue", "currency")],
+        record_key: ["month"],
+        records: [{ month: "Sample month B", revenue: 80000 }],
+      },
+      {
+        name: "Sample capacity tab",
+        provider: "google_sheets",
+        target_module: "pm_capacity",
+        outcome: "never",
+        stale_after_hours: null,
+        field_map: [field("PM", "pm", "text", { required: true })],
+        record_key: ["pm"],
+        records: [],
+      },
+      {
+        name: "Sample invoices",
+        provider: "quickbooks",
+        target_module: "controls",
+        outcome: "never",
+        stale_after_hours: null,
+        field_map: [field("Invoice number", "doc_number", "text")],
+        record_key: [],
+        records: [],
+      },
     ],
   },
   "co-rba": {
@@ -134,6 +278,9 @@ export interface CompanyBundle {
   jobRoleGoals: JobRoleGoal[];
   financials: EmployeeFinancial[];
   connections: CompanyConnection[];
+  projects: Project[];
+  milestones: ProjectMilestone[];
+  wins: Win[];
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
@@ -150,6 +297,10 @@ export interface CompanyBundle {
   invitations: Invitation[];
   snapshots: FinancialSnapshot[];
   campaigns: MarketingCampaign[];
+  syncSources: SyncSource[];
+  syncRuns: SyncRun[];
+  syncRecords: SyncRecord[];
+  externalLinks: ExternalLink[];
 }
 
 // Small deterministic generator so every run produces the same numbers.
@@ -198,7 +349,7 @@ function build(company: Company): CompanyBundle {
     is_active: true,
     hire_date: i === 0 ? "2018-03-12" : i === 1 ? "2026-05-26" : "2024-09-02",
     phone: i === 1 ? "(555) 010-2201" : null,
-    department: person.role === "admin" ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
+    department: isCompanyAdminRole(person.role) ? "Leadership" : i % 2 === 1 ? "Production" : "Office",
     reports_to: i === 0 ? null : p("user-1"),
     job_role_id: null,
     created_at: EARLIER,
@@ -423,6 +574,81 @@ function build(company: Company): CompanyBundle {
   const connections: CompanyConnection[] = [
     { id: p("conn-ghl"), company_id: company.id, provider: "gohighlevel", status: "connected", external_account_id: p("ghl-location"), external_account_name: `${company.name} (HighLevel)`, scopes: "opportunities.readonly users.readonly locations.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
   ];
+  // A company with data sources also reads a spreadsheet account and, not yet, QuickBooks.
+  if (spec.sync) {
+    connections.push(
+      { id: p("conn-sheets"), company_id: company.id, provider: "google_sheets", status: "connected", external_account_id: p("sheets-account"), external_account_name: "sample-reports@example.com", scopes: "spreadsheets.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("conn-qbo"), company_id: company.id, provider: "quickbooks", status: "not_connected", external_account_id: null, external_account_name: null, scopes: null, connected_by: null, connected_at: null, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+    );
+  }
+
+  // Projects entered by hand, each with its milestones and letters in order (Kingdom only).
+  const projects: Project[] = [];
+  const milestones: ProjectMilestone[] = [];
+  (spec.projects ?? []).forEach((ps, i) => {
+    const project: Project = {
+      id: p(`project-${i + 1}`),
+      company_id: company.id,
+      name: ps.name,
+      reference: ps.reference,
+      notes: ps.notes,
+      source: "manual",
+      source_key: null,
+      archived_at: null,
+      created_by: profiles[0].id,
+      updated_by: profiles[0].id,
+      created_at: EARLIER,
+      updated_at: EARLIER,
+    };
+    projects.push(project);
+    ps.milestones.forEach((m, j) => {
+      milestones.push({
+        id: p(`milestone-${i + 1}-${j + 1}`),
+        company_id: company.id,
+        project_id: project.id,
+        title: m.title,
+        description: null,
+        kind: m.kind,
+        sort_order: j + 1,
+        target_date: m.target_date,
+        responsible_profile_id: m.responsible === undefined ? null : profiles[m.responsible].id,
+        completed_on: m.completed_on,
+        archived_at: null,
+        created_by: profiles[0].id,
+        updated_by: profiles[0].id,
+        created_at: EARLIER,
+        updated_at: EARLIER,
+      });
+    });
+  });
+
+  // Wins entered by hand (Kingdom only); the first carries a line, the fourth a project.
+  const wins: Win[] = (spec.wins ?? []).map((ws, i) => ({
+    id: p(`win-${i + 1}`),
+    company_id: company.id,
+    title: ws.title,
+    description: i === 0 ? "Illustrative sample win." : null,
+    won_on: ws.won_on,
+    project_id: ws.project === undefined ? null : projects[ws.project].id,
+    source_type: "manual",
+    source_ref: null,
+    archived_at: ws.archived ? EARLIER : null,
+    created_by: profiles[0].id,
+    updated_by: profiles[0].id,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
+
+  // Links to outside tools (Kingdom only).
+  const externalLinks: ExternalLink[] = (spec.links ?? []).map((link, i) => ({
+    ...link,
+    id: p(`link-${i + 1}`),
+    company_id: company.id,
+    created_by: profiles[0].id,
+    updated_by: profiles[0].id,
+    created_at: EARLIER,
+    updated_at: EARLIER,
+  }));
 
   // One person's goals as the monthly review reads them: this month's (one carried over from
   // last month), last month's (a hit and two misses, one still to carry), and the year's.
@@ -921,7 +1147,78 @@ function build(company: Company): CompanyBundle {
     { id: p("campaign-4"), company_id: company.id, name: "Project photo series", channel: "Social (organic)", status: "complete", start_date: "2026-03-01", end_date: "2026-06-30", budget: 1500, actual_spend: 1650, goal: "Grow followers 25%", key_metric_label: "Follower growth", key_metric_value: 31, results: "Two inbound design-build inquiries traced to the series.", notes: null, sort_order: 4, created_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
   ];
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns };
+  // Data sources with their runs and the records of each one's last good run (Kingdom only).
+  const syncSources: SyncSource[] = [];
+  const syncRuns: SyncRun[] = [];
+  const syncRecords: SyncRecord[] = [];
+  (spec.sync ?? []).forEach((ss, index) => {
+    const i = index + 1;
+    const sheets = ss.provider === "google_sheets";
+    const sourceId = p(`source-${i}`);
+    const connectionId = p(sheets ? "conn-sheets" : "conn-qbo");
+    const run = (n: number, status: SyncRun["status"], at: string, errorMessage: string | null): SyncRun => ({
+      id: p(`run-${i}-${n}`),
+      company_id: company.id,
+      source_id: sourceId,
+      connection_id: connectionId,
+      trigger_kind: "schedule",
+      requested_by: null,
+      status,
+      started_at: at,
+      finished_at: status === "running" ? null : at,
+      rows_read: status === "succeeded" ? ss.records.length : 0,
+      rows_applied: status === "succeeded" ? ss.records.length : 0,
+      rows_blank: 0,
+      error_detail: errorMessage === null ? null : [{ code: "missing_header", message: errorMessage, row: null, field: null }],
+    });
+    const synced = ss.outcome !== "never";
+    if (synced) syncRuns.push(run(1, "succeeded", EARLIER, null));
+    if (ss.outcome === "failed") syncRuns.push(run(2, "failed", NOW, ss.last_error ?? null));
+    if (ss.outcome === "running") syncRuns.push(run(2, "running", RUN_STARTED, null));
+    const currentRunId = synced ? p(`run-${i}-1`) : null;
+    syncSources.push({
+      id: sourceId,
+      company_id: company.id,
+      connection_id: connectionId,
+      provider: ss.provider,
+      name: ss.name,
+      target_module: ss.target_module,
+      config: sheets ? { spreadsheet_id: `sample-sheet-${i}`, sheet_gid: 0, range: null, header_row: 1 } : { entity: "Invoice" },
+      field_map: ss.field_map,
+      record_key: ss.record_key,
+      sync_weekday: sheets ? 1 : null,
+      sync_time: sheets ? "07:00:00" : null,
+      sync_timezone: sheets ? "America/Chicago" : null,
+      stale_after_hours: ss.stale_after_hours,
+      enabled: true,
+      current_run_id: currentRunId,
+      last_attempt_at: !synced ? null : ss.outcome === "succeeded" ? EARLIER : ss.outcome === "running" ? RUN_STARTED : NOW,
+      last_success_at: synced ? EARLIER : null,
+      last_status: ss.outcome === "never" ? null : ss.outcome,
+      last_error: ss.outcome === "failed" ? (ss.last_error ?? null) : null,
+      sync_requested_at: null,
+      created_by: profiles[0].id,
+      updated_by: null,
+      created_at: EARLIER,
+      updated_at: EARLIER,
+    });
+    if (currentRunId === null) return;
+    ss.records.forEach((data, r) => {
+      const j = r + 1;
+      syncRecords.push({
+        id: p(`record-${i}-${j}`),
+        company_id: company.id,
+        source_id: sourceId,
+        run_id: currentRunId,
+        record_key: buildRecordKey(data, ss.record_key, j + 1) ?? `row:${j + 1}`,
+        data,
+        source_ref: { spreadsheet_id: `sample-sheet-${i}`, sheet_gid: 0, row: j + 1 },
+        created_at: EARLIER,
+      });
+    });
+  });
+
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -947,6 +1244,47 @@ const ROCOCO: Profile = {
 
 export const ALL_PROFILES: Profile[] = [...BUNDLES.flatMap((b) => b.profiles), ROCOCO];
 
+// A few recorded changes for the Rococo Activity page, newest first: Rococo turning Kingdom's
+// modules on and changing a Kingdom role, and a Klasik admin inviting someone.
+export const AUDIT_EVENTS: AuditEvent[] = [
+  {
+    id: "audit-1",
+    company_id: "co-kingdom",
+    table_name: "companies",
+    row_id: "co-kingdom",
+    action: "update",
+    changed: { modules: { old: [], new: [...MODULE_KEYS] } },
+    actor_user_id: "rococo-auth-1",
+    actor_profile_id: "rococo-user-1",
+    actor_kind: "rococo",
+    created_at: "2026-09-02T15:00:00.000Z",
+  },
+  {
+    id: "audit-2",
+    company_id: "co-kingdom",
+    table_name: "profiles",
+    row_id: "kingdom-user-1",
+    action: "update",
+    changed: { role: { old: "employee", new: "admin" } },
+    actor_user_id: "rococo-auth-1",
+    actor_profile_id: "rococo-user-1",
+    actor_kind: "rococo",
+    created_at: "2026-09-01T16:00:00.000Z",
+  },
+  {
+    id: "audit-3",
+    company_id: "co-klasik",
+    table_name: "invitations",
+    row_id: "klasik-invite-1",
+    action: "insert",
+    changed: { role: { old: null, new: "employee" }, email: { old: null, new: "new.hire@beklasik.com" } },
+    actor_user_id: "klasik-auth-1",
+    actor_profile_id: "klasik-user-1",
+    actor_kind: "user",
+    created_at: "2026-09-01T12:00:00.000Z",
+  },
+];
+
 function bundleFor(companyId: string): CompanyBundle | undefined {
   return BUNDLES.find((b) => b.company.id === companyId);
 }
@@ -959,6 +1297,8 @@ export const KLASIK: CompanyBundle = bundleFor("co-klasik")!;
 // RBA runs quarterly cycles, so it is where the scoring shape of a review is exercised:
 // Klasik's cycles are monthly, and a monthly review is goals only.
 export const RBA: CompanyBundle = bundleFor("co-rba")!;
+// Kingdom is the company with every module on, used by the module page tests and the demo.
+export const KINGDOM: CompanyBundle = bundleFor("co-kingdom")!;
 
 export function fakeSession(profile: Profile): Session {
   return {
@@ -977,11 +1317,17 @@ export function fakeSession(profile: Profile): Session {
   } as unknown as Session;
 }
 
-export type Persona = "admin" | "employee" | "rococo";
+export type Persona = "admin" | "employee" | "rococo" | "owner" | "manager";
 
+// Each persona is the first person holding that role. At Klasik and RBA the admin is still the
+// first person; at Kingdom the owner is Marcus Lee and the admin is Avery Stone.
 function personaProfile(persona: Persona, bundle: CompanyBundle): Profile {
   if (persona === "rococo") return ROCOCO;
-  return persona === "admin" ? bundle.profiles[0] : bundle.profiles[1];
+  const first = (role: Role) => bundle.profiles.find((p) => p.role === role);
+  if (persona === "owner") return first("owner") ?? bundle.profiles[0];
+  if (persona === "manager") return first("manager") ?? bundle.profiles[1];
+  if (persona === "admin") return first("admin") ?? bundle.profiles[0];
+  return bundle.profiles[1];
 }
 
 // A Rococo admin with company null is on the portfolio.
@@ -995,7 +1341,7 @@ export function makeHub(persona: Persona, company: Company | null = KLASIK.compa
     company,
     companies: isRococo ? COMPANIES : company ? [company] : [],
     isRococo,
-    isAdmin: isRococo || persona === "admin",
+    isAdmin: isRococo || isCompanyAdminRole(profile.role),
     setActiveCompanyId: () => undefined,
     refreshProfile: async () => undefined,
     refreshCompanies: async () => undefined,

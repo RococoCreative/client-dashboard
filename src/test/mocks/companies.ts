@@ -3,7 +3,7 @@
 import type { Company, CompanyDomain, ThemeKey } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
 
-const companies: Company[] = COMPANIES.map((c) => ({ ...c }));
+const companies: Company[] = COMPANIES.map((c) => ({ ...c, modules: [...c.modules] }));
 const domains: CompanyDomain[] = DOMAINS.map((d) => ({ ...d }));
 
 export async function listCompanies(): Promise<Company[]> {
@@ -18,12 +18,12 @@ export async function getCompany(id: string): Promise<Company> {
 
 export async function createCompany(input: { slug: string; name: string; theme_key: ThemeKey }): Promise<Company> {
   const now = new Date().toISOString();
-  const created: Company = { id: `co-${input.slug}`, logo_url: null, created_at: now, updated_at: now, ...input };
+  const created: Company = { id: `co-${input.slug}`, logo_url: null, modules: [], created_at: now, updated_at: now, ...input };
   companies.push(created);
   return created;
 }
 
-export type CompanyPatch = Partial<Pick<Company, "name" | "logo_url" | "theme_key" | "slug">>;
+export type CompanyPatch = Partial<Pick<Company, "name" | "logo_url" | "theme_key" | "slug" | "modules">>;
 
 export async function updateCompany(id: string, patch: CompanyPatch): Promise<Company> {
   const index = companies.findIndex((c) => c.id === id);

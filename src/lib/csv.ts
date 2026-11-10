@@ -1,6 +1,11 @@
 // A small RFC 4180 CSV parser for the financial snapshot upload: quoted fields, escaped
 // quotes, CRLF or LF line endings, and a header row mapped to objects. No dependency
 // because the input is a spreadsheet export a few dozen rows long.
+import { normalizeHeader } from "../../supabase/functions/_shared/sync/parse.ts";
+
+// One header normalizer for the CSV upload and the sync engine, so a column reads as the same key
+// in both.
+export { normalizeHeader };
 
 // A file the parser will not guess at. Thrown rather than read leniently, because a lenient
 // read here writes the wrong figures over real periods with nothing said.
@@ -149,17 +154,6 @@ function closingQuote(line: string, from: number): number {
     return next >= line.length || line[next] === "," ? i : -1;
   }
   return -1;
-}
-
-// Header keys are lowercased with spaces and punctuation collapsed to underscores, so
-// "Net Profit" and "net_profit" and "NET PROFIT ($)" all read as net_profit.
-export function normalizeHeader(header: string): string {
-  return header
-    .trim()
-    .toLowerCase()
-    .replace(/\(.*?\)/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
 }
 
 export interface CsvTable {

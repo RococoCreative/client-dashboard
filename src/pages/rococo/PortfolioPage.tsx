@@ -31,6 +31,7 @@ import { hasAccount } from "../../lib/people.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { isCompanyAdminRole } from "../../lib/people.ts";
 import type { Company, CompanyDomain, FinancialSnapshot, ReviewCycle } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
@@ -72,7 +73,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   // A cycle covers the whole active roster, signed in or not, so the fraction counts the same
   // people the cycle page does.
   const reviewable = active;
-  const admins = active.filter((p) => p.role === "admin");
+  const admins = active.filter((p) => isCompanyAdminRole(p.role));
   // Every cycle with reviews still owed, not one of them: a monthly Goal Setting Review runs
   // inside a quarterly scored review, and a cycle stays open after its period until an admin
   // closes it. Reading fewer reports finished reviews as missing. The same set the company

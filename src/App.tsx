@@ -17,6 +17,8 @@ import { useSession } from "./hooks/useSession.ts";
 import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
+import { hasModule, type ModuleKey } from "./lib/modules.ts";
+import { isCompanyAdminRole } from "./lib/people.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -42,9 +44,15 @@ import ResourcesPage from "./pages/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
 import CompanySettingsPage from "./pages/CompanySettingsPage.tsx";
+import ProductionPage from "./pages/production/ProductionPage.tsx";
+import ProjectPage from "./pages/production/ProjectPage.tsx";
+import WinsPage from "./pages/WinsPage.tsx";
+import SalesFinancePage from "./pages/salesFinance/SalesFinancePage.tsx";
+import ControlsPage from "./pages/salesFinance/ControlsPage.tsx";
 import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
+import ActivityPage from "./pages/rococo/ActivityPage.tsx";
 import type { Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
@@ -116,6 +124,14 @@ function ConnectionReturn() {
   if (!target) return <Navigate to={isRococo ? "/rococo" : "/"} replace />;
   if (stepIn) return null;
   return <RedirectTo path="/settings" />;
+}
+
+// A module's pages exist only for a company that has the module on. Typing the URL elsewhere
+// lands on Home, the way AdminOnly does for employees.
+export function ModuleOnly({ module, children }: { module: ModuleKey; children: ReactNode }) {
+  const { company } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 function RococoOnly({ children }: { children: ReactNode }) {
@@ -291,7 +307,7 @@ function SignedIn({ session }: { session: Session }) {
   }
 
   const isRococo = profile.is_rococo_admin;
-  const isAdmin = isRococo || (profile.role === "admin" && profile.company_id !== null && profile.company_id === company?.id);
+  const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && profile.company_id !== null && profile.company_id === company?.id);
 
   const value: HubValue = {
     session,
@@ -311,6 +327,7 @@ function SignedIn({ session }: { session: Session }) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
+            <Route path="wins" element={<ModuleOnly module="wins"><WinsPage /></ModuleOnly>} />
             {/* Three sections keyed on cadence: GSRs (monthly), Reviews (every scored cadence), Goals
                 (the year's). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
@@ -331,6 +348,8 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<AdminOnly><PeoplePage /></AdminOnly>} />
             <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
+            <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
+            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
             <Route path="sops" element={<WithCompany><SopListPage /></WithCompany>} />
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
@@ -338,11 +357,14 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="resources" element={<WithCompany><ResourcesPage /></WithCompany>} />
             <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
+            <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
+            <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
             <Route path="settings" element={<AdminOnly><CompanySettingsPage /></AdminOnly>} />
             <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
             <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />
+            <Route path="rococo/activity" element={<RococoOnly><ActivityPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

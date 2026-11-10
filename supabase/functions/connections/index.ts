@@ -1,5 +1,5 @@
 // The one place Company Hub talks to an outside system's sign-in. A company's admin connects
-// that company's own GoHighLevel or QuickBooks account from Settings; the tokens land in
+// that company's own GoHighLevel, QuickBooks or Google account from Settings; the tokens land in
 // connection_tokens, which only this function (holding the service role) can read. The browser
 // never sees a provider secret or token, and nothing is shared between companies.
 //
@@ -7,21 +7,31 @@
 //   POST /start        { company_id, provider, return_to }   -> { url } to send the browser to
 //   GET  /callback     ?code&state[&realmId]                 -> redirect back to return_to
 //   POST /disconnect   { company_id, provider }              -> { ok: true }
+//   POST /sync/run     { source_id }                         -> { status, message, rows_applied }
+//   POST /sync/tick    (x-sync-secret header)                -> { due, ran }
+//   POST /sync/describe { connection_id, spreadsheet_id, gid } -> { title, tabs, headers }
 //
-// start and disconnect need the signed-in admin's JWT. The provider reaches callback with no
-// JWT at all, so this function verifies its own signed state and the gateway's JWT check is
-// off for it. A state is good for one callback: start records its nonce in connection_states
-// (0029) and callback takes it off that table as it redeems it. Providers are entries in the
-// registry below, never a branch on the company.
+// start, disconnect and sync/describe need the signed-in admin's JWT; sync/run needs the JWT of
+// someone allowed to sync the source, which row level security decides. The provider reaches
+// callback with no JWT at all, so this function verifies its own signed state and the gateway's
+// JWT check is off for it; the hourly cron reaches sync/tick with the shared secret instead. A
+// state is good for one callback: start records its nonce in connection_states (0029) and
+// callback takes it off that table as it redeems it. Providers are entries in the registry
+// below, never a branch on the company. The sync routes (sync.ts) live in this function so it
+// stays the only reader of connection_tokens.
 //
 // Environment (Supabase secrets): CONNECTIONS_STATE_SECRET, APP_ORIGINS (comma separated
 // origins the browser may be sent back to; localhost is always allowed), GHL_CLIENT_ID,
-// GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production).
+// GHL_CLIENT_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production),
+// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SYNC_CRON_SECRET (the secret the hourly tick sends).
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { PROVIDER_KEYS, type ProviderKey } from "../_shared/providers.ts";
+import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl } from "../_shared/sync/googleSheets.ts";
+import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, sameBytes, service } from "./http.ts";
+import { handleSyncDescribe, handleSyncRun, handleSyncTick } from "./sync.ts";
 
-type Provider = "gohighlevel" | "quickbooks";
+type Provider = ProviderKey;
 
 interface Exchanged {
   accessToken: string;
@@ -46,43 +56,13 @@ interface ProviderDef {
   revoke?(args: Credentials & { accessToken: string; refreshToken: string | null }): Promise<void>;
 }
 
-class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const STATE_SECRET = Deno.env.get("CONNECTIONS_STATE_SECRET") ?? "";
 const APP_ORIGINS = (Deno.env.get("APP_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/connections/callback`;
 const STATE_TTL_SECONDS = 10 * 60;
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
 const secondsFromNow = (seconds: number | undefined): string | null =>
   typeof seconds === "number" && Number.isFinite(seconds) ? new Date(Date.now() + seconds * 1000).toISOString() : null;
-
-async function readJson<T>(response: Response, what: string): Promise<T> {
-  const text = await response.text();
-  if (!response.ok) {
-    console.error(`${what} failed with ${response.status}`);
-    throw new HttpError(502, `${what} was refused by the provider.`);
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new HttpError(502, `${what} returned something unexpected.`);
-  }
-}
 
 // GoHighLevel: a sub-account (location) install. The token answer names the location; the
 // location's name is fetched for the card and is not required.
@@ -173,10 +153,48 @@ const quickbooks: ProviderDef = {
   },
 };
 
-const PROVIDERS: Record<Provider, ProviderDef> = { gohighlevel, quickbooks };
+// Google Sheets: the company's own Google account, read-only. The account is the verified email
+// in the id token, which comes straight from Google's token endpoint over TLS, so its payload is
+// read, not verified (Google documents this as safe for tokens received directly).
+const google_sheets: ProviderDef = {
+  label: "Google Sheets",
+  env: { id: "GOOGLE_CLIENT_ID", secret: "GOOGLE_CLIENT_SECRET" },
+  authorizeUrl: ({ clientId, redirectUri, state }) => googleAuthorizeUrl({ clientId, redirectUri, state }),
+  exchange: async ({ clientId, clientSecret, code, redirectUri }) => {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+    });
+    const token = await readJson<{ access_token: string; refresh_token?: string; expires_in?: number; scope?: string; id_token?: string }>(response, "The Google sign-in");
+    const email = token.id_token ? emailFromIdToken(token.id_token) : null;
+    if (!email) throw new HttpError(400, "Google did not say which account was connected. Try again from Settings.");
+    return {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? null,
+      accessExpiresAt: secondsFromNow(token.expires_in),
+      refreshExpiresAt: null,
+      externalAccountId: email,
+      externalAccountName: email,
+      scopes: token.scope ?? GOOGLE_SCOPES,
+    };
+  },
+  revoke: async ({ accessToken, refreshToken }) => {
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: refreshToken ?? accessToken }),
+    });
+  },
+};
+
+const PROVIDERS: Record<Provider, ProviderDef> = { gohighlevel, quickbooks, google_sheets };
 
 function providerFor(value: unknown): ProviderDef & { key: Provider } {
-  if (value === "gohighlevel" || value === "quickbooks") return { ...PROVIDERS[value], key: value };
+  if (typeof value === "string" && (PROVIDER_KEYS as readonly string[]).includes(value)) {
+    const key = value as Provider;
+    return { ...PROVIDERS[key], key };
+  }
   throw new HttpError(400, "Unknown provider.");
 }
 
@@ -208,13 +226,6 @@ async function hmac(payload: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload)));
 }
 
-function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
 async function signState(claims: StateClaims): Promise<string> {
   const payload = toBase64Url(encoder.encode(JSON.stringify(claims)));
   return `${payload}.${toBase64Url(await hmac(payload))}`;
@@ -243,26 +254,6 @@ function checkReturnTo(value: unknown): string {
   return `${url.origin}${url.pathname}`;
 }
 
-// The signed-in person, checked as an active admin of the company through their own JWT and the
-// same row level security the app lives under. Returns their profile id. A person's own profile
-// row reads back even after they are deactivated, so is_active is checked here the way every
-// database helper checks it (0013's kill switch): a departed admin's session cannot connect or
-// disconnect the company's accounts.
-async function requireAdmin(req: Request, companyId: string): Promise<string> {
-  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!jwt) throw new HttpError(401, "Sign in first.");
-  const asUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: userData, error: userError } = await asUser.auth.getUser(jwt);
-  if (userError || !userData.user) throw new HttpError(401, "Sign in first.");
-  const { data: profile } = await asUser.from("profiles").select("id, role, company_id, is_rococo_admin, is_active").eq("user_id", userData.user.id).maybeSingle();
-  const allowed = Boolean(profile) && profile!.is_active === true && (profile!.is_rococo_admin || (profile!.role === "admin" && profile!.company_id === companyId));
-  if (!allowed) throw new HttpError(403, "Only a company admin can manage connections.");
-  return profile!.id as string;
-}
-
-const service = () => createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 const redirect = (to: string) => new Response(null, { status: 302, headers: { Location: to } });
 const backTo = (returnTo: string, params: Record<string, string>) => redirect(`${returnTo}?${new URLSearchParams(params).toString()}`);
 
@@ -406,6 +397,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const path = new URL(req.url).pathname;
   try {
+    if (req.method === "POST" && path.endsWith("/sync/run")) return await handleSyncRun(req);
+    if (req.method === "POST" && path.endsWith("/sync/tick")) return await handleSyncTick(req);
+    if (req.method === "POST" && path.endsWith("/sync/describe")) return await handleSyncDescribe(req);
     if (req.method === "POST" && path.endsWith("/start")) return await handleStart(req);
     if (req.method === "GET" && path.endsWith("/callback")) return await handleCallback(req);
     if (req.method === "POST" && path.endsWith("/disconnect")) return await handleDisconnect(req);

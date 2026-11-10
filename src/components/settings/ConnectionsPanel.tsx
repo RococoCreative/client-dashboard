@@ -20,6 +20,7 @@ import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type Connec
 const PROVIDER_BLURBS: Record<ConnectionProvider, string> = {
   gohighlevel: "Closed sales, for the company and for each person, from won opportunities.",
   quickbooks: "Revenue, costs, profit and cash for the company; revenue per person where the books tag it.",
+  google_sheets: "Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule.",
 };
 
 // The fixed lines the connections Edge Function puts on connect_error, word for word, kept in step
@@ -31,12 +32,16 @@ const KNOWN_CONNECT_ERRORS = new Set([
   "This sign-in link was already used or has expired. Start the connection again.",
   "GoHighLevel is not set up yet. Ask Rococo Creative to add the app keys.",
   "QuickBooks Online is not set up yet. Ask Rococo Creative to add the app keys.",
+  "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.",
   "The GoHighLevel sign-in was refused by the provider.",
   "The GoHighLevel sign-in returned something unexpected.",
   "The QuickBooks sign-in was refused by the provider.",
   "The QuickBooks sign-in returned something unexpected.",
+  "The Google sign-in was refused by the provider.",
+  "The Google sign-in returned something unexpected.",
   "Choose one sub-account when installing; an agency-wide install is not supported.",
   "QuickBooks did not say which company was connected.",
+  "Google did not say which account was connected. Try again from Settings.",
   "The connection could not be saved.",
   "The connection could not be finished. Try again from Settings.",
 ]);
@@ -56,7 +61,11 @@ function readOutcome(params: URLSearchParams): Outcome | null {
   return { tone: "error", text: KNOWN_CONNECT_ERRORS.has(returned) ? returned : "The connection did not finish. Try again." };
 }
 
-export default function ConnectionsPanel({ companyId }: { companyId: string }) {
+// The providers Settings lists unless a page names its own; Google Sheets appears only where a
+// page that uses data sources asks for it.
+const DEFAULT_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks"];
+
+export default function ConnectionsPanel({ companyId, providers = DEFAULT_PROVIDERS }: { companyId: string; providers?: ConnectionProvider[] }) {
   const state = useAsync(() => listConnections(companyId), [companyId]);
   const [params, setParams] = useSearchParams();
   const [busy, setBusy] = useState<ConnectionProvider | null>(null);
@@ -133,7 +142,7 @@ export default function ConnectionsPanel({ companyId }: { companyId: string }) {
       {!state.data && !state.error ? <SkeletonRows rows={2} /> : null}
       {state.data ? (
         <ul className="divide-y divide-line">
-          {keysOf(CONNECTION_PROVIDER_LABELS).map((provider) => {
+          {providers.map((provider) => {
             const row = rowFor(provider);
             const connected = row?.status === "connected";
             const label = CONNECTION_PROVIDER_LABELS[provider];

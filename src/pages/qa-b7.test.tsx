@@ -524,12 +524,15 @@ describe("deleting a company", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.queryByRole("heading", { name: "Kingdom Custom Construction" })).not.toBeInTheDocument();
 
-    // Only the connected provider is revoked; the tokens go with the company, so it comes first.
-    expect(disconnectConnection).toHaveBeenCalledTimes(1);
+    // Only the connected providers are revoked (Kingdom's sample data has HighLevel and Google
+    // Sheets connected, QuickBooks not); the tokens go with the company, so they come first.
+    expect(disconnectConnection).toHaveBeenCalledTimes(2);
     expect(disconnectConnection).toHaveBeenCalledWith("co-kingdom", "gohighlevel");
+    expect(disconnectConnection).toHaveBeenCalledWith("co-kingdom", "google_sheets");
+    expect(disconnectConnection).not.toHaveBeenCalledWith("co-kingdom", "quickbooks");
     expect(deleteCompany).toHaveBeenCalledWith("co-kingdom");
     expect(removeCompanyFiles).toHaveBeenCalledWith("co-kingdom");
-    const revoked = vi.mocked(disconnectConnection).mock.invocationCallOrder[0];
+    const revoked = Math.max(...vi.mocked(disconnectConnection).mock.invocationCallOrder);
     const deleted = vi.mocked(deleteCompany).mock.invocationCallOrder[0];
     const cleared = vi.mocked(removeCompanyFiles).mock.invocationCallOrder[0];
     expect(revoked).toBeLessThan(deleted);

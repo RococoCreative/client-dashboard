@@ -15,6 +15,10 @@ import ScoreBar from "../components/ui/ScoreBar.tsx";
 import ScoreRing from "../components/ui/ScoreRing.tsx";
 import Section from "../components/ui/Section.tsx";
 import GsrQuarterLine from "../components/gsr/GsrQuarterLine.tsx";
+import AttentionCard from "../components/home/AttentionCard.tsx";
+import FreshnessCard from "../components/home/FreshnessCard.tsx";
+import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
+import WinsCard from "../components/home/WinsCard.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonCard from "../components/ui/SkeletonCard.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
@@ -36,7 +40,8 @@ import { CADENCE_LABELS, cycleProgress, cyclePath, cycleSettled, cyclesInPlay, g
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
-import { financialProgress, hasAccount } from "../lib/people.ts";
+import { financialProgress, hasAccount, isCompanyAdminRole } from "../lib/people.ts";
+import { hasModule } from "../lib/modules.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
   FINANCIAL_SOURCE_LABELS,
@@ -172,7 +177,7 @@ async function loadOwnModules(companyId: string, profile: Pick<Profile, "id" | "
 }
 
 function AdminDashboard() {
-  const { company, profile } = useHub();
+  const { company, profile, isAdmin, isRococo } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
@@ -258,12 +263,12 @@ function AdminDashboard() {
     <>
       <PageHeader
         eyebrow={company!.name}
-        title="Dashboard"
+        title={hasModule(company, "switchboard") ? "Home" : "Dashboard"}
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => p.role === "admin").length, "admin")} />
+        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
         <Stat
           label="GSRs complete"
           value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
@@ -287,6 +292,23 @@ function AdminDashboard() {
         />
         <Stat label="Library" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "resource")}`} />
       </div>
+
+      {/* The Home cards, each under its own module. With neither module on, none mounts and
+          none of their calls is made, so the dashboard is exactly what it always was. */}
+      {hasModule(company, "switchboard") || hasModule(company, "wins") ? (
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {hasModule(company, "switchboard") ? (
+            <div className="lg:col-span-2">
+              <AttentionCard company={company!} />
+            </div>
+          ) : null}
+          <div className="space-y-6">
+            {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
+            {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+            {hasModule(company!, "switchboard") && hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -439,7 +461,7 @@ function AdminDashboard() {
 }
 
 function EmployeeDashboard() {
-  const { company, profile } = useHub();
+  const { company, profile, isAdmin, isRococo } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
@@ -520,6 +542,13 @@ function EmployeeDashboard() {
   return (
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
+
+      {hasModule(company, "wins") || hasModule(company, "switchboard") ? (
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {ratingPillars.length > 0 ? (

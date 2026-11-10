@@ -1,6 +1,7 @@
 // Company settings for a company admin: name and logo, the company's job roles with the
 // dashboard modules and goals each one carries, the categories its deliverables are filed
-// under, and its own connections to outside systems.
+// under, its data sources and its external links when it has those modules, and its own
+// connections to outside systems.
 // Theme, slug, and sign-in domains are Rococo's to manage (they affect who can sign in), so
 // they show read-only here.
 import { useState, type FormEvent } from "react";
@@ -10,14 +11,21 @@ import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
+import DataSourcesPanel from "../components/settings/DataSourcesPanel.tsx";
 import DeliverableCategoriesPanel from "../components/settings/DeliverableCategoriesPanel.tsx";
+import ExternalLinksPanel from "../components/settings/ExternalLinksPanel.tsx";
 import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import { inputClass } from "../components/ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { listCompanyDomains, updateCompany } from "../services/companies.ts";
 import { THEMES } from "../lib/theme.ts";
+import { hasModule } from "../lib/modules.ts";
 import { errorMessage } from "../lib/errors.ts";
+import type { ConnectionProvider } from "../types/database.ts";
+
+// A company with data sources also connects its own Google account for them.
+const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
 
 export default function CompanySettingsPage() {
   const { company, refreshCompanies, isRococo } = useHub();
@@ -71,6 +79,8 @@ export default function CompanySettingsPage() {
         </form>
         <JobRolesPanel companyId={company!.id} />
         <DeliverableCategoriesPanel companyId={company!.id} />
+        {hasModule(company!, "data_sources") ? <DataSourcesPanel companyId={company!.id} /> : null}
+        {hasModule(company!, "external_links") ? <ExternalLinksPanel companyId={company!.id} /> : null}
         </div>
         <div className="space-y-6">
           <Section eyebrow="Managed by Rococo" title="Theme and sign-in">
@@ -94,7 +104,7 @@ export default function CompanySettingsPage() {
             </dl>
             {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
           </Section>
-          <ConnectionsPanel companyId={company!.id} />
+          <ConnectionsPanel companyId={company!.id} providers={hasModule(company!, "data_sources") ? GOOGLE_ROW_PROVIDERS : undefined} />
         </div>
       </div>
     </>
