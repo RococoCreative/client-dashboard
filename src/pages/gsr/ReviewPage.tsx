@@ -9,9 +9,16 @@
 // pillars, target-vs-actual line items for deliverable pillars, the overall score, and the
 // management, peer and client feedback with the employee's reflection.
 //
+// Both shapes open with the same question, "What would help you do your job better?", written by
+// the person and their admins while the review is open, and both carry a note per assigned project.
+// A monthly GSR also reads the person's role scorecard for its month ("Performance this month"),
+// entered here by an admin.
+//
 // Employees open the same page for their own review (RLS makes sure it is theirs). A monthly
-// GSR is theirs to work in full so they can prefill it before the meeting; a scored review is
-// read-only apart from their reflection. Every change saves on its own, so there is no save
+// GSR is theirs to work in full so they can prefill it before the meeting, except what is
+// reserved for an admin: a goal someone else set for them keeps what it is, results are entered
+// by an admin, and so are the project notes. A scored review is read-only apart from their
+// reflection and the opening discussion. Every change saves on its own, so there is no save
 // button to forget.
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -19,6 +26,9 @@ import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
+import ReviewPerformance from "../../components/gsr/ReviewPerformance.tsx";
+import ReviewProjects from "../../components/gsr/ReviewProjects.tsx";
+import SupportDiscussionCard from "../../components/gsr/SupportDiscussionCard.tsx";
 import DeliverablesPanel from "../../components/people/DeliverablesPanel.tsx";
 import type { DeliverableScore } from "../../lib/gsr/deliverables.ts";
 import Badge from "../../components/ui/Badge.tsx";
@@ -42,6 +52,11 @@ import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCr
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals, listJobRoles } from "../../services/jobRoles.ts";
+import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts";
+import { listProjectAssignments } from "../../services/projectAssignments.ts";
+import { listProjects } from "../../services/projects.ts";
+import { listReviewProjectNotes } from "../../services/reviewProjectNotes.ts";
+import { monthOf } from "../../lib/scorecard.ts";
 import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pillarsForReview, scoreInputsForReview, signedOffBarDetail, weightTotal, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, omittedCycleIdsFor, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount, lockedMonthsIn, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
@@ -161,7 +176,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     const year = cycleYear(cycle);
     const person = people.find((p) => p.id === review.employee_id) ?? null;
     const roleId = cycle.cadence === "monthly" ? (person?.job_role_id ?? null) : null;
-    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions] = await Promise.all([
+    // A monthly GSR reads the role scorecard for its month; the results are read for that month's year.
+    const reviewMonth = cycle.cadence === "monthly" ? monthOf(cycle.period_start) : null;
+    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
@@ -180,8 +197,16 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       cycle.cadence === "monthly" ? listGoalNotes(review.company_id, review.employee_id) : Promise.resolve([]),
       // Which cycles the person is omitted from (0034): this one, and the months inside it.
       listCycleOmissions(review.company_id),
+      // The projects the person works on, named from the company's projects (archived ones too, so
+      // an older review still names them), and this review's note on each.
+      listProjectAssignments(review.company_id, { employeeId: review.employee_id }),
+      listProjects(review.company_id, { includeArchived: true }),
+      listReviewProjectNotes(review.id),
+      // The company's role metrics, retired ones too, and the person's results for the month's year.
+      reviewMonth ? listRoleMetrics(review.company_id, true) : Promise.resolve([]),
+      reviewMonth ? listMetricEntries(review.company_id, { employeeId: review.employee_id, year: Number(reviewMonth.slice(0, 4)) }) : Promise.resolve([]),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, year };
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, reviewMonth, year };
   }, [reviewId, companyId]);
 
   // The panel is handed the person and year of the review on screen, so every figure it reports
@@ -199,7 +224,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, reviewMonth, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
   // signed it off.
@@ -217,6 +242,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // module is the person's standing record, not the review's, so it keeps the cycle's rule.
   const canEditModule = isAdmin && cycle.status === "open";
   const canScore = canEditModule && !frozen && !omittedHere;
+  // The opening discussion is the person's to write as much as the admin's, while the review is
+  // open; the database freezes it with the rest at sign-off (0029, 0035).
+  const canDiscuss = (isAdmin || isOwn) && cycle.status === "open" && !frozen && !omittedHere;
   // Monthly cycles are Goal Setting Reviews: goals lead, scores follow.
   const monthly = cycle.cadence === "monthly";
   const lastMonth = monthly ? previousCycle(cycles, cycle) : null;
@@ -289,6 +317,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // figure, and it locks a month's score in, not a module line item. Waiting on it there kept
   // Mark complete disabled for good wherever a company scores deliverables from the module.
   const awaitingRollup = !monthly && !frozen && modulePillars.length > 0 && rollup === null;
+
+  const onProjectNotes = (update: (list: typeof projectNotes) => typeof projectNotes) =>
+    state.setData((prev) => (prev ? { ...prev, projectNotes: update(prev.projectNotes) } : prev));
 
   // A row that came back from a write we started: it replaces what is in state, and it is
   // dropped if the row is no longer there. Removing a line item blurs the Notes box beside the
@@ -397,6 +428,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     } finally {
       setBusy(false);
     }
+  }
+
+  async function saveDiscussion(next: string | null) {
+    await patchReview({ support_discussion: next });
+    await markInProgress().catch((err: unknown) => setError(errorMessage(err)));
   }
 
   const feedbackPatch = (key: "manager_feedback" | "peer_feedback" | "client_feedback", value: string): ReviewPatch => {
@@ -522,6 +558,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         </Notice>
       ) : null}
 
+      {/* The review opens with what would help the person do the job better, on every cycle. */}
+      <div className="mb-6">
+        <SupportDiscussionCard value={review.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={frozen} onSave={(next) => void saveDiscussion(next)} />
+      </div>
+
       {/* Annual content, the KPIs, company goals, deliverables and yearly goals, belongs to the
           quarterly and annual reviews. A monthly cycle is a Goal Setting Review: the month's
           goals and nothing else. */}
@@ -562,6 +603,12 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         </Section>
       ) : null}
 
+      {!monthly ? (
+        <div className="mb-6 empty:hidden">
+          <ReviewProjects review={review} assignments={assignments} projects={projects} notes={projectNotes} canWrite={canScore} isOwn={isOwn} onNotes={onProjectNotes} />
+        </div>
+      ) : null}
+
       {monthly ? (
         <div className="mb-6">
           <GoalSettingPanel
@@ -582,6 +629,30 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             onError={setError}
             onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
           />
+        </div>
+      ) : null}
+
+      {/* The month's results against the role scorecard, for a company that keeps scorecards. */}
+      {monthly && employee && reviewMonth && metrics.length > 0 ? (
+        <div className="mb-6">
+          <ReviewPerformance
+            companyId={review.company_id}
+            employee={employee}
+            month={reviewMonth}
+            metrics={metrics}
+            entries={entries}
+            assignments={assignments}
+            projects={projects}
+            canEnter={canScore}
+            isOwn={isOwn}
+            onEntries={(update) => state.setData((prev) => (prev ? { ...prev, entries: update(prev.entries) } : prev))}
+          />
+        </div>
+      ) : null}
+
+      {monthly ? (
+        <div className="mb-6 empty:hidden">
+          <ReviewProjects review={review} assignments={assignments} projects={projects} notes={projectNotes} canWrite={canScore} isOwn={isOwn} onNotes={onProjectNotes} />
         </div>
       ) : null}
 
