@@ -1,7 +1,7 @@
 // Company settings for a company admin: name and logo, the company's job roles with the
-// dashboard modules and goals each one carries, the categories its deliverables are filed
-// under, its data sources and its external links when it has those modules, and its own
-// connections to outside systems.
+// dashboard modules and goals each one carries, the divisions it reports by, the categories its
+// deliverables are filed under, its data sources and its external links when it has those
+// modules, and its own connections to outside systems.
 // Theme, slug, and sign-in domains are Rococo's to manage (they affect who can sign in), so
 // they show read-only here.
 import { useState, type FormEvent } from "react";
@@ -13,6 +13,7 @@ import Section from "../components/ui/Section.tsx";
 import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
 import DataSourcesPanel from "../components/settings/DataSourcesPanel.tsx";
 import DeliverableCategoriesPanel from "../components/settings/DeliverableCategoriesPanel.tsx";
+import DivisionsPanel from "../components/settings/DivisionsPanel.tsx";
 import ExternalLinksPanel from "../components/settings/ExternalLinksPanel.tsx";
 import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import { inputClass } from "../components/ui/forms.ts";
@@ -78,6 +79,7 @@ export default function CompanySettingsPage() {
           </Section>
         </form>
         <JobRolesPanel companyId={company!.id} />
+        <DivisionsPanel companyId={company!.id} />
         <DeliverableCategoriesPanel companyId={company!.id} />
         {hasModule(company!, "data_sources") ? <DataSourcesPanel companyId={company!.id} /> : null}
         {hasModule(company!, "external_links") ? <ExternalLinksPanel companyId={company!.id} /> : null}
