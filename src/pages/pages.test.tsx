@@ -631,7 +631,7 @@ describe("navigation and modules", () => {
     renderWithHub(<AppLayout />, admin);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).queryAllByRole("group")).toHaveLength(0);
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Dashboard", "GSRs", "Reviews", "Goals", "People", "SOPs", "Resources", "Financials", "Marketing", "My GSR", "Settings"]);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Dashboard", "GSRs", "Reviews", "Scorecards", "Goals", "People", "SOPs", "Resources", "Financials", "Marketing", "My GSR", "Settings"]);
   });
 
   it("titles the dashboard Home under the switchboard module", async () => {

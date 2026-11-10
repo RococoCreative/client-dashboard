@@ -2,7 +2,7 @@
 // before the registry replaced them, so a company without the switchboard module is proven to see
 // exactly the sidebar it always had, and the four-section layout is pinned for one that has it.
 import { describe, expect, it } from "vitest";
-import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, CircleDollarSign, ClipboardCheck, FolderOpen, Gauge, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, Target, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
 import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, navFor, sectionShortcuts, type NavItem, type NavLayout } from "./navigation.ts";
@@ -22,6 +22,9 @@ const TODAY_ADMIN: TodayItem[] = [
   { to: "/my/gsr", label: "My GSR", icon: UserRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
+
+// The admin sidebar is today's plus Scorecards, right after Reviews (0035).
+const ADMIN: TodayItem[] = [...TODAY_ADMIN.slice(0, 3), { to: "/scorecards", label: "Scorecards", icon: Gauge }, ...TODAY_ADMIN.slice(3)];
 
 const TODAY_PORTFOLIO: TodayItem[] = [
   { to: "/rococo", label: "Portfolio", icon: LayoutGrid, end: true },
@@ -62,11 +65,11 @@ function labelsOf(layout: NavLayout, heading: string | null): string[] | undefin
 const klasik: Company = KLASIK.company;
 const rba: Company = RBA.company;
 const kingdom: Company = KINGDOM.company;
-const withoutRococoMy = TODAY_ADMIN.filter((i) => i.to !== "/my/gsr");
+const withoutRococoMy = ADMIN.filter((i) => i.to !== "/my/gsr");
 
 describe("navFor without the switchboard module", () => {
   it("gives a Klasik admin today's admin sidebar", () => {
-    expect(shape(flatItems(navFor(klasik, true, false)))).toEqual(shape(TODAY_ADMIN));
+    expect(shape(flatItems(navFor(klasik, true, false)))).toEqual(shape(ADMIN));
   });
 
   it("gives a Klasik employee today's employee sidebar", () => {
@@ -78,7 +81,7 @@ describe("navFor without the switchboard module", () => {
   });
 
   it("gives RBA the same three sidebars", () => {
-    expect(shape(flatItems(navFor(rba, true, false)))).toEqual(shape(TODAY_ADMIN));
+    expect(shape(flatItems(navFor(rba, true, false)))).toEqual(shape(ADMIN));
     expect(shape(flatItems(navFor(rba, false, false)))).toEqual(shape(TODAY_EMPLOYEE));
     expect(shape(flatItems(navFor(rba, true, true)))).toEqual(shape(withoutRococoMy));
   });
@@ -86,7 +89,7 @@ describe("navFor without the switchboard module", () => {
   it("stays flat with other modules on, and their gated items are all that differ", () => {
     const others = { ...klasik, modules: ["wins", "production", "data_sources", "external_links"] };
     const ungated = (layout: NavLayout) => flatItems(layout).filter((i) => !i.requires);
-    expect(shape(ungated(navFor(others, true, false)))).toEqual(shape(TODAY_ADMIN));
+    expect(shape(ungated(navFor(others, true, false)))).toEqual(shape(ADMIN));
     expect(shape(ungated(navFor(others, false, false)))).toEqual(shape(TODAY_EMPLOYEE));
     expect(shape(ungated(navFor(others, true, true)))).toEqual(shape(withoutRococoMy));
   });
@@ -95,7 +98,7 @@ describe("navFor without the switchboard module", () => {
     const production = { ...klasik, modules: ["production"] };
     const admin = flatItems(navFor(production, true, false)).map((i) => i.label);
     expect(admin.slice(admin.indexOf("People"), admin.indexOf("People") + 2)).toEqual(["People", "Projects"]);
-    expect(admin.filter((label) => label !== "Projects")).toEqual(TODAY_ADMIN.map((i) => i.label));
+    expect(admin.filter((label) => label !== "Projects")).toEqual(ADMIN.map((i) => i.label));
     const employee = flatItems(navFor(production, false, false)).map((i) => i.label);
     expect(employee.slice(employee.indexOf("My Goals"), employee.indexOf("My Goals") + 2)).toEqual(["My Goals", "Projects"]);
     expect(employee.filter((label) => label !== "Projects")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
@@ -105,7 +108,7 @@ describe("navFor without the switchboard module", () => {
     const wins = { ...klasik, modules: ["wins"] };
     const admin = flatItems(navFor(wins, true, false)).map((i) => i.label);
     expect(admin.slice(0, 2)).toEqual(["Dashboard", "Wins"]);
-    expect(admin.filter((label) => label !== "Wins")).toEqual(TODAY_ADMIN.map((i) => i.label));
+    expect(admin.filter((label) => label !== "Wins")).toEqual(ADMIN.map((i) => i.label));
     const employee = flatItems(navFor(wins, false, false)).map((i) => i.label);
     expect(employee.slice(0, 2)).toEqual(["Dashboard", "Wins"]);
     expect(employee.filter((label) => label !== "Wins")).toEqual(TODAY_EMPLOYEE.map((i) => i.label));
@@ -114,14 +117,14 @@ describe("navFor without the switchboard module", () => {
   it("puts Reporting and Controls after People for admins with data sources on, and nothing new for employees", () => {
     const dataSources = { ...klasik, modules: ["data_sources"] };
     expect(flatItems(navFor(dataSources, true, false)).map((i) => i.id)).toEqual([
-      "dashboard", "gsr", "reviews", "goals", "people", "sales-reporting", "controls", "sops", "resources", "financials", "marketing", "my-gsr-admin", "settings",
+      "dashboard", "gsr", "reviews", "scorecards", "goals", "people", "sales-reporting", "controls", "sops", "resources", "financials", "marketing", "my-gsr-admin", "settings",
     ]);
     expect(shape(flatItems(navFor(dataSources, false, false)))).toEqual(shape(TODAY_EMPLOYEE));
   });
 
   it("ignores an unknown key entirely", () => {
     const future = { ...klasik, modules: ["future"] };
-    expect(shape(flatItems(navFor(future, true, false)))).toEqual(shape(TODAY_ADMIN));
+    expect(shape(flatItems(navFor(future, true, false)))).toEqual(shape(ADMIN));
     expect(shape(flatItems(navFor(future, false, false)))).toEqual(shape(TODAY_EMPLOYEE));
     expect(shape(flatItems(navFor(future, true, true)))).toEqual(shape(withoutRococoMy));
   });
@@ -140,7 +143,7 @@ describe("navFor with the switchboard module", () => {
     expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Reporting", "Controls", "Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
-    expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People", "My GSR"]);
+    expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Scorecards", "Goals", "People", "My GSR"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
   });
 
@@ -159,7 +162,7 @@ describe("navFor with the switchboard module", () => {
     expect(labelsOf(layout, "Home")).toEqual(["Home", "Wins"]);
     expect(labelsOf(layout, "Sales & Finance")).toEqual(["Reporting", "Controls", "Financials", "Marketing"]);
     expect(labelsOf(layout, "Production")).toEqual(["Projects"]);
-    expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Goals", "People"]);
+    expect(labelsOf(layout, "People / HR")).toEqual(["GSRs", "Reviews", "Scorecards", "Goals", "People"]);
     expect(labelsOf(layout, null)).toEqual(["SOPs", "Resources", "Settings"]);
   });
 

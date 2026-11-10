@@ -1,8 +1,9 @@
 // The company's job roles, for an admin in Company Settings: the jobs people do here, the
-// dashboard modules each role gets, and the goals a role brings into every month's Goal
-// Setting Review. Roles are rows (rule 12): a company shapes its own set and nothing here knows
-// a company by name. Every change saves on its own.
-import { useState, type FormEvent } from "react";
+// dashboard modules each role gets, the goals a role brings into every month's Goal Setting
+// Review, and the metrics the role is scored on each month (its scorecard). Roles and metrics are
+// rows (rule 12): a company shapes its own set and nothing here knows a company by name. Every
+// change saves on its own.
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -12,12 +13,13 @@ import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
-import { checkboxClass, inputClass } from "../ui/forms.ts";
+import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createJobRole, createJobRoleGoal, deleteJobRole, deleteJobRoleGoal, listJobRoleGoals, listJobRoles, updateJobRole, updateJobRoleGoal } from "../../services/jobRoles.ts";
+import { createRoleMetric, deleteRoleMetric, listRoleMetrics, updateRoleMetric, type RoleMetricPatch } from "../../services/scorecards.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
-import { DASHBOARD_MODULE_LABELS, keysOf, type DashboardModule, type JobRole, type JobRoleGoal } from "../../types/database.ts";
+import { DASHBOARD_MODULE_LABELS, METRIC_KIND_LABELS, keysOf, type DashboardModule, type JobRole, type JobRoleGoal, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
 const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
@@ -40,10 +42,183 @@ function AddForm({ placeholder, label, onAdd }: { placeholder: string; label: st
   );
 }
 
-// One role: its name and description, the modules its people see, and its goal templates.
+const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+// The shared control classes at a compact size for the dense metric rows: the same look, without
+// the stacked-form top margin, and one step shorter.
+const compact = (cls: string) => `${cls.replace("mt-1.5 ", "").replace("py-2 ", "")} py-1.5 text-[13px]`;
+const smallInput = compact(inputClass);
+const smallSelect = compact(selectClass);
+const toggleLabel = "flex items-center gap-1.5 text-[12.5px] text-ink-2";
+
+// A number typed into a metric field: blank is none, anything else has to read as a number.
+function parseNumber(text: string): number | null | undefined {
+  const cleaned = text.trim().replace(/,/g, "").replace(/%$/, "").trim();
+  if (cleaned === "") return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+// One metric on a role's scorecard: what it is called, how it is measured (a percent, a rating
+// on a scale, or a plain number), its target and which way is better, whether it is entered per
+// project, its place in the list, and whether it is still scored. Retiring keeps its results.
+function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; onSave: (patch: RoleMetricPatch) => void; onDelete: () => void; onError: (message: string) => void }) {
+  return (
+    <li className={`py-2.5 ${metric.is_active ? "" : "opacity-70"}`}>
+      <div className="flex items-center gap-2">
+        <BlurInput value={metric.name} required ariaLabel={`Metric name ${metric.name}`} onSave={(next) => onSave({ name: next.trim() })} className={`${smallInput} min-w-0 flex-1 font-medium`} />
+        {metric.is_active ? null : <Badge>Retired</Badge>}
+        <IconButton label={`Delete metric ${metric.name}`} onClick={onDelete}>
+          <Trash2 size={14} aria-hidden />
+        </IconButton>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div>
+          <select aria-label={`Kind for ${metric.name}`} value={metric.kind} onChange={(e) => onSave({ kind: e.target.value as MetricKind })} className={smallSelect}>
+            {keysOf(METRIC_KIND_LABELS).map((k) => (
+              <option key={k} value={k}>{METRIC_KIND_LABELS[k]}</option>
+            ))}
+          </select>
+        </div>
+        {metric.kind === "rating" ? (
+          <div>
+            <select aria-label={`Scale for ${metric.name}`} value={metric.scale_max} onChange={(e) => onSave({ scale_max: Number(e.target.value) })} className={smallSelect}>
+              {SCALES.map((n) => (
+                <option key={n} value={n}>1 to {n}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <label className={toggleLabel}>
+          <span>Target</span>
+          <span className="block w-20">
+            <BlurInput
+              value={metric.target === null ? "" : String(metric.target)}
+              placeholder="None"
+              ariaLabel={`Target for ${metric.name}`}
+              className={`${smallInput} tnum`}
+              onSave={(next) => {
+                const value = parseNumber(next);
+                if (value === undefined) {
+                  onError("A target is a number, or blank for none.");
+                  return false;
+                }
+                onSave({ target: value });
+              }}
+            />
+          </span>
+          {metric.kind === "percent" ? <span className="text-ink-3">%</span> : null}
+        </label>
+        <label className={toggleLabel}>
+          <span>Order</span>
+          <span className="block w-14">
+            <BlurInput
+              value={String(metric.sort_order)}
+              ariaLabel={`Order for ${metric.name}`}
+              className={`${smallInput} tnum`}
+              onSave={(next) => {
+                const value = parseNumber(next);
+                if (value === null || value === undefined || !Number.isInteger(value)) {
+                  onError("The order is a whole number.");
+                  return false;
+                }
+                onSave({ sort_order: value });
+              }}
+            />
+          </span>
+        </label>
+        <label className={toggleLabel}>
+          <input type="checkbox" className={checkboxClass} checked={metric.higher_is_better} aria-label={`Higher is better for ${metric.name}`} onChange={(e) => onSave({ higher_is_better: e.target.checked })} />
+          <span>Higher is better</span>
+        </label>
+        <label className={toggleLabel}>
+          <input type="checkbox" className={checkboxClass} checked={metric.per_project} aria-label={`Per project for ${metric.name}`} onChange={(e) => onSave({ per_project: e.target.checked })} />
+          <span>Per project</span>
+        </label>
+        <label className={toggleLabel}>
+          <input type="checkbox" className={checkboxClass} checked={metric.is_active} aria-label={`Active for ${metric.name}`} onChange={(e) => onSave({ is_active: e.target.checked })} />
+          <span>Active</span>
+        </label>
+      </div>
+    </li>
+  );
+}
+
+// A role's scorecard: its metrics and the form to add one.
+function RoleMetrics({
+  role,
+  metrics,
+  onMetrics,
+  onDelete,
+  onError,
+}: {
+  role: JobRole;
+  metrics: RoleMetric[];
+  onMetrics: (update: (list: RoleMetric[]) => RoleMetric[]) => void;
+  onDelete: (metric: RoleMetric) => void;
+  onError: (message: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<MetricKind>("percent");
+  const own = metrics.filter((m) => m.job_role_id === role.id).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    const text = name.trim();
+    if (!text) return;
+    onError("");
+    try {
+      const created = await createRoleMetric({ job_role_id: role.id, name: text, kind, sort_order: Math.max(0, ...own.map((m) => m.sort_order)) + 1 });
+      onMetrics((list) => [...list, created]);
+      setName("");
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  }
+
+  async function save(metric: RoleMetric, patch: RoleMetricPatch) {
+    onError("");
+    try {
+      const next = await updateRoleMetric(metric.id, patch);
+      onMetrics((list) => list.map((m) => (m.id === next.id ? next : m)));
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <p className={eyebrowClass}>Scorecard metrics</p>
+      <p className="mt-0.5 text-[12px] text-ink-3">What people in this role are scored on each month, against target. Results are entered on each person's profile. Untick Active to retire a metric and keep its history.</p>
+      {own.length > 0 ? (
+        <ul className="mt-2 divide-y divide-line">
+          {own.map((metric) => (
+            <MetricRow key={metric.id} metric={metric} onSave={(patch) => void save(metric, patch)} onDelete={() => onDelete(metric)} onError={onError} />
+          ))}
+        </ul>
+      ) : null}
+      <form onSubmit={(e) => void add(e)} className="mt-2 flex flex-wrap gap-2">
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={`Add a metric for ${role.name}`} aria-label={`Add a metric for ${role.name}`} className={`${inputClass} mt-0 min-w-0 flex-1 basis-48`} />
+        <div>
+          <select aria-label={`Kind of new metric for ${role.name}`} value={kind} onChange={(e) => setKind(e.target.value as MetricKind)} className={`${selectClass} mt-0`}>
+            {keysOf(METRIC_KIND_LABELS).map((k) => (
+              <option key={k} value={k}>{METRIC_KIND_LABELS[k]}</option>
+            ))}
+          </select>
+        </div>
+        <Button type="submit" variant="secondary" disabled={!name.trim()}>
+          <Plus size={14} aria-hidden /> Add metric
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+// One role: its name and description, the modules its people see, its goal templates, and its
+// scorecard metrics.
 function RoleCard({
   role,
   goals,
+  metrics,
   onRole,
   onGoals,
   onDelete,
@@ -51,6 +226,8 @@ function RoleCard({
 }: {
   role: JobRole;
   goals: JobRoleGoal[];
+  // The scorecard half, or null when the metrics did not load (the rest of the card still works).
+  metrics: ReactNode;
   onRole: (role: JobRole) => void;
   onGoals: (update: (goals: JobRoleGoal[]) => JobRoleGoal[]) => void;
   onDelete: () => void;
@@ -146,6 +323,7 @@ function RoleCard({
           <AddForm placeholder={`Add a goal for ${role.name}`} label="Add" onAdd={(title) => void addGoal(title)} />
         </div>
       </div>
+      {metrics}
     </li>
   );
 }
@@ -155,8 +333,11 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
     const [roles, goals] = await Promise.all([listJobRoles(companyId, true), listJobRoleGoals(companyId)]);
     return { roles, goals };
   }, [companyId]);
+  // The scorecard metrics load on their own, so a failure there leaves the roles workable.
+  const metricState = useAsync(() => listRoleMetrics(companyId, true), [companyId]);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<JobRole | null>(null);
+  const [deletingMetric, setDeletingMetric] = useState<RoleMetric | null>(null);
   const [busy, setBusy] = useState(false);
   // The delete dialog reports only its own failure, never an inline save's or an earlier
   // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
@@ -185,7 +366,32 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
   function closeDelete() {
     if (busy) return;
     setDeleting(null);
+    setDeletingMetric(null);
     setDialogError("");
+  }
+
+  function openDeleteMetric(metric: RoleMetric) {
+    if (busy) return;
+    setDialogError("");
+    setDeletingMetric(metric);
+  }
+
+  // A metric with results on file is refused by the database, which says to retire it instead;
+  // the dialog shows that answer where it will be read.
+  async function removeMetric() {
+    if (!deletingMetric) return;
+    const id = deletingMetric.id;
+    setBusy(true);
+    setDialogError("");
+    try {
+      await deleteRoleMetric(id);
+      metricState.setData((prev) => (prev ? prev.filter((m) => m.id !== id) : prev));
+      setDeletingMetric(null);
+    } catch (err) {
+      setDialogError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove() {
@@ -211,7 +417,7 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
     <Section
       eyebrow="People"
       title="Job roles"
-      description="The jobs people do here. A person's role decides which modules their dashboard carries and which goals their monthly Goal Setting Review offers. Set it on their profile. Retiring a role keeps it on record, but it stops adding its modules and goals for anyone still in it."
+      description="The jobs people do here. A person's role decides which modules their dashboard carries, which goals their monthly Goal Setting Review offers, and the metrics their scorecard is scored on. Set it on their profile. Retiring a role keeps it on record, but it stops adding its modules and goals for anyone still in it."
     >
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={3} /> : null}
@@ -228,6 +434,19 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
                   key={role.id}
                   role={role}
                   goals={goals.filter((g) => g.job_role_id === role.id)}
+                  metrics={
+                    metricState.data ? (
+                      <RoleMetrics
+                        role={role}
+                        metrics={metricState.data}
+                        onMetrics={(update) => metricState.setData((prev) => (prev ? update(prev) : prev))}
+                        onDelete={openDeleteMetric}
+                        onError={setError}
+                      />
+                    ) : metricState.error ? (
+                      <p className="mt-4 text-[12px] text-ink-3">Scorecard metrics did not load. {metricState.error}</p>
+                    ) : null
+                  }
                   onRole={(next) => state.setData((prev) => (prev ? { ...prev, roles: prev.roles.map((r) => (r.id === next.id ? next : r)) } : prev))}
                   onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
                   onDelete={() => openDelete(role)}
@@ -246,6 +465,17 @@ export default function JobRolesPanel({ companyId }: { companyId: string }) {
           busy={busy}
           error={dialogError}
           onConfirm={() => void remove()}
+          onCancel={closeDelete}
+        />
+      ) : null}
+      {deletingMetric ? (
+        <ConfirmDialog
+          title={`Delete "${deletingMetric.name}"?`}
+          body="It comes off the role's scorecard for good. A metric with results entered cannot be deleted; untick Active to retire it instead and keep its history."
+          confirmLabel="Delete metric"
+          busy={busy}
+          error={dialogError}
+          onConfirm={() => void removeMetric()}
           onCancel={closeDelete}
         />
       ) : null}
