@@ -220,19 +220,24 @@ they first get in. A person in that state counts as having an account.
 A new Edge Function, `supabase/functions/notify`, called by the app through `invokeFunction`
 after a successful save.
 
-1. The function builds a client from the caller's JWT, as the connections function does.
-2. It calls a security definer database function, `claim_task_notification(task_id)`, which
-   checks the caller can manage the task's company and the conditions above, sets
-   `notified_assignee_id = assignee_id` in one statement, and returns the task title, due date,
-   assigner name, company name, and assignee email only when it claimed the send. A second call
-   returns nothing, so an email can never go twice for one assignment.
-3. The function sends one plain email through the Resend API and returns.
+1. The function builds a client from the caller's JWT, as the connections function does, and
+   reads the task through it, so the caller must be able to see the task.
+2. With its own service client, the way the connections function reads provider tokens, it
+   checks the conditions above and claims the send in one statement: it sets
+   `notified_assignee_id = assignee_id` only where that is not already true. A second call
+   claims nothing, so an email can never go twice for one assignment. The browser can never
+   write `notified_assignee_id`; a guard trigger pins it.
+3. The function sends one plain email through the Resend API and returns. If the send fails,
+   it releases the claim so a later save can try again.
+
+This keeps the standing rule that no new database function is callable from the browser.
 
 - **From:** `tasks@companyhub.rocococreative.io`, with the company name as the sender name.
 - **Content:** who assigned the task, its title, its due date when set, and a link to
   `/tasks/:id`. Plain text and simple HTML, no tracking.
 - **Secrets:** `RESEND_API_KEY` and `TASKS_FROM_EMAIL` as Supabase function secrets. Neither
-  reaches the browser or Vercel. The function uses no service-role key.
+  reaches the browser or Vercel. The service-role key stays inside the Edge Function, where
+  the platform provides it, exactly as in the connections function.
 
 ### Failure
 
