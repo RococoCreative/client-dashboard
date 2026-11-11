@@ -30,13 +30,14 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
 | Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, mark done, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
 | Wins (`wins`) | Log, edit and archive wins; the five most recent on Home | Read; the five most recent on Home |
+| Tasks (`tasks`) | Assign tasks to anyone with a due date, a priority, ordered steps and a repeat; see every task, filter by person, priority, campaign or state; attach a task to a marketing campaign; the assignee gets an email | Own assigned tasks: tick steps, complete and reopen; create tasks for themselves |
 | Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
 | Home cards (`switchboard`, `data_sources`) | Attention items, section shortcuts, data freshness | Shortcuts, wins |
 | Resources: Links (`external_links`) | Links to the programs where the work lives (name, link, what it is for, category, order, who sees it), managed on Resources > Links and shown there, on the Home card Where the work lives, and on the section page their category names; public share views embedded on section pages only when flagged public | Read on Resources > Links and on Home |
 | Rococo portfolio | Rococo admins only: every company with its health signals, plus companies, themes, sign-in domains, and every user, and the Activity log of configuration and permission changes | |
 
-Rows marked with a module key appear only for a company whose modules include it. Email
-notifications are the next phase.
+Rows marked with a module key appear only for a company whose modules include it. The task
+assignment email is the only email the hub sends; other notifications are the next phase.
 
 ## Quick start
 
@@ -102,26 +103,35 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 ### What is applied live
 
 Kept current by whoever pastes a migration, so the next session knows where it stands. Live
-project `jjdcejevdqpwuastsmpq`, as of 2026-11-10:
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-11:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
   `0026_projects_milestones`, then `0027_wins`, `0030_sync_engine`, `0031_external_links`,
   `0033_role_hierarchy` and `0034_cycle_omissions` together in one transaction (2026-11-10),
-  then `0035_scorecards_divisions_focus_calendar` (2026-11-10, after `0034`).
+  then `0035_scorecards_divisions_focus_calendar` (2026-11-10, after `0034`), then `0036_tasks`
+  (2026-11-11).
   `0026` and `0027` went in after `0029` even though their numbers are lower, because they
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
+  `0037_company_time_zone` is written and is to be applied next, after `0036`: it gives every
+  company a time zone (default `America/New_York`) and makes a repeating task's next due date
+  count from the company's own day.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   and `SYNC_CRON_SECRET` are set and `0032` is applied.
-- **Configuration set live:** Kingdom has all five modules on; Klasik and RBA have
-  `external_links` only. Kingdom's owners are Maddie Cothran and marvin waters.
-- **Next free number:** `0036`.
+- **The `notify` Edge Function** is deployed with the gateway's JWT check on (2026-11-11). It
+  reads the secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails
+  are not set up yet." until all three are set. The version in this repo, which builds the task
+  link from `APP_URL`, is deployed along with `0037`.
+- **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
+  Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
+  Companies. Kingdom's owners are Maddie Cothran and marvin waters.
+- **Next free number:** `0038`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -137,6 +147,7 @@ Some parts of the hub are modules a company has on or off. The keys:
 | `wins` | Wins | The wins page and the Home wins card. |
 | `data_sources` | Data sources | Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness. |
 | `external_links` | External links | Links to outside tools, such as Monday: Resources, Links, the Home card, and each section's page. |
+| `tasks` | Tasks | Tasks assigned to people, with due dates, steps, and repeats, the Tasks page with its open count in the sidebar, and the tasks behind each marketing campaign. |
 
 Every company's sidebar reads in the same sections (see Where things live); a module adds or
 hides whole items in it, never a company name. `external_links` is the one that puts Links in
@@ -308,7 +319,7 @@ The sidebar is the same for every company, in sections named for the job being d
 
 | Section | Admins and owners | Employees |
 | --- | --- | --- |
-| (top) | Home, Wins (`wins`) | Home, Wins (`wins`) |
+| (top) | Home, Wins (`wins`), Tasks (`tasks`) | Home, Wins (`wins`), Tasks (`tasks`) |
 | Sales & Finance | Reporting and Controls (`data_sources`), Financials, Marketing | (not visible) |
 | Production | Projects (`production`) | Projects (`production`) |
 | People | People, Goals, Monthly GSRs, Reviews, Scorecards | My development: My GSR, My Reviews, My Goals |
@@ -321,8 +332,8 @@ Three pages are hubs with a route per tab, so a link can land on the right one:
   reviews monthly; `/goals/roles` the goals each job role brings into every month; `/goals/focus`
   the focus topic calendar, the #1 GSR's topic each month; `/goals/people` each person's goals for
   the year and their BHAG.
-- **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme and sign-in
-  domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
+- **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme, time zone and
+  sign-in domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
   divisions; `/settings/reviews` pillars and weights, criteria, the Monthly GSRs rule and
   deliverable categories; `/settings/connections` connections and data sources.
   `/settings/connections/:companyId` is the OAuth return path, which lands on the Connections tab
@@ -566,11 +577,12 @@ Secrets):
 - `RESEND_API_KEY`: a Resend API key with sending access, restricted to the sending domain.
 - `TASKS_FROM_EMAIL`: the sending address, `tasks@companyhub.rocococreative.io`. The sender name
   is the company's name.
+- `APP_URL`: the production address, `https://companyhub.rocococreative.io`. The task link starts
+  from it and from nothing else, so an email can only ever link to the app.
 
-The task link starts from the first entry of `APP_ORIGINS`, the secret the connections function
-already uses, and from nothing else, so that entry must be the production address
-(`https://companyhub.rocococreative.io`). Until the key, the address and that entry are set, the
-function answers "Task emails are not set up yet." and claims nothing. Deploy with the gateway's
+Until all three are set, the function answers "Task emails are not set up yet." and claims
+nothing. A task that is already complete is never announced, and a send that Resend does not
+answer within ten seconds counts as a failed send. Deploy with the gateway's
 JWT check on: `supabase functions deploy notify`.
 
 ## Data sources and Google setup
