@@ -60,18 +60,16 @@ const displayName = (name: string) => name.replace(/["<>\\\r\n]/g, " ").replace(
 
 const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
 
-// The origin the task link starts from: the first configured app origin, else the caller's own.
-function appUrl(req: Request): string | null {
-  for (const candidate of [APP_ORIGINS[0], req.headers.get("Origin")]) {
-    if (!candidate) continue;
-    try {
-      const url = new URL(candidate);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
-    } catch {
-      // Not a URL; try the next one.
-    }
+// The origin the task link starts from: the first APP_ORIGINS entry only, never anything the
+// caller sends, so a company-branded email can only ever link to the app.
+function appUrl(): string | null {
+  if (!APP_ORIGINS[0]) return null;
+  try {
+    const url = new URL(APP_ORIGINS[0]);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.origin : null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 async function handleNotify(req: Request): Promise<Response> {
@@ -105,7 +103,7 @@ async function handleNotify(req: Request): Promise<Response> {
   if (!assignee || !assignee.user_id || assignee.is_active !== true || !assignee.email) return json(200, { sent: false });
 
   // 9. Nothing is claimed unless the email can actually go.
-  const base = appUrl(req);
+  const base = appUrl();
   if (!RESEND_API_KEY || !TASKS_FROM_EMAIL || !base) throw new HttpError(503, NOT_SET_UP);
 
   // 6. The claim, in one statement: only one call can move notified_assignee_id to this assignee.

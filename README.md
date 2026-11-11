@@ -568,7 +568,8 @@ Secrets):
   is the company's name.
 
 The task link starts from the first entry of `APP_ORIGINS`, the secret the connections function
-already uses, and falls back to the caller's origin. Until the key and address are set, the
+already uses, and from nothing else, so that entry must be the production address
+(`https://companyhub.rocococreative.io`). Until the key, the address and that entry are set, the
 function answers "Task emails are not set up yet." and claims nothing. Deploy with the gateway's
 JWT check on: `supabase functions deploy notify`.
 
