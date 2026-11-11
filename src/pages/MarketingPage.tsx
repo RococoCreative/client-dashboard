@@ -1,8 +1,10 @@
 // Marketing campaign tracker: a board of what is planned, running, paused, and done, with
 // budget vs actual spend and the key result for each. A tracking surface, not a marketing
-// platform. Admin-only.
-import { useState, type FormEvent } from "react";
+// platform. Admin-only. With the tasks module on, each campaign also shows the work behind it
+// (CampaignTasks), from one read of the company's tasks grouped here by campaign.
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import CampaignTasks from "../components/tasks/CampaignTasks.tsx";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.tsx";
@@ -18,11 +20,14 @@ import { inputClass, selectClass, textareaClass } from "../components/ui/forms.t
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "../services/marketing.ts";
+import { listCompanyProfiles } from "../services/profiles.ts";
+import { listTasks } from "../services/tasks.ts";
 import { CAMPAIGN_STATUS_TONE } from "../components/status.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatDate, formatMoney, formatNumber, formatPercent, moneyFieldError, parseMoney, pluralize } from "../lib/format.ts";
+import { formatDate, formatMoney, formatNumber, formatPercent, moneyFieldError, parseMoney, pluralize, todayIso } from "../lib/format.ts";
 import { liveCampaignTotals } from "../lib/marketing.ts";
-import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUS_LABELS, keysOf, type CampaignStatus, type MarketingCampaign } from "../types/database.ts";
+import { hasModule } from "../lib/modules.ts";
+import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUS_LABELS, keysOf, type CampaignStatus, type MarketingCampaign, type TaskWithSteps } from "../types/database.ts";
 
 type NumberField = "budget" | "spend" | "metricValue";
 
@@ -153,7 +158,7 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
   );
 }
 
-function CampaignCard({ campaign, onEdit, onDelete, onStatus }: { campaign: MarketingCampaign; onEdit: () => void; onDelete: () => void; onStatus: (status: CampaignStatus) => void }) {
+function CampaignCard({ campaign, footer, onEdit, onDelete, onStatus }: { campaign: MarketingCampaign; footer: ReactNode; onEdit: () => void; onDelete: () => void; onStatus: (status: CampaignStatus) => void }) {
   const budget = campaign.budget ?? 0;
   const spend = campaign.actual_spend ?? 0;
   const ratio = budget > 0 ? spend / budget : null;
@@ -201,23 +206,50 @@ function CampaignCard({ campaign, onEdit, onDelete, onStatus }: { campaign: Mark
           ))}
         </select>
       </div>
+      {footer}
     </li>
   );
 }
 
 export default function MarketingPage() {
-  const { company } = useHub();
+  const { company, profile } = useHub();
   const companyId = company!.id;
+  const tasksOn = hasModule(company, "tasks");
   const [dialog, setDialog] = useState<{ campaign: MarketingCampaign | null } | null>(null);
   const [deleting, setDeleting] = useState<MarketingCampaign | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const state = useAsync(() => listCampaigns(companyId), [companyId]);
+  // Every task, open and done, read once for the whole board; nothing is asked without the module.
+  const taskState = useAsync(async () => {
+    if (!tasksOn) return null;
+    const [tasks, people] = await Promise.all([listTasks(companyId, { status: "all" }), listCompanyProfiles(companyId)]);
+    return { tasks, people };
+  }, [companyId, tasksOn]);
 
   const campaigns = state.data ?? [];
   // Budget and spend over the same live campaigns, with the unbudgeted counted apart: the one
   // reading the dashboard and the Rococo portfolio share.
   const { live, unbudgeted, budget: totalBudget, spend: totalSpend } = liveCampaignTotals(campaigns);
+  // Each campaign's tasks at the foot of its card, once the tasks are in.
+  const tasksByCampaign = new Map<string, TaskWithSteps[]>();
+  for (const task of taskState.data?.tasks ?? []) {
+    if (task.campaign_id) tasksByCampaign.set(task.campaign_id, [...(tasksByCampaign.get(task.campaign_id) ?? []), task]);
+  }
+  const today = todayIso();
+  const taskFooter = (campaign: MarketingCampaign) =>
+    taskState.data ? (
+      <CampaignTasks
+        companyId={companyId}
+        campaign={campaign}
+        campaigns={campaigns}
+        tasks={tasksByCampaign.get(campaign.id) ?? []}
+        people={taskState.data.people}
+        viewerProfileId={profile.id}
+        today={today}
+        onCreated={(task) => taskState.setData((prev) => (prev ? { ...prev, tasks: [...prev.tasks, task] } : prev))}
+      />
+    ) : null;
 
   function upsert(saved: MarketingCampaign) {
     state.setData((prev) => {
@@ -259,6 +291,7 @@ export default function MarketingPage() {
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
+      {taskState.error ? <Notice tone="error" className="mb-4">{taskState.error}</Notice> : null}
 
       {!state.data && !state.error ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
@@ -279,7 +312,7 @@ export default function MarketingPage() {
             {keysOf(CAMPAIGN_STATUS_LABELS).map((status) => {
               const column = campaigns.filter((c) => c.status === status).sort((a, b) => a.sort_order - b.sort_order);
               return (
-                <section key={status} className="rounded-lg border border-line bg-bg/40 p-3">
+                <section key={status} className="min-w-0 rounded-lg border border-line bg-bg/40 p-3">
                   <header className="mb-3 flex items-center justify-between px-1">
                     <h2 className="text-[11px] font-medium uppercase tracking-label text-ink-3">{CAMPAIGN_STATUS_LABELS[status]}</h2>
                     <span className="tnum text-[11px] text-ink-3">{column.length}</span>
@@ -289,7 +322,7 @@ export default function MarketingPage() {
                   ) : (
                     <ul className="space-y-3">
                       {column.map((campaign) => (
-                        <CampaignCard key={campaign.id} campaign={campaign} onEdit={() => setDialog({ campaign })} onDelete={() => setDeleting(campaign)} onStatus={(next) => void move(campaign, next)} />
+                        <CampaignCard key={campaign.id} campaign={campaign} footer={taskFooter(campaign)} onEdit={() => setDialog({ campaign })} onDelete={() => setDeleting(campaign)} onStatus={(next) => void move(campaign, next)} />
                       ))}
                     </ul>
                   )}

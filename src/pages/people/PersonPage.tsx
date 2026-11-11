@@ -2,9 +2,10 @@
 // they report to, their job role and division), then their role Scorecard (the month-by-month
 // results an admin enters against the role's targets), their Goals for this year, next year and
 // their BHAG (editable, so a manager can set goals in a one-on-one), the Projects they are on,
-// this year's KPIs, financial figures and deliverables, their impact score, Compensation, and
-// Review history. A goal's action steps and progress notes are the person's own and never show
-// here; the month's goals live in the GSR. Each section header carries the one action it needs.
+// their open Tasks (with the tasks module), this year's KPIs, financial figures and deliverables,
+// their impact score, Compensation, and Review history. A goal's action steps and progress notes
+// are the person's own and never show here; the month's goals live in the GSR. Each section
+// header carries the one action it needs.
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -25,6 +26,7 @@ import FinancialsTable from "../../components/people/FinancialsTable.tsx";
 import KpiList from "../../components/people/KpiList.tsx";
 import PersonProjects from "../../components/people/PersonProjects.tsx";
 import PersonScorecard from "../../components/scorecards/PersonScorecard.tsx";
+import PersonTasks from "../../components/tasks/PersonTasks.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
@@ -433,6 +435,7 @@ export default function PersonPage() {
               onError={setError}
             />
           )}
+          {hasModule(company, "tasks") && !rococo ? <PersonTasks companyId={companyId} person={person} /> : null}
           <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
             <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={kpis} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))} onError={setError} />
           </Section>

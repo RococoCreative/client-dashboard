@@ -27,6 +27,7 @@ vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 // The mock, with startConnection watched so a test can read the return address it was given.
 vi.mock("../services/connections.ts", async () => {
   const mock = await import("../test/mocks/connections.ts");

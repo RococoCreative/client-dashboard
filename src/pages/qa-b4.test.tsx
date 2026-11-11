@@ -79,6 +79,7 @@ vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts")
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { KLASIK, makeHub } from "../test/fixtures.ts";

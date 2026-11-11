@@ -67,7 +67,10 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    QuickBooks account through the app's own OAuth flow in the `connections` Edge Function
    (`supabase/functions/connections`), never through anything of Rococo's. Provider tokens
    live in `connection_tokens`, which only that function reads; the browser sees status rows
-   and never calls a provider.
+   and never calls a provider. The `notify` Edge Function (`supabase/functions/notify`) sends the
+   task assignment email through Resend and is the only place the Resend key lives; its secrets
+   are `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and the task link starts from `APP_URL`
+   alone, never from anything the caller sends.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule and its one exception, a Monthly GSRs pillar with no locked month, which
@@ -117,8 +120,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     slug, or theme key to change behavior, and never let one company's setup reach another's
     screen. When a company needs a different shape, the difference becomes a column, a row, or a
     setting every company carries, with the behavior the others have today as its default.
-    Configured per company already: theme, pillars, criteria and weights, cycles and cadence,
-    who is in each cycle (`cycle_omissions`, 0034: everyone active unless an admin omits them),
+    Configured per company already: theme, time zone, pillars, criteria and weights, cycles and
+    cadence, who is in each cycle (`cycle_omissions`, 0034: everyone active unless an admin omits them),
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
     how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at

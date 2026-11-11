@@ -1,12 +1,18 @@
-// Pins the module gate: the five known keys, how a company's raw module list is read (unknown
+// Pins the module gate: the six known keys, how a company's raw module list is read (unknown
 // keys ignored, a missing column reads as off), and the pure toggle the Rococo checkboxes use.
 import { describe, expect, it } from "vitest";
 import type { Company } from "../types/database.ts";
 import { MODULE_DESCRIPTIONS, MODULE_KEYS, MODULE_LABELS, enabledModules, hasModule, isModuleKey, withModule } from "./modules.ts";
 
 describe("MODULE_KEYS", () => {
-  it("lists the five modules in order", () => {
-    expect(MODULE_KEYS).toEqual(["switchboard", "production", "wins", "data_sources", "external_links"]);
+  it("lists the six modules in order", () => {
+    expect(MODULE_KEYS).toEqual(["switchboard", "production", "wins", "data_sources", "external_links", "tasks"]);
+  });
+
+  it("has tasks as a module key with a label and a description", () => {
+    expect(isModuleKey("tasks")).toBe(true);
+    expect(MODULE_LABELS.tasks).toBe("Tasks");
+    expect(MODULE_DESCRIPTIONS.tasks).toBe("Tasks assigned to people, with due dates, steps, and repeats, and the tasks behind each marketing campaign.");
   });
 
   it("gives every key a label and a description without an em dash", () => {

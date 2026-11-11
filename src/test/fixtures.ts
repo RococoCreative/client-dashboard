@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -16,9 +16,10 @@ const EARLIER = "2026-08-04T15:30:00.000Z";
 const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
+  // RBA has the task tracker on and nothing else.
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -41,6 +42,8 @@ interface CompanySpec {
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
   projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
   wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
+  // Seeds the sample tasks (RBA and Kingdom).
+  tasks?: boolean;
   sync?: SyncSpec[];
   links?: Array<Omit<ExternalLink, "id" | "company_id" | "created_by" | "updated_by" | "created_at" | "updated_at">>;
 }
@@ -96,6 +99,7 @@ const SPECS: Record<string, CompanySpec> = {
   },
   "co-kingdom": {
     domain: "kingdomcustomconstruction.com",
+    tasks: true,
     cadence: "monthly",
     people: [
       { name: "Marcus Lee", title: "Owner", role: "owner" },
@@ -241,6 +245,7 @@ const SPECS: Record<string, CompanySpec> = {
   },
   "co-rba": {
     domain: "rbaprojects.com",
+    tasks: true,
     cadence: "quarterly",
     people: [
       { name: "Alex Morgan", title: "Principal", role: "admin" },
@@ -281,6 +286,9 @@ export interface CompanyBundle {
   projects: Project[];
   milestones: ProjectMilestone[];
   wins: Win[];
+  // 0036. Six sample tasks each at RBA and Kingdom; none at Klasik.
+  tasks: Task[];
+  taskSteps: TaskStep[];
   goals: Goal[];
   goalNotes: GoalNote[];
   goalPrivate: GoalPrivate[];
@@ -651,6 +659,56 @@ function build(company: Company): CompanyBundle {
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
+
+  // Tasks (RBA and Kingdom). The first employee has an overdue high-priority task an admin
+  // assigned, three steps with one ticked; a weekly task with two steps; one they made for
+  // themselves with no due date; and one they finished. The person who has not signed in has an
+  // open task, and the second employee has the only task on the first campaign, still open.
+  const tasks: Task[] = [];
+  const taskSteps: TaskStep[] = [];
+  if (spec.tasks) {
+    const admin = profiles[0].id;
+    const employee = profiles[1].id;
+    const task = (n: number, fields: Partial<Task> & Pick<Task, "title" | "assignee_id" | "created_by" | "created_at">, stepSpecs: Array<[string, string | null]> = []): void => {
+      const id = p(`task-${n}`);
+      tasks.push({
+        id,
+        company_id: company.id,
+        description: null,
+        due_date: null,
+        priority: "medium",
+        recurrence: null,
+        campaign_id: null,
+        completed_at: null,
+        completed_by: null,
+        next_task_id: null,
+        notified_assignee_id: null,
+        updated_at: fields.created_at,
+        ...fields,
+      });
+      stepSpecs.forEach(([title, done_at], i) => {
+        taskSteps.push({ id: p(`task-${n}-step-${i + 1}`), task_id: id, company_id: company.id, title, sort_order: i + 1, done_at });
+      });
+    };
+    task(1, { title: "Close out the September punch list", description: "Walk each open item and get sign-off on what is done.", assignee_id: employee, created_by: admin, due_date: "2026-09-10", priority: "high", notified_assignee_id: employee, created_at: "2026-09-02T14:00:00.000Z" }, [
+      ["Walk the open items", "2026-09-08T15:00:00.000Z"],
+      ["Book the repairs", null],
+      ["Get the sign-off", null],
+    ]);
+    task(2, { title: "Send the weekly progress update", assignee_id: employee, created_by: admin, due_date: "2026-09-18", recurrence: "weekly", notified_assignee_id: employee, created_at: "2026-09-03T14:00:00.000Z" }, [
+      ["Gather this week's photos", null],
+      ["Email the summary", null],
+    ]);
+    task(3, { title: "Renew my first aid certificate", assignee_id: employee, created_by: employee, priority: "low", created_at: "2026-09-05T14:00:00.000Z" });
+    task(4, { title: "Order the new signage", assignee_id: employee, created_by: admin, due_date: "2026-09-08", notified_assignee_id: employee, completed_at: "2026-09-07T16:00:00.000Z", completed_by: employee, created_at: "2026-08-28T14:00:00.000Z" }, [
+      ["Confirm sizes with the office", "2026-09-07T16:00:00.000Z"],
+    ]);
+    task(5, { title: "Complete the onboarding checklist", assignee_id: p("staff-invited"), created_by: admin, due_date: "2026-10-09", created_at: "2026-09-10T14:00:00.000Z" }, [
+      ["Read the safety SOP", null],
+      ["Set up payroll details", null],
+    ]);
+    task(6, { title: "Collect photos for the showcase page", assignee_id: profiles[2].id, created_by: admin, due_date: "2026-09-25", campaign_id: p("campaign-1"), notified_assignee_id: profiles[2].id, created_at: "2026-09-04T14:00:00.000Z" });
+  }
 
   // Links to outside tools (Kingdom only).
   const externalLinks: ExternalLink[] = (spec.links ?? []).map((link, i) => ({
@@ -1326,7 +1384,7 @@ function build(company: Company): CompanyBundle {
     reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
   }
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
+  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

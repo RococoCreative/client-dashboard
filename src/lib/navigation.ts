@@ -2,9 +2,9 @@
 // belongs to, and the module it needs, so the sidebar is the same code for every company and only
 // its data differs. Every company reads the same sections: Home, Sales & Finance, Production,
 // People, Resources, then My GSR and Settings at the bottom. A module adds or hides whole items
-// (Wins, Reporting, Controls, Projects, Links), never a company name.
+// (Wins, Tasks, Reporting, Controls, Projects, Links), never a company name.
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
 import type { Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
@@ -46,6 +46,7 @@ const EMPLOYEE_GROUP_LABELS: Partial<Record<NavGroup, string>> = { people_hr: "M
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: "dashboard", to: "/", label: "Home", icon: LayoutDashboard, end: true, audience: "both", group: "home" },
   { id: "wins", to: "/wins", label: "Wins", icon: Trophy, audience: "both", group: "home", requires: "wins" },
+  { id: "tasks", to: "/tasks", label: "Tasks", icon: ListChecks, audience: "both", group: "home", requires: "tasks" },
   { id: "sales-reporting", to: "/sales-finance", label: "Reporting", icon: ChartColumn, end: true, audience: "admin", group: "sales_finance", requires: "data_sources" },
   { id: "controls", to: "/sales-finance/controls", label: "Controls", icon: ShieldCheck, audience: "admin", group: "sales_finance", requires: "data_sources" },
   { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance" },

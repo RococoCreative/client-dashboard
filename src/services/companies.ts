@@ -1,10 +1,11 @@
 // Data layer for companies and their sign-in domains. Members read their own company;
-// company admins may rename it and set a logo; slug, theme, modules, domains, and creation are
-// Rococo-only, enforced by RLS and the guard_company_fields trigger, not by this module.
+// company admins may rename it, set a logo and set its time zone (which the database checks is a
+// real named zone, 0037); slug, theme, modules, domains, and creation are Rococo-only, enforced
+// by RLS and the guard_company_fields trigger, not by this module.
 import { db } from "./supabase.ts";
 import type { Company, CompanyDomain, ThemeKey } from "../types/database.ts";
 
-const COLUMNS = "id, slug, name, theme_key, logo_url, modules, created_at, updated_at";
+const COLUMNS = "id, slug, name, theme_key, logo_url, modules, time_zone, created_at, updated_at";
 const DOMAIN_COLUMNS = "domain, company_id, created_at";
 
 export async function listCompanies(): Promise<Company[]> {
@@ -25,7 +26,7 @@ export async function createCompany(input: { slug: string; name: string; theme_k
   return data as Company;
 }
 
-export type CompanyPatch = Partial<Pick<Company, "name" | "logo_url" | "theme_key" | "slug" | "modules">>;
+export type CompanyPatch = Partial<Pick<Company, "name" | "logo_url" | "theme_key" | "slug" | "modules" | "time_zone">>;
 
 export async function updateCompany(id: string, patch: CompanyPatch): Promise<Company> {
   const { data, error } = await db().from("companies").update(patch).eq("id", id).select(COLUMNS).single();

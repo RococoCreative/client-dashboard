@@ -18,6 +18,8 @@ export interface Company {
   logo_url: string | null;
   // Module keys a Rococo admin switched on (0024). Raw text[]: unknown keys are allowed and ignored; read only through lib/modules.ts.
   modules: string[];
+  // The company's own named time zone (0037), America/New_York unless an admin sets another. A repeating task's next due date counts from the day here.
+  time_zone: string;
   created_at: string;
   updated_at: string;
 }
@@ -707,6 +709,24 @@ export interface MarketingCampaign {
   created_at: string;
   updated_at: string;
 }
+
+// Tasks
+// A task's priority (0036).
+export type TaskPriority = "low" | "medium" | "high";
+// How often a task repeats (0036); completing one opens the next copy, dated by the database.
+export type TaskRecurrence = "daily" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
+// A task a company assigns to a person (0036). Only the database writes next_task_id and notified_assignee_id.
+export interface Task {
+  id: string; company_id: string; title: string; description: string | null;
+  assignee_id: string | null; created_by: string | null; due_date: string | null;
+  priority: TaskPriority; recurrence: TaskRecurrence | null; campaign_id: string | null;
+  completed_at: string | null; completed_by: string | null; next_task_id: string | null;
+  notified_assignee_id: string | null; created_at: string; updated_at: string;
+}
+// One checklist line on a task (0036); its company is copied from the task by trigger.
+export interface TaskStep { id: string; task_id: string; company_id: string; title: string; sort_order: number; done_at: string | null; }
+// A task with its steps in order, as the task pages read it (0036).
+export type TaskWithSteps = Task & { steps: TaskStep[] };
 
 export const PERIOD_TYPE_LABELS: Record<PeriodType, string> = {
   month: "Monthly",
