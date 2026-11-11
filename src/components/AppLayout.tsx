@@ -38,8 +38,8 @@ function NavEntry({ item, count = 0 }: { item: NavItem; count?: number }) {
       <span>{item.label}</span>
       {count > 0 ? (
         <Badge tone="accent" className="ml-auto tabular-nums">
-          {count}
-          <span className="sr-only"> open</span>
+          <span aria-hidden>{count}</span>
+          <span className="sr-only">{`, ${count} open`}</span>
         </Badge>
       ) : null}
     </>

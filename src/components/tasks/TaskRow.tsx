@@ -21,9 +21,9 @@ export default function TaskRow({ task, assigneeName, today, showAssignee }: { t
   const who = task.assignee_id === null ? "Unassigned" : assigneeName;
   return (
     <li>
-      <Link to={`/tasks/${task.id}`} className="flex items-center gap-3 px-5 py-3 transition-colors duration-150 hover:bg-surface-2/60">
-        <div className="min-w-0 flex-1">
-          <p className={`truncate text-sm font-medium ${done ? "text-ink-2 line-through" : "text-ink"}`}>{task.title}</p>
+      <Link to={`/tasks/${task.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 transition-colors duration-150 hover:bg-surface-2/60">
+        <div className="min-w-0 flex-1 basis-40">
+          <p className={`line-clamp-2 break-words text-sm sm:line-clamp-1 sm:truncate font-medium ${done ? "text-ink-2 line-through" : "text-ink"}`}>{task.title}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-ink-2">
             {showAssignee && who ? (
               <>
@@ -31,7 +31,7 @@ export default function TaskRow({ task, assigneeName, today, showAssignee }: { t
                 <Dot />
               </>
             ) : null}
-            <span className={overdue ? "text-danger" : undefined}>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</span>
+            <span className={`whitespace-nowrap ${overdue ? "text-danger" : ""}`}>{task.due_date ? `Due ${formatDate(task.due_date)}` : "No due date"}</span>
             {task.recurrence ? (
               <>
                 <Dot />

@@ -312,7 +312,7 @@ export default function MarketingPage() {
             {keysOf(CAMPAIGN_STATUS_LABELS).map((status) => {
               const column = campaigns.filter((c) => c.status === status).sort((a, b) => a.sort_order - b.sort_order);
               return (
-                <section key={status} className="rounded-lg border border-line bg-bg/40 p-3">
+                <section key={status} className="min-w-0 rounded-lg border border-line bg-bg/40 p-3">
                   <header className="mb-3 flex items-center justify-between px-1">
                     <h2 className="text-[11px] font-medium uppercase tracking-label text-ink-3">{CAMPAIGN_STATUS_LABELS[status]}</h2>
                     <span className="tnum text-[11px] text-ink-3">{column.length}</span>

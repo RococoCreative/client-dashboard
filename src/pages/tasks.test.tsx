@@ -449,6 +449,7 @@ describe("tasks: the sidebar count", () => {
     renderLayout(rbaEmployee);
     await waitFor(() => expect(within(tasksLink()).getByText(String(expected))).toBeInTheDocument());
     expect(tasksLink()).toHaveAttribute("href", "/tasks");
+    expect(tasksLink()).toHaveAccessibleName(`Tasks, ${expected} open`);
   });
 
   it("gives a Klasik employee no Tasks item and asks for no count", () => {
