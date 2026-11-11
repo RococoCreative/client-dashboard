@@ -497,8 +497,9 @@ and the RBA theme picks them up without a code change.
 - `src/test/`: fixtures and the mocked services the page tests render against.
 - `demo/`: the demo-mode entry that runs the app on those mocks (`npm run demo`).
 - `supabase/migrations/`: the schema, RLS, triggers, storage policies, and seed.
-- `supabase/functions/`: the `connections` Edge Function and `_shared/` (provider keys and the
-  pure sync modules: parse, keys, schedule, runner, tick, links, Google Sheets, QuickBooks).
+- `supabase/functions/`: the `connections` and `notify` Edge Functions and `_shared/` (provider
+  keys and the pure sync modules: parse, keys, schedule, runner, tick, links, Google Sheets,
+  QuickBooks).
 - `supabase/tests/`: the SQL harness and one test file per migration.
 - `docs/`: designs for work that is specified but not built.
 
@@ -546,6 +547,30 @@ All three provider apps (HighLevel, Intuit and Google) must list the same single
 `https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until the keys are in
 place, Connect answers with a plain "not set up yet" line and nothing else changes. Deploy with
 `supabase functions deploy connections --no-verify-jwt`.
+
+## The notify function
+
+`supabase/functions/notify` sends the task assignment email. The app calls
+`POST /functions/v1/notify` with `{ task_id }` after a task is saved with a new assignee, and it
+answers `{ sent: true }` or `{ sent: false }`. Any active, signed-in person who can see the task
+may call it; the function reads the task on the caller's own JWT, so row level security decides.
+It sends only when the assignee is someone other than the caller, has signed in, is active, and
+has not already been emailed about this assignment. It claims the send in one update of
+`tasks.notified_assignee_id`, which the browser can never write, so one assignment gets at most
+one email; if Resend refuses the message, the claim is released and a later save can try again.
+Saving a task never depends on the email.
+
+It is the only place the Resend key lives. It needs these secrets (Dashboard, Edge Functions,
+Secrets):
+
+- `RESEND_API_KEY`: a Resend API key with sending access, restricted to the sending domain.
+- `TASKS_FROM_EMAIL`: the sending address, `tasks@companyhub.rocococreative.io`. The sender name
+  is the company's name.
+
+The task link starts from the first entry of `APP_ORIGINS`, the secret the connections function
+already uses, and falls back to the caller's origin. Until the key and address are set, the
+function answers "Task emails are not set up yet." and claims nothing. Deploy with the gateway's
+JWT check on: `supabase functions deploy notify`.
 
 ## Data sources and Google setup
 

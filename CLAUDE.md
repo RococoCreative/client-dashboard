@@ -67,7 +67,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    QuickBooks account through the app's own OAuth flow in the `connections` Edge Function
    (`supabase/functions/connections`), never through anything of Rococo's. Provider tokens
    live in `connection_tokens`, which only that function reads; the browser sees status rows
-   and never calls a provider.
+   and never calls a provider. The `notify` Edge Function (`supabase/functions/notify`) sends the
+   task assignment email through Resend and is the only place the Resend key lives.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule and its one exception, a Monthly GSRs pillar with no locked month, which
