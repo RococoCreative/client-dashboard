@@ -1,11 +1,12 @@
 // The tasks service on the in-memory fixtures, for page tests and the demo. Same exports as
 // src/services/tasks.ts, and it plays the triggers of 0036 so a page sees what the database would
 // decide: ticking the last step completes a task and unticking one reopens it, completing a
-// repeating task opens one next copy dated forward from its due date, a completed copy whose next
-// one is open is locked, and deleting the open copy ends the series. tasks.test.ts pins all of it.
+// repeating task opens one next copy dated forward from its due date past today in the company's
+// own time zone (0037), a completed copy whose next one is open is locked, and deleting the open
+// copy ends the series. tasks.test.ts pins all of it.
 import type { Task, TaskPriority, TaskRecurrence, TaskStep, TaskWithSteps } from "../../types/database.ts";
-import { todayIso } from "../../lib/format.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { timeZoneOf } from "./companies.ts";
 import { companyOf } from "./profiles.ts";
 
 const tasks: Task[] = fromAll((b) => b.tasks).map((x) => ({ ...x }));
@@ -91,10 +92,18 @@ function addMonths(date: string, months: number): string {
   return iso(new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))));
 }
 
-// recur_task: whole intervals forward from the due date until the date falls after today.
+// Today's date (YYYY-MM-DD) in a named time zone: the (now() at time zone tz)::date of 0037.
+function todayIn(timeZone: string): string {
+  const fields = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => fields.find((f) => f.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+// recur_task: whole intervals forward from the due date until the date falls after today, where
+// today is the day in the task's company time zone, not the browser's or UTC's.
 function nextDueDate(task: Task): string {
   const from = task.due_date!;
-  const today = todayIso();
+  const today = todayIn(timeZoneOf(task.company_id));
   const days = DAYS[task.recurrence!];
   if (days !== undefined) {
     const [fy, fm, fd] = parts(from);

@@ -504,6 +504,31 @@ describe("admin", () => {
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
 
+  it("saves the company's time zone and refuses one that is not a real zone", async () => {
+    const user = userEvent.setup();
+    const { getCompany, updateCompany } = await import("../services/companies.ts");
+    const companyId = admin.company!.id;
+    onTestFinished(async () => {
+      await updateCompany(companyId, { time_zone: "America/New_York" });
+    });
+    renderWithHub(<SettingsPage tab="company" />, admin);
+    const field = await screen.findByLabelText("Time zone");
+    expect(field).toHaveValue("America/New_York");
+    expect(screen.getByText("Used for due dates on repeating tasks.")).toBeInTheDocument();
+
+    await user.clear(field);
+    await user.type(field, "Mars/Olympus_Mons");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("That time zone is not recognized.")).toBeInTheDocument();
+    expect((await getCompany(companyId)).time_zone).toBe("America/New_York");
+
+    await user.clear(field);
+    await user.type(field, "America/Chicago");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved.")).toBeInTheDocument();
+    expect((await getCompany(companyId)).time_zone).toBe("America/Chicago");
+  });
+
   it("shows the portfolio with a card and signals per company", async () => {
     renderWithHub(<PortfolioPage />, rococo, { path: "/rococo", pattern: "/rococo" });
     expect(await screen.findByRole("heading", { name: "Portfolio" })).toBeInTheDocument();

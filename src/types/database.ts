@@ -18,6 +18,8 @@ export interface Company {
   logo_url: string | null;
   // Module keys a Rococo admin switched on (0024). Raw text[]: unknown keys are allowed and ignored; read only through lib/modules.ts.
   modules: string[];
+  // The company's own named time zone (0037), America/New_York unless an admin sets another. A repeating task's next due date counts from the day here.
+  time_zone: string;
   created_at: string;
   updated_at: string;
 }

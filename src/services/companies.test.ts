@@ -12,7 +12,7 @@ vi.mock("./supabase.ts", () => {
   return { db: () => ({ from: () => builder }) };
 });
 
-const COLUMNS = "id, slug, name, theme_key, logo_url, modules, created_at, updated_at";
+const COLUMNS = "id, slug, name, theme_key, logo_url, modules, time_zone, created_at, updated_at";
 
 describe("companies service columns", () => {
   beforeEach(() => {

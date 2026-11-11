@@ -9,6 +9,10 @@
 -- Runs inside one transaction the harness opens and rolls back; never begin or commit here.
 
 -- Setup, as system.
+-- Recurrence counts from the company's own day (0037). The cases below compare with
+-- current_date, so the session and RBA read the same zone whatever the hour.
+set local timezone = 'UTC';
+update public.companies set time_zone = 'UTC' where slug = 'rba';
 select tests.create_person('rba_admin', tests.company('rba'), 'admin');
 select tests.create_person('rba_employee', tests.company('rba'));
 select tests.create_person('rba_other', tests.company('rba'));

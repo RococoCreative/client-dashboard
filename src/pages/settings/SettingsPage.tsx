@@ -1,6 +1,6 @@
 // Settings, for a company admin: one page, one tab per area, each tab its own route.
-//   Company: name and logo, plus the theme and sign-in domains, which Rococo manages (they decide
-//     who can sign in), so they read only here.
+//   Company: name, logo and time zone, plus the theme and sign-in domains, which Rococo manages
+//     (they decide who can sign in), so they read only here.
 //   Roles: the company's job roles (dashboard modules and scorecard metrics) and its divisions.
 //   Reviews: pillars, weights and criteria, the Monthly GSRs rule, and deliverable categories.
 //   Connections: the company's own connections to outside systems and, with the module, its data
@@ -33,6 +33,11 @@ import { SETTINGS_TABS, type SettingsTab } from "./settingsTabs.ts";
 // A company with data sources also connects its own Google account for them.
 const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
 
+// The named zones the browser knows, offered as suggestions; the database has the final say.
+function timeZones(): string[] {
+  return typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+}
+
 const DESCRIPTIONS: Record<SettingsTab, string> = {
   company: "How the company appears in the hub and who can sign in.",
   roles: "The jobs people do here, what each role sees and is scored on, and the divisions the company reports by.",
@@ -44,6 +49,8 @@ function CompanyTab({ company }: { company: Company }) {
   const { refreshCompanies, isRococo } = useHub();
   const [name, setName] = useState(company.name);
   const [logoUrl, setLogoUrl] = useState(company.logo_url ?? "");
+  const [timeZone, setTimeZone] = useState(company.time_zone);
+  const [zones] = useState(timeZones);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -54,11 +61,13 @@ function CompanyTab({ company }: { company: Company }) {
     event.preventDefault();
     if (busy) return;
     if (!name.trim()) return setError("The company needs a name.");
+    if (!timeZone.trim()) return setError("Choose a time zone.");
     setBusy(true);
     setError("");
     setSaved(false);
     try {
-      await updateCompany(company.id, { name: name.trim(), logo_url: logoUrl.trim() || null });
+      const zone = timeZone.trim();
+      await updateCompany(company.id, { name: name.trim(), logo_url: logoUrl.trim() || null, ...(zone !== company.time_zone ? { time_zone: zone } : {}) });
       await refreshCompanies();
       setSaved(true);
     } catch (err) {
@@ -82,6 +91,12 @@ function CompanyTab({ company }: { company: Company }) {
               <input id="company-logo" type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://" className={inputClass} />
             </Field>
             {logoUrl.trim() ? <img src={logoUrl.trim()} alt="Logo preview" className="h-10 w-auto max-w-[220px] rounded bg-surface-2 p-1 object-contain" /> : null}
+            <Field label="Time zone" htmlFor="company-time-zone" hint="Used for due dates on repeating tasks.">
+              <input id="company-time-zone" type="text" list="company-time-zones" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="America/New_York" autoComplete="off" spellCheck={false} className={inputClass} />
+              <datalist id="company-time-zones">
+                {zones.map((zone) => <option key={zone} value={zone} />)}
+              </datalist>
+            </Field>
             {error ? <Notice tone="error">{error}</Notice> : null}
             {saved ? <Notice tone="success">Saved.</Notice> : null}
           </div>

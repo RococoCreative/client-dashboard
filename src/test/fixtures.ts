@@ -16,10 +16,10 @@ const EARLIER = "2026-08-04T15:30:00.000Z";
 const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
   // RBA has the task tracker on and nothing else.
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [

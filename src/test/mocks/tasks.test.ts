@@ -1,9 +1,10 @@
-// Pins that the tasks mock behaves as the database does (0036): steps complete and reopen their
-// task, a repeating task opens one next copy dated forward from its due date, a completed copy
-// with its next one open stays shut, and nothing crosses a company. Page tests and the demo rely
-// on the mock telling the same story the triggers would.
-import { describe, expect, it } from "vitest";
+// Pins that the tasks mock behaves as the database does (0036, 0037): steps complete and reopen
+// their task, a repeating task opens one next copy dated forward from its due date past today in
+// its company's time zone, a completed copy with its next one open stays shut, and nothing crosses
+// a company. Page tests and the demo rely on the mock telling the same story the triggers would.
+import { describe, expect, it, onTestFinished } from "vitest";
 import { KINGDOM, RBA } from "../fixtures.ts";
+import { updateCompany } from "./companies.ts";
 import { addStep, completeTask, countOpenTasks, createTask, deleteTask, getTask, listTasks, moveStep, reopenTask, setStepDone } from "./tasks.ts";
 
 const rba = RBA.company.id;
@@ -116,6 +117,19 @@ describe("repeating tasks", () => {
     const task = await createTask({ company_id: rba, title: "Daily sweep", assignee_id: jamie, due_date: "2026-09-15", recurrence: "daily", steps: ["Sweep"] });
     const done = await setStepDone(task.steps[0].id, true);
     expect((await getTask(done.next_task_id!)).due_date).toBe("2026-09-16");
+  });
+
+  it("counts today in the company's time zone, so a daily task done where it is already tomorrow lands the day after", async () => {
+    // The suite's clock is 2026-09-15 12:00 UTC, which is already 2026-09-16 in Kiritimati (UTC+14).
+    await updateCompany(rba, { time_zone: "Pacific/Kiritimati" });
+    onTestFinished(async () => {
+      await updateCompany(rba, { time_zone: "America/New_York" });
+    });
+    const task = await createTask({ company_id: rba, title: "Daily far east", assignee_id: jamie, due_date: "2026-09-16", recurrence: "daily" });
+    const done = await completeTask(task.id);
+    expect((await getTask(done.next_task_id!)).due_date).toBe("2026-09-17");
+    const late = await completeTask((await createTask({ company_id: rba, title: "Daily far east late", assignee_id: jamie, due_date: "2026-09-14", recurrence: "daily" })).id);
+    expect((await getTask(late.next_task_id!)).due_date).toBe("2026-09-17");
   });
 
   it("reopenTask on a completed task with next_task_id rejects with \"The next one is already open.\"", async () => {
