@@ -1,8 +1,9 @@
 // The Tasks module's pages against the mocked data layer: what an employee and an admin each see,
 // adding a task, the assignment email and what happens when it fails, and one task's own page with
 // its steps, completion, the lock on a finished repeat, editing and deleting; then the module gate,
-// the routes, and the open count beside Tasks in the sidebar. Same mock block as
-// pages.test.tsx plus the tasks service, so no test here reaches the network.
+// the routes, the open count beside Tasks in the sidebar, and the tasks a campaign and a person
+// page show. Same mock block as pages.test.tsx plus the tasks service, so no test here reaches
+// the network.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
@@ -42,6 +43,8 @@ import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import AppLayout from "../components/AppLayout.tsx";
 import { ModuleOnly, TaskRoute } from "../App.tsx";
+import MarketingPage from "./MarketingPage.tsx";
+import PersonPage from "./people/PersonPage.tsx";
 import TaskPage from "./tasks/TaskPage.tsx";
 import TasksPage from "./tasks/TasksPage.tsx";
 
@@ -115,6 +118,18 @@ function spyCreate() {
   const spy = vi.spyOn(tasksService, "createTask");
   onTestFinished(() => spy.mockRestore());
   return spy;
+}
+function spyList() {
+  const spy = vi.spyOn(tasksService, "listTasks");
+  onTestFinished(() => spy.mockRestore());
+  return spy;
+}
+function renderPerson(id: string, hub: HubValue) {
+  return renderWithHub(<PersonPage />, hub, { path: `/people/${id}`, pattern: "/people/:profileId" });
+}
+// A campaign's card on the Marketing board, found by its name.
+function cardOf(name: string): HTMLElement {
+  return screen.getByRole("heading", { name }).closest("li") as HTMLElement;
 }
 function idFromRow(title: string): string {
   const href = rowOf(title).querySelector("a")?.getAttribute("href") ?? "";
@@ -472,5 +487,93 @@ describe("tasks: the sidebar count", () => {
     await user.click(tasksLink());
     await waitFor(() => expect(within(tasksLink()).getByText("1")).toBeInTheDocument());
     expect(count).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Kingdom's board, because a Task page test above adds a task to RBA's first campaign.
+describe("tasks: on a campaign and on a person", () => {
+  it("shows each campaign's tasks done out of its tasks, and adds one with the campaign filled in", async () => {
+    const user = userEvent.setup();
+    const notify = spyNotify();
+    const list = spyList();
+    renderWithHub(<MarketingPage />, kingdomAdmin, { path: "/marketing", pattern: "/marketing" });
+    const card = await waitFor(() => {
+      const found = cardOf("Spring remodel showcase");
+      within(found).getByText("0 of 1 tasks done");
+      return found;
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledWith(KINGDOM.company.id, { status: "all" });
+    expect(within(cardOf("Referral thank-you program")).getByText("0 of 0 tasks done")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: /0 of 1 tasks done/ }));
+    expect(within(card).getByText("Collect photos for the showcase page")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Add a task" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Campaign")).toHaveValue("kingdom-campaign-1");
+    await user.type(within(dialog).getByLabelText("Title"), "Book the drone shoot");
+    await user.selectOptions(within(dialog).getByLabelText("Assignee"), KINGDOM.profiles[1].id);
+    await user.click(within(dialog).getByRole("button", { name: "Add task" }));
+    expect(await within(card).findByText("0 of 2 tasks done")).toBeInTheDocument();
+    expect(within(card).getByText("Book the drone shoot")).toBeInTheDocument();
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so on Marketing when the assignment email does not send", async () => {
+    const user = userEvent.setup();
+    spyNotify().mockRejectedValueOnce(new Error("Task emails are not set up yet."));
+    renderWithHub(<MarketingPage />, kingdomAdmin, { path: "/marketing", pattern: "/marketing" });
+    const card = await waitFor(() => {
+      const found = cardOf("Fall home show booth");
+      within(found).getByText("0 of 0 tasks done");
+      return found;
+    });
+    await user.click(within(card).getByRole("button", { name: /0 of 0 tasks done/ }));
+    await user.click(within(card).getByRole("button", { name: "Add a task" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Title"), "Print the booth banner");
+    await user.selectOptions(within(dialog).getByLabelText("Assignee"), KINGDOM.profiles[1].id);
+    await user.click(within(dialog).getByRole("button", { name: "Add task" }));
+    expect(await screen.findByText("The task was saved. The email did not send.")).toBeInTheDocument();
+    expect(within(card).getByText("0 of 1 tasks done")).toBeInTheDocument();
+  });
+
+  it("shows no task counts on Marketing for a company without the module, and asks for no tasks", async () => {
+    const list = spyList();
+    renderWithHub(<MarketingPage />, makeHub("admin", KLASIK.company), { path: "/marketing", pattern: "/marketing" });
+    await screen.findByRole("heading", { name: "Spring remodel showcase" });
+    expect(screen.queryByText(/tasks done/)).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("lists an employee's open tasks on their person page, each linking to the task", async () => {
+    renderPerson(jamie.id, rbaAdmin);
+    const section = await waitFor(() => screen.getByRole("list", { name: `Open tasks for ${jamie.full_name}` }));
+    const link = within(section).getByRole("link", { name: /Close out the September punch list/ });
+    expect(link).toHaveAttribute("href", "/tasks/rba-task-1");
+    expect(within(section).getByText("Send the weekly progress update")).toBeInTheDocument();
+    expect(within(section).getByText("Renew my first aid certificate")).toBeInTheDocument();
+    expect(within(section).queryByText("Order the new signage")).not.toBeInTheDocument();
+  });
+
+  it("lists the task of someone who has not signed in yet", async () => {
+    const avery = RBA.profiles.find((p) => p.id === "rba-staff-invited")!;
+    renderPerson(avery.id, rbaAdmin);
+    const section = await waitFor(() => screen.getByRole("list", { name: `Open tasks for ${avery.full_name}` }));
+    expect(within(section).getByText("Complete the onboarding checklist")).toBeInTheDocument();
+  });
+
+  it("says when a person has no open tasks", async () => {
+    renderPerson(RBA.profiles[0].id, rbaAdmin);
+    expect(await screen.findByText("No open tasks.")).toBeInTheDocument();
+  });
+
+  it("shows no Tasks section on a person page for a company without the module, and asks for no tasks", async () => {
+    const list = spyList();
+    renderPerson(KLASIK.profiles[1].id, makeHub("admin", KLASIK.company));
+    await screen.findByRole("heading", { name: "Personal KPIs" });
+    expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No open tasks.")).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import StepList from "../../components/tasks/StepList.tsx";
 import TaskForm from "../../components/tasks/TaskForm.tsx";
+import { sendAssignmentEmail } from "../../components/tasks/assignmentEmail.ts";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
@@ -20,7 +21,6 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, todayIso } from "../../lib/format.ts";
 import {
-  EMAIL_NOT_SENT,
   PRIORITY_LABELS,
   RECURRENCE_LABELS,
   canEditTask,
@@ -28,12 +28,11 @@ import {
   isLocked,
   isOverdue,
   percentComplete,
-  shouldNotifyAssignee,
 } from "../../lib/tasks.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
-import { completeTask, deleteTask, getTask, notifyAssignment, reopenTask } from "../../services/tasks.ts";
+import { completeTask, deleteTask, getTask, reopenTask } from "../../services/tasks.ts";
 import type { MarketingCampaign, TaskWithSteps } from "../../types/database.ts";
 
 function Detail({ label, children }: { label: string; children: ReactNode }) {
@@ -103,13 +102,8 @@ export default function TaskPage() {
     setEditing(false);
     setNotice("");
     setTask(saved);
-    if (shouldNotifyAssignee(previous, saved.assignee_id, profileId)) {
-      try {
-        await notifyAssignment(saved.id);
-      } catch {
-        setNotice(EMAIL_NOT_SENT);
-      }
-    }
+    const line = await sendAssignmentEmail(previous, saved, profileId);
+    if (line) setNotice(line);
   }
 
   async function handleDelete() {

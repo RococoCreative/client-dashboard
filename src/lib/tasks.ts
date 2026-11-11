@@ -49,6 +49,14 @@ export function sortTasks<T extends Pick<Task, "due_date" | "priority" | "create
   });
 }
 
+// How a list of tasks is read: open ones in the order they are worked (sortTasks), then finished
+// ones, most recently finished first.
+export function readingOrder<T extends Pick<Task, "due_date" | "priority" | "created_at" | "completed_at">>(tasks: T[]): T[] {
+  const open = sortTasks(tasks.filter((t) => !isDone(t)));
+  const done = tasks.filter(isDone).sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
+  return [...open, ...done];
+}
+
 // A task that has spawned its next occurrence is read-only.
 export function isLocked(task: Pick<Task, "next_task_id">): boolean {
   return task.next_task_id !== null;

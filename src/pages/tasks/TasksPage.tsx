@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import TaskForm from "../../components/tasks/TaskForm.tsx";
 import TaskRow from "../../components/tasks/TaskRow.tsx";
+import { sendAssignmentEmail } from "../../components/tasks/assignmentEmail.ts";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -19,10 +20,10 @@ import { checkboxClass, selectClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
-import { EMAIL_NOT_SENT, PRIORITY_LABELS, isDone, shouldNotifyAssignee, sortTasks } from "../../lib/tasks.ts";
+import { PRIORITY_LABELS, isDone, readingOrder } from "../../lib/tasks.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
-import { listTasks, notifyAssignment } from "../../services/tasks.ts";
+import { listTasks } from "../../services/tasks.ts";
 import type { MarketingCampaign, Profile, TaskPriority, TaskWithSteps } from "../../types/database.ts";
 import { TASKS_TABS, type TasksTab } from "./tasksTabs.ts";
 
@@ -31,13 +32,6 @@ type Status = "open" | "done" | "all";
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
 const STATUS_LABELS: Record<Status, string> = { open: "Open", done: "Done", all: "Open and done" };
 const filterClass = `${selectClass} mt-0 w-auto`;
-
-// Open tasks in the order they are worked (sortTasks), then finished ones, most recent first.
-function readingOrder(tasks: TaskWithSteps[]): TaskWithSteps[] {
-  const open = sortTasks(tasks.filter((t) => !isDone(t)));
-  const done = tasks.filter(isDone).sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
-  return [...open, ...done];
-}
 
 function matchesStatus(task: TaskWithSteps, status: Status): boolean {
   return status === "all" || (status === "done") === isDone(task);
@@ -156,13 +150,8 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
     if (view === "everyone" || task.assignee_id === profileId) {
       state.setData((prev) => (prev ? [...prev, task] : prev));
     }
-    if (shouldNotifyAssignee(undefined, task.assignee_id, profileId)) {
-      try {
-        await notifyAssignment(task.id);
-      } catch {
-        setNotice(EMAIL_NOT_SENT);
-      }
-    }
+    const line = await sendAssignmentEmail(undefined, task, profileId);
+    if (line) setNotice(line);
   }
 
   const empty =

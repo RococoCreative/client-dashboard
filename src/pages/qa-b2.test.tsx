@@ -29,6 +29,7 @@ vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCycle, createPillar, deleteCycle, deletePillar, listCycles, updateReview } from "../services/gsr.ts";

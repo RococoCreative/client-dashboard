@@ -12,6 +12,7 @@ import {
   isLocked,
   isOverdue,
   percentComplete,
+  readingOrder,
   shouldNotifyAssignee,
   sortTasks,
 } from "./tasks.ts";
@@ -124,6 +125,18 @@ describe("canEditTask", () => {
 
   it("stops an employee editing an unassigned task", () => {
     expect(canEditTask({ created_by: "a", assignee_id: null }, { profileId: "a", isAdmin: false })).toBe(false);
+  });
+});
+
+describe("readingOrder", () => {
+  it("puts open tasks first in working order, then finished ones, most recently finished first", () => {
+    const rows = [
+      { ...row("done-early"), completed_at: "2026-09-01T00:00:00Z" },
+      { ...row("open-undated"), completed_at: null },
+      { ...row("done-late"), completed_at: "2026-09-10T00:00:00Z" },
+      { ...row("open-dated", { due_date: "2026-09-20" }), completed_at: null },
+    ];
+    expect(readingOrder(rows).map((t) => t.id)).toEqual(["open-dated", "open-undated", "done-late", "done-early"]);
   });
 });
 
