@@ -51,6 +51,8 @@ import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
 import ActivityPage from "./pages/rococo/ActivityPage.tsx";
+import TasksPage from "./pages/tasks/TasksPage.tsx";
+import TaskPage from "./pages/tasks/TaskPage.tsx";
 import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
 import { SETTINGS_TABS } from "./pages/settings/settingsTabs.ts";
 import type { Company, Profile } from "./types/database.ts";
@@ -133,6 +135,13 @@ export function ModuleOnly({ module, children }: { module: ModuleKey; children: 
   const { company } = useHub();
   if (!company) return <RedirectTo path="/rococo" />;
   return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// One task's page, keyed on the task id, so moving from one task to another starts the page and
+// its checklist fresh instead of carrying the last task's notices and drafts across.
+export function TaskRoute() {
+  const { taskId } = useParams();
+  return <TaskPage key={taskId} />;
 }
 
 function RococoOnly({ children }: { children: ReactNode }) {
@@ -329,6 +338,11 @@ function SignedIn({ session }: { session: Session }) {
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
             <Route path="wins" element={<ModuleOnly module="wins"><WinsPage /></ModuleOnly>} />
+            {/* Tasks: Mine for everyone, Everyone for admins. Everyone is declared before a task's
+                own address so it never reads as a task id. */}
+            <Route path="tasks" element={<ModuleOnly module="tasks"><TasksPage tab="mine" /></ModuleOnly>} />
+            <Route path="tasks/everyone" element={<AdminOnly><ModuleOnly module="tasks"><TasksPage tab="everyone" /></ModuleOnly></AdminOnly>} />
+            <Route path="tasks/:taskId" element={<ModuleOnly module="tasks"><TaskRoute /></ModuleOnly>} />
             {/* Two sections keyed on cadence: Monthly GSRs (monthly) and Reviews (every scored
                 cadence). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}

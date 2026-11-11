@@ -4,7 +4,7 @@
 // sees the standard hub.
 import type { Company } from "../types/database.ts";
 
-export const MODULE_KEYS = ["switchboard", "production", "wins", "data_sources", "external_links"] as const;
+export const MODULE_KEYS = ["switchboard", "production", "wins", "data_sources", "external_links", "tasks"] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -13,6 +13,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   wins: "Wins",
   data_sources: "Data sources",
   external_links: "External links",
+  tasks: "Tasks",
 };
 
 // One plain line each, shown under the checkbox on Rococo > Companies.
@@ -22,6 +23,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   wins: "The wins page and the Home wins card.",
   data_sources: "Connected Google Sheets and QuickBooks sources, Sales & Finance, and data freshness.",
   external_links: "Links to outside tools, such as Monday: Resources, Links, the Home card, and each section's page.",
+  tasks: "Tasks assigned to people, with due dates, steps, and repeats, and the tasks behind each marketing campaign.",
 };
 
 export function isModuleKey(value: string): value is ModuleKey {

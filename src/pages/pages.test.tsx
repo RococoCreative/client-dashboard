@@ -30,6 +30,7 @@ vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts")
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { addBackToCycle, createGoal, createPillar, ensureReview, listPillars, omitFromCycle, updatePillar, updateReview } from "../services/gsr.ts";
@@ -537,7 +538,7 @@ describe("admin", () => {
   it("reads the audit log on the Activity tab, newest first", async () => {
     renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
     expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
-    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links")).toBeInTheDocument();
+    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links, tasks")).toBeInTheDocument();
     expect(screen.getByText("profiles: role employee to admin")).toBeInTheDocument();
     expect(screen.getByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
     const rows = screen.getAllByRole("row").slice(1);
@@ -586,7 +587,7 @@ describe("admin", () => {
     onTestFinished(() => spy.mockRestore());
     renderWithHub(<ActivityPage />, rococo, { path: "/rococo/activity", pattern: "/rococo/activity" });
     await user.click(await screen.findByRole("button", { name: "Load more" }));
-    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links")).toBeInTheDocument();
+    expect(await screen.findByText("companies: modules none to switchboard, production, wins, data_sources, external_links, tasks")).toBeInTheDocument();
     expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ before: { created_at: shared, id: "audit-1b" } }));
     expect(screen.getByText("invitations: added (role employee, email new.hire@beklasik.com)")).toBeInTheDocument();
     expect(screen.getAllByRole("row")).toHaveLength(104);
@@ -657,10 +658,10 @@ describe("navigation and modules", () => {
     const kingdom = await screen.findByRole("group", { name: "Modules for Kingdom Custom Construction" });
     const klasik = screen.getByRole("group", { name: "Modules for Klasik Construction" });
     const kingdomBoxes = within(kingdom).getAllByRole("checkbox");
-    expect(kingdomBoxes).toHaveLength(5);
+    expect(kingdomBoxes).toHaveLength(6);
     for (const box of kingdomBoxes) expect(box).toBeChecked();
     const klasikBoxes = within(klasik).getAllByRole("checkbox");
-    expect(klasikBoxes).toHaveLength(5);
+    expect(klasikBoxes).toHaveLength(6);
     for (const box of klasikBoxes) expect(box).not.toBeChecked();
 
     // Checked and unchecked again, so the shared mock store is back to [] for later tests.

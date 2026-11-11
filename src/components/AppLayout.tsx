@@ -2,17 +2,21 @@
 // person's role in its sections (the same sections for every company), and the account footer.
 // Rococo admins get the portfolio nav when no company is active, and inside a company a way
 // back plus the switcher. Collapses to a top bar on small screens. The content area remounts when the active company changes so every page
-// refetches for the new tenant.
-import { useEffect, useRef } from "react";
+// refetches for the new tenant. Beside Tasks sits the signed-in person's open count, asked for
+// again on every page change rather than polled.
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ArrowLeft, LogOut } from "lucide-react";
 import Avatar from "./ui/Avatar.tsx";
+import Badge from "./ui/Badge.tsx";
 import IconButton from "./ui/IconButton.tsx";
 import { labelClass, selectClass } from "./ui/forms.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { signOut } from "../services/auth.ts";
+import { countOpenTasks } from "../services/tasks.ts";
 import { displayName } from "../lib/format.ts";
 import { applyTheme } from "../lib/theme.ts";
+import { hasModule } from "../lib/modules.ts";
 import { PORTFOLIO_NAV, alsoActiveFor, navFor, type NavItem, type NavLayout, type NavSection } from "../lib/navigation.ts";
 import { ROLE_LABELS } from "../types/database.ts";
 
@@ -20,15 +24,24 @@ const entryClass = (active: boolean) =>
   "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors duration-150 lg:py-1.5 " +
   (active ? "bg-accent/10 font-medium text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink");
 
+// Counts shown beside sidebar items, by item id. Only a count above zero shows.
+type NavCounts = Partial<Record<string, number>>;
+
 // One sidebar link. An item that owns other paths too (SOPs owns /sops/:id) is marked current on
 // them as well, the way the router marks its own path.
-function NavEntry({ item }: { item: NavItem }) {
+function NavEntry({ item, count = 0 }: { item: NavItem; count?: number }) {
   const Icon = item.icon;
   const { pathname } = useLocation();
   const body = (
     <>
       <Icon size={15} aria-hidden />
       <span>{item.label}</span>
+      {count > 0 ? (
+        <Badge tone="accent" className="ml-auto tabular-nums">
+          {count}
+          <span className="sr-only"> open</span>
+        </Badge>
+      ) : null}
     </>
   );
   if (alsoActiveFor(item, pathname)) {
@@ -47,7 +60,7 @@ function NavEntry({ item }: { item: NavItem }) {
 
 // One section of the sidebar. Its heading shows only at lg, so the small-screen bar stays one
 // horizontal row; the bottom group has no heading and a hairline instead.
-function NavSectionGroup({ section }: { section: NavSection }) {
+function NavSectionGroup({ section, counts }: { section: NavSection; counts: NavCounts }) {
   const utility = section.group === "utility";
   return (
     <div
@@ -60,7 +73,7 @@ function NavSectionGroup({ section }: { section: NavSection }) {
     >
       {section.heading ? <p className="eyebrow hidden px-3 pt-1 pb-0.5 text-[10px] text-ink-3 lg:block">{section.heading}</p> : null}
       {section.items.map((item) => (
-        <NavEntry key={item.id} item={item} />
+        <NavEntry key={item.id} item={item} count={counts[item.id]} />
       ))}
     </div>
   );
@@ -77,6 +90,26 @@ export default function AppLayout() {
   const layout: NavLayout = portfolio
     ? { kind: "flat", items: [...PORTFOLIO_NAV] }
     : company ? navFor(company, isAdmin, isRococo) : { kind: "flat", items: [] };
+
+  // The open count beside Tasks is the signed-in person's own, so it is asked for only by someone
+  // whose profile is in this company, never a Rococo admin stepped in. A failed count shows nothing.
+  const countCompanyId = !portfolio && !isRococo && company && profile.company_id === company.id && hasModule(company, "tasks") ? company.id : null;
+  const [openTasks, setOpenTasks] = useState<{ companyId: string; count: number } | null>(null);
+  useEffect(() => {
+    if (!countCompanyId) return;
+    let active = true;
+    countOpenTasks(countCompanyId, profile.id)
+      .then((count) => {
+        if (active) setOpenTasks({ companyId: countCompanyId, count });
+      })
+      .catch(() => {
+        if (active) setOpenTasks(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [countCompanyId, profile.id, location.pathname]);
+  const counts: NavCounts = countCompanyId && openTasks?.companyId === countCompanyId ? { tasks: openTasks.count } : {};
 
   // The bar scrolls on its own (sideways on a phone, down on a short laptop screen), so the current
   // page's item is brought into view within it, without moving the page itself.
@@ -146,7 +179,7 @@ export default function AppLayout() {
         <nav ref={navRef} className="flex gap-1 overflow-x-auto px-3 py-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto" aria-label="Primary">
           {layout.kind === "flat"
             ? layout.items.map((item) => <NavEntry key={item.id} item={item} />)
-            : layout.sections.map((section) => <NavSectionGroup key={section.group} section={section} />)}
+            : layout.sections.map((section) => <NavSectionGroup key={section.group} section={section} counts={counts} />)}
         </nav>
 
         <footer className="hidden items-center gap-3 border-t border-line px-4 py-3 lg:flex">

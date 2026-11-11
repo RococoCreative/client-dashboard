@@ -3,7 +3,7 @@
 // whole items, so the sidebar for each audience is written out here in full: an admin and an
 // employee of a company with no modules, of one with every module, and a Rococo admin inside each.
 import { describe, expect, it } from "vitest";
-import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
 import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, type NavItem, type NavLayout } from "./navigation.ts";
@@ -13,6 +13,7 @@ type Sections = Array<[string | null, Expected[]]>;
 
 const HOME: Expected = { to: "/", label: "Home", icon: LayoutDashboard, end: true };
 const WINS: Expected = { to: "/wins", label: "Wins", icon: Trophy };
+const TASKS: Expected = { to: "/tasks", label: "Tasks", icon: ListChecks };
 const REPORTING: Expected = { to: "/sales-finance", label: "Reporting", icon: ChartColumn, end: true };
 const CONTROLS: Expected = { to: "/sales-finance/controls", label: "Controls", icon: ShieldCheck };
 const FINANCIALS: Expected = { to: "/financials", label: "Financials", icon: CircleDollarSign };
@@ -32,7 +33,7 @@ const LINKS: Expected = { to: "/resources/links", label: "Links", icon: External
 const MY_GSR_ADMIN: Expected = { to: "/my/gsr", label: "My GSR", icon: UserRound };
 const SETTINGS: Expected = { to: "/settings", label: "Settings", icon: Settings };
 
-// A company with no modules on (Klasik and RBA in the fixtures).
+// A company with no modules on (Klasik in the fixtures).
 const PLAIN_ADMIN: Sections = [
   [null, [HOME]],
   ["Sales & Finance", [FINANCIALS, MARKETING]],
@@ -49,7 +50,7 @@ const PLAIN_ROCOCO: Sections = [...PLAIN_ADMIN.slice(0, 4), [null, [SETTINGS]]];
 
 // A company with every module on (Kingdom in the fixtures).
 const FULL_ADMIN: Sections = [
-  [null, [HOME, WINS]],
+  [null, [HOME, WINS, TASKS]],
   ["Sales & Finance", [REPORTING, CONTROLS, FINANCIALS, MARKETING]],
   ["Production", [PROJECTS]],
   ["People", [PEOPLE, GOALS, GSRS, REVIEWS, SCORECARDS]],
@@ -57,7 +58,7 @@ const FULL_ADMIN: Sections = [
   [null, [MY_GSR_ADMIN, SETTINGS]],
 ];
 const FULL_EMPLOYEE: Sections = [
-  [null, [HOME, WINS]],
+  [null, [HOME, WINS, TASKS]],
   ["Production", [PROJECTS]],
   ["My development", [MY_GSR, MY_REVIEWS, MY_GOALS]],
   ["Resources", [SOPS, FILES, LINKS]],
@@ -105,10 +106,11 @@ describe("navFor for a company with no modules", () => {
     expect(read(navFor(klasik, true, true))).toEqual(expected(PLAIN_ROCOCO));
   });
 
-  it("gives RBA the same three sidebars, since its modules are the same", () => {
-    expect(read(navFor(rba, true, false))).toEqual(expected(PLAIN_ADMIN));
-    expect(read(navFor(rba, false, false))).toEqual(expected(PLAIN_EMPLOYEE));
-    expect(read(navFor(rba, true, true))).toEqual(expected(PLAIN_ROCOCO));
+  it("gives RBA the same three sidebars plus Tasks, the one module it has on", () => {
+    const withTasks = (sections: Sections): Sections => [[null, [HOME, TASKS]], ...sections.slice(1)];
+    expect(read(navFor(rba, true, false))).toEqual(expected(withTasks(PLAIN_ADMIN)));
+    expect(read(navFor(rba, false, false))).toEqual(expected(withTasks(PLAIN_EMPLOYEE)));
+    expect(read(navFor(rba, true, true))).toEqual(expected(withTasks(PLAIN_ROCOCO)));
   });
 
   it("ignores an unknown module key entirely", () => {
@@ -141,9 +143,10 @@ describe("each module adds only its own items", () => {
     ["production", [PROJECTS]],
     ["data_sources", [REPORTING, CONTROLS]],
     ["external_links", [LINKS]],
+    ["tasks", [TASKS]],
   ] as const)("%s adds %j and nothing else", (module, items) => {
     const company = { ...klasik, modules: [module] };
-    const others = [WINS, PROJECTS, REPORTING, CONTROLS, LINKS].filter((i) => !(items as readonly Expected[]).includes(i));
+    const others = [WINS, TASKS, PROJECTS, REPORTING, CONTROLS, LINKS].filter((i) => !(items as readonly Expected[]).includes(i));
     expect(read(navFor(company, true, false))).toEqual(expected(without(FULL_ADMIN, others)));
     expect(read(navFor(company, false, false))).toEqual(expected(without(FULL_EMPLOYEE, others)));
   });
@@ -152,6 +155,23 @@ describe("each module adds only its own items", () => {
     const company = { ...klasik, modules: ["switchboard"] };
     expect(read(navFor(company, true, false))).toEqual(expected(PLAIN_ADMIN));
     expect(read(navFor(company, false, false))).toEqual(expected(PLAIN_EMPLOYEE));
+  });
+});
+
+describe("the Tasks item", () => {
+  const labels = (layout: NavLayout) => sectionsOf(layout).flatMap((s) => s.items.map((i) => i.label));
+
+  it("shows for an admin and an employee of a company with the module, and for neither without it", () => {
+    const on = { ...klasik, modules: ["tasks"] };
+    expect(labels(navFor(on, true, false))).toContain("Tasks");
+    expect(labels(navFor(on, false, false))).toContain("Tasks");
+    expect(labels(navFor(klasik, true, false))).not.toContain("Tasks");
+    expect(labels(navFor(klasik, false, false))).not.toContain("Tasks");
+  });
+
+  it("sits in the Home group, right after Wins", () => {
+    const home = sectionsOf(navFor(kingdom, false, false))[0];
+    expect(home.items.map((i) => i.id)).toEqual(["dashboard", "wins", "tasks"]);
   });
 });
 

@@ -1,8 +1,9 @@
 // The Tasks module's pages against the mocked data layer: what an employee and an admin each see,
 // adding a task, the assignment email and what happens when it fails, and one task's own page with
-// its steps, completion, the lock on a finished repeat, editing and deleting. Same mock block as
+// its steps, completion, the lock on a finished repeat, editing and deleting; then the module gate,
+// the routes, and the open count beside Tasks in the sidebar. Same mock block as
 // pages.test.tsx plus the tasks service, so no test here reaches the network.
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -33,9 +34,14 @@ vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/project
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 
+import type { ReactNode } from "react";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import * as tasksService from "../services/tasks.ts";
-import { KINGDOM, RBA, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import { HubContext, type HubValue } from "../context/HubContext.tsx";
+import AppLayout from "../components/AppLayout.tsx";
+import { ModuleOnly, TaskRoute } from "../App.tsx";
 import TaskPage from "./tasks/TaskPage.tsx";
 import TasksPage from "./tasks/TasksPage.tsx";
 
@@ -62,6 +68,43 @@ function stepTitles(): string[] {
 // The row a task's title sits in, so a check reads only that row.
 function rowOf(title: string): HTMLElement {
   return screen.getByText(title).closest("li") as HTMLElement;
+}
+// The sidebar the way the app mounts it: the layout around whatever page the address names, with
+// a link outside it so a test can move to another address.
+function renderLayout(hub: HubValue, path = "/tasks") {
+  return render(
+    <HubContext value={hub}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="*" element={<p>page</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </HubContext>,
+  );
+}
+function tasksLink(): HTMLElement {
+  return within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: /^Tasks/ });
+}
+function spyCount() {
+  const spy = vi.spyOn(tasksService, "countOpenTasks");
+  onTestFinished(() => spy.mockRestore());
+  return spy;
+}
+// One task's route as App.tsx declares it, with links outside it to move between tasks.
+function renderTaskRoute(path: string, hub: HubValue, links: ReactNode) {
+  return render(
+    <HubContext value={hub}>
+      <MemoryRouter initialEntries={[path]}>
+        {links}
+        <Routes>
+          <Route path="/tasks/:taskId" element={<ModuleOnly module="tasks"><TaskRoute /></ModuleOnly>} />
+          <Route path="*" element={<div>elsewhere</div>} />
+        </Routes>
+      </MemoryRouter>
+    </HubContext>,
+  );
 }
 function spyNotify() {
   const spy = vi.spyOn(tasksService, "notifyAssignment");
@@ -355,5 +398,79 @@ describe("tasks: Task page", () => {
     expect(await screen.findByText("The task was saved. The email did not send.")).toBeInTheDocument();
     expect(screen.getByText(noor.full_name!)).toBeInTheDocument();
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("tasks: the module gate and routes", () => {
+  it("sends /tasks home for a company without the module", () => {
+    renderWithHub(<ModuleOnly module="tasks"><TasksPage tab="mine" /></ModuleOnly>, makeHub("employee", KLASIK.company), { path: "/tasks", pattern: "/tasks" });
+    expect(screen.getByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument();
+  });
+
+  it("opens a task for a company with the module", async () => {
+    renderTaskRoute("/tasks/kingdom-task-3", kingdomEmployee, null);
+    expect(await screen.findByRole("heading", { name: /first aid certificate/ })).toBeInTheDocument();
+  });
+
+  it("shows the second task with nothing left over from the first when moving between tasks", async () => {
+    const user = userEvent.setup();
+    const complete = vi.spyOn(tasksService, "completeTask").mockRejectedValueOnce(new Error("The connection dropped."));
+    onTestFinished(() => complete.mockRestore());
+    renderTaskRoute("/tasks/kingdom-task-1", kingdomEmployee, <Link to="/tasks/kingdom-task-3">Go to the other task</Link>);
+    await screen.findByRole("heading", { name: "Close out the September punch list" });
+    await user.click(screen.getByRole("button", { name: "Mark complete" }));
+    expect(await screen.findByText("The connection dropped.")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Go to the other task" }));
+    expect(await screen.findByRole("heading", { name: /first aid certificate/ })).toBeInTheDocument();
+    expect(screen.queryByText("The connection dropped.")).not.toBeInTheDocument();
+  });
+});
+
+describe("tasks: the sidebar count", () => {
+  it("shows an RBA employee Tasks with their open count", async () => {
+    const expected = await tasksService.countOpenTasks(RBA.company.id, jamie.id);
+    expect(expected).toBeGreaterThan(0);
+    renderLayout(rbaEmployee);
+    await waitFor(() => expect(within(tasksLink()).getByText(String(expected))).toBeInTheDocument());
+    expect(tasksLink()).toHaveAttribute("href", "/tasks");
+  });
+
+  it("gives a Klasik employee no Tasks item and asks for no count", () => {
+    const count = spyCount();
+    renderLayout(makeHub("employee", KLASIK.company), "/");
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).queryByRole("link", { name: /^Tasks/ })).not.toBeInTheDocument();
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it("shows a Rococo admin stepped into RBA the Tasks item with no count", () => {
+    const count = spyCount();
+    renderLayout(makeHub("rococo", RBA.company), "/");
+    expect(tasksLink().textContent).toBe("Tasks");
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  it("shows nothing beside Tasks for zero, or when the count fails", async () => {
+    const count = spyCount().mockResolvedValueOnce(0);
+    const { unmount } = renderLayout(rbaEmployee, "/");
+    await waitFor(() => expect(count).toHaveBeenCalledTimes(1));
+    expect(tasksLink().textContent).toBe("Tasks");
+    unmount();
+    count.mockRejectedValueOnce(new Error("offline"));
+    renderLayout(rbaEmployee, "/");
+    await waitFor(() => expect(count).toHaveBeenCalledTimes(2));
+    expect(tasksLink().textContent).toBe("Tasks");
+  });
+
+  it("asks again for the count when the page changes", async () => {
+    const user = userEvent.setup();
+    const count = spyCount().mockResolvedValueOnce(2).mockResolvedValueOnce(1);
+    renderLayout(rbaEmployee, "/");
+    await waitFor(() => expect(within(tasksLink()).getByText("2")).toBeInTheDocument());
+    expect(count).toHaveBeenCalledWith(RBA.company.id, jamie.id);
+    await user.click(tasksLink());
+    await waitFor(() => expect(within(tasksLink()).getByText("1")).toBeInTheDocument());
+    expect(count).toHaveBeenCalledTimes(2);
   });
 });

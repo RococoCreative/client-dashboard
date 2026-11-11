@@ -33,6 +33,7 @@ vi.mock("./services/scorecards.ts", () => import("./test/mocks/scorecards.ts"));
 vi.mock("./services/divisions.ts", () => import("./test/mocks/divisions.ts"));
 vi.mock("./services/projectAssignments.ts", () => import("./test/mocks/projectAssignments.ts"));
 vi.mock("./services/reviewProjectNotes.ts", () => import("./test/mocks/reviewProjectNotes.ts"));
+vi.mock("./services/tasks.ts", () => import("./test/mocks/tasks.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";
@@ -88,17 +89,23 @@ describe("routes land the same with modules on", () => {
   type Persona = "admin" | "employee";
 
   // Signs in as the persona through the real gate, opens the path, and waits until the
-  // router stops redirecting. Returns where it landed.
+  // router stops redirecting: the address has to hold still for 50ms on the real clock (the tests
+  // pin Date), not just for two checks in a row, since waitFor also checks on every DOM change (the
+  // sidebar's task count arriving, say) and two of those can land between one redirect and the
+  // next. Returns where it landed.
   async function landing(path: string, persona: Persona, slug: string): Promise<{ pathname: string; search: string }> {
     window.history.pushState({}, "", `${path}${path.includes("?") ? "&" : "?"}persona=${persona}&company=${slug}`);
     render(<App />);
     await screen.findByRole("navigation", { name: "Primary" });
     let last = "";
+    let since = 0;
     await waitFor(() => {
       const now = window.location.pathname + window.location.search;
-      const settled = now === last;
-      last = now;
-      if (!settled) throw new Error("Still redirecting");
+      if (now !== last) {
+        last = now;
+        since = performance.now();
+      }
+      if (performance.now() - since < 50) throw new Error("Still redirecting");
     });
     return { pathname: window.location.pathname, search: window.location.search };
   }
@@ -191,6 +198,16 @@ describe("routes land the same with modules on", () => {
     ["/resources/links", "employee", "kingdom", "/resources/links"],
     ["/resources/links", "admin", "klasik", "/resources/sops"],
     ["/resources/links", "employee", "klasik", "/resources/sops"],
+    ["/tasks", "admin", "kingdom", "/tasks"],
+    ["/tasks", "employee", "kingdom", "/tasks"],
+    ["/tasks", "admin", "klasik", "/"],
+    ["/tasks", "employee", "klasik", "/"],
+    ["/tasks/everyone", "admin", "kingdom", "/tasks/everyone"],
+    ["/tasks/everyone", "employee", "kingdom", "/"],
+    ["/tasks/everyone", "admin", "klasik", "/"],
+    ["/tasks/kingdom-task-1", "employee", "kingdom", "/tasks/kingdom-task-1"],
+    ["/tasks/kingdom-task-1", "admin", "klasik", "/"],
+    ["/tasks/kingdom-task-1", "employee", "klasik", "/"],
   ];
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
     const landed = await landing(path, persona, slug);
