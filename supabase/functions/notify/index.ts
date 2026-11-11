@@ -8,9 +8,8 @@
 // the task, and must be able to see it under row level security.
 //
 // Environment (Supabase secrets): RESEND_API_KEY, TASKS_FROM_EMAIL (the sending address), and
-// APP_ORIGINS (comma separated, shared with the connections function; the first entry builds the
-// task link). SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the
-// platform.
+// APP_URL (the app's own address, which every task link starts from; an https or http URL).
+// SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -27,7 +26,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const TASKS_FROM_EMAIL = (Deno.env.get("TASKS_FROM_EMAIL") ?? "").trim();
-const APP_ORIGINS = (Deno.env.get("APP_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const APP_URL = (Deno.env.get("APP_URL") ?? "").trim();
 
 const NOT_SET_UP = "Task emails are not set up yet.";
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -60,12 +59,12 @@ const displayName = (name: string) => name.replace(/["<>\\\r\n]/g, " ").replace(
 
 const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
 
-// The origin the task link starts from: the first APP_ORIGINS entry only, never anything the
-// caller sends, so a company-branded email can only ever link to the app.
+// The origin the task link starts from: the APP_URL secret only, never anything the caller
+// sends, so a company-branded email can only ever link to the app.
 function appUrl(): string | null {
-  if (!APP_ORIGINS[0]) return null;
+  if (!APP_URL) return null;
   try {
-    const url = new URL(APP_ORIGINS[0]);
+    const url = new URL(APP_URL);
     return url.protocol === "https:" || url.protocol === "http:" ? url.origin : null;
   } catch {
     return null;
@@ -87,8 +86,11 @@ async function handleNotify(req: Request): Promise<Response> {
   if (!caller || caller.is_active !== true) throw new HttpError(403, "Your profile is not active.");
 
   // 3. The task, read as the caller: if they cannot see it, nothing is sent.
-  const { data: task } = await asUser.from("tasks").select("id, company_id, title, due_date, assignee_id").eq("id", taskId).maybeSingle();
+  const { data: task } = await asUser.from("tasks").select("id, company_id, title, due_date, assignee_id, completed_at").eq("id", taskId).maybeSingle();
   if (!task) throw new HttpError(404, "That task was not found.");
+
+  // A completed task needs nobody's attention, so it is never announced.
+  if (task.completed_at) return json(200, { sent: false });
 
   // 4. Nobody to tell, or the caller assigned it to themselves.
   const assigneeId = task.assignee_id as string | null;
@@ -144,6 +146,8 @@ async function handleNotify(req: Request): Promise<Response> {
         text,
         html,
       }),
+      // A send that hangs is a failed send: the claim is released below like any other failure.
+      signal: AbortSignal.timeout(10000),
     });
     accepted = response.ok;
     if (!accepted) console.error(`notify send refused with ${response.status}`);
