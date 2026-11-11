@@ -57,7 +57,8 @@ export function canEditTask(
   task: Pick<Task, "created_by" | "assignee_id">,
   me: { profileId: string; isAdmin: boolean },
 ): boolean {
-  return me.isAdmin || task.created_by === me.profileId;
+  // An employee edits only tasks they made for themselves; an admin edits any.
+  return me.isAdmin || (task.created_by === me.profileId && task.assignee_id === me.profileId);
 }
 
 export function campaignProgress(tasks: Pick<Task, "completed_at">[]): { done: number; total: number } {

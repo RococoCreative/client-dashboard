@@ -115,6 +115,14 @@ describe("canEditTask", () => {
     expect(canEditTask({ created_by: "b", assignee_id: "a" }, { profileId: "a", isAdmin: false })).toBe(false);
     expect(canEditTask({ created_by: "b", assignee_id: "c" }, { profileId: "a", isAdmin: true })).toBe(true);
   });
+
+  it("stops an employee editing a task they created once it is reassigned", () => {
+    expect(canEditTask({ created_by: "a", assignee_id: "b" }, { profileId: "a", isAdmin: false })).toBe(false);
+  });
+
+  it("stops an employee editing an unassigned task", () => {
+    expect(canEditTask({ created_by: "a", assignee_id: null }, { profileId: "a", isAdmin: false })).toBe(false);
+  });
 });
 
 describe("campaignProgress", () => {
