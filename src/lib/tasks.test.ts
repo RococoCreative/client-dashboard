@@ -1,5 +1,6 @@
 // Pins the task display rules: labels, step percent, done and overdue, the order a list is read in,
-// the lock on a task that has spawned its next one, who may edit, and a campaign's done-of-total.
+// the lock on a task that has spawned its next one, who may edit, a campaign's done-of-total, and
+// when a save asks for the assignment email.
 import { describe, expect, it } from "vitest";
 import type { Task } from "../types/database.ts";
 import {
@@ -11,6 +12,7 @@ import {
   isLocked,
   isOverdue,
   percentComplete,
+  shouldNotifyAssignee,
   sortTasks,
 } from "./tasks.ts";
 
@@ -129,5 +131,28 @@ describe("campaignProgress", () => {
   it("counts done of total", () => {
     expect(campaignProgress([{ completed_at: "x" }, { completed_at: null }])).toEqual({ done: 1, total: 2 });
     expect(campaignProgress([])).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe("shouldNotifyAssignee", () => {
+  it("asks for the email when a new task is for someone else", () => {
+    expect(shouldNotifyAssignee(undefined, "b", "a")).toBe(true);
+  });
+
+  it("does not ask when a new task is for the viewer or for no one", () => {
+    expect(shouldNotifyAssignee(undefined, "a", "a")).toBe(false);
+    expect(shouldNotifyAssignee(undefined, null, "a")).toBe(false);
+  });
+
+  it("asks on an edit only when the assignee changed to someone else", () => {
+    expect(shouldNotifyAssignee("b", "c", "a")).toBe(true);
+    expect(shouldNotifyAssignee(null, "c", "a")).toBe(true);
+    expect(shouldNotifyAssignee("b", "b", "a")).toBe(false);
+    expect(shouldNotifyAssignee("b", "a", "a")).toBe(false);
+    expect(shouldNotifyAssignee("b", null, "a")).toBe(false);
+  });
+
+  it("asks for anyone on the roster when the viewer has no profile here", () => {
+    expect(shouldNotifyAssignee(undefined, "b", null)).toBe(true);
   });
 });

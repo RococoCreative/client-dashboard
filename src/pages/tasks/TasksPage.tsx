@@ -19,7 +19,7 @@ import { checkboxClass, selectClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
-import { PRIORITY_LABELS, isDone, sortTasks } from "../../lib/tasks.ts";
+import { EMAIL_NOT_SENT, PRIORITY_LABELS, isDone, shouldNotifyAssignee, sortTasks } from "../../lib/tasks.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listTasks, notifyAssignment } from "../../services/tasks.ts";
@@ -28,7 +28,6 @@ import { TASKS_TABS, type TasksTab } from "./tasksTabs.ts";
 
 type Status = "open" | "done" | "all";
 
-const EMAIL_FAILED = "The task was saved. The email did not send.";
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
 const STATUS_LABELS: Record<Status, string> = { open: "Open", done: "Done", all: "Open and done" };
 const filterClass = `${selectClass} mt-0 w-auto`;
@@ -157,11 +156,11 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
     if (view === "everyone" || task.assignee_id === profileId) {
       state.setData((prev) => (prev ? [...prev, task] : prev));
     }
-    if (task.assignee_id !== null && task.assignee_id !== profileId) {
+    if (shouldNotifyAssignee(undefined, task.assignee_id, profileId)) {
       try {
         await notifyAssignment(task.id);
       } catch {
-        setNotice(EMAIL_FAILED);
+        setNotice(EMAIL_NOT_SENT);
       }
     }
   }

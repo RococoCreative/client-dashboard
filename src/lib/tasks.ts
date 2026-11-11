@@ -1,6 +1,7 @@
 // The task display rules the Tasks pages share, kept pure so they are tested in one place.
 // The database owns completion and recurrence; this file only computes what a screen shows:
-// labels, step progress, overdue, the order a list is read in, the lock, who may edit.
+// labels, step progress, overdue, the order a list is read in, the lock, who may edit, and when a
+// save asks for the assignment email.
 import type { Task, TaskPriority, TaskRecurrence, TaskStep } from "../types/database.ts";
 
 export const PRIORITY_LABELS: Record<TaskPriority, string> = {
@@ -63,4 +64,19 @@ export function canEditTask(
 
 export function campaignProgress(tasks: Pick<Task, "completed_at">[]): { done: number; total: number } {
   return { done: tasks.filter(isDone).length, total: tasks.length };
+}
+
+// The one line a page shows when a task saved but its assignment email did not.
+export const EMAIL_NOT_SENT = "The task was saved. The email did not send.";
+
+// Whether a save asks for the assignment email: the task is now someone's, that someone is not the
+// person saving, and on an edit the assignee changed. previous is undefined for a new task. The
+// Edge Function makes the final call (an account, active, not already told); this only keeps a
+// page from asking when it plainly should not.
+export function shouldNotifyAssignee(
+  previousAssigneeId: string | null | undefined,
+  savedAssigneeId: string | null,
+  viewerProfileId: string | null,
+): boolean {
+  return savedAssigneeId !== null && savedAssigneeId !== viewerProfileId && savedAssigneeId !== previousAssigneeId;
 }
