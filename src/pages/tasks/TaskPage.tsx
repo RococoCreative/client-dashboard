@@ -161,7 +161,8 @@ export default function TaskPage() {
           {task.description ? <p className="mb-4 whitespace-pre-line text-sm leading-relaxed text-ink-2">{task.description}</p> : null}
           <dl className="space-y-3">
             <Detail label="Assignee">{task.assignee_id ? (names.get(task.assignee_id) ?? "Not on the roster") : "Unassigned"}</Detail>
-            <Detail label="Assigned by">{task.created_by ? (names.get(task.created_by) ?? "Not on the roster") : "Not recorded"}</Detail>
+            {/* A creator missing from the company's roster is a Rococo admin who stepped in to assign it. */}
+            <Detail label="Assigned by">{task.created_by ? (names.get(task.created_by) ?? "Hub admin") : "Not recorded"}</Detail>
             <Detail label="Due">
               {task.due_date ? formatDate(task.due_date) : "No due date"}
               {overdue ? <Badge tone="danger">Overdue</Badge> : null}

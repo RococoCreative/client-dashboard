@@ -284,6 +284,16 @@ describe("tasks: Task page", () => {
     expect(screen.queryByText("Campaign")).not.toBeInTheDocument();
   });
 
+  it("names a creator who is not on the company's roster as Hub admin", async () => {
+    // The mock stamps created_by with the signed-in persona, the Klasik admin, who is not on RBA's
+    // roster: the same position as a Rococo admin who stepped into RBA to assign a task.
+    const created = await tasksService.createTask({ company_id: RBA.company.id, title: "Order the site sign", assignee_id: jamie.id });
+    renderTask(created.id, rbaAdmin);
+    await screen.findByRole("heading", { name: "Order the site sign" });
+    expect(screen.getByText("Assigned by").nextElementSibling).toHaveTextContent("Hub admin");
+    expect(screen.queryByText("Not on the roster")).not.toBeInTheDocument();
+  });
+
   it("shows the task as complete once the last step is ticked", async () => {
     const user = userEvent.setup();
     const created = await tasksService.createTask({ company_id: RBA.company.id, title: "Close up the site", assignee_id: jamie.id, steps: ["Sweep the floor", "Lock the gate"] });
