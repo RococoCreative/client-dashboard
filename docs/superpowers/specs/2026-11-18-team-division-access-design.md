@@ -192,3 +192,121 @@ for assigning work use the visible profiles, not the directory.
 
 New scoring weights, a manager approval workflow, division-scoped company configuration,
 per-person notification settings, dropping `profiles.division_id` (next release).
+
+## Revisions after the design review
+
+Three independent reviews (security, SQL feasibility, sprint coverage) found holes in the first
+draft. These rules replace anything above that disagrees with them.
+
+### Who counts as a lead, and how far down
+
+- Chain powers (seeing and leading the people below you) belong to managers, admins and owners
+  only. An employee whom someone reports to gets nothing from it; the person page warns when
+  "Reports to" points at an employee ("They will not see this person until they are a manager").
+- Nobody leads or division-views someone ranked at or above them, except an owner. A manager's
+  division view access shows employees only; their own manager, admins and owners stay hidden
+  unless they are in the manager's chain, and they never are by definition.
+- A full-scope admin is an owner, a Rococo admin, or an admin with `view_all_divisions`.
+  `private.has_full_scope()` names it. Full scope reads and writes every row of the company,
+  including rows of people who have since moved company (their history stays readable).
+
+### Profiles
+
+- Row visibility on `profiles` is written over the row's own columns (role, division_ids,
+  reports_to) plus the caller's chain, never as `id in (set)`, so an insert's RETURNING and an
+  update's new row are judged correctly. Child tables use the id sets.
+- The profiles INSERT and UPDATE policies keep their company-admin shape; placement is enforced by
+  BEFORE triggers on NEW with one message per refusal:
+  - a non-full-scope admin edits only people they manage;
+  - added or removed `division_ids` must be divisions they can view;
+  - `reports_to` must point at someone they can view, and a non-full-scope admin may change a
+    person's `reports_to` only when they can already view everyone in that person's chain;
+  - only an owner or Rococo sets `view_all_divisions` or `view_division_ids`, on insert or update;
+  - a role change made by anyone but an owner or Rococo clears both view settings.
+- The self branch of `guard_profile_fields` becomes a whitelist: a person may change their own
+  `full_name`, `title` and `phone`, nothing else. A future column is admin-only by default.
+- `guard_profile_division` does the mirror and the validation (it already fires before the field
+  guard): if `division_ids` changed, `division_id` follows; else if `division_id` changed, the
+  array follows; every id in either array belongs to the person's company, no nulls or
+  duplicates; a company move clears all four division columns.
+- `division_ids`, `view_all_divisions` and `view_division_ids` join the audited columns.
+- The backfill is one-shot: it runs only when the columns are being created, so re-pasting the
+  migration never widens access an owner has narrowed.
+
+### Configuration that holds people's data
+
+- Divisions: only a full-scope admin adds, renames or removes one. A division someone still works
+  in cannot be deleted ("Move the N people out of RBA North first"). Deleting one strips it from
+  everyone's view access through a security-definer cleanup that the profile guards let through.
+- Review cycles: any admin creates one; only a full-scope admin edits, closes, reopens or deletes
+  one, because a cycle cascades to every person's reviews and goals.
+- Invitations: an admin reads and writes an invitation only for someone they manage. An
+  invitation by address for an unclaimed person they cannot manage is refused.
+
+### Shared company content, on purpose
+
+Project teams (`project_assignments`), milestone owners and the directory's names and titles stay
+readable company-wide: they describe projects and who to talk to, not a person's record. Sync
+records stay admin-only as today.
+
+### Tasks
+
+- Writes go through the led set, never through visibility: a manager who only views a division
+  cannot add, tick or edit steps on those tasks.
+- `guard_task` and `guard_task_step` get a leader branch: a caller who leads both the old and the
+  new assignee edits like an admin. Campaigns are pinned for non-admins in the guard.
+- A plain assignee may change only `completed_at` and `goal_id` on a task someone else assigned,
+  so a person can link their own tasks to their own goals.
+- Unlinking is always allowed, frozen month or not, and database-driven clears (a deleted goal, a
+  deleted person, a company move, `hub.task_internal`) pass. Only linking checks the freeze.
+  Changing the assignee of a linked task in the same write that unlinks it is allowed.
+- `clear_task_assignee_on_move` also clears `goal_id`.
+- Delete: admins over the manageable set; leaders over tasks they created for led people; anyone
+  over a task they made for themselves.
+- `notify` sends only when the caller created the task or is an owner or admin of its company.
+
+### GSR
+
+- `goals.employee_id` is pinned on update for every signed-in caller but Rococo.
+- A carried goal takes `created_by` from its source goal, only when the source belongs to the same
+  person; otherwise the caller.
+- The "set for you" rule binds only the goal's own person.
+- A complete monthly review freezes its goals and notes whether or not it was scored. Months
+  already marked complete freeze when this ships; the release notes say so.
+- The freeze deletes stale criterion rows under the freeze flag, which `guard_signed_off_scores`
+  lets through for that review only. Line items (criterion null) are never touched.
+- A partial unique index on `review_scores (review_id, pillar_id) where criterion_id is null` is
+  created only when no duplicates exist; otherwise the migration reports them.
+- Reviews: refused into a closed cycle; refused to leave complete while the cycle is closed; the
+  person must belong to the cycle's company (checked on insert or a change of person or cycle).
+  A leader's insert is the not-started shape with no reflection or discussion, sent as an insert
+  that ignores a duplicate.
+
+### App consequences
+
+- `lib/people.ts` gains the pure helpers the screens share: `chainOf(people, rootId)`,
+  `isLeadRole`, `ledBy(viewer, people)`, `divisionLabel`, `canViewDivision`, `isDivisionLimited`.
+  Pickers for assigning work use `ledBy`.
+- Division consumers move to `division_ids`: a person in Both counts in each division's figures
+  and once in Combined (`compare.ts`, the dashboard split, Scorecards, DivisionsPanel counts).
+- A division-limited viewer sees chips only for the divisions they can view, and company-wide
+  figures are labelled "in your divisions".
+- Managers: a `lead` nav audience (People, Tasks Team); `LeadOnly` routes for people and the team
+  tasks tab; read-only person page apart from tasks; GSR goal editing for led people; the review
+  back link returns to the person; copy never says "your manager" to the manager.
+- `ProgressSlider` rolls back when its save fails. KPI, compensation and financial rows queue
+  their writes per row; job role module toggles queue.
+- A person who is in the company but hidden from the viewer reads "You do not have access to this
+  person", not "not in this company".
+
+### Rollout
+
+Paste 0038 then 0039 in the SQL editor, then deploy the app the same day. The new client selects
+the new columns and the directory, so it must not deploy before the migrations. An old client left
+open after the migrations keeps working with blank names on a few employee screens until reload.
+
+### Known residual
+
+Two people editing the same field at the same moment still resolve last write wins. Patches send
+only the fields that changed, so different fields never overwrite each other. A concurrency token
+is follow-up work.
