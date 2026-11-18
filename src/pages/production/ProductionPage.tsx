@@ -7,6 +7,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import ExternalLinksList from "../../components/links/ExternalLinksList.tsx";
+import ProductionSync from "../../components/production/ProductionSync.tsx";
 import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
 import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -74,7 +75,7 @@ function NewProjectDialog({ companyId, onClose, onCreated }: { companyId: string
 }
 
 export default function ProductionPage() {
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, can } = useHub();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
   const state = useAsync(async () => {
@@ -146,6 +147,12 @@ export default function ProductionPage() {
       )}
 
       {hasModule(company!, "external_links") ? <ExternalLinksList companyId={company!.id} navGroup="production" /> : null}
+
+      {/* Someone who may sync but is not an admin gets Sync now and a last-updated stamp; admins get the
+          full source panel with PM capacity below. */}
+      {!isAdmin && can("sync_run") && hasModule(company!, "data_sources") ? (
+        <ProductionSync companyId={companyId} />
+      ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ScaffoldCard
