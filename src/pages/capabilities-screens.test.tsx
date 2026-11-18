@@ -4,8 +4,9 @@
 // with audit_log for admins gets an Activity tab that asks for its own events only, and the Rococo
 // activity page still lists every company. These render real pages; the provider tests live in
 // capabilities.test.tsx, which swaps the app shell for a probe.
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi, onTestFinished } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -42,6 +43,12 @@ import { KINGDOM, makeHub } from "../test/fixtures.ts";
 import { setMockCapabilities } from "../test/mocks/capabilities.ts";
 import * as auditService from "../services/audit.ts";
 import * as employeesService from "../services/employees.ts";
+import * as projectAssignmentsService from "../services/projectAssignments.ts";
+import * as winsService from "../services/wins.ts";
+import ProductionPage from "./production/ProductionPage.tsx";
+import ProjectPage from "./production/ProjectPage.tsx";
+import WinsPage from "./WinsPage.tsx";
+import PersonProjects from "../components/people/PersonProjects.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import ActivityPage from "./rococo/ActivityPage.tsx";
@@ -168,4 +175,163 @@ it("the Rococo activity page still lists every company", async () => {
   expect(await screen.findByText(/^companies: modules/)).toBeInTheDocument();
   expect(screen.getByText(/^invitations: added/)).toBeInTheDocument();
   expect(spy).toHaveBeenCalledWith({ companyId: undefined, limit: 100 });
+});
+
+describe("wins, milestones and Production follow their capabilities", () => {
+  const employeeHub = makeHub("employee", KINGDOM.company);
+  const managerHub = makeHub("manager", KINGDOM.company);
+  const winsRoute = { path: "/wins", pattern: "/wins" };
+  const job102 = { path: "/production/projects/kingdom-project-2", pattern: "/production/projects/:projectId" };
+  const asEmployee = (path: string) => {
+    window.history.pushState({}, "", `${path}?persona=employee&company=kingdom`);
+    render(<App />);
+  };
+
+  it("an employee can record a win but sees no edit or archive control", async () => {
+    setMockCapabilities(kingdom, { wins_post: "employee" });
+    const create = vi.spyOn(winsService, "createWin");
+    onTestFinished(() => create.mockRestore());
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, employeeHub, winsRoute);
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Archive / })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "New win" }));
+    const dialog = screen.getByRole("dialog", { name: "New win" });
+    await user.type(within(dialog).getByLabelText("Title"), "Sample win from staff");
+    await user.selectOptions(within(dialog).getByLabelText("Project"), "Sample job 101");
+    await user.click(within(dialog).getByRole("button", { name: "Add win" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ company_id: kingdom, title: "Sample win from staff", project_id: "kingdom-project-1" })));
+    expect(await screen.findByText("Sample win from staff")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("an employee's empty wins page invites them to record one", async () => {
+    setMockCapabilities(kingdom, { wins_post: "employee" });
+    const list = vi.spyOn(winsService, "listWins").mockResolvedValue([]);
+    onTestFinished(() => list.mockRestore());
+    renderWithHub(<WinsPage />, employeeHub, winsRoute);
+    expect(await screen.findByText("Record a win. It shows here and on Home.")).toBeInTheDocument();
+  });
+
+  it("with defaults an employee cannot record a win and the empty page does not invite one", async () => {
+    const list = vi.spyOn(winsService, "listWins").mockResolvedValue([]);
+    onTestFinished(() => list.mockRestore());
+    renderWithHub(<WinsPage />, employeeHub, winsRoute);
+    expect(await screen.findByText("Wins your team records show here.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New win" })).toBeNull();
+  });
+
+  it("a manager can add, edit and complete a milestone", async () => {
+    setMockCapabilities(kingdom, { milestones_edit: "manager" });
+    const user = userEvent.setup();
+    renderWithHub(<ProjectPage />, managerHub, job102);
+    await screen.findByRole("heading", { name: "Sample job 102" });
+    await user.type(screen.getByLabelText("New milestone title"), "Sample inspection");
+    await user.click(screen.getByRole("button", { name: "Add milestone" }));
+    expect(await screen.findByLabelText("Title of Sample inspection")).toBeInTheDocument();
+    const title = screen.getByLabelText("Title of Permit approved");
+    await user.clear(title);
+    await user.type(title, "Permit issued");
+    await user.tab();
+    expect(await screen.findByDisplayValue("Permit issued")).toBeInTheDocument();
+    const done = screen.getByLabelText("Completed on for Sample inspection");
+    fireEvent.change(done, { target: { value: "2026-09-14" } });
+    fireEvent.blur(done);
+    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+  });
+
+  it("a manager still cannot rename or archive the project", async () => {
+    setMockCapabilities(kingdom, { milestones_edit: "manager" });
+    renderWithHub(<ProjectPage />, managerHub, job102);
+    await screen.findByLabelText("New milestone title");
+    expect(screen.queryByLabelText("Project name")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive project" })).toBeNull();
+  });
+
+  it("with defaults a manager has no milestone controls", async () => {
+    renderWithHub(<ProjectPage />, managerHub, job102);
+    await screen.findByRole("heading", { name: "Sample job 102" });
+    expect(screen.queryByLabelText("New milestone title")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Move / })).toBeNull();
+  });
+
+  it("a manager sees no New project button and no project edit control", async () => {
+    setMockCapabilities(kingdom, { milestones_edit: "manager", production_view: "manager" });
+    renderWithHub(<ProductionPage />, managerHub, { path: "/production", pattern: "/production" });
+    expect(await screen.findByRole("link", { name: "Sample job 101" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
+  });
+
+  it("an employee has no Projects item in the nav and /production sends them Home", async () => {
+    setMockCapabilities(kingdom, { production_view: "manager" });
+    asEmployee("/production");
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    const nav = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(nav).queryByRole("link", { name: "Projects" })).toBeNull();
+  });
+
+  it("a project page sends an employee without production_view Home too", async () => {
+    setMockCapabilities(kingdom, { production_view: "manager" });
+    asEmployee("/production/projects/kingdom-project-1");
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+  });
+
+  it("a manager has Projects in the nav", async () => {
+    setMockCapabilities(kingdom, { production_view: "manager" });
+    window.history.pushState({}, "", "/?persona=manager&company=kingdom");
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "Projects" })).toBeInTheDocument();
+  });
+
+  it("with defaults an employee still opens Production read-only and cannot record a win", async () => {
+    asEmployee("/production");
+    expect(await screen.findByRole("link", { name: "Sample job 101" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/production");
+    expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "Projects" })).toBeInTheDocument();
+  });
+});
+
+describe("links into Production", () => {
+  const assignment = { id: "a1", company_id: kingdom, profile_id: "kingdom-user-1", project_id: "kingdom-project-1", role: "Lead", created_at: "", updated_at: "" };
+  const project = { id: "kingdom-project-1", company_id: kingdom, name: "Sample job 101", reference: null, notes: null, archived_at: null, created_at: "", updated_at: "" };
+  const baseProps = { companyId: kingdom, employeeId: "kingdom-user-1", firstName: "Sample", assignments: [assignment], projects: [project], canEdit: false, onAssignments: () => undefined, onProjects: () => undefined, onError: () => undefined };
+
+  it("PersonProjects renders the project name as plain text without a link", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    renderWithHub(<PersonProjects {...(baseProps as any)} linkProjects={false} />, adminHub);
+    expect(screen.getByText("Sample job 101")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sample job 101" })).toBeNull();
+  });
+});
+
+describe("a person page links a project only to someone who may open Production", () => {
+  // Kingdom has no assignments of its own, so give this person one on its first project.
+  const assignment = { id: "assignment-1", company_id: kingdom, project_id: "kingdom-project-1", employee_id: "kingdom-user-1", role: null, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+  const noorRoute = person;
+  beforeEach(() => {
+    const spy = vi.spyOn(projectAssignmentsService, "listProjectAssignments").mockResolvedValue([assignment]);
+    onTestFinished(() => spy.mockRestore());
+  });
+  it("shows project names as plain text without production_view", async () => {
+    setMockCapabilities(kingdom, { production_view: "owner" });
+    renderWithHub(<PersonPage />, adminHub, noorRoute);
+    await screen.findByRole("heading", { name: "Financial figures" });
+    const heading = await screen.findByText(/^On \d+ projects?$/);
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getAllByText(/^Sample job/).length).toBeGreaterThan(0);
+    expect(within(section).queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("links them by default", async () => {
+    renderWithHub(<PersonPage />, adminHub, noorRoute);
+    await screen.findByRole("heading", { name: "Financial figures" });
+    const heading = await screen.findByText(/^On \d+ projects?$/);
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getAllByRole("link").length).toBeGreaterThan(0);
+  });
 });

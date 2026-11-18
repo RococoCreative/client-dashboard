@@ -753,7 +753,7 @@ export default function PersonPage() {
               person={person}
               roleName={jobRole?.name ?? null}
               canEdit={isAdmin}
-              linkProjects={hasModule(company, "production")}
+              linkProjects={hasModule(company, "production") && can("production_view")}
               between={goalsBlock}
               onError={setError}
             />

@@ -251,3 +251,22 @@ describe("NAV_ITEMS", () => {
     for (const item of NAV_ITEMS) expect(NAV_GROUP_ORDER).toContain(item.group);
   });
 });
+
+describe("the Projects item and the production_view capability", () => {
+  const labels = (layout: NavLayout) => sectionsOf(layout).flatMap((s) => s.items.map((i) => i.label));
+  const lacking = (capability: string) => (asked: string) => asked !== capability;
+
+  it("carries production_view", () => {
+    expect(NAV_ITEMS.find((i) => i.id === "projects")?.capability).toBe("production_view");
+  });
+
+  it("hides Projects from someone who lacks it, for an employee and an admin alike", () => {
+    expect(labels(navFor(kingdom, false, false, false, lacking("production_view")))).not.toContain("Projects");
+    expect(labels(navFor(kingdom, true, false, true, lacking("production_view")))).not.toContain("Projects");
+  });
+
+  it("keeps Projects for someone who holds it, and leaves every other item alone", () => {
+    expect(labels(navFor(kingdom, false, false, false, () => true))).toContain("Projects");
+    expect(labels(navFor(kingdom, false, false, false, lacking("production_view")))).toEqual(labels(navFor(kingdom, false, false)).filter((l) => l !== "Projects"));
+  });
+});

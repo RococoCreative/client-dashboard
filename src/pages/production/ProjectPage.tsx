@@ -74,7 +74,9 @@ function AddMilestoneForm({ projectId, all, onAdded }: { projectId: string; all:
 
 export default function ProjectPage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, can } = useHub();
+  // Milestones follow the milestones_edit capability; renaming and archiving the project stay with admins.
+  const canMilestones = can("milestones_edit");
   const navigate = useNavigate();
   const companyId = company!.id;
   const [filter, setFilter] = useState<Filter>("all");
@@ -155,9 +157,9 @@ export default function ProjectPage() {
             </div>
           }
         >
-          {isAdmin && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
-          <MilestoneList milestones={shown} people={people} directory={directory} canEdit={isAdmin && filter === "all"} onChanged={setMilestones} />
-          {isAdmin && filter === "all" ? (
+          {canMilestones && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
+          <MilestoneList milestones={shown} people={people} directory={directory} canEdit={canMilestones && filter === "all"} onChanged={setMilestones} />
+          {canMilestones && filter === "all" ? (
             <AddMilestoneForm projectId={project.id} all={milestones} onAdded={(m) => setMilestones([...milestones, m])} />
           ) : null}
         </Section>

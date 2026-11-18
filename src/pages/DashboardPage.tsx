@@ -244,7 +244,7 @@ function MyScorecard({ companyId, employeeId, jobRole }: { companyId: string; em
 }
 
 function AdminDashboard() {
-  const { company, profile, isAdmin, isRococo } = useHub();
+  const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
@@ -419,9 +419,9 @@ function AdminDashboard() {
             {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin /> : null}
           </div>
           <div className="space-y-6">
-            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} />
+            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} />
             {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
-            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
+            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} canViewProduction={can("production_view")} /> : null}
           </div>
         </div>
       ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (
@@ -590,7 +590,7 @@ function AdminDashboard() {
 }
 
 function EmployeeDashboard() {
-  const { company, profile, isAdmin, isRococo } = useHub();
+  const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
@@ -681,7 +681,7 @@ function EmployeeDashboard() {
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin={false} /> : null}
           {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
-          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
+          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
         </div>
       ) : null}
 

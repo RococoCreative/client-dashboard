@@ -21,7 +21,9 @@ const MODULE_PATHS: Record<TargetModule, string> = {
   pm_capacity: "/production",
 };
 
-export default function FreshnessCard({ companyId }: { companyId: string }) {
+// canViewProduction is the hub's production_view: a source that feeds Production names its page
+// as plain text for someone who may not open it, instead of a link that would bounce them Home.
+export default function FreshnessCard({ companyId, canViewProduction }: { companyId: string; canViewProduction: boolean }) {
   const state = useAsync(async () => {
     const [sources, connections] = await Promise.all([listSyncSources(companyId), listConnections(companyId)]);
     return sources.filter((source) => source.enabled).map((source) => ({ source, connection: connections.find((c) => c.id === source.connection_id) ?? null }));
@@ -44,7 +46,11 @@ export default function FreshnessCard({ companyId }: { companyId: string }) {
             <li key={source.id} className="px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <Link to={MODULE_PATHS[source.target_module]} className="text-sm font-medium text-ink hover:text-accent">{source.name}</Link>
+                  {source.target_module === "pm_capacity" && !canViewProduction ? (
+                    <span className="text-sm font-medium text-ink">{source.name}</span>
+                  ) : (
+                    <Link to={MODULE_PATHS[source.target_module]} className="text-sm font-medium text-ink hover:text-accent">{source.name}</Link>
+                  )}
                   <p className="text-[12px] text-ink-3">{TARGET_MODULE_LABELS[source.target_module]}</p>
                 </div>
                 <SyncStateBadge state={syncState(source, connection, now)} />

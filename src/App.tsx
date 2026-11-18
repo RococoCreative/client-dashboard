@@ -169,6 +169,14 @@ export function ModuleOnly({ module, children }: { module: ModuleKey; children: 
   return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
 }
 
+// A page that needs a capability the company has set for the person's role. Anyone without it
+// lands on Home, the way AdminOnly does, so a typed URL gets the same answer the sidebar gives.
+export function CapabilityOnly({ capability, children }: { capability: CapabilityKey; children: ReactNode }) {
+  const { company, can } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return can(capability) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
 // One task's page, keyed on the task id, so moving from one task to another starts the page and
 // its checklist fresh instead of carrying the last task's notices and drafts across.
 export function TaskRoute() {
@@ -437,8 +445,8 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<LeadOnly><PeoplePage /></LeadOnly>} />
             <Route path="people/:profileId" element={<LeadOnly><PersonPage /></LeadOnly>} />
-            <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
-            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
+            <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
+            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
                 keeps its own address under /sops. */}
             <Route path="resources" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
