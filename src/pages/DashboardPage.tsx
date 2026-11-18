@@ -420,14 +420,14 @@ function AdminDashboard() {
           </div>
           <div className="space-y-6">
             <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} />
-            {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+            {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
             {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} canViewProduction={can("production_view")} /> : null}
           </div>
         </div>
       ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin className={hasModule(company, "wins") ? "" : "lg:col-span-2"} /> : null}
-          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
         </div>
       ) : null}
 
@@ -680,7 +680,7 @@ function EmployeeDashboard() {
       {hasModule(company, "external_links") || hasModule(company, "wins") || hasModule(company, "switchboard") ? (
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin={false} /> : null}
-          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
           {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
         </div>
       ) : null}

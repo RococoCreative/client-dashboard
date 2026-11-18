@@ -1,6 +1,8 @@
 // The wins a company records by hand, newest first. Members read the list; admins add a win,
-// edit each one in place (every field saves on its own) and archive it. Every win here is
-// manual: the database forces that for any write from the browser (0027).
+// edit each one in place (every field saves on its own) and remove it (stored as archived_at).
+// Every win here is manual: the database forces that for any write from the browser (0027).
+// When the company limits how many days a win stays on Home, the page splits in two: Recent (the
+// wins still on Home) and Archive (older ones). With no setting it is one list, as it always was.
 import { useRef, useState, type FormEvent } from "react";
 import { Archive, Plus } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
@@ -20,6 +22,7 @@ import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { errorMessage } from "../lib/errors.ts";
 import { formatDate, todayIso } from "../lib/format.ts";
+import { companyToday, homeCutoff } from "../lib/wins.ts";
 import { hasModule } from "../lib/modules.ts";
 import { listProjects } from "../services/projects.ts";
 import { archiveWin, createWin, listWins, updateWin, type WinPatch } from "../services/wins.ts";
@@ -28,6 +31,35 @@ import { WIN_SOURCE_LABELS, type Project, type Win } from "../types/database.ts"
 // The order the service reads them in: by the date won, then by when each was entered.
 function newestFirst(a: Win, b: Win): number {
   return b.won_on.localeCompare(a.won_on) || b.created_at.localeCompare(a.created_at);
+}
+
+type View = "recent" | "archive";
+
+// Two views of one list, switched in place. Styled like the route tabs; no route of its own.
+function ViewTabs({ view, onChange }: { view: View; onChange: (next: View) => void }) {
+  const items: Array<{ key: View; label: string }> = [
+    { key: "recent", label: "Recent" },
+    { key: "archive", label: "Archive" },
+  ];
+  return (
+    <div role="tablist" aria-label="Wins" className="relative -mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-line px-1">
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          role="tab"
+          aria-selected={view === item.key}
+          onClick={() => onChange(item.key)}
+          className={
+            "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors duration-150 " +
+            (view === item.key ? "border-accent font-medium text-ink" : "border-transparent text-ink-2 hover:text-ink")
+          }
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function SourceBadge({ win }: { win: Win }) {
@@ -170,10 +202,17 @@ export default function WinsPage() {
   const [archiving, setArchiving] = useState<Win | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The cut-off is the company's own day, so it moves at the company's midnight, not the browser's.
+  const cutoff = homeCutoff(company!.wins_home_days, companyToday(company!.time_zone));
+  const [view, setView] = useState<View>("recent");
+  const inView = (win: Win) => (cutoff === null ? true : view === "recent" ? win.won_on >= cutoff : win.won_on < cutoff);
   const state = useAsync(async () => {
-    const [wins, projects] = await Promise.all([listWins(companyId), withProjects ? listProjects(companyId) : Promise.resolve([] as Project[])]);
+    const range = cutoff === null ? undefined : view === "recent" ? { wonOnOrAfter: cutoff } : { wonBefore: cutoff };
+    const [wins, projects] = await Promise.all([listWins(companyId, range), withProjects ? listProjects(companyId) : Promise.resolve([] as Project[])]);
     return { wins, projects };
-  }, [companyId]);
+  }, [companyId, cutoff, view]);
+  // A win created or re-dated here may belong to the other view; only this view's wins show.
+  const shown = state.data ? state.data.wins.filter(inView) : [];
 
   const replace = (next: Win) => state.setData((prev) => (prev ? { ...prev, wins: prev.wins.map((w) => (w.id === next.id ? next : w)) } : prev));
 
@@ -220,18 +259,24 @@ export default function WinsPage() {
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error && !archiving ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 
+      {cutoff !== null ? <ViewTabs view={view} onChange={setView} /> : null}
+
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
-      ) : !state.data ? null : state.data.wins.length === 0 ? (
-        <EmptyState
-          eyebrow="Wins"
-          title="No wins yet"
-          body={canPost ? "Record a win. It shows here and on Home." : "Wins your team records show here."}
-        />
+      ) : !state.data ? null : shown.length === 0 ? (
+        cutoff !== null && view === "archive" ? (
+          <p className="px-1 py-4 text-sm text-ink-2">No older wins yet.</p>
+        ) : (
+          <EmptyState
+            eyebrow="Wins"
+            title="No wins yet"
+            body={canPost ? "Record a win. It shows here and on Home." : "Wins your team records show here."}
+          />
+        )
       ) : (
         <Section padded={false}>
           <ul className="divide-y divide-line">
-            {state.data.wins.map((win) =>
+            {shown.map((win) =>
               isAdmin ? (
                 <EditableRow
                   key={win.id}

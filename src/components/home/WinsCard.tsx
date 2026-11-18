@@ -1,6 +1,7 @@
 // The Home card with the five most recent wins that are not archived, and a way into the Wins
-// page. Only a company with the wins module mounts it. Five is the whole rule: there is no age
-// cut-off and no other filter.
+// page. Only a company with the wins module mounts it. When the company sets how many days a win
+// stays on Home, a win older than that (by the company's own day) is left off and lives in the
+// Wins page archive; with no setting there is no age cut-off.
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
@@ -8,11 +9,14 @@ import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { formatDate } from "../../lib/format.ts";
+import { companyToday, homeCutoff } from "../../lib/wins.ts";
 import { listWins } from "../../services/wins.ts";
-import { WIN_SOURCE_LABELS } from "../../types/database.ts";
+import { WIN_SOURCE_LABELS, type Company } from "../../types/database.ts";
 
-export default function WinsCard({ companyId }: { companyId: string }) {
-  const state = useAsync(() => listWins(companyId, { limit: 5 }), [companyId]);
+export default function WinsCard({ company }: { company: Company }) {
+  const companyId = company.id;
+  const cutoff = homeCutoff(company.wins_home_days, companyToday(company.time_zone));
+  const state = useAsync(() => listWins(companyId, cutoff ? { limit: 5, wonOnOrAfter: cutoff } : { limit: 5 }), [companyId, cutoff]);
 
   return (
     <Section
@@ -26,7 +30,7 @@ export default function WinsCard({ companyId }: { companyId: string }) {
       ) : !state.data ? (
         <div className="p-5"><SkeletonRows rows={3} /></div>
       ) : state.data.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">No wins recorded yet.</p>
+        <p className="px-5 py-4 text-sm text-ink-2">{cutoff ? "No recent wins." : "No wins recorded yet."}</p>
       ) : (
         <ul className="divide-y divide-line">
           {state.data.map((win) => (

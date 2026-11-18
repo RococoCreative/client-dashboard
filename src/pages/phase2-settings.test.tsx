@@ -1,6 +1,7 @@
 // Phase 2 company settings on Rococo > Companies: how many days a win stays on Home, and whether a
 // company keeps the manual Financials page. Both save through the page's own write queue, one
-// company at a time, and a bad number is refused with a plain line before anything is sent.
+// company at a time, and a bad number is refused with a plain line before anything is sent. Also
+// the screens that read the days: the Home wins card and the Wins page with its Archive.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -35,9 +36,12 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
+import WinsPage from "./WinsPage.tsx";
+import WinsCard from "../components/home/WinsCard.tsx";
+import * as winsService from "../services/wins.ts";
 import * as companiesService from "../services/companies.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { makeHub } from "../test/fixtures.ts";
+import { KINGDOM, makeHub } from "../test/fixtures.ts";
 
 const rococo = makeHub("rococo", null);
 
@@ -119,5 +123,93 @@ describe("Rococo Companies display settings", () => {
     expect(other).toBeChecked();
     expect((await companiesService.getCompany("co-kingdom")).manual_financials).toBe(true);
     spy.mockRestore();
+  });
+});
+
+// Kingdom's sample wins: 09-12, 09-05, 08-28, 08-20, a removed one on 08-11, 07-30, 07-15. The test
+// clock is 2026-09-15 12:00Z, which is the 15th in New York and the 16th in Kiritimati.
+describe("wins leave Home after the company's days", () => {
+  const withDays = (days: number | null, time_zone = "America/New_York") => ({ ...KINGDOM.company, wins_home_days: days, time_zone });
+  const adminFor = (company: ReturnType<typeof withDays>) => makeHub("admin", company);
+  const winsRoute = { path: "/wins", pattern: "/wins" };
+  const originals = new Map<string, string>();
+
+  // Move two sample wins onto the edge of a 14 day window and put them back after.
+  async function setEdge() {
+    const all = await winsService.listWins("co-kingdom");
+    for (const [title, won_on] of [["Sample win 2", "2026-09-02"], ["Sample win 3", "2026-09-01"]] as const) {
+      const win = all.find((w) => w.title === title)!;
+      originals.set(win.id, win.won_on);
+      await winsService.updateWin(win.id, { won_on });
+    }
+  }
+  afterEach(async () => {
+    for (const [id, won_on] of originals) await winsService.updateWin(id, { won_on });
+    originals.clear();
+  });
+
+  it("the Home card shows a win won 13 days ago and not one won 14 days ago", async () => {
+    await setEdge();
+    renderWithHub(<WinsCard company={withDays(14)} />, adminFor(withDays(14)));
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    expect(screen.getByText("Sample win 2")).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 3")).not.toBeInTheDocument();
+  });
+
+  it("the Home card with no setting still shows the five newest", async () => {
+    renderWithHub(<WinsCard company={withDays(null)} />, adminFor(withDays(null)));
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    for (const n of [1, 2, 3, 4, 6]) expect(screen.getByText(`Sample win ${n}`)).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 7")).not.toBeInTheDocument();
+  });
+
+  it("the Wins page has Recent and Archive when the company has a setting, and one list when it does not", async () => {
+    const user = userEvent.setup();
+    const view = renderWithHub(<WinsPage />, adminFor(withDays(14)), winsRoute);
+    expect(await screen.findByRole("tab", { name: "Recent" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Archive" })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Sample win 2")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Sample win 3")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Archive" }));
+    expect(await screen.findByDisplayValue("Sample win 3")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Sample win 2")).not.toBeInTheDocument();
+    view.unmount();
+
+    renderWithHub(<WinsPage />, adminFor(withDays(null)), winsRoute);
+    expect(await screen.findByDisplayValue("Sample win 1")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Sample win 7")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("Archive lists wins older than the cut-off, newest first, and never a win an admin removed", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, makeHub("employee", withDays(14)), winsRoute);
+    await user.click(await screen.findByRole("tab", { name: "Archive" }));
+    expect(await screen.findByText("Sample win 3")).toBeInTheDocument();
+    const titles = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    const order = [3, 4, 6, 7].map((n) => titles.findIndex((t) => t.includes(`Sample win ${n}`)));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(screen.queryByText("Sample win 5")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample win 1")).not.toBeInTheDocument();
+  });
+
+  it("an empty Archive says so plainly", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<WinsPage />, adminFor(withDays(365)), winsRoute);
+    await user.click(await screen.findByRole("tab", { name: "Archive" }));
+    expect(await screen.findByText("No older wins yet.")).toBeInTheDocument();
+  });
+
+  it("uses the company's day, not the browser's", async () => {
+    await setEdge();
+    // 12:00Z is already the 16th in Kiritimati, so the 14 day window starts on the 3rd and the
+    // win from the 2nd has left Home; in New York it is still the 15th and the win stays.
+    const { unmount } = renderWithHub(<WinsCard company={withDays(14, "Pacific/Kiritimati")} />, adminFor(withDays(14, "Pacific/Kiritimati")));
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 2")).not.toBeInTheDocument();
+    unmount();
+    renderWithHub(<WinsCard company={withDays(14, "America/New_York")} />, adminFor(withDays(14, "America/New_York")));
+    expect(await screen.findByText("Sample win 2")).toBeInTheDocument();
   });
 });
