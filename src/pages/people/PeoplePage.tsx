@@ -443,7 +443,15 @@ export default function PeoplePage() {
             ? "The people who report to you, and their teams. Open someone for their profile, goals and tasks."
             : "Everyone on the team. Set someone up in full before you invite them; the invitation is the last step, not the first."
         }
-        actions={teamView ? undefined : <Button size="sm" onClick={() => setAdding(true)}><UserPlus size={14} aria-hidden /> Add staff</Button>}
+        actions={
+          teamView ? (
+            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-accent hover:text-accent-hover">
+              Your profile and team
+            </Link>
+          ) : (
+            <Button size="sm" onClick={() => setAdding(true)}><UserPlus size={14} aria-hidden /> Add staff</Button>
+          )
+        }
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}

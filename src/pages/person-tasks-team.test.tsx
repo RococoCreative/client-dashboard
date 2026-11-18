@@ -428,3 +428,33 @@ describe("copy on a team member's page", () => {
     expect(screen.queryByText(/your manager/i)).not.toBeInTheDocument();
   });
 });
+
+describe("who reports to a person", () => {
+  it("shows a manager their own team as a tree on their profile", async () => {
+    onlySees(team);
+    renderPerson(harper.id, rbaManager);
+    const tree = await screen.findByRole("list", { name: "Who reports to you" });
+    // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them.
+    expect(within(tree).getByRole("link", { name: "Rowan Ellis" })).toHaveAttribute("href", `/people/${rowan.id}`);
+    const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
+    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" })).toBeInTheDocument();
+    expect(screen.getByText("1 direct report, 2 in all.")).toBeInTheDocument();
+    expect(within(underRowan).getByText("Not signed in yet")).toBeInTheDocument();
+  });
+
+  it("shows an admin who reports to a manager, and says when nobody does", async () => {
+    renderPerson(harper.id, rbaAdmin);
+    expect(await screen.findByRole("list", { name: "Who reports to Harper" })).toBeInTheDocument();
+  });
+
+  it("warns when an employee has people reporting to them", async () => {
+    renderPerson(rowan.id, rbaAdmin);
+    expect(await screen.findByText(/Rowan is an employee, so they do not see these people/)).toBeInTheDocument();
+  });
+
+  it("leaves the section off for an employee with nobody under them", async () => {
+    renderPerson(jamie.id, rbaAdmin);
+    expect(await screen.findByRole("heading", { name: "Details" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Who reports to/ })).not.toBeInTheDocument();
+  });
+});

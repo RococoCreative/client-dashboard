@@ -39,6 +39,7 @@ import KpiList from "../../components/people/KpiList.tsx";
 import PersonProjects from "../../components/people/PersonProjects.tsx";
 import PersonScorecard from "../../components/scorecards/PersonScorecard.tsx";
 import PersonTasks from "../../components/tasks/PersonTasks.tsx";
+import PersonTeam from "../../components/people/PersonTeam.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
@@ -743,6 +744,7 @@ export default function PersonPage() {
 
         <div className="space-y-6 lg:col-span-2">
           {isLeader && !rococo ? <ThisMonthGsr companyId={companyId} person={person} cycles={cycles} reviews={reviews} omittedCycleIds={omittedCycleIds} /> : null}
+          {rococo ? null : <PersonTeam companyId={companyId} person={person} people={people} self={self} isAdmin={isAdmin} />}
           {rococo ? goalsBlock : (
             <ScorecardAndProjects
               companyId={companyId}
