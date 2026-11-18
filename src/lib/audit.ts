@@ -9,6 +9,7 @@ import {
   DASHBOARD_MODULE_LABELS,
   LINK_AUDIENCE_LABELS,
   LINK_PROVIDER_LABELS,
+  MILESTONE_KIND_LABELS,
   ROLE_LABELS,
   SCORING_TYPE_LABELS,
   TARGET_MODULE_LABELS,
@@ -42,6 +43,7 @@ export const AUDIT_TABLE_LABELS: Record<string, string> = {
   sync_sources: "Data source",
   external_links: "External link",
   company_capabilities: "Permission",
+  milestone_templates: "Standard milestone",
 };
 
 function fmt(value: unknown): string {
@@ -212,6 +214,12 @@ const COLUMNS: Record<string, Record<string, Column>> = {
   company_capabilities: {
     capability: { label: "permission", kind: "capability" },
     min_role: { label: "lowest role", kind: "level" },
+  },
+  milestone_templates: {
+    title: { label: "title", kind: "text" },
+    kind: { label: "kind", kind: { labels: MILESTONE_KIND_LABELS } },
+    sort_order: { label: "position", kind: "text" },
+    archived_at: { label: "removed", kind: "text" },
   },
 };
 

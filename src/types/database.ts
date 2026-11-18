@@ -952,6 +952,13 @@ export interface ProjectMilestone {
   responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
   created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
 }
+// A company's standard milestones (0044): the items every new project starts with. A database
+// trigger copies the live rows, in order, onto a project when it is created; editing the list
+// later never reaches back into a project. Members read, admins write, nothing is deleted.
+export interface MilestoneTemplate {
+  id: string; company_id: string; title: string; kind: MilestoneKind; sort_order: number;
+  archived_at: string | null; created_at: string; updated_at: string;
+}
 
 // Wins
 // Wins a company records by hand (0027). Members read them and admins write them. A write from

@@ -3,9 +3,12 @@
 // a select, and completing dates it today in the company's zone; everyone else reads it as text.
 // The project page filters to open or done items, and a milestone completed and then reopened
 // leaves the project list's count where it started.
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+// A company's standard milestones (0044): Settings > Production, for a company with the module,
+// lists the milestones and letters every new project starts with, in order, to add, rename, mark
+// as a letter, reorder and remove.
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -35,12 +38,16 @@ vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewP
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
+vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
 import ProjectPage from "./production/ProjectPage.tsx";
 import ProductionPage from "./production/ProductionPage.tsx";
 import * as projectsService from "../services/projects.ts";
+import App from "../App.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
+import * as templatesService from "../services/milestoneTemplates.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { KINGDOM, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
 
 const kingdomAdmin = makeHub("admin", KINGDOM.company);
 const kingdomEmployee = makeHub("employee", KINGDOM.company);
@@ -169,5 +176,105 @@ describe("milestone status", () => {
     expect(badge(editRowOf("Final walkthrough"), "In progress")).toBeInTheDocument();
     again.unmount();
     expect(await countFor("Sample job 101")).toBe(before);
+  });
+});
+
+describe("standard milestones in Settings", () => {
+  const kingdom = KINGDOM.company.id;
+  const production = { path: "/settings/production", pattern: "/settings/production" };
+  const titles = () => screen.getAllByLabelText(/^Title of /).map((el) => (el as HTMLInputElement).value);
+
+  it("Settings shows a Production tab only when the company has the production module", async () => {
+    const view = renderWithHub(<SettingsPage tab="roles" />, kingdomAdmin, { path: "/settings/roles", pattern: "/settings/roles" });
+    const nav = await screen.findByRole("navigation", { name: "Settings" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Company", "Roles", "Reviews", "Production", "Connections"]);
+    view.unmount();
+
+    const klasik = renderWithHub(<SettingsPage tab="roles" />, makeHub("admin", KLASIK.company), { path: "/settings/roles", pattern: "/settings/roles" });
+    const klasikNav = await screen.findByRole("navigation", { name: "Settings" });
+    expect(within(klasikNav).queryByRole("link", { name: "Production" })).toBeNull();
+    klasik.unmount();
+
+    // Opened by address at a company without the module, it lands on the first tab, as a disallowed tab does.
+    window.history.pushState({}, "", "/settings/production?persona=admin&company=klasik");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/company"));
+    expect(screen.queryByRole("heading", { name: "Standard milestones" })).toBeNull();
+  });
+
+  it("an empty list explains what it is for", async () => {
+    renderWithHub(<SettingsPage tab="production" />, kingdomAdmin, production);
+    expect(await screen.findByText("No standard milestones yet. Add the checkpoints every project should start with.")).toBeInTheDocument();
+  });
+
+  it("says plainly that the list applies to projects created from now on", async () => {
+    renderWithHub(<SettingsPage tab="production" />, kingdomAdmin, production);
+    expect(await screen.findByText("Every new project starts with these. Projects that already exist keep the milestones they have.")).toBeInTheDocument();
+  });
+
+  describe("with rows", () => {
+    beforeAll(async () => {
+      // Created out of order, so the list has to read sort_order rather than when a row was added.
+      await templatesService.createMilestoneTemplate(kingdom, { title: "Sample step B", kind: "milestone", sort_order: 2 });
+      await templatesService.createMilestoneTemplate(kingdom, { title: "Sample step A", kind: "milestone", sort_order: 1 });
+      await templatesService.createMilestoneTemplate(kingdom, { title: "Sample step C", kind: "milestone", sort_order: 3 });
+    });
+
+    it("lists the standard milestones in order and adds one at the end", async () => {
+      const create = vi.spyOn(templatesService, "createMilestoneTemplate");
+      onTestFinished(() => create.mockRestore());
+      const user = userEvent.setup();
+      renderWithHub(<SettingsPage tab="production" />, kingdomAdmin, production);
+      await screen.findByLabelText("Title of Sample step A");
+      expect(titles()).toEqual(["Sample step A", "Sample step B", "Sample step C"]);
+
+      await user.type(screen.getByLabelText("New standard milestone title"), "Sample step D");
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      expect(create).toHaveBeenCalledWith(kingdom, { title: "Sample step D", kind: "milestone", sort_order: 4 });
+      await screen.findByLabelText("Title of Sample step D");
+      expect(titles()).toEqual(["Sample step A", "Sample step B", "Sample step C", "Sample step D"]);
+      expect((screen.getByLabelText("New standard milestone title") as HTMLInputElement).value).toBe("");
+    });
+
+    it("marks a row as a letter", async () => {
+      const update = vi.spyOn(templatesService, "updateMilestoneTemplate");
+      onTestFinished(() => update.mockRestore());
+      const user = userEvent.setup();
+      renderWithHub(<SettingsPage tab="production" />, kingdomAdmin, production);
+      const kind = (await screen.findByRole("combobox", { name: "Kind of Sample step B" })) as HTMLSelectElement;
+      expect(kind.value).toBe("milestone");
+      await user.selectOptions(kind, "Letter");
+      expect(update).toHaveBeenLastCalledWith(expect.any(String), { kind: "letter" });
+      await waitFor(() => expect((screen.getByRole("combobox", { name: "Kind of Sample step B" }) as HTMLSelectElement).value).toBe("letter"));
+      expect((await templatesService.listMilestoneTemplates(kingdom)).find((t) => t.title === "Sample step B")?.kind).toBe("letter");
+    });
+
+    it("renames on blur, reorders with the arrows, and removes after a confirm", async () => {
+      const user = userEvent.setup();
+      renderWithHub(<SettingsPage tab="production" />, kingdomAdmin, production);
+      const title = await screen.findByLabelText("Title of Sample step C");
+      fireEvent.change(title, { target: { value: "Sample step C, renamed" } });
+      fireEvent.blur(title);
+      await screen.findByLabelText("Title of Sample step C, renamed");
+      expect((await templatesService.listMilestoneTemplates(kingdom)).map((t) => t.title)).toContain("Sample step C, renamed");
+
+      await user.click(screen.getByRole("button", { name: "Move Sample step C, renamed up" }));
+      await waitFor(() => expect(titles()).toEqual(["Sample step A", "Sample step C, renamed", "Sample step B", "Sample step D"]));
+      await user.click(screen.getByRole("button", { name: "Move Sample step A down" }));
+      await waitFor(() => expect(titles()).toEqual(["Sample step C, renamed", "Sample step A", "Sample step B", "Sample step D"]));
+      expect((await templatesService.listMilestoneTemplates(kingdom)).map((t) => t.title)).toEqual(["Sample step C, renamed", "Sample step A", "Sample step B", "Sample step D"]);
+
+      await user.click(screen.getByRole("button", { name: "Remove Sample step B" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/Projects that already have it keep it/)).toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.getByLabelText("Title of Sample step B")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Remove Sample step B" }));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove" }));
+      await waitFor(() => expect(screen.queryByLabelText("Title of Sample step B")).toBeNull());
+      expect(titles()).toEqual(["Sample step C, renamed", "Sample step A", "Sample step D"]);
+      expect((await templatesService.listMilestoneTemplates(kingdom)).map((t) => t.title)).toEqual(["Sample step C, renamed", "Sample step A", "Sample step D"]);
+    });
   });
 });

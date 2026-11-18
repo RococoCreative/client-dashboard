@@ -3,10 +3,13 @@
 //     (they decide who can sign in), so they read only here.
 //   Roles: the company's job roles (dashboard modules and scorecard metrics) and its divisions.
 //   Reviews: pillars, weights and criteria, the Monthly GSRs rule, and deliverable categories.
+//   Production: the standard milestones every new project starts with, for a company with the
+//     production module.
 //   Connections: the company's own connections to outside systems and, with the module, its data
 //     sources. Links to outside tools live in Resources > Links, which this tab points to.
 //   Activity: this company's own change log, for whoever the company lets read it.
-// Company and Activity show only to people the company's permissions allow.
+// Company and Activity show only to people the company's permissions allow, Production only to a
+// company with the module.
 // What shows is the company's data and modules (rule 12), never its name.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -21,6 +24,7 @@ import DataSourcesPanel from "../../components/settings/DataSourcesPanel.tsx";
 import DeliverableCategoriesPanel from "../../components/settings/DeliverableCategoriesPanel.tsx";
 import DivisionsPanel from "../../components/settings/DivisionsPanel.tsx";
 import JobRolesPanel from "../../components/settings/JobRolesPanel.tsx";
+import MilestoneTemplatePanel from "../../components/settings/MilestoneTemplatePanel.tsx";
 import PillarsPanel from "../../components/settings/PillarsPanel.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
@@ -45,6 +49,7 @@ const DESCRIPTIONS: Record<SettingsTab, string> = {
   company: "How the company appears in the hub and who can sign in.",
   roles: "The jobs people do here, what each role sees and is scored on, and the divisions the company reports by.",
   reviews: "How people are reviewed: the pillars and their weights, the criteria rated, the Monthly GSRs rule, and the categories deliverables are filed under.",
+  production: "The milestones and letters every new project starts with.",
   connections: "The company's own accounts in outside systems, and the sources the hub reads from them.",
   activity: "Changes to roles, access and settings for this company.",
 };
@@ -159,7 +164,7 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
   return (
     <>
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
-      <Tabs items={settingsTabsFor(can)} label="Settings" />
+      <Tabs items={settingsTabsFor(can, current)} label="Settings" />
       {tab === "company" ? <CompanyTab company={current} /> : null}
       {tab === "roles" ? (
         <div className="space-y-6">
@@ -173,6 +178,7 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
           <DeliverableCategoriesPanel companyId={current.id} />
         </div>
       ) : null}
+      {tab === "production" ? <MilestoneTemplatePanel key={current.id} companyId={current.id} /> : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
       {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
     </>

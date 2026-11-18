@@ -132,9 +132,9 @@ describe("an admin without company_settings", () => {
     setMockCapabilities(kingdom, { company_settings: "owner" });
     renderWithHub(<SettingsPage tab="roles" />, adminHub, { path: "/settings/roles", pattern: "/settings/roles" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Roles", "Reviews", "Connections"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Roles", "Reviews", "Production", "Connections"]);
     expect(within(nav).queryByRole("link", { name: "Company" })).toBeNull();
-    expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["roles", "reviews", "connections"]);
+    expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["roles", "reviews", "production", "connections"]);
   });
 
   it("lands on Roles from /settings", async () => {
@@ -151,10 +151,10 @@ describe("an admin without company_settings", () => {
   });
 });
 
-it("lists five tabs in all, an admin by default gets four with Company first, and Rococo stepped in gets all five", () => {
-  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections", "activity"]);
-  expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections"]);
-  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can).map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections", "activity"]);
+it("lists six tabs in all, an admin by default gets five with Company first, and Rococo stepped in gets all six", () => {
+  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
+  expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections"]);
+  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can, KINGDOM.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
 });
 
 describe("the company Activity tab", () => {

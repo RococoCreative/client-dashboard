@@ -68,8 +68,10 @@ describe("AUDIT_TABLE_LABELS", () => {
       "sync_sources",
       "external_links",
       "company_capabilities",
+      "milestone_templates",
     ]);
     expect(AUDIT_TABLE_LABELS.company_domains).toBe("Sign-in domain");
+    expect(AUDIT_TABLE_LABELS.milestone_templates).toBe("Standard milestone");
   });
 });
 

@@ -1,12 +1,14 @@
 // The projects service on the in-memory fixtures, for page tests and the demo. Same exports as
 // src/services/projects.ts; a milestone takes its company from its project here as the database
 // trigger does, its status and completed-on date stay in step as sync_milestone_status keeps them
-// (0043), and nothing is ever deleted, only archived.
+// (0043), a new project starts with a copy of its company's standard milestones (0044), and
+// nothing is ever deleted, only archived.
 import type { MilestoneKind, Project, ProjectMilestone } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { companyToday } from "../../lib/wins.ts";
 import { timeZoneOf } from "./companies.ts";
+import { listMilestoneTemplates } from "./milestoneTemplates.ts";
 
 const projects = fromAll((b) => b.projects).map((x) => ({ ...x }));
 const milestones = fromAll((b) => b.milestones).map((x) => ({ ...x }));
@@ -79,6 +81,10 @@ export async function createProject(input: { company_id: string; name: string; r
     updated_at: now(),
   };
   projects.push(created);
+  // apply_milestone_template (0044): the company's live rows, in order, as fresh milestones.
+  for (const [index, template] of (await listMilestoneTemplates(created.company_id)).entries()) {
+    await createMilestone({ project_id: created.id, title: template.title, kind: template.kind, sort_order: index + 1 });
+  }
   return { ...created };
 }
 
