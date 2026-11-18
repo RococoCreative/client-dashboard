@@ -163,7 +163,7 @@ export default function ProductionPage() {
         {/* PM capacity shows its source's state only until the PM mapping slice (S11). Members
             cannot read sources under RLS, so they get the scaffold without a pointless call. */}
         {isAdmin && hasModule(company!, "data_sources") ? (
-          <SourcePanel companyId={company!.id} targetModule="pm_capacity" scaffold={pmCapacity} showRecords={false} />
+          <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="pm_capacity" scaffold={pmCapacity} showRecords={false} />
         ) : (
           pmCapacity
         )}

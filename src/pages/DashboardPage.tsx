@@ -423,7 +423,7 @@ function AdminDashboard() {
           <div className="space-y-6">
             <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} />
             {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
-            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} canViewProduction={can("production_view")} /> : null}
+            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} companyTimeZone={company!.time_zone} canViewProduction={can("production_view")} /> : null}
           </div>
         </div>
       ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (

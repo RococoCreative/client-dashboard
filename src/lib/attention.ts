@@ -27,6 +27,7 @@ export interface AttentionInput {
   today: string; // YYYY-MM-DD
   sources?: SyncSource[];
   now?: Date;
+  companyTimeZone: string; // weekends for a source with no schedule of its own are judged here
 }
 
 function notSignedIn(people: Profile[]): AttentionItem[] {
@@ -80,11 +81,11 @@ function brokenConnections(connections: CompanyConnection[]): AttentionItem[] {
 }
 
 // An enabled source whose last sync failed, or whose data is older than its own threshold.
-function troubledSources(sources: SyncSource[], connections: CompanyConnection[], now: Date): AttentionItem[] {
+function troubledSources(sources: SyncSource[], connections: CompanyConnection[], now: Date, companyTimeZone: string): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const source of sources) {
     if (!source.enabled) continue;
-    const state = syncState(source, connections.find((c) => c.id === source.connection_id) ?? null, now);
+    const state = syncState(source, connections.find((c) => c.id === source.connection_id) ?? null, now, companyTimeZone);
     if (state === "failed") {
       items.push({ kind: "sync_failed", title: `${source.name}: sync failed`, detail: failureDetail(source, now), to: "/settings/connections", severity: "danger" });
     } else if (state === "stale") {
@@ -102,7 +103,7 @@ export function attentionItems(input: AttentionInput): AttentionItem[] {
     ...overdueCycles(input.cycles, input.today),
     ...unbudgetedCampaigns(input.campaigns),
     ...brokenConnections(input.connections),
-    ...troubledSources(input.sources ?? [], input.connections, input.now ?? new Date()),
+    ...troubledSources(input.sources ?? [], input.connections, input.now ?? new Date(), input.companyTimeZone),
   ];
   return [...all.filter((item) => item.severity === "danger"), ...all.filter((item) => item.severity === "warning")];
 }

@@ -142,7 +142,7 @@ function ConnectionsTab({ company }: { company: Company }) {
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         <ConnectionsPanel companyId={company.id} providers={dataSources ? GOOGLE_ROW_PROVIDERS : undefined} />
-        {dataSources ? <DataSourcesPanel companyId={company.id} /> : null}
+        {dataSources ? <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} /> : null}
       </div>
       {hasModule(company, "external_links") ? (
         <Section eyebrow="Where the work lives" title="Links to outside tools">

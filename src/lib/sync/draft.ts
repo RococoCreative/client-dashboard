@@ -22,6 +22,7 @@ export interface SourceDraft {
   time: string;
   timezone: string;
   stale_after_hours: string;
+  stale_business_days: boolean;
   enabled: boolean;
 }
 
@@ -69,6 +70,7 @@ export function emptyDraft(provider: SyncProvider, timezone: string): SourceDraf
     time: "",
     timezone,
     stale_after_hours: "",
+    stale_business_days: false,
     enabled: false,
   };
 }
@@ -90,6 +92,7 @@ export function draftFromSource(source: SyncSource): SourceDraft {
     time: source.sync_time ? source.sync_time.slice(0, 5) : "",
     timezone: source.sync_timezone ?? "",
     stale_after_hours: source.stale_after_hours === null ? "" : String(source.stale_after_hours),
+    stale_business_days: source.stale_business_days,
     enabled: source.enabled,
   };
 }
@@ -177,6 +180,7 @@ export function draftToInput(draft: SourceDraft): DraftResult {
       record_key: recordKey,
       ...schedule,
       stale_after_hours: staleAfter,
+      stale_business_days: draft.stale_business_days,
       enabled: draft.enabled,
     },
   };

@@ -202,6 +202,7 @@ function SourceEditor({
             sync_time: value.sync_time,
             sync_timezone: value.sync_timezone,
             stale_after_hours: value.stale_after_hours,
+            stale_business_days: value.stale_business_days,
             enabled: value.enabled,
           })
         : await createSyncSource({ company_id: companyId, connection_id: connection.id, ...value });
@@ -382,6 +383,13 @@ function SourceEditor({
             <Field label="Stale after (hours)" htmlFor="source-stale" hint="Leave blank to show the age without ever marking it stale.">
               <input id="source-stale" type="text" inputMode="numeric" value={draft.stale_after_hours} onChange={(e) => set("stale_after_hours", e.target.value)} className={inputClass} />
             </Field>
+            <div className="self-start pt-7">
+              <label className="inline-flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" checked={draft.stale_business_days} onChange={(e) => set("stale_business_days", e.target.checked)} className={checkboxClass} />
+                Count weekdays only
+              </label>
+              <p className={helpClass}>Weekends do not count toward the limit.</p>
+            </div>
             <label className="inline-flex items-center gap-2 self-start pt-7 text-sm text-ink">
               <input type="checkbox" checked={draft.enabled} onChange={(e) => set("enabled", e.target.checked)} className={checkboxClass} />
               Enabled
@@ -401,7 +409,7 @@ function SourceEditor({
 
 type SyncNotice = { tone: "success" | "error" | "info"; text: string };
 
-export default function DataSourcesPanel({ companyId }: { companyId: string }) {
+export default function DataSourcesPanel({ companyId, companyTimeZone }: { companyId: string; companyTimeZone: string }) {
   const state = useAsync(async () => {
     const [sources, connections] = await Promise.all([listSyncSources(companyId), listConnections(companyId)]);
     return { sources, connections };
@@ -475,11 +483,11 @@ export default function DataSourcesPanel({ companyId }: { companyId: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium text-ink">{source.name}</p>
-                      <SyncStateBadge state={syncState(source, connection, now)} />
+                      <SyncStateBadge state={syncState(source, connection, now, companyTimeZone)} />
                     </div>
                     <p className="mt-0.5 text-[12px] text-ink-3">{`${TARGET_MODULE_LABELS[source.target_module]} · ${CONNECTION_PROVIDER_LABELS[source.provider]}`}</p>
                     <div className="mt-1">
-                      <FreshnessLine source={source} connection={connection} now={now} />
+                      <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

@@ -36,8 +36,8 @@ export default function SalesFinancePage() {
       <PageHeader eyebrow={company!.name} title="Sales & Finance" description="Sales and financial reporting read from the company's own sources. Nothing here is typed in by hand." />
       <Tabs items={SALES_FINANCE_TABS} />
       <div className="space-y-6">
-        <SourcePanel companyId={company!.id} targetModule="sales_reporting" scaffold={salesScaffold} />
-        <SourcePanel companyId={company!.id} targetModule="financial_reporting" scaffold={financialScaffold} />
+        <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="sales_reporting" scaffold={salesScaffold} />
+        <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="financial_reporting" scaffold={financialScaffold} />
       </div>
       {hasModule(company!, "external_links") ? <ExternalLinksList companyId={company!.id} navGroup="sales_finance" /> : null}
       <p className="mt-4 text-[12.5px] text-ink-2">

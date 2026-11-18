@@ -15,7 +15,7 @@ import type { AdapterRegistry, ProviderAdapter, ProviderTokens, SyncProvider, Sy
 import { HttpError, json, requireAdmin, sameBytes, service, signedInUser } from "./http.ts";
 
 const SOURCE_COLUMNS =
-  "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_weekdays, sync_time, sync_timezone, stale_business_days, current_run_id, last_attempt_at, last_success_at";
+  "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_weekdays, sync_time, sync_timezone, current_run_id, last_attempt_at, last_success_at";
 const CONNECTION_COLUMNS = "id, company_id, provider, status, external_account_id";
 
 // Wall time the tick spends starting sources; the rest stay due and run on the next tick.

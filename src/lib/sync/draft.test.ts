@@ -38,6 +38,7 @@ describe("emptyDraft", () => {
       time: "",
       timezone: "America/Chicago",
       stale_after_hours: "",
+      stale_business_days: false,
       enabled: false,
     });
   });
@@ -69,6 +70,7 @@ describe("draftFromSource and draftToInput", () => {
       sync_time: salesTab.sync_time,
       sync_timezone: salesTab.sync_timezone,
       stale_after_hours: salesTab.stale_after_hours,
+      stale_business_days: salesTab.stale_business_days,
       enabled: salesTab.enabled,
     });
   });
@@ -170,5 +172,19 @@ describe("withHeaders", () => {
     const { fields, added } = withHeaders([], ["", "  ", "Job", "Job"]);
     expect(fields).toEqual([fieldFromHeader("Job")]);
     expect(added).toBe(1);
+  });
+});
+
+describe("weekdays-only staleness", () => {
+  it("round-trips the flag through draftFromSource and draftToInput", () => {
+    expect(draftFromSource(salesTab).stale_business_days).toBe(false);
+    const on = draftFromSource({ ...salesTab, stale_business_days: true });
+    expect(on.stale_business_days).toBe(true);
+    const result = draftToInput(on);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.value.stale_business_days).toBe(true);
+    const off = draftToInput({ ...on, stale_business_days: false });
+    if (!off.ok) throw new Error(off.message);
+    expect(off.value.stale_business_days).toBe(false);
   });
 });

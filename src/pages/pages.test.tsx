@@ -1619,7 +1619,7 @@ describe("data sources", () => {
   const salesRoute = { path: "/sales-finance", pattern: "/sales-finance" };
 
   it("carries one Kingdom source in each sync state", () => {
-    const states = KINGDOM.syncSources.map((s) => syncState(s, KINGDOM.connections.find((c) => c.id === s.connection_id) ?? null));
+    const states = KINGDOM.syncSources.map((s) => syncState(s, KINGDOM.connections.find((c) => c.id === s.connection_id) ?? null, new Date(), KINGDOM.company.time_zone));
     expect([...states].sort()).toEqual(["awaiting_first_sync", "failed", "not_connected", "stale", "synced", "syncing"]);
   });
 
@@ -1732,6 +1732,36 @@ describe("data sources", () => {
     const attention = card("Needs attention");
     expect(await within(attention).findByText("Sample financial tab: sync failed")).toBeInTheDocument();
     expect(within(attention).getByText("Sample stale tab: stale data")).toBeInTheDocument();
+  });
+
+  it("lets a weekdays-only source skip the weekend on Home, and flags the same source with the flag off", async () => {
+    // The clock is Tuesday 08:00 in New York. Synced Friday 17:00 with a 48 hour limit: 87 hours have
+    // elapsed, 39 of them on weekdays (7 Friday, 24 Monday, 8 Tuesday).
+    const friday5pm = "2026-09-11T21:00:00.000Z";
+    const staleName = "Sample stale tab";
+    const original = syncService.listSyncSources;
+    const withFlag = (flag: boolean) =>
+      vi.spyOn(syncService, "listSyncSources").mockImplementation(async (companyId) => {
+        const sources = await original(companyId);
+        return sources.map((s) => (s.name === staleName ? { ...s, last_success_at: friday5pm, stale_after_hours: 48, stale_business_days: flag, sync_timezone: null } : s));
+      });
+
+    const on = withFlag(true);
+    onTestFinished(() => on.mockRestore());
+    const first = renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Freshness" });
+    const attentionOn = card("Needs attention");
+    expect(await within(attentionOn).findByText("Sample financial tab: sync failed")).toBeInTheDocument();
+    expect(within(attentionOn).queryByText(`${staleName}: stale data`)).not.toBeInTheDocument();
+    expect(within(card("Freshness")).queryByText("Stale data")).not.toBeInTheDocument();
+    first.unmount();
+    on.mockRestore();
+
+    const off = withFlag(false);
+    onTestFinished(() => off.mockRestore());
+    renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Freshness" });
+    expect(await within(card("Needs attention")).findByText(`${staleName}: stale data`)).toBeInTheDocument();
   });
 
   it("adds nothing to a company without data sources", async () => {
