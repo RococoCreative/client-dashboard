@@ -16,16 +16,42 @@ export const CAPABILITY_KEYS: readonly CapabilityKey[] = [
   "production_view",
 ];
 
-// Each capability's plain name, for anywhere a person reads one (the company Activity tab).
+// What a Rococo admin reads on the Permissions page: each power as a plain sentence, and each level
+// as who it lets in. The Activity tab keeps its own shorter names (AUDIT_CAPABILITY_LABELS).
 export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
-  pay: "Pay",
-  company_settings: "Company settings",
-  audit_log: "Change log",
+  pay: "See pay",
+  company_settings: "Change company settings",
+  audit_log: "Read the change log",
   milestones_edit: "Edit milestones",
   wins_post: "Record wins",
-  sync_run: "Sync now",
+  sync_run: "Press Sync now",
   production_view: "Open Production",
 };
+
+export const LEVEL_LABELS: Record<CapabilityLevel, string> = {
+  employee: "Everyone",
+  manager: "Managers and up",
+  admin: "Admins and owners",
+  owner: "Owners only",
+  rococo: "Rococo only",
+};
+
+// The levels a capability may be set to, lowest first. Pay and settings never go below admin, the
+// change log is never opened to managers or below, and Sync now has no owner-only or Rococo-only
+// setting. The database accepts any of the five; this is what the page offers.
+const ALLOWED_LEVELS: Record<CapabilityKey, CapabilityLevel[]> = {
+  pay: ["admin", "owner"],
+  company_settings: ["admin", "owner"],
+  audit_log: ["admin", "owner", "rococo"],
+  milestones_edit: ["employee", "manager", "admin", "owner"],
+  wins_post: ["employee", "manager", "admin", "owner"],
+  sync_run: ["employee", "manager", "admin"],
+  production_view: ["employee", "manager", "admin", "owner"],
+};
+
+export function allowedLevels(key: CapabilityKey): CapabilityLevel[] {
+  return [...ALLOWED_LEVELS[key]];
+}
 
 // A company's row wins over the catalog default. A key the catalog does not carry stays out of
 // the map, and meets() refuses a missing level, so an unknown capability is never granted.

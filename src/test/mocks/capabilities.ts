@@ -1,7 +1,8 @@
 // In-memory stand-in for services/capabilities.ts, same exports, for page tests and the demo. It
-// returns the catalog defaults with any per-company overrides a test set. setMockCapabilities and
+// returns the catalog defaults with any per-company overrides a test set. Set and clear write the same
+// store loadCapabilities reads, so a change made through the Permissions page is what a company then gets. setMockCapabilities and
 // resetMockCapabilities are test-only extras; src/test/setup.ts resets after every test.
-import type { Capability, CompanyCapability } from "../../types/database.ts";
+import type { Capability, CapabilityKey, CapabilityLevel, CompanyCapability } from "../../types/database.ts";
 import { resolveCapabilities, type CapabilityMap } from "../../lib/capabilities.ts";
 
 const CATALOG: Capability[] = [
@@ -44,4 +45,23 @@ export async function loadCapabilities(companyId: string): Promise<CapabilityMap
 
 export async function listCompanyCapabilities(companyId: string): Promise<CompanyCapability[]> {
   return overrideRows(companyId);
+}
+
+export async function listCapabilityCatalog(): Promise<Capability[]> {
+  return CATALOG.map((c) => ({ ...c }));
+}
+
+export async function listAllCompanyCapabilities(): Promise<CompanyCapability[]> {
+  return [...overridesByCompany.keys()].flatMap(overrideRows);
+}
+
+export async function setCompanyCapability(companyId: string, capability: CapabilityKey, level: CapabilityLevel): Promise<CompanyCapability> {
+  overridesByCompany.set(companyId, { ...overridesByCompany.get(companyId), [capability]: level });
+  return { id: `${companyId}-${capability}`, company_id: companyId, capability, min_role: level };
+}
+
+export async function clearCompanyCapability(companyId: string, capability: CapabilityKey): Promise<void> {
+  const next = { ...overridesByCompany.get(companyId) };
+  delete next[capability];
+  overridesByCompany.set(companyId, next);
 }

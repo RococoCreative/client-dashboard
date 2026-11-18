@@ -198,3 +198,61 @@ select tests.assert(
       and action = 'insert' and changed->'capability'->>'new' = 'sync_run') = 1,
   'override_change_is_audited: the insert does not name its capability'
 );
+
+-- case: rococo_upsert_writes_and_updates
+select tests.act_as(tests.id('rococo_admin'));
+insert into public.company_capabilities (company_id, capability, min_role)
+values (tests.company('klasik'), 'wins_post', 'manager')
+on conflict (company_id, capability) do update set min_role = excluded.min_role;
+insert into public.company_capabilities (company_id, capability, min_role)
+values (tests.company('klasik'), 'wins_post', 'owner')
+on conflict (company_id, capability) do update set min_role = excluded.min_role;
+select tests.assert(
+  (select count(*) from public.company_capabilities
+    where company_id = tests.company('klasik') and capability = 'wins_post') = 1,
+  'rococo_upsert_writes_and_updates: the upsert left more than one row'
+);
+select tests.assert(
+  (select min_role = 'owner' from public.company_capabilities
+    where company_id = tests.company('klasik') and capability = 'wins_post'),
+  'rococo_upsert_writes_and_updates: the second level did not win'
+);
+
+-- case: rococo_delete_clears_and_is_audited
+delete from public.company_capabilities
+ where company_id = tests.company('klasik') and capability = 'wins_post';
+select tests.assert(
+  not exists (select 1 from public.company_capabilities
+               where company_id = tests.company('klasik') and capability = 'wins_post'),
+  'rococo_delete_clears_and_is_audited: the row is still there'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select count(*) from public.audit_events
+    where table_name = 'company_capabilities' and company_id = tests.company('klasik')
+      and action = 'delete' and changed::text like '%wins_post%') = 1,
+  'rococo_delete_clears_and_is_audited: the delete was not audited with its capability'
+);
+
+-- case: company_owner_cannot_upsert_or_delete
+select tests.act_as(tests.id('kingdom_owner'));
+select tests.assert_raises(
+  format(
+    $q$insert into public.company_capabilities (company_id, capability, min_role) values (%L, 'sync_run', 'employee')
+       on conflict (company_id, capability) do update set min_role = excluded.min_role$q$,
+    tests.company('kingdom')
+  ),
+  '%row-level security%'
+);
+do $$
+declare
+  v_rows integer;
+begin
+  delete from public.company_capabilities where company_id = tests.company('kingdom');
+  get diagnostics v_rows = row_count;
+  if v_rows <> 0 then
+    raise exception 'company_owner_cannot_upsert_or_delete: % row(s) deleted by a Kingdom owner', v_rows;
+  end if;
+end;
+$$;

@@ -14,9 +14,20 @@ import {
   TARGET_MODULE_LABELS,
   type AuditEvent,
 } from "../types/database.ts";
-import { CAPABILITY_LABELS } from "./capabilities.ts";
 import { LINK_GROUP_LABELS } from "./links.ts";
 import { MODULE_LABELS } from "./modules.ts";
+
+// Each capability's short name for the change log, where a sentence like "Permission for Pay added"
+// has to read well. The Permissions page uses the longer CAPABILITY_LABELS.
+const AUDIT_CAPABILITY_LABELS: Record<string, string> = {
+  pay: "Pay",
+  company_settings: "Company settings",
+  audit_log: "Change log",
+  milestones_edit: "Edit milestones",
+  wins_post: "Record wins",
+  sync_run: "Sync now",
+  production_view: "Open Production",
+};
 
 // Every audited table, the later ones included (sync_sources and external_links are attached by
 // their own migrations), so this file stays the one place a table gets its plain name.
@@ -230,7 +241,7 @@ function plainValue(value: unknown, kind: Kind, names: AuditNames): string {
     case "level":
       return text === "rococo" ? "Rococo only" : (ROLE_LABELS[text as keyof typeof ROLE_LABELS] ?? text);
     case "capability":
-      return CAPABILITY_LABELS[text as keyof typeof CAPABILITY_LABELS] ?? text.replace(/_/g, " ");
+      return AUDIT_CAPABILITY_LABELS[text] ?? text.replace(/_/g, " ");
     case "person":
       return names.people.get(text) ?? "someone";
     case "jobRole":

@@ -53,6 +53,7 @@ import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
 import ActivityPage from "./pages/rococo/ActivityPage.tsx";
+import PermissionsPage from "./pages/rococo/PermissionsPage.tsx";
 import TasksPage from "./pages/tasks/TasksPage.tsx";
 import TaskPage from "./pages/tasks/TaskPage.tsx";
 import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
@@ -106,6 +107,9 @@ function HoldingScreen({ eyebrow, title, body }: { eyebrow: string; title: strin
     </CenteredCard>
   );
 }
+
+// How often a company's capabilities are read again when the tab returns to the front.
+const CAPABILITY_REFRESH_MS = 30_000;
 
 // Redirect that keeps the query string (the demo harness carries its persona there).
 function RedirectTo({ path }: { path: string }) {
@@ -278,6 +282,40 @@ function SignedIn({ session }: { session: Session }) {
       active = false;
     };
   }, [companyId, retryTick]);
+
+  // A change a Rococo admin makes on the Permissions page is stored at once, but a person who has the
+  // hub open only holds the map they loaded. When the tab comes back (visible again, or the window
+  // focused) the active company's map is read again, at most once every 30 seconds. The current map
+  // stays on screen while it runs, a failure changes nothing, and the company tag plus the cleanup
+  // flag keep a late answer from landing on another company.
+  useEffect(() => {
+    if (!companyId) return;
+    const id = companyId;
+    let active = true;
+    let inFlight = false;
+    let lastAttempt = Date.now();
+    function refresh() {
+      if (document.visibilityState !== "visible" || inFlight) return;
+      if (Date.now() - lastAttempt < CAPABILITY_REFRESH_MS) return;
+      lastAttempt = Date.now();
+      inFlight = true;
+      loadCapabilities(id)
+        .then((map) => {
+          if (active) setCapabilities({ companyId: id, map });
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+        });
+    }
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [companyId]);
 
   // Theme before the shell mounts: onboarding wears the company's theme when there is one.
   // Once AppLayout mounts it owns the theme, because the portfolio is Rococo-branded
@@ -471,6 +509,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
             <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />
+            <Route path="rococo/permissions" element={<RococoOnly><PermissionsPage /></RococoOnly>} />
             <Route path="rococo/activity" element={<RococoOnly><ActivityPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
