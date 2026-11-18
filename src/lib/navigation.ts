@@ -25,6 +25,8 @@ export interface NavItem {
   group: NavGroup;
   // The module a company needs on for this item to show at all.
   requires?: ModuleKey;
+  // A company setting that must be on for this item to show. Off hides the item for that company.
+  setting?: "manual_financials";
   // The capability a person needs for this item to show, on top of its audience and module. A
   // company can raise or lower it, so the same item reads differently per company by data.
   capability?: CapabilityKey;
@@ -57,7 +59,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "tasks", to: "/tasks", label: "Tasks", icon: ListChecks, audience: "both", group: "home", requires: "tasks" },
   { id: "sales-reporting", to: "/sales-finance", label: "Reporting", icon: ChartColumn, end: true, audience: "admin", group: "sales_finance", requires: "data_sources" },
   { id: "controls", to: "/sales-finance/controls", label: "Controls", icon: ShieldCheck, audience: "admin", group: "sales_finance", requires: "data_sources" },
-  { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance" },
+  { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance", setting: "manual_financials" },
   { id: "marketing", to: "/marketing", label: "Marketing", icon: Megaphone, audience: "admin", group: "sales_finance" },
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production", capability: "production_view" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
@@ -102,6 +104,7 @@ function audienceSees(audience: NavAudience, isAdmin: boolean, isLead: boolean):
 function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean, can: CanFn): boolean {
   if (!audienceSees(item.audience, isAdmin, isLead)) return false;
   if (item.requires && !hasModule(company, item.requires)) return false;
+  if (item.setting && !company[item.setting]) return false;
   if (item.capability && !can(item.capability)) return false;
   // Rococo admins have no company of their own, so a "My" page would be empty for them.
   if (isRococo && item.to.startsWith("/my")) return false;

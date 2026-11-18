@@ -71,6 +71,7 @@ import {
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
   type EmployeeFinancial,
+  type FinancialSnapshot,
   type JobRole,
   type Profile,
   type Review,
@@ -246,6 +247,7 @@ function MyScorecard({ companyId, employeeId, jobRole }: { companyId: string; em
 function AdminDashboard() {
   const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
+  const showManualFinancials = company!.manual_financials;
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
@@ -257,7 +259,7 @@ function AdminDashboard() {
       listRecentSops(companyId, 5),
       listSops(companyId),
       listResources(companyId),
-      listSnapshots(companyId),
+      showManualFinancials ? listSnapshots(companyId) : Promise.resolve([] as FinancialSnapshot[]),
       listCampaigns(companyId),
       loadOwnModules(companyId, profile, year),
       listCycleOmissions(companyId),
@@ -274,7 +276,7 @@ function AdminDashboard() {
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
     return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
-  }, [companyId, profile.id, profile.job_role_id, year]);
+  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year]);
 
   // The division split, read only for someone allowed to see it, and only past the divisions
   // themselves when the company has some. Null means the combined picture alone.
@@ -492,38 +494,40 @@ function AdminDashboard() {
         </div>
 
         <div className="space-y-6">
-          <Section
-            eyebrow="Financials"
-            title={latestMonth ? periodLabel(latestMonth.period_type, latestMonth.period_start) : "No snapshots yet"}
-            actions={
-              <Link to="/financials">
-                <Button variant="ghost" size="sm">Open</Button>
-              </Link>
-            }
-          >
-            {latestMonth && latestDerived ? (
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Revenue</dt>
-                  <dd className="tnum mt-0.5 text-lg font-medium text-heading">{formatMoney(latestMonth.revenue)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net profit</dt>
-                  <dd className={`tnum mt-0.5 text-lg font-medium ${latestDerived.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(latestDerived.net)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Gross margin</dt>
-                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.grossMargin, 1)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net margin</dt>
-                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.netMargin, 1)}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="text-sm text-ink-2">Enter a period or import a CSV to see revenue, margins, and net here.</p>
-            )}
-          </Section>
+          {showManualFinancials ? (
+            <Section
+              eyebrow="Financials"
+              title={latestMonth ? periodLabel(latestMonth.period_type, latestMonth.period_start) : "No snapshots yet"}
+              actions={
+                <Link to="/financials">
+                  <Button variant="ghost" size="sm">Open</Button>
+                </Link>
+              }
+            >
+              {latestMonth && latestDerived ? (
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Revenue</dt>
+                    <dd className="tnum mt-0.5 text-lg font-medium text-heading">{formatMoney(latestMonth.revenue)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Net profit</dt>
+                    <dd className={`tnum mt-0.5 text-lg font-medium ${latestDerived.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(latestDerived.net)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Gross margin</dt>
+                    <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.grossMargin, 1)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Net margin</dt>
+                    <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.netMargin, 1)}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-sm text-ink-2">Enter a period or import a CSV to see revenue, margins, and net here.</p>
+              )}
+            </Section>
+          ) : null}
           <Section
             eyebrow="Marketing"
             title={pluralize(liveCampaigns.length, "live campaign")}

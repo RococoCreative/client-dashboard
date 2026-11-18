@@ -36,12 +36,18 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
+import PortfolioPage from "./rococo/PortfolioPage.tsx";
+import DashboardPage from "./DashboardPage.tsx";
+import SalesFinancePage from "./salesFinance/SalesFinancePage.tsx";
+import { SettingOnly } from "../App.tsx";
+import * as financialsService from "../services/financials.ts";
 import WinsPage from "./WinsPage.tsx";
+import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
 import WinsCard from "../components/home/WinsCard.tsx";
 import * as winsService from "../services/wins.ts";
 import * as companiesService from "../services/companies.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { KINGDOM, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
 
 const rococo = makeHub("rococo", null);
 
@@ -211,5 +217,90 @@ describe("wins leave Home after the company's days", () => {
     unmount();
     renderWithHub(<WinsCard company={withDays(14, "America/New_York")} />, adminFor(withDays(14, "America/New_York")));
     expect(await screen.findByText("Sample win 2")).toBeInTheDocument();
+  });
+});
+
+// The manual Financials switch on screen: the page, its sidebar item and Home shortcut, its Home
+// section, the Sales and Finance pointer and the portfolio figure all follow the company's setting.
+describe("manual Financials off", () => {
+  const off = { ...KLASIK.company, manual_financials: false };
+  const adminOff = () => makeHub("admin", off);
+
+  it("has no Financials item in the sidebar or the Home shortcuts", () => {
+    // The shortcut for Sales & Finance points at the section's first page; with the setting on it is
+    // Financials, off it is Marketing.
+    const on = makeHub("admin", KLASIK.company);
+    expect(on.company?.manual_financials).toBe(true);
+    const { unmount } = renderWithHub(<ShortcutsCard company={KLASIK.company} isAdmin isRococo={false} can={on.can} />, on);
+    expect(screen.getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/financials");
+    unmount();
+    renderWithHub(<ShortcutsCard company={off} isAdmin isRococo={false} can={adminOff().can} />, adminOff());
+    expect(screen.getByRole("link", { name: "Sales & Finance" })).toHaveAttribute("href", "/marketing");
+  });
+
+  it("sends /financials Home", () => {
+    const gated = <SettingOnly setting="manual_financials"><p>financials page</p></SettingOnly>;
+    const view = renderWithHub(gated, adminOff(), { path: "/x", pattern: "/x" });
+    expect(screen.getByText("elsewhere")).toBeInTheDocument();
+    expect(screen.queryByText("financials page")).not.toBeInTheDocument();
+    view.unmount();
+    renderWithHub(gated, makeHub("admin", KLASIK.company), { path: "/x", pattern: "/x" });
+    expect(screen.getByText("financials page")).toBeInTheDocument();
+  });
+
+  it("shows no Financials section on Home and does not request snapshots", async () => {
+    const spy = vi.spyOn(financialsService, "listSnapshots");
+    renderWithHub(<DashboardPage />, adminOff());
+    expect(await screen.findByText("Marketing")).toBeInTheDocument();
+    expect(screen.queryByText("No snapshots yet")).not.toBeInTheDocument();
+    expect(screen.queryByText("Net profit")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open" })).not.toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("the Sales and Finance page does not point at a manual Financials page", () => {
+    const view = renderWithHub(<SalesFinancePage />, makeHub("admin", { ...KINGDOM.company, manual_financials: false }));
+    expect(screen.queryByRole("link", { name: "Financials" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Marketing" })).toBeInTheDocument();
+    view.unmount();
+    renderWithHub(<SalesFinancePage />, makeHub("admin", KINGDOM.company));
+    expect(screen.getByRole("link", { name: "Financials" })).toHaveAttribute("href", "/financials");
+  });
+
+  it("the portfolio drops the figure, alert and button for that company only", async () => {
+    const rococoHub = makeHub("rococo", null);
+    const hub = { ...rococoHub, companies: rococoHub.companies.map((c) => (c.id === "co-klasik" ? { ...c, manual_financials: false } : c)) };
+    const spy = vi.spyOn(financialsService, "listSnapshots");
+    renderWithHub(<PortfolioPage />, hub, { path: "/rococo", pattern: "/rococo" });
+    await screen.findByRole("heading", { name: "Klasik Construction" });
+    const card = (name: string) => screen.getByRole("heading", { name }).closest("li") as HTMLElement;
+    await waitFor(() => expect(within(card("Kingdom Custom Construction")).getByText("Financials", { selector: "dt" })).toBeInTheDocument());
+    const klasik = card("Klasik Construction");
+    expect(within(klasik).queryByText("Financials", { selector: "dt" })).not.toBeInTheDocument();
+    expect(within(klasik).queryByRole("button", { name: "Financials" })).not.toBeInTheDocument();
+    expect(within(klasik).queryByText("No financials yet")).not.toBeInTheDocument();
+    for (const other of ["Kingdom Custom Construction", "RBA Projects"]) {
+      expect(within(card(other)).getByText("Financials", { selector: "dt" })).toBeInTheDocument();
+      expect(within(card(other)).getByRole("button", { name: "Financials" })).toBeInTheDocument();
+    }
+    expect(spy).not.toHaveBeenCalledWith("co-klasik");
+    expect(spy).toHaveBeenCalledWith("co-kingdom");
+    spy.mockRestore();
+  });
+});
+
+describe("manual Financials on (the default)", () => {
+  it("is unchanged: nav item, Home section and portfolio figure are all present", async () => {
+    const spy = vi.spyOn(financialsService, "listSnapshots");
+    const view = renderWithHub(<DashboardPage />, makeHub("admin", KLASIK.company));
+    expect(await screen.findByText("Net profit")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith("co-klasik");
+    view.unmount();
+    spy.mockRestore();
+    renderWithHub(<PortfolioPage />, makeHub("rococo", null), { path: "/rococo", pattern: "/rococo" });
+    await screen.findByRole("heading", { name: "Klasik Construction" });
+    expect(await screen.findAllByText("Financials", { selector: "dt" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Financials" })).toHaveLength(3);
   });
 });

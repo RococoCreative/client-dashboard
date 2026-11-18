@@ -173,6 +173,14 @@ export function ModuleOnly({ module, children }: { module: ModuleKey; children: 
   return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
 }
 
+// A page that exists only while a company setting is on (the manual Financials page). Off, a typed
+// URL lands on Home, the same answer the sidebar gives by hiding the item.
+export function SettingOnly({ setting, children }: { setting: "manual_financials"; children: ReactNode }) {
+  const { company } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return company[setting] ? <>{children}</> : <Navigate to="/" replace />;
+}
+
 // A page that needs a capability the company has set for the person's role. Anyone without it
 // lands on Home, the way AdminOnly does, so a typed URL gets the same answer the sidebar gives.
 export function CapabilityOnly({ capability, children }: { capability: CapabilityKey; children: ReactNode }) {
@@ -495,7 +503,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
+            <Route path="financials" element={<AdminOnly><SettingOnly setting="manual_financials"><FinancialsPage /></SettingOnly></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
             <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
