@@ -2,10 +2,11 @@
 // decides who sees and changes what; the triggers own completion and recurrence, so every write
 // here reads the whole task back and a page always shows what the database decided.
 import type { Task, TaskPriority, TaskRecurrence, TaskStep, TaskWithSteps } from "../types/database.ts";
+import { requireRows } from "../lib/errors.ts";
 import { invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
-const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
+const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, goal_id, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
 const SELECT = `${TASK_COLUMNS}, steps:task_steps(id, task_id, company_id, title, sort_order, done_at)`;
 
 function bySortOrder(a: TaskStep, b: TaskStep): number {
@@ -24,9 +25,11 @@ export type TaskInput = {
   priority?: TaskPriority;
   recurrence?: TaskRecurrence | null;
   campaign_id?: string | null;
+  // A monthly GSR goal of the assignee's own (0039). The database refuses any other goal.
+  goal_id?: string | null;
   steps?: string[];
 };
-export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id">>;
+export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id">>;
 
 // Earliest due date first, undated last, then oldest created. Open only unless asked.
 export async function listTasks(companyId: string, opts?: { assigneeId?: string; campaignId?: string; status?: "open" | "done" | "all" }): Promise<TaskWithSteps[]> {
@@ -39,6 +42,27 @@ export async function listTasks(companyId: string, opts?: { assigneeId?: string;
   const { data, error } = await query.order("due_date", { ascending: true, nullsFirst: false }).order("created_at", { ascending: true });
   if (error) throw error;
   return ((data as unknown as TaskWithSteps[]) ?? []).map(withOrderedSteps);
+}
+
+// Every task linked to any of these goals, open and done alike, so a past GSR shows the work behind
+// each goal as it stands now. Completion is informational: nothing here feeds a score.
+export async function listTasksForGoals(companyId: string, goalIds: readonly string[]): Promise<TaskWithSteps[]> {
+  if (goalIds.length === 0) return [];
+  const { data, error } = await db()
+    .from("tasks")
+    .select(SELECT)
+    .eq("company_id", companyId)
+    .in("goal_id", [...goalIds])
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return ((data as unknown as TaskWithSteps[]) ?? []).map(withOrderedSteps);
+}
+
+// Links a task to a monthly goal, or unlinks it with null. Unlinking is always allowed; linking
+// is refused in a closed, complete or omitted month and for a goal that is not the assignee's.
+export async function linkTaskToGoal(taskId: string, goalId: string | null): Promise<TaskWithSteps> {
+  return updateTask(taskId, { goal_id: goalId });
 }
 
 export async function getTask(id: string): Promise<TaskWithSteps> {
@@ -67,7 +91,12 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
   if (titles.length > 0) {
     const rows = titles.map((title, i) => ({ task_id: id, company_id: input.company_id, title, sort_order: i + 1 }));
     const { error: stepsError } = await db().from("task_steps").insert(rows);
-    if (stepsError) throw stepsError;
+    if (stepsError) {
+      // Take the task back out so a retry never leaves a duplicate behind. If even that fails,
+      // the task stays and the steps error is still the one the person needs to see.
+      await db().from("tasks").delete().eq("id", id);
+      throw stepsError;
+    }
   }
   return getTask(id);
 }
@@ -79,8 +108,9 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskWith
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  const { error } = await db().from("tasks").delete().eq("id", id);
+  const { data, error } = await db().from("tasks").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // A repeating task opens its next copy in the database when this lands.
@@ -132,7 +162,13 @@ export async function moveStep(stepId: string, direction: "up" | "down"): Promis
   if (index === -1 || !neighbor) return task;
   const current = task.steps[index];
   await updateStep(current.id, { sort_order: neighbor.sort_order });
-  await updateStep(neighbor.id, { sort_order: current.sort_order });
+  try {
+    await updateStep(neighbor.id, { sort_order: current.sort_order });
+  } catch (err) {
+    // Put the first step back so the two never share a place; the error still surfaces.
+    await updateStep(current.id, { sort_order: current.sort_order }).catch(() => undefined);
+    throw err;
+  }
   return getTask(task.id);
 }
 

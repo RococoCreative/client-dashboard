@@ -47,6 +47,23 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
   if (index !== -1) list.splice(index, 1);
 }
 
+// The task link rule of 0039, for the tasks mock: a task may be linked only to a monthly goal of
+// its own assignee in its own company, and only while that month is open, not complete and the
+// person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
+// reaches here.
+export function goalLinkProblem(task: { company_id: string; assignee_id: string | null; goal_id: string | null }): string | null {
+  if (task.goal_id === null) return null;
+  const goal = goals.find((g) => g.id === task.goal_id);
+  if (!goal || goal.company_id !== task.company_id) return "That goal is not here any more.";
+  if (goal.scope !== "cycle" || goal.cycle_id === null) return "Only a monthly GSR goal can have tasks.";
+  if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
+  const cycle = cycles.find((c) => c.id === goal.cycle_id);
+  const review = reviews.find((r) => r.cycle_id === goal.cycle_id && r.employee_id === goal.employee_id);
+  const omitted = cycleOmissions.some((o) => o.cycle_id === goal.cycle_id && o.employee_id === goal.employee_id);
+  if (!cycle || cycle.status !== "open" || review?.status === "complete" || omitted) return "That month is closed, so its goals take no new tasks.";
+  return null;
+}
+
 export async function listPillars(companyId: string, includeInactive = false): Promise<GsrPillar[]> {
   return pillars.filter((p) => p.company_id === companyId && (includeInactive || p.is_active)).sort((a, b) => a.sort_order - b.sort_order);
 }
