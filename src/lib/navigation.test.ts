@@ -4,7 +4,7 @@
 // employee of a company with no modules, of one with every module, a Rococo admin inside each, and
 // a manager.
 import { describe, expect, it } from "vitest";
-import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, KeyRound, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
 import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, type CanFn, type NavItem, type NavLayout } from "./navigation.ts";
@@ -73,6 +73,7 @@ const PORTFOLIO: Expected[] = [
   { to: "/rococo", label: "Portfolio", icon: LayoutGrid, end: true },
   { to: "/rococo/companies", label: "Companies", icon: Building2 },
   { to: "/rococo/people", label: "People", icon: Users },
+  { to: "/rococo/permissions", label: "Permissions", icon: KeyRound },
   { to: "/rococo/activity", label: "Activity", icon: History },
 ];
 

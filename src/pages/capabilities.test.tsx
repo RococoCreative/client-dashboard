@@ -155,3 +155,51 @@ describe("capabilities in the app", () => {
     expect(probeLog.every((r) => r.wins === true)).toBe(true);
   });
 });
+
+describe("capabilities when the tab returns", () => {
+  function comeBack() {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("reloads the active company's map without a loading screen, at most once every 30 seconds", async () => {
+    signInAs("admin");
+    render(<App />);
+    expect(await screen.findByTestId("probe")).toHaveTextContent("co-klasik:true");
+    expect(load).toHaveBeenCalledTimes(1);
+
+    setMockCapabilities("co-klasik", { wins_post: "owner" });
+    vi.setSystemTime(Date.now() + 31_000);
+    const rendersBefore = probeLog.length;
+    await act(async () => comeBack());
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("co-klasik:false"));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Loading your company")).not.toBeInTheDocument();
+    expect(probeLog.slice(rendersBefore).every((r) => r.company === "co-klasik")).toBe(true);
+
+    setMockCapabilities("co-klasik", { wins_post: "employee" });
+    vi.setSystemTime(Date.now() + 5_000);
+    await act(async () => comeBack());
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("probe")).toHaveTextContent("co-klasik:false");
+  });
+
+  it("keeps the current map when the reload fails, and does nothing on the portfolio", async () => {
+    signInAs("rococo");
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByTestId("probe")).toHaveTextContent("portfolio:true");
+    vi.setSystemTime(Date.now() + 31_000);
+    await act(async () => comeBack());
+    expect(load).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Enter Klasik" }));
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("co-klasik:true"));
+    load.mockRejectedValueOnce(new Error("offline"));
+    vi.setSystemTime(Date.now() + 31_000);
+    await act(async () => comeBack());
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("probe")).toHaveTextContent("co-klasik:true");
+    expect(screen.queryByText("Could not load your company")).not.toBeInTheDocument();
+  });
+});

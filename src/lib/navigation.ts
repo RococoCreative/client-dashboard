@@ -8,7 +8,7 @@
 // to admins and to managers; a manager otherwise keeps every employee item, so People sits beside
 // their own My GSR, My Reviews and My Goals.
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
+import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, KeyRound, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
 import type { CapabilityKey, Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
@@ -80,6 +80,7 @@ export const PORTFOLIO_NAV: readonly NavItem[] = [
   { id: "portfolio", to: "/rococo", label: "Portfolio", icon: LayoutGrid, end: true, audience: "both", group: "utility" },
   { id: "companies", to: "/rococo/companies", label: "Companies", icon: Building2, audience: "both", group: "utility" },
   { id: "rococo-people", to: "/rococo/people", label: "People", icon: Users, audience: "both", group: "utility" },
+  { id: "permissions", to: "/rococo/permissions", label: "Permissions", icon: KeyRound, audience: "both", group: "utility" },
   { id: "activity", to: "/rococo/activity", label: "Activity", icon: History, audience: "both", group: "utility" },
 ];
 

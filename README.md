@@ -271,9 +271,11 @@ capability. The level `rococo` means no company role holds it.
 | `sync_run` | admin | Who presses Sync now on a data source |
 | `production_view` | employee | Who sees the Production pages and project links in the app |
 
-Members read their own company's rows and only Rococo writes them. There is no screen for them
-yet: Rococo sets them in the SQL editor, as `supabase/seeds/kingdom_intake.sql` does for
-Kingdom, and every change is in the change log. `production_view` is a screen rule only: the
+Members read their own company's rows and only Rococo writes them. A Rococo admin sets a
+company's levels on Rococo, Permissions: one grid with a row per capability and a column per
+company, each change stored, read back and shown from what the database returned. Every change
+is in the change log. `supabase/seeds/kingdom_permissions.sql` stays as a record of what Kingdom
+asked for and is not needed. `production_view` is a screen rule only: the
 project rows themselves stay readable by every member, as before.
 
 Known limits, as built:
@@ -289,8 +291,9 @@ Known limits, as built:
   Sync now button until one is added to Production; until then the power is only in the database.
 - Keep `audit_log` at admin or above. There is no screen for it below admin, and the log includes
   invitation addresses and connection details.
-- Capabilities load once per company per page load. After changing a company's rows, ask its people
-  to reload, and run the seed (or any change to them) off hours.
+- Capabilities load when a company opens and again when the tab returns to the front (at most once
+  every 30 seconds), so a change reaches a person who has the hub open on their next return to the
+  tab. Make changes off hours.
 
 ## Personal KPIs and deliverables
 
