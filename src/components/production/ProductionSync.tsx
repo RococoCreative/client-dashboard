@@ -2,7 +2,7 @@
 // an admin. Their database access reaches the source rows and nothing else (no connection, run or
 // record rows), so the stamp is built from the source row alone and the connection list is never
 // read: an empty list would wrongly say "Not connected". Admins keep the full SourcePanel instead.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "../ui/Button.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
@@ -36,30 +36,48 @@ export default function ProductionSync({ companyId }: { companyId: string }) {
   const state = useAsync(() => loadProductionSources(companyId), [companyId]);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [notice, setNotice] = useState<Message | null>(null);
+  // A ref, so two clicks in one batch cannot both start a sync; and the company this component
+  // currently shows, so nothing lands after unmount or after the company changed.
+  const busy = useRef(false);
+  const current = useRef(companyId);
+  useEffect(() => {
+    current.current = companyId;
+    return () => {
+      current.current = "";
+    };
+  }, [companyId]);
 
   async function syncNow(source: SyncSource) {
-    if (syncing) return;
+    if (busy.current) return;
+    busy.current = true;
+    const forCompany = companyId;
+    const live = () => current.current === forCompany;
     setSyncing(source.id);
     setNotice(null);
     try {
       const result = await requestSync(source.id);
+      if (!live()) { busy.current = false; return; }
       setNotice(
         result.status === "succeeded"
           ? { tone: "success", text: `${source.name} synced: ${pluralize(result.rows_applied, "row")}.` }
           : result.status === "locked"
             ? { tone: "info", text: "A sync is already running for this connection. Try again in a few minutes." }
-            : { tone: "error", text: result.message ?? "The sync did not finish." },
+            : // The runner's message can quote sheet cells and column names; a failed run gets a fixed line.
+              { tone: "error", text: "The sync did not finish. Ask an admin to check the source." },
       );
     } catch (err) {
+      if (!live()) { busy.current = false; return; }
       setNotice({ tone: "error", text: errorMessage(err) });
     }
     // Render from what the database now says, never from an assumed time.
     try {
-      state.setData(await loadProductionSources(companyId));
+      const next = await loadProductionSources(companyId);
+      if (live()) state.setData(next);
     } catch (err) {
-      setNotice((current) => current ?? { tone: "error", text: errorMessage(err) });
+      if (live()) setNotice((prev) => prev ?? { tone: "error", text: errorMessage(err) });
     } finally {
-      setSyncing(null);
+      busy.current = false;
+      if (live()) setSyncing(null);
     }
   }
 

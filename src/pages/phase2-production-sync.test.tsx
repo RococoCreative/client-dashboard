@@ -88,6 +88,7 @@ describe("Production sync for people who may sync", () => {
     manage([row({ last_success_at: GOOD, last_status: "failed", last_error: "Column missing", last_attempt_at: "2026-09-15T09:00:00Z" })]);
     renderWithHub(<ProductionPage />, manager, route);
     expect(await screen.findByText(`The last sync did not finish. Showing figures from ${formatDateTime(GOOD)}.`)).toBeInTheDocument();
+    expect(screen.queryByText(/Column missing/)).not.toBeInTheDocument();
   });
 
   it("a failed sync with no good time yet says so without a time", async () => {
@@ -142,6 +143,23 @@ describe("Production sync for people who may sync", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Sync Sample capacity tab now" }));
     expect(await screen.findByText("This company does not have data sources switched on.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sync Sample capacity tab now" })).toBeEnabled();
+  });
+
+  it("a failed result shows a fixed line and never the runner's raw message", async () => {
+    manage([row({})]);
+    vi.spyOn(syncService, "requestSync").mockResolvedValue({ status: "failed", message: 'Expected a number but found "abc"', rows_applied: 0 });
+    renderWithHub(<ProductionPage />, manager, route);
+    await userEvent.click(await screen.findByRole("button", { name: "Sync Sample capacity tab now" }));
+    expect(await screen.findByText("The sync did not finish. Ask an admin to check the source.")).toBeInTheDocument();
+    expect(screen.queryByText(/abc/)).not.toBeInTheDocument();
+  });
+
+  it("a locked result shows its info notice", async () => {
+    manage([row({})]);
+    vi.spyOn(syncService, "requestSync").mockResolvedValue({ status: "locked", message: null, rows_applied: 0 });
+    renderWithHub(<ProductionPage />, manager, route);
+    await userEvent.click(await screen.findByRole("button", { name: "Sync Sample capacity tab now" }));
+    expect(await screen.findByText("A sync is already running for this connection. Try again in a few minutes.")).toBeInTheDocument();
   });
 
   it("is absent without sync_run", async () => {
