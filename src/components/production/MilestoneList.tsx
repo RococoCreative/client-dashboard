@@ -15,7 +15,7 @@ import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
 import { nameFromDirectory } from "../../lib/people.ts";
 import { isComplete, moveMilestone, sortMilestones } from "../../lib/milestones.ts";
-import { archiveMilestone, reorderMilestones, updateMilestone, type MilestonePatch } from "../../services/projects.ts";
+import { archiveMilestone, listMilestones, reorderMilestones, updateMilestone, type MilestonePatch } from "../../services/projects.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type DirectoryEntry, type MilestoneKind, type Profile, type ProjectMilestone } from "../../types/database.ts";
 
 type Directory = ReadonlyMap<string, DirectoryEntry>;
@@ -160,6 +160,13 @@ export default function MilestoneList({
       onChanged(next.filter((m) => m.archived_at === null));
     } catch (err) {
       setError(errorMessage(err));
+      // A move writes one row at a time, so a failure can land after some rows moved. Read the
+      // true order back, so the list on screen is the one the database holds beside the error.
+      try {
+        onChanged(await listMilestones(milestone.project_id));
+      } catch {
+        // The error above already says the move did not finish; a reload refreshes the order.
+      }
     } finally {
       setBusy(false);
     }

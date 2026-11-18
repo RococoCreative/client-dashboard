@@ -60,7 +60,7 @@ export default function MyReviewsPage() {
       <Tabs items={MY_TABS} />
 
       {rows.length === 0 ? (
-        <EmptyState eyebrow="Reviews" title="No reviews yet" body="Your first review appears here once your manager opens a review cycle and starts scoring." />
+        <EmptyState eyebrow="Reviews" title="No reviews yet" body="Your first review appears here once an admin opens a review cycle and starts it." />
       ) : (
         <div className="space-y-6">
           {featured ? (

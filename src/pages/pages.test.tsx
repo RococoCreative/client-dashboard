@@ -851,6 +851,8 @@ describe("monthly goal setting review", () => {
     const user = userEvent.setup();
     // Riley's September review has no goals yet, so the card offers to set one from the topic.
     const riley = KLASIK.reviews.find((r) => r.cycle_id === currentCycle.id && r.status === "complete")!;
+    // A complete month is frozen, scored or not (0039), so an admin reopens it before adding goals.
+    await updateReview(riley.id, { status: "in_progress", completed_at: null });
     renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${riley.id}`, pattern: "/gsr/reviews/:reviewId" });
     await user.click(await screen.findByRole("button", { name: "Set their monthly GSR based on this focus topic" }));
     // The #1 GSR is a role or professional goal, never a personal one.

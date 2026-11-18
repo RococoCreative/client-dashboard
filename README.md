@@ -123,7 +123,14 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-11:
   table that holds a person's records reads and writes through those rules. Paste it after
   `0037` and before `0039`, then deploy the app the same day. Existing admins start with every
   division, so nothing changes for them until an owner narrows it.
-  `0039` is reserved for the GSR and task link migration that follows it.
+  `0039_gsr_guards_and_task_goal_links` is written, not applied: a carried goal keeps its
+  creator, the "set for you" lock binds only the goal's own person, a monthly GSR marked complete
+  freezes its goals and notes whether or not it was scored (months already complete freeze when it
+  is pasted), a re-sign drops ratings for retired criteria, reviews stay out of closed cycles and
+  inside their cycle's company, tasks can link to a monthly goal, and tasks are read through
+  their assignee and written by whoever leads them. Paste it straight after `0038`, then deploy
+  the app (and the `notify` function, which now sends only for the task's creator or an admin)
+  the same day.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):

@@ -6,6 +6,8 @@
 import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
 vi.mock("../services/profiles.ts", () => import("../test/mocks/profiles.ts"));
@@ -54,7 +56,9 @@ describe("a person's review history", () => {
     // and the database still lets them read their own, so the history has to ask for this
     // company's: a Klasik review here has no cycle to name it and an Open link that fails.
     const jamie = RBA.profiles[1];
-    await ensureReview(KLASIK.cycles[1].id, KLASIK.company.id, jamie.id);
+    // The month must be open: a closed cycle takes no new reviews (0039).
+    const openKlasik = KLASIK.cycles.find((c) => c.status === "open")!;
+    await ensureReview(openKlasik.id, KLASIK.company.id, jamie.id);
     renderWithHub(<MyReviewsPage />, rbaEmployee);
     expect(await screen.findByText("All reviews")).toBeInTheDocument();
     expect((await screen.findAllByText(RBA.cycles[0].name)).length).toBeGreaterThan(0);

@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 // one review's figure and the next one's, so a test can see which figure the page is using.
 const panel = vi.hoisted(() => ({ quietFor: new Set<string>() }));
 
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
 vi.mock("../services/profiles.ts", () => import("../test/mocks/profiles.ts"));

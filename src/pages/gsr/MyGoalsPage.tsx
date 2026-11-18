@@ -20,7 +20,7 @@ export default function MyGoalsPage() {
       <p className="mb-5 flex items-start gap-2 rounded-md border border-line bg-surface px-4 py-3 text-[13px] leading-relaxed text-ink-2">
         <Lock size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
         <span>
-          Your manager sees each goal's title, description, kind, period and completion, on your profile and on every quarterly review. Your action steps and progress notes stay private to you.
+          Your manager and your company's admins see each goal's title, description, kind, period and completion, on your profile and on every quarterly review. Your action steps and progress notes stay private to you.
         </span>
       </p>
       <GoalsPanel companyId={companyId} employeeId={profile.id} canEdit />

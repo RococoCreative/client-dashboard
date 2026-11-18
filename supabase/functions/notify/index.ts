@@ -3,9 +3,11 @@
 // can never go twice for one assignment, and sends one plain email through Resend. It is the only
 // place the Resend key lives, and the browser can never write notified_assignee_id itself.
 //
-// Route: POST /functions/v1/notify { task_id } -> { sent: boolean }, or { error } with a non-2xx
-// status. Deployed with the gateway's JWT check on: the caller is the signed-in person who saved
-// the task, and must be able to see it under row level security.
+// Route: POST /functions/v1/notify { task_id } -> { sent: boolean, reason?: string }, or { error }
+// with a non-2xx status. Deployed with the gateway's JWT check on: the caller is the signed-in
+// person who saved the task, and must be able to see it under row level security. Only the person
+// who created the task, an owner or admin of its company, or a Rococo admin can have its email
+// sent; anyone else who can see the task gets { sent: false, reason }.
 //
 // Environment (Supabase secrets): RESEND_API_KEY, TASKS_FROM_EMAIL (the sending address), and
 // APP_URL (the app's own address, which every task link starts from; an https or http URL).
@@ -82,12 +84,20 @@ async function handleNotify(req: Request): Promise<Response> {
   const asUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, ...noSession });
   const { data: userData, error: userError } = await asUser.auth.getUser(jwt);
   if (userError || !userData.user) throw new HttpError(401, "Sign in first.");
-  const { data: caller } = await asUser.from("profiles").select("id, full_name, is_active").eq("user_id", userData.user.id).maybeSingle();
+  const { data: caller } = await asUser.from("profiles").select("id, full_name, is_active, role, company_id, is_rococo_admin").eq("user_id", userData.user.id).maybeSingle();
   if (!caller || caller.is_active !== true) throw new HttpError(403, "Your profile is not active.");
 
   // 3. The task, read as the caller: if they cannot see it, nothing is sent.
-  const { data: task } = await asUser.from("tasks").select("id, company_id, title, due_date, assignee_id, completed_at").eq("id", taskId).maybeSingle();
+  const { data: task } = await asUser.from("tasks").select("id, company_id, title, due_date, assignee_id, completed_at, created_by").eq("id", taskId).maybeSingle();
   if (!task) throw new HttpError(404, "That task was not found.");
+
+  // Seeing a task is not the same as assigning it: a teammate who can read it, or the assignee
+  // themselves, must not be able to send its email. The person who created it, an owner or admin
+  // of its company, or a Rococo admin can.
+  const companyAdmin = caller.company_id === task.company_id && (caller.role === "owner" || caller.role === "admin");
+  if (task.created_by !== caller.id && !companyAdmin && caller.is_rococo_admin !== true) {
+    return json(200, { sent: false, reason: "Only the person who assigned this task or an admin can send its email." });
+  }
 
   // A completed task needs nobody's attention, so it is never announced.
   if (task.completed_at) return json(200, { sent: false });

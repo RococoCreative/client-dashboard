@@ -3,7 +3,10 @@
 // checkpoints along the way, and a dated notes log to discuss in the meeting. Only the completion
 // says how a goal landed; steps and notes are there to get it there.
 // The person works their own month the same way the manager does, so they can fill it in
-// before the meeting and the meeting starts from their draft.
+// before the meeting and the meeting starts from their draft. A manager works the month of someone
+// they lead the same way, goals and notes, while it is open (0038); locking it, ratings and
+// sign-off stay with an admin. Where the company runs tasks, each goal lists the tasks behind it
+// (GoalTasks), which never move its completion.
 // The month's focus topic sits at the top with its explanation, for reference, and the person's #1
 // GSR comes from it: their own words, set as a role or professional goal. The goals their job role
 // brings are offered the same way, one click to file. Goals read the focus topic's GSR first, then
@@ -12,16 +15,18 @@
 // locks the score in and the month with it. Last month's goals read back as hit or miss with a
 // "why" and a one-click carry forward. Yearly goals are not here: they live on the profile and on
 // the quarterly and annual reviews, because a Goal Setting Review is the month and nothing else.
-// Every change saves on its own; a closed or locked month is read-only except for the why, which
-// is written the month after.
+// Every change saves on its own; a closed or complete month is read-only except for the why,
+// which is written the month after.
 // Employees add and own their goals for the month. A goal someone else set for them (goalLockedFor)
 // keeps what it is: its title, description and kind read only and it cannot be deleted, while its
 // agreed completion, action steps and notes stay theirs to work, as the database allows (0035).
+// That rule binds only the goal's own person (0039): their manager edits it like any other.
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, Lock, Plus, Trash2 } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
 import GoalNotes from "./GoalNotes.tsx";
+import GoalTasks from "./GoalTasks.tsx";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
@@ -32,16 +37,20 @@ import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, carryForward, goalLockedFor, goalOutcome, hitCount, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { GOAL_KIND_ORDER, carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
 import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
-import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle } from "../../types/database.ts";
+import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
 
 const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 type GoalPatch = Parameters<typeof updateGoal>[1];
 type NotesUpdate = (update: (notes: GoalNote[]) => GoalNote[]) => void;
+type TasksUpdate = (update: (tasks: TaskWithSteps[]) => TaskWithSteps[]) => void;
+// What a goal needs to list its tasks: the linked ones on the page, the profiles for the task form,
+// who is looking, and how to update the page's list. Absent where the company does not run tasks.
+type TaskLinks = { tasks: TaskWithSteps[]; people: Profile[]; viewerProfileId: string; onTasks: TasksUpdate };
 // Where a goal stands in a scored month: one of the mandatory GSRs, or a stretch goal.
 type Standing = "mandatory" | "stretch";
 
@@ -52,7 +61,8 @@ const FOCUS_KINDS: GoalKind[] = ["role", "professional"];
 function GoalEditor({
   goal,
   notes,
-  people,
+  names,
+  taskLinks,
   standing,
   canEdit,
   canTick,
@@ -66,7 +76,8 @@ function GoalEditor({
 }: {
   goal: Goal;
   notes: GoalNote[];
-  people: Profile[];
+  names: ReadonlyMap<string, string>;
+  taskLinks: TaskLinks | null;
   // For a company that scores its GSRs, whether the goal is mandatory or a stretch goal; null
   // where nothing is scored.
   standing: Standing | null;
@@ -84,8 +95,10 @@ function GoalEditor({
   // Title, kind, completion, description and steps all write this one goals row, and each answer
   // carries the whole row. Queued, the writes land in the order they were made, so a slow
   // completion save cannot come back after a tick and put the old steps back on screen.
+  // Each save resolves whether it landed, so a field or the slider that failed goes back to what
+  // is stored and says so.
   const saveChain = useRef<Promise<unknown>>(Promise.resolve());
-  function save(patch: GoalPatch): Promise<void> {
+  function save(patch: GoalPatch): Promise<boolean> {
     const run = saveChain.current
       .catch(() => undefined)
       .then(async () => {
@@ -93,7 +106,13 @@ function GoalEditor({
         onTouched();
       });
     saveChain.current = run;
-    return run.catch((err: unknown) => onError(errorMessage(err)));
+    return run.then(
+      () => true,
+      (err: unknown) => {
+        onError(errorMessage(err));
+        return false;
+      },
+    );
   }
   const { done, total } = stepsTaken(goal);
   // Title, kind, description and delete. Completion, steps and notes follow canEdit and canTick.
@@ -104,7 +123,7 @@ function GoalEditor({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {canDefine ? (
-            <BlurInput value={goal.title} required ariaLabel={`Title for ${goal.title}`} onSave={(next) => void save({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
+            <BlurInput value={goal.title} required ariaLabel={`Title for ${goal.title}`} onSave={(next) => save({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
           ) : (
             <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
           )}
@@ -145,11 +164,11 @@ function GoalEditor({
           checkpoints on the way and move nothing. */}
       <div className="mt-3">
         <p className={eyebrowClass}>Agreed completion</p>
-        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => save(progressPatch(next, goal.status))} />
       </div>
 
       {canDefine ? (
-        <BlurInput multiline rows={1} value={goal.description ?? ""} placeholder="What does success look like?" ariaLabel={`Description for ${goal.title}`} onSave={(next) => void save({ description: next.trim() || null })} className={`${textareaClass} mt-3 min-h-[36px] text-[13px]`} />
+        <BlurInput multiline rows={1} value={goal.description ?? ""} placeholder="What does success look like?" ariaLabel={`Description for ${goal.title}`} onSave={(next) => save({ description: next.trim() || null })} className={`${textareaClass} mt-3 min-h-[36px] text-[13px]`} />
       ) : goal.description ? (
         <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{goal.description}</p>
       ) : null}
@@ -165,8 +184,21 @@ function GoalEditor({
       {canEdit || notes.length > 0 ? (
         <div className="mt-3">
           <p className={eyebrowClass}>Notes</p>
-          <GoalNotes goal={goal} notes={notes} people={people} canWrite={canEdit} onNotes={onNotes} onError={onError} />
+          <GoalNotes goal={goal} notes={notes} names={names} canWrite={canEdit} onNotes={onNotes} onError={onError} onSaved={onTouched} />
         </div>
+      ) : null}
+
+      {taskLinks ? (
+        <GoalTasks
+          goal={goal}
+          tasks={taskLinks.tasks.filter((t) => t.goal_id === goal.id)}
+          people={taskLinks.people}
+          canEdit={canEdit}
+          viewerProfileId={taskLinks.viewerProfileId}
+          onTasks={taskLinks.onTasks}
+          onError={onError}
+          onSaved={onTouched}
+        />
       ) : null}
     </li>
   );
@@ -176,7 +208,8 @@ function GoalEditor({
 function LastMonthGoal({
   goal,
   notes,
-  people,
+  names,
+  taskLinks,
   settled,
   carriedTitle,
   canCarry,
@@ -188,13 +221,14 @@ function LastMonthGoal({
 }: {
   goal: Goal;
   notes: GoalNote[];
-  people: Profile[];
+  names: ReadonlyMap<string, string>;
+  taskLinks: TaskLinks | null;
   settled: boolean;
   carriedTitle: string | null;
   canCarry: boolean;
   canNote: boolean;
   onCarry: () => void;
-  onNote: (note: string | null) => void;
+  onNote: (note: string | null) => Promise<boolean>;
   onNotes: NotesUpdate;
   onError: (message: string) => void;
 }) {
@@ -229,8 +263,20 @@ function LastMonthGoal({
       {notes.length > 0 ? (
         <div className="mt-2">
           <p className={eyebrowClass}>Notes</p>
-          <GoalNotes goal={goal} notes={notes} people={people} canWrite={false} onNotes={onNotes} onError={onError} />
+          <GoalNotes goal={goal} notes={notes} names={names} canWrite={false} onNotes={onNotes} onError={onError} />
         </div>
+      ) : null}
+      {/* Last month's tasks read only: its goals are on record, and so is the work behind them. */}
+      {taskLinks ? (
+        <GoalTasks
+          goal={goal}
+          tasks={taskLinks.tasks.filter((t) => t.goal_id === goal.id)}
+          people={taskLinks.people}
+          canEdit={false}
+          viewerProfileId={taskLinks.viewerProfileId}
+          onTasks={taskLinks.onTasks}
+          onError={onError}
+        />
       ) : null}
       {canNote ? (
         <div className="mt-2">
@@ -345,12 +391,14 @@ export default function GoalSettingPanel({
   cycles,
   goals,
   notes,
-  people,
+  names,
   roleGoals = [],
   gsrRequired = null,
   isAdmin,
   isOwn,
+  isLeader = false,
   omitted = false,
+  taskLinks = null,
   onGoals,
   onNotes,
   onError,
@@ -365,8 +413,8 @@ export default function GoalSettingPanel({
   goals: Goal[];
   // The person's goal notes the reader may see, every goal's; each goal shows its own.
   notes: GoalNote[];
-  // The company's people, to name who wrote each note.
-  people: Profile[];
+  // Full names by profile id, from the company directory, to name who wrote each note.
+  names: ReadonlyMap<string, string>;
   // The goals the person's job role brings into every month, set once in Settings. Offered
   // here until each is filed for this month; the template itself is never edited from a review.
   roleGoals?: JobRoleGoal[];
@@ -375,32 +423,43 @@ export default function GoalSettingPanel({
   gsrRequired?: number | null;
   isAdmin: boolean;
   isOwn: boolean;
+  // The viewer leads the person (their manager, up the chain): they work the month's goals and
+  // notes as an admin does while it is open (0038), and nothing an admin keeps.
+  isLeader?: boolean;
   // The person is omitted from this month (0034): the month is set aside as it is, read only,
   // until an admin adds them back. The database freezes it too.
   omitted?: boolean;
+  // The tasks linked to this month's and last month's goals, for a company that runs tasks;
+  // null where it does not, and the goals show no tasks.
+  taskLinks?: TaskLinks | null;
   onGoals: (update: (goals: Goal[]) => Goal[]) => void;
   onNotes: NotesUpdate;
   onError: (message: string) => void;
+  // Something on the month saved: the page clears an older failure line and moves the review on.
   onTouched: () => void;
 }) {
   const open = cycle.status === "open";
   // A month an admin has marked complete with its score is locked in for this person (0023).
   const locked = monthLocked(review);
-  // The manager and the person both work an open month in full: set goals, steps, completion,
-  // notes, the why on last month. RLS is what keeps it to their own (goals are theirs to write
-  // since 0013), and the database freezes a closed or locked month; this only decides what the
-  // page offers.
-  const canEdit = (isAdmin || isOwn) && open && !locked && !omitted;
+  // Marked complete, scored or not: its goals and notes stay as they were until it is reopened
+  // (0039). A company with no Monthly GSRs pillar locks no score, and the month still freezes.
+  const frozen = monthFrozen(review);
+  // The admin, the person and their manager all work an open month in full: set goals, steps,
+  // completion, notes, the why on last month. RLS is what keeps it to the people each may write
+  // for (0013, 0038), and the database freezes a closed, complete or omitted month; this only
+  // decides what the page offers.
+  const canWork = isAdmin || isOwn || isLeader;
+  const canEdit = canWork && open && !frozen && !omitted;
   const year = cycleYear(cycle);
   const { thisCycle, lastCycle } = splitGoals(goals, { cycleId: cycle.id, previousCycleId: previousCycle?.id ?? null, year });
   const lastSettled = previousCycle ? cycleSettled(previousCycle) : true;
 
   // Where a carried goal came from is a property of the link, not of "the previous cycle".
-  // Reading it off previousCycle named the wrong month whenever the source cycle was deleted
-  // (goals.cycle_id is ON DELETE SET NULL, so the goal outlives its cycle) or whenever a
-  // skipped month was created later and slid in between. The source goal is only in `goals`
-  // when it belongs to this person, which it always does, and the neutral wording covers the
-  // case where the source goal or its cycle is gone.
+  // Reading it off previousCycle named the wrong month whenever a skipped month was created later
+  // and slid in between. Deleting a cycle deletes its goals with it (goals.cycle_id is ON DELETE
+  // CASCADE since 0029), so a carried goal can outlive its source, and carried_from_goal_id then
+  // points at nothing. The source goal is only in `goals` when it belongs to this person, which it
+  // always does, and the neutral wording covers the case where the source goal or its cycle is gone.
   const carriedFromName = (goal: Goal): string | null => {
     if (!goal.carried_from_goal_id) return null;
     const source = goals.find((g) => g.id === goal.carried_from_goal_id);
@@ -513,13 +572,20 @@ export default function GoalSettingPanel({
     }
   }
 
-  async function saveNote(goal: Goal, note: string | null) {
+  async function saveNote(goal: Goal, note: string | null): Promise<boolean> {
     try {
       upsert(await updateGoal(goal.id, { outcome_note: note }));
+      onTouched();
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
+
+  // Said to whoever is reading: an admin reopens the review themselves; anyone else is told an
+  // admin can, never "your manager", because the reader may be the manager.
+  const reopenLine = isAdmin ? "reopen the review to change them." : "an admin can reopen the review to change them.";
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -536,7 +602,7 @@ export default function GoalSettingPanel({
           ) : (
             <ul className="divide-y divide-line">
               {lastCycle.map((goal) => (
-                <LastMonthGoal key={goal.id} goal={goal} notes={notesFor(goal)} people={people} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={isAdmin || isOwn} onCarry={() => void carry(goal)} onNote={(note) => void saveNote(goal, note)} onNotes={onNotes} onError={onError} />
+                <LastMonthGoal key={goal.id} goal={goal} notes={notesFor(goal)} names={names} taskLinks={taskLinks} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={canWork} onCarry={() => void carry(goal)} onNote={(note) => saveNote(goal, note)} onNotes={onNotes} onError={onError} />
               ))}
             </ul>
           )}
@@ -553,10 +619,20 @@ export default function GoalSettingPanel({
               : "Set together in the review. Agreed completion is the number for each goal, and 100 marks it complete; action steps are checkpoints along the way and do not count toward the score. Next month reads each goal back as a hit or a miss."
           }
         >
+          {!open && !frozen ? (
+            <p className="mb-4 rounded-md border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+              {cycle.name} is closed, so its goals and notes stay as they are.
+            </p>
+          ) : null}
           {locked ? (
             <p className="mb-4 rounded-md border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
               <span className="tnum font-medium text-ink">Locked in at {review.gsr_score}%</span>
-              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The month's goals and notes are on record; {isAdmin ? "reopen the review" : "your manager can reopen the review"} to change them.
+              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The month's goals and notes are on record; {reopenLine}
+            </p>
+          ) : frozen ? (
+            <p className="mb-4 rounded-md border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+              <span className="font-medium text-ink">Marked complete</span>
+              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The month's goals and notes are on record as they were; {reopenLine}
             </p>
           ) : split && month && gsrRequired ? (
             <p className="mb-4 text-[12.5px] leading-relaxed text-ink-2">
@@ -597,11 +673,12 @@ export default function GoalSettingPanel({
                 key={goal.id}
                 goal={goal}
                 notes={notesFor(goal)}
-                people={people}
+                names={names}
+                taskLinks={taskLinks}
                 standing={standing(goal)}
                 canEdit={canEdit}
                 canTick={canEdit}
-                setForThem={goalLockedFor(goal, isAdmin)}
+                setForThem={isOwn && goalLockedFor(goal, isAdmin)}
                 carriedFrom={carriedFromName(goal)}
                 onChange={upsert}
                 onNotes={onNotes}

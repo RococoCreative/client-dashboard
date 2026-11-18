@@ -206,6 +206,14 @@ export function monthLocked(review: Pick<Review, "status" | "gsr_score"> | null 
   return review?.status === "complete" && review.gsr_score !== null;
 }
 
+// Whether a person's month is frozen: their GSR for it marked complete, scored or not. A complete
+// month's goals and notes stay as they were signed off until the review is reopened (0039), even
+// for a company with no Monthly GSRs pillar, where nothing is locked in. monthLocked is the score
+// of record; this is whether the month can still change.
+export function monthFrozen(review: Pick<Review, "status"> | null | undefined): boolean {
+  return review?.status === "complete";
+}
+
 // A goal someone else filed for a person is theirs to work, not to rewrite. The database enforces
 // it (0035, guard_goal_owner); screens mirror it so the fields read as fixed instead of failing on
 // save. For a viewer who is not an admin of the company, these fields are read-only and the goal

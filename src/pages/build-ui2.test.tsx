@@ -207,12 +207,17 @@ describe("person division", () => {
   it("lets an admin pick the division, without the access toggle", async () => {
     const user = userEvent.setup();
     personPage(rbaAdmin, avery.id);
-    const picker = await screen.findByRole("combobox", { name: "Division" });
-    expect(picker).toHaveValue("rba-division-south");
-    await user.selectOptions(picker, "rba-division-north");
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Division" })).toHaveValue("rba-division-north"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Division" }), "rba-division-south");
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Division" })).toHaveValue("rba-division-south"));
+    const group = await screen.findByRole("group", { name: "Divisions" });
+    const south = within(group).getByRole("checkbox", { name: "RBA South" });
+    const north = within(group).getByRole("checkbox", { name: "RBA North" });
+    expect(south).toBeChecked();
+    expect(north).not.toBeChecked();
+    // Ticking North as well puts them in Both; unticking it puts them back in South only.
+    await user.click(north);
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Divisions" })).getByRole("checkbox", { name: "RBA North" })).toBeChecked());
+    expect(screen.getByText(/Works in: Both/)).toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "Divisions" })).getByRole("checkbox", { name: "RBA North" }));
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Divisions" })).getByRole("checkbox", { name: "RBA North" })).not.toBeChecked());
     expect(screen.queryByRole("checkbox", { name: "Can view divisions" })).not.toBeInTheDocument();
   });
 
@@ -234,7 +239,7 @@ describe("person division", () => {
     const klasikPerson = KLASIK.profiles[1];
     personPage(makeHub("owner"), klasikPerson.id);
     expect(await screen.findByLabelText("Job role")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("combobox", { name: "Division" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Divisions" })).not.toBeInTheDocument());
     expect(screen.queryByRole("checkbox", { name: "Can view divisions" })).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@
 // catch and message. Every insert passes company_id explicitly (Rococo admins act on
 // behalf of a chosen company), and child rows are re-stamped by database triggers so a
 // score can never land under the wrong company.
+import { requireRows } from "../lib/errors.ts";
 import { db } from "./supabase.ts";
 import type { ActionStep, CompanyGoal, CycleOmission, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
@@ -46,8 +47,9 @@ export async function updatePillar(id: string, patch: Partial<PillarInput>): Pro
 }
 
 export async function deletePillar(id: string): Promise<void> {
-  const { error } = await db().from("gsr_pillars").delete().eq("id", id);
+  const { data, error } = await db().from("gsr_pillars").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listCriteria(companyId: string, includeInactive = false): Promise<GsrCriterion[]> {
@@ -80,8 +82,9 @@ export async function updateCriterion(
 }
 
 export async function deleteCriterion(id: string): Promise<void> {
-  const { error } = await db().from("gsr_criteria").delete().eq("id", id);
+  const { data, error } = await db().from("gsr_criteria").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Cycles -----------------------------------------------------------------------------------
@@ -118,8 +121,9 @@ export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "c
 }
 
 export async function deleteCycle(id: string): Promise<void> {
-  const { error } = await db().from("review_cycles").delete().eq("id", id);
+  const { data, error } = await db().from("review_cycles").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Reviews and scores ------------------------------------------------------------------------
@@ -156,23 +160,35 @@ export async function getReview(id: string): Promise<Review> {
   return data as Review;
 }
 
-// One review per employee per cycle: return the existing row or create it.
-export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
-  const { data: existing, error: findError } = await db()
+async function findReview(cycleId: string, employeeId: string): Promise<Review | null> {
+  const { data, error } = await db()
     .from("reviews")
     .select(REVIEW_COLUMNS)
     .eq("cycle_id", cycleId)
     .eq("employee_id", employeeId)
     .maybeSingle();
-  if (findError) throw findError;
-  if (existing) return existing as Review;
+  if (error) throw error;
+  return (data as Review | null) ?? null;
+}
+
+// One review per employee per cycle: return the existing row or create it. Two people can open the
+// same GSR at the same moment (the person starting theirs as an admin runs Start all), so the
+// create is an insert that ignores a duplicate (reviews_cycle_employee_key) and then reads the row,
+// whoever's insert won. Read first, because a row that is already there needs no insert, and an
+// insert into a closed cycle is refused even when it would have been a duplicate.
+export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
+  const existing = await findReview(cycleId, employeeId);
+  if (existing) return existing;
   const { data, error } = await db()
     .from("reviews")
-    .insert({ cycle_id: cycleId, company_id: companyId, employee_id: employeeId })
-    .select(REVIEW_COLUMNS)
-    .single();
+    .upsert({ cycle_id: cycleId, company_id: companyId, employee_id: employeeId }, { onConflict: "cycle_id,employee_id", ignoreDuplicates: true })
+    .select(REVIEW_COLUMNS);
   if (error) throw error;
-  return data as Review;
+  const created = ((data as Review[] | null) ?? [])[0];
+  if (created) return created;
+  const raced = await findReview(cycleId, employeeId);
+  if (!raced) throw new Error("That review could not be opened. Reload the page and try again.");
+  return raced;
 }
 
 export type ReviewPatch = Partial<
@@ -244,8 +260,9 @@ export async function updateScore(
 }
 
 export async function deleteScore(id: string): Promise<void> {
-  const { error } = await db().from("review_scores").delete().eq("id", id);
+  const { data, error } = await db().from("review_scores").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Goals --------------------------------------------------------------------------------------
@@ -311,8 +328,9 @@ export async function updateGoal(id: string, patch: Partial<Omit<GoalInput, "com
 }
 
 export async function deleteGoal(id: string): Promise<void> {
-  const { error } = await db().from("goals").delete().eq("id", id);
+  const { data, error } = await db().from("goals").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Goal notes: dated entries in a goal's log. Who reads which is the database's call (0021): the
@@ -348,8 +366,9 @@ export async function updateGoalNote(id: string, body: string): Promise<GoalNote
 }
 
 export async function deleteGoalNote(id: string): Promise<void> {
-  const { error } = await db().from("goal_notes").delete().eq("id", id);
+  const { data, error } = await db().from("goal_notes").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 const OMISSION_COLUMNS = "cycle_id, employee_id, company_id, reason, omitted_by, created_at";
@@ -373,8 +392,9 @@ export async function omitFromCycle(input: OmissionInput): Promise<CycleOmission
 }
 
 export async function addBackToCycle(cycleId: string, employeeId: string): Promise<void> {
-  const { error } = await db().from("cycle_omissions").delete().eq("cycle_id", cycleId).eq("employee_id", employeeId);
+  const { data, error } = await db().from("cycle_omissions").delete().eq("cycle_id", cycleId).eq("employee_id", employeeId).select("cycle_id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // A yearly or BHAG goal's private half: its action steps, which only the owner can read or write.
@@ -444,8 +464,9 @@ export async function updateCompanyGoal(
 }
 
 export async function deleteCompanyGoal(id: string): Promise<void> {
-  const { error } = await db().from("company_goals").delete().eq("id", id);
+  const { data, error } = await db().from("company_goals").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Impact scores: a person's current ratings, one row per criterion. company_id and pillar_id are

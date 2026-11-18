@@ -5,6 +5,10 @@
 // are created on demand (or all at once) so an admin can start anyone with one click. An admin
 // also chooses who is in the cycle: a person omitted from it leaves its progress, its team score
 // and its Start all, and sits in a list of their own until they are added back (0034).
+// A cycle cascades to every person's reviews and goals, so only a full-scope admin (an owner, a
+// Rococo admin, or an admin who sees every division) edits, closes, reopens or deletes one (0038);
+// any admin starts reviews and chooses who is in it. A closed cycle starts nothing (0039), and
+// closing one asks first, with how many reviews in it are not complete.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Pencil, Trash2, Unlock, UserMinus, UserPlus, UsersRound } from "lucide-react";
@@ -57,8 +61,9 @@ import {
 } from "../../lib/gsr/cycles.ts";
 import { monthLocked } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDate, formatPeriod, parseDate } from "../../lib/format.ts";
-import { hasAccount } from "../../lib/people.ts";
+import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../../lib/format.ts";
+import { hasAccount, hasFullScope } from "../../lib/people.ts";
+import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
 
 // A month is a calendar month, here as in the New month form: the start snaps to the first and
@@ -211,7 +216,7 @@ function OmitDialog({
 
 export default function CyclePage() {
   const { cycleId = "" } = useParams();
-  const { company } = useHub();
+  const { company, profile } = useHub();
   const navigate = useNavigate();
   const companyId = company!.id;
   const [editing, setEditing] = useState(false);
@@ -219,26 +224,34 @@ export default function CyclePage() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [omitting, setOmitting] = useState<Profile | null>(null);
+  // Closing a cycle asks first; this is the dialog's own failure line.
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState("");
+  // Start all carries on past one person's failure; what did not start is listed here.
+  const [startFailures, setStartFailures] = useState<{ tried: number; lines: string[] } | null>(null);
 
   const state = useAsync(async () => {
-    const [cycle, reviews, pillars, people, omissions] = await Promise.all([
+    const [cycle, reviews, pillars, people, omissions, directory] = await Promise.all([
       getCycle(cycleId),
       listCycleReviews(cycleId),
       listPillars(companyId),
       listCompanyProfiles(companyId),
       listCycleOmissions(companyId),
+      // Names who omitted someone, who may be an admin this viewer cannot open.
+      listDirectory(companyId),
     ]);
     // The roster below belongs to the active company, so the cycle has to as well. Otherwise
     // starting reviews here pairs this company's people with another company's cycle.
     assertInCompany(cycle, companyId, "review cycle");
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
-    return { cycle, reviews, pillars, people, scores, omissions };
+    return { cycle, reviews, pillars, people, scores, omissions, directory };
   }, [cycleId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { cycle, reviews, pillars, people, scores, omissions } = state.data;
+  const { cycle, reviews, pillars, people, scores, omissions, directory } = state.data;
+  const canRunCycle = hasFullScope(profile);
   // A scored cycle carries pillar columns, an overall and a team score; a month carries none of
   // them, only the GSR score locked in on it where the company scores its GSRs.
   const columns = cycleColumns(cycle.cadence, pillars);
@@ -269,6 +282,7 @@ export default function CyclePage() {
   const complete = rows.filter((r) => r.review?.status === "complete").length;
   const teamAverage = averageScore(rows.map((r) => r.result?.overall ?? null));
   const missing = rows.filter((r) => !r.review);
+  const notComplete = rows.length - complete;
 
   async function openReview(personId: string) {
     setBusy(true);
@@ -282,19 +296,25 @@ export default function CyclePage() {
     }
   }
 
+  // One person's failure (a race with someone else opening theirs, a refusal) never stops the
+  // rest: everyone else is started, the page reloads to show what landed, and whoever did not
+  // start is named with the reason.
   async function startAll() {
+    if (busy) return;
     setBusy(true);
     setActionError("");
-    try {
-      for (const row of missing) {
+    setStartFailures(null);
+    const failures: string[] = [];
+    for (const row of missing) {
+      try {
         await ensureReview(cycle.id, companyId, row.person.id);
+      } catch (err) {
+        failures.push(`${displayName(row.person)}: ${errorMessage(err)}`);
       }
-      state.reload();
-    } catch (err) {
-      setActionError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setStartFailures(failures.length > 0 ? { tried: missing.length, lines: failures } : null);
+    state.reload();
+    setBusy(false);
   }
 
   async function addBack(personId: string) {
@@ -310,14 +330,17 @@ export default function CyclePage() {
     }
   }
 
-  async function toggleStatus() {
+  async function setStatus(status: "open" | "closed") {
     setBusy(true);
     setActionError("");
+    setCloseError("");
     try {
-      const next = await updateCycle(cycle.id, { status: cycle.status === "open" ? "closed" : "open" });
+      const next = await updateCycle(cycle.id, { status });
       state.setData((prev) => (prev ? { ...prev, cycle: next } : prev));
+      setClosing(false);
     } catch (err) {
-      setActionError(errorMessage(err));
+      if (status === "closed") setCloseError(errorMessage(err));
+      else setActionError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -344,18 +367,41 @@ export default function CyclePage() {
         title={cycle.name}
         description={cycle.theme ? `Theme: ${cycle.theme}${cycle.theme_description ? `. ${cycle.theme_description}` : ""}` : undefined}
         actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> Edit</Button>
-            <Button variant="secondary" size="sm" onClick={() => void toggleStatus()} disabled={busy}>
-              {cycle.status === "open" ? <><Lock size={14} aria-hidden /> Close cycle</> : <><Unlock size={14} aria-hidden /> Reopen</>}
-            </Button>
-            <Button variant="danger" size="sm" onClick={() => setDeleting(true)}><Trash2 size={14} aria-hidden /> Delete</Button>
-          </>
+          canRunCycle ? (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> Edit</Button>
+              {open ? (
+                <Button variant="secondary" size="sm" onClick={() => { setCloseError(""); setClosing(true); }} disabled={busy}>
+                  <Lock size={14} aria-hidden /> Close cycle
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={() => void setStatus("open")} disabled={busy}>
+                  <Unlock size={14} aria-hidden /> Reopen
+                </Button>
+              )}
+              <Button variant="danger" size="sm" onClick={() => setDeleting(true)}><Trash2 size={14} aria-hidden /> Delete</Button>
+            </>
+          ) : (
+            <p className="max-w-xs text-right text-[12.5px] leading-snug text-ink-3">
+              Only an owner or an admin who sees every division can edit, close or delete a cycle.
+            </p>
+          )
         }
       />
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {actionError ? <Notice tone="error" className="mb-4">{actionError}</Notice> : null}
+      {startFailures ? (
+        <Notice tone="error" className="mb-4">
+          {`${pluralize(startFailures.lines.length, gsr ? "GSR" : "review")} of ${startFailures.tried} did not start${startFailures.lines.length < startFailures.tried ? "; the rest did" : ""}. `}
+          {startFailures.lines.join(" ")}
+        </Notice>
+      ) : null}
+      {!open ? (
+        <Notice tone="info" className="mb-4">
+          {`${cycle.name} is closed, so nothing new starts in it and its ${gsr ? "GSRs" : "reviews"} stay as they are. ${canRunCycle ? "Reopen the cycle" : "An owner or an admin who sees every division can reopen it"} to start or change one.`}
+        </Notice>
+      ) : null}
 
       <div className={`grid gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Stat label="People" value={team.length} hint={omitted.length > 0 ? `${omitted.length} omitted from this cycle` : undefined} />
@@ -374,7 +420,7 @@ export default function CyclePage() {
         eyebrow="Team"
         title="Reviews"
         actions={
-          missing.length > 0 ? (
+          missing.length > 0 && open ? (
             <Button size="sm" variant="secondary" onClick={() => void startAll()} disabled={busy}>
               <UsersRound size={14} aria-hidden /> Start all {missing.length} reviews
             </Button>
@@ -457,10 +503,12 @@ export default function CyclePage() {
                       <div className="flex items-center justify-end gap-3">
                         {review ? (
                           <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-accent hover:underline">Open</Link>
-                        ) : (
+                        ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review
                           </Button>
+                        ) : (
+                          <span className="text-[12px] text-ink-3">Cycle closed</span>
                         )}
                         {open && review?.status !== "complete" ? (
                           <Button
@@ -493,7 +541,7 @@ export default function CyclePage() {
         >
           <ul className="divide-y divide-line">
             {omitted.map(({ person, omission, review }) => {
-              const by = people.find((p) => p.id === omission.omitted_by);
+              const by = omission.omitted_by ? (directory.find((d) => d.id === omission.omitted_by)?.full_name?.trim() || null) : null;
               return (
                 <li key={person.id} className="flex items-center justify-between gap-3 px-5 py-3">
                   <div className="flex min-w-0 items-center gap-3">
@@ -501,7 +549,7 @@ export default function CyclePage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm text-ink">{displayName(person)}</p>
                       <p className="truncate text-[12px] text-ink-3">
-                        {`Omitted ${formatDate(omission.created_at)}${by ? ` by ${displayName(by)}` : ""}${omission.reason ? ` · ${omission.reason}` : ""}${review ? ` · review set aside, ${REVIEW_STATUS_LABELS[review.status].toLowerCase()}` : ""}`}
+                        {`Omitted ${formatDate(omission.created_at)}${by ? ` by ${by}` : ""}${omission.reason ? ` · ${omission.reason}` : ""}${review ? ` · review set aside, ${REVIEW_STATUS_LABELS[review.status].toLowerCase()}` : ""}`}
                       </p>
                     </div>
                   </div>
@@ -538,6 +586,22 @@ export default function CyclePage() {
             setEditing(false);
             state.setData((prev) => (prev ? { ...prev, cycle: next } : prev));
           }}
+        />
+      ) : null}
+      {closing ? (
+        <ConfirmDialog
+          title={`Close ${cycle.name}?`}
+          body={
+            notComplete > 0
+              ? `${notComplete} of ${pluralize(rows.length, gsr ? "GSR" : "review")} in it ${notComplete === 1 ? "is" : "are"} not complete. Closing keeps them as they are: nothing can be started, marked complete or changed until the cycle is reopened${gsr ? ", and a month that is not locked in does not count toward a scored review" : ""}.`
+              : `Every ${gsr ? "GSR" : "review"} in it is complete. Closing keeps them as they are until the cycle is reopened.`
+          }
+          confirmLabel="Close cycle"
+          tone="primary"
+          busy={busy}
+          error={closeError}
+          onConfirm={() => void setStatus("closed")}
+          onCancel={() => { setClosing(false); setCloseError(""); }}
         />
       ) : null}
       {deleting ? (

@@ -1,9 +1,12 @@
 // Tasks, the list view. Mine is the signed-in person's own tasks, earliest due first, with their
-// finished ones on request; anyone may add a task for themselves here. Everyone, for admins only,
-// is every task in the company, narrowed by person, priority, campaign and status, and an admin
-// adds a task for anyone on the roster from it. Each tab is its own route (/tasks and
-// /tasks/everyone). Saving a task never waits on the assignment email: when someone else is the
-// assignee the page asks for it after the save, and a failed send says so without undoing the task.
+// finished ones on request; anyone may add a task for themselves here. The second tab is Everyone
+// for admins (every task in the company) and Team for managers (the tasks of the people they may
+// see, as the database returns them), narrowed by person, priority, campaign and status. From it an
+// admin adds a task for anyone on the roster and a manager for anyone they lead or themselves. Each
+// tab is its own route (/tasks and /tasks/everyone). Saving a task never waits on the assignment
+// email: when someone else is the assignee the page asks for it after the save, and the line it
+// shows says when no email went (a failed send, or someone who has not signed in yet) without
+// undoing the task.
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import TaskForm from "../../components/tasks/TaskForm.tsx";
@@ -20,12 +23,13 @@ import { checkboxClass, selectClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
+import { ledBy } from "../../lib/people.ts";
 import { PRIORITY_LABELS, isDone, readingOrder } from "../../lib/tasks.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listTasks } from "../../services/tasks.ts";
 import type { MarketingCampaign, Profile, TaskPriority, TaskWithSteps } from "../../types/database.ts";
-import { TASKS_TABS, type TasksTab } from "./tasksTabs.ts";
+import { tasksTabsFor, type TasksTab } from "./tasksTabs.ts";
 
 type Status = "open" | "done" | "all";
 
@@ -46,6 +50,7 @@ function matchesChoice(value: string | null, choice: string): boolean {
 
 function Filters({
   people,
+  showUnassigned,
   campaigns,
   person,
   priority,
@@ -57,6 +62,8 @@ function Filters({
   onStatus,
 }: {
   people: Profile[];
+  // Unassigned tasks are an admin's to read, so only an admin filters to them.
+  showUnassigned: boolean;
   campaigns: MarketingCampaign[];
   person: string;
   priority: TaskPriority | "";
@@ -71,7 +78,7 @@ function Filters({
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <select value={person} onChange={(e) => onPerson(e.target.value)} aria-label="Filter by person" className={filterClass}>
         <option value="">All people</option>
-        <option value="none">Unassigned</option>
+        {showUnassigned ? <option value="none">Unassigned</option> : null}
         {people.map((p) => (
           <option key={p.id} value={p.id}>{displayName(p)}</option>
         ))}
@@ -101,11 +108,11 @@ function Filters({
 }
 
 export default function TasksPage({ tab }: { tab: TasksTab }) {
-  const { company, profile, isAdmin } = useHub();
+  const { company, profile, isAdmin, isLead } = useHub();
   const companyId = company!.id;
   const profileId = profile.id;
-  // Everyone is for admins; anyone else who lands on it sees their own tasks.
-  const view: TasksTab = isAdmin ? tab : "mine";
+  // Everyone (Team, for a manager) is for leads; anyone else who lands on it sees their own tasks.
+  const view: TasksTab = isLead ? tab : "mine";
   const today = todayIso();
   const [showCompleted, setShowCompleted] = useState(false);
   const [status, setStatus] = useState<Status>("open");
@@ -115,13 +122,13 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState("");
 
-  // The roster and campaigns are for an admin's picker, names and filters. Campaigns are
-  // admin-only in the database too, so an employee never asks for them.
+  // The roster is for a lead's picker, names and filters: the people the database lets the viewer
+  // see. Campaigns are admin-only in the database too, so nobody else asks for them.
   const roster = useAsync(async () => {
-    if (!isAdmin) return { people: [] as Profile[], campaigns: [] as MarketingCampaign[] };
-    const [people, campaigns] = await Promise.all([listCompanyProfiles(companyId), listCampaigns(companyId)]);
+    if (!isLead) return { people: [] as Profile[], campaigns: [] as MarketingCampaign[] };
+    const [people, campaigns] = await Promise.all([listCompanyProfiles(companyId), isAdmin ? listCampaigns(companyId) : Promise.resolve([] as MarketingCampaign[])]);
     return { people, campaigns };
-  }, [companyId, isAdmin]);
+  }, [companyId, isAdmin, isLead]);
 
   const listStatus: Status = view === "mine" ? (showCompleted ? "all" : "open") : status;
   const state = useAsync(
@@ -132,25 +139,31 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
   const people = roster.data?.people ?? [];
   const campaigns = roster.data?.campaigns ?? [];
   const names = new Map(people.map((p) => [p.id, displayName(p)]));
+  const visibleIds = new Set(people.map((p) => p.id));
+  // Whom the viewer may give a task: everyone they see for an admin; for a manager, the people
+  // they lead and themselves.
+  const assignable = isAdmin ? people : people.filter((p) => p.id === profileId || ledBy(profile, people).some((l) => l.id === p.id));
   const filtered = view === "everyone" && (person !== "" || priority !== "" || campaign !== "");
   const visible = readingOrder(
     (state.data ?? []).filter(
       (t) =>
         matchesStatus(t, listStatus) &&
+        // A manager's Team is the people the database showed them; this only ever narrows.
+        (view === "mine" || isAdmin || (t.assignee_id !== null && visibleIds.has(t.assignee_id))) &&
         (view === "mine" || (matchesChoice(t.assignee_id, person) && (priority === "" || t.priority === priority) && matchesChoice(t.campaign_id, campaign))),
     ),
   );
   // A company member adds to their own list from Mine. A Rococo admin stepped in has no place on
   // the roster to fix a task to, so they get the picker.
   const lockAssigneeTo = view === "mine" && profile.company_id === companyId ? profileId : undefined;
-  const loading = (!state.data && !state.error) || (isAdmin && !roster.data && !roster.error);
+  const loading = (!state.data && !state.error) || (isLead && !roster.data && !roster.error);
 
   async function handleSaved(task: TaskWithSteps) {
     setCreating(false);
     if (view === "everyone" || task.assignee_id === profileId) {
       state.setData((prev) => (prev ? [...prev, task] : prev));
     }
-    const line = await sendAssignmentEmail(undefined, task, profileId);
+    const line = await sendAssignmentEmail(undefined, task, profileId, people.find((p) => p.id === task.assignee_id) ?? null);
     if (line) setNotice(line);
   }
 
@@ -159,7 +172,7 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
       ? { title: listStatus === "open" ? "No open tasks." : "No tasks yet.", body: "Tasks assigned to you show here. Add one for yourself any time." }
       : filtered || listStatus !== "open"
         ? { title: "No tasks match these filters.", body: "Change a filter to see more." }
-        : { title: "No open tasks.", body: "Add a task for anyone on the team." };
+        : { title: "No open tasks.", body: isAdmin ? "Add a task for anyone on the team." : "Tasks for the people you lead show here. Add one for any of them." };
 
   const addTask = (
     <Button
@@ -176,7 +189,7 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
   return (
     <>
       <PageHeader eyebrow={company!.name} title="Tasks" description="Tasks with due dates, steps, and repeats, earliest due first." actions={addTask} />
-      {isAdmin ? <Tabs items={TASKS_TABS} label="Tasks" /> : null}
+      {isLead ? <Tabs items={tasksTabsFor(isAdmin)} label="Tasks" /> : null}
       {notice ? <Notice tone="warning" className="mb-4">{notice}</Notice> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {roster.error ? <Notice tone="error" className="mb-4">{roster.error}</Notice> : null}
@@ -189,6 +202,7 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
       ) : (
         <Filters
           people={people}
+          showUnassigned={isAdmin}
           campaigns={campaigns}
           person={person}
           priority={priority}
@@ -218,9 +232,10 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
       {creating ? (
         <TaskForm
           companyId={companyId}
-          people={people}
+          people={assignable}
           campaigns={campaigns}
           lockAssigneeTo={lockAssigneeTo}
+          allowUnassigned={isAdmin}
           canSetCampaign={isAdmin}
           onSaved={(task) => void handleSaved(task)}
           onClose={() => setCreating(false)}

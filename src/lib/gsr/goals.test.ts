@@ -260,3 +260,14 @@ describe("goalLockedFor", () => {
     expect(goalLockedFor({ created_by: "admin", employee_id: "e" }, true)).toBe(false);
   });
 });
+
+describe("monthFrozen", () => {
+  it("freezes a complete month whether or not it was scored, and nothing else", async () => {
+    const { monthFrozen, monthLocked } = await import("./goals.ts");
+    expect(monthFrozen({ status: "complete" })).toBe(true);
+    expect(monthLocked({ status: "complete", gsr_score: null })).toBe(false);
+    expect(monthFrozen({ status: "in_progress" })).toBe(false);
+    expect(monthFrozen({ status: "not_started" })).toBe(false);
+    expect(monthFrozen(null)).toBe(false);
+  });
+});
