@@ -107,14 +107,13 @@ function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: bo
   return true;
 }
 
-// The hub's can(), passed in so this file stays pure. Left out, every capability reads as held,
-// which suits a caller with no hub (the tests of the registry itself).
+// The hub's can(), passed in so this file stays pure. Always passed: there is no default, so a
+// caller that forgets it fails to compile rather than showing every gated item.
 export type CanFn = (capability: CapabilityKey) => boolean;
 
 // The company sidebar, in sections, for every company alike. isLead is the hub's (owners, admins,
-// managers and Rococo); left out, it follows isAdmin. can is the hub's, and hides an item whose
-// capability the person lacks.
-export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean = isAdmin, can: CanFn = () => true): NavLayout {
+// managers and Rococo). can is the hub's, and hides an item whose capability the person lacks.
+export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean, can: CanFn): NavLayout {
   const items = NAV_ITEMS.filter((item) => visible(item, company, isAdmin, isRococo, isLead, can));
   const sections: NavSection[] = [];
   for (const group of NAV_GROUP_ORDER) {

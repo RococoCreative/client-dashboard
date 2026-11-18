@@ -16,6 +16,17 @@ export const CAPABILITY_KEYS: readonly CapabilityKey[] = [
   "production_view",
 ];
 
+// Each capability's plain name, for anywhere a person reads one (the company Activity tab).
+export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
+  pay: "Pay",
+  company_settings: "Company settings",
+  audit_log: "Change log",
+  milestones_edit: "Edit milestones",
+  wins_post: "Record wins",
+  sync_run: "Sync now",
+  production_view: "Open Production",
+};
+
 // A company's row wins over the catalog default. A key the catalog does not carry stays out of
 // the map, and meets() refuses a missing level, so an unknown capability is never granted.
 export function resolveCapabilities(catalog: Capability[], overrides: CompanyCapability[]): CapabilityMap {

@@ -39,9 +39,11 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 
 import App from "../App.tsx";
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { KINGDOM, makeHub } from "../test/fixtures.ts";
+import { AUDIT_EVENTS, KINGDOM, makeHub } from "../test/fixtures.ts";
 import { setMockCapabilities } from "../test/mocks/capabilities.ts";
 import * as auditService from "../services/audit.ts";
+import * as companiesService from "../services/companies.ts";
+import * as profilesService from "../services/profiles.ts";
 import * as employeesService from "../services/employees.ts";
 import * as projectAssignmentsService from "../services/projectAssignments.ts";
 import * as winsService from "../services/wins.ts";
@@ -50,6 +52,7 @@ import ProjectPage from "./production/ProjectPage.tsx";
 import WinsPage from "./WinsPage.tsx";
 import PersonProjects from "../components/people/PersonProjects.tsx";
 import PersonPage from "./people/PersonPage.tsx";
+import PeoplePage from "./people/PeoplePage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import ActivityPage from "./rococo/ActivityPage.tsx";
 import { SETTINGS_TABS, settingsTabsFor } from "./settings/settingsTabs.ts";
@@ -94,6 +97,18 @@ describe("an admin without the pay capability", () => {
     expect(await screen.findByRole("heading", { name: "Financial figures" })).toBeInTheDocument();
     expect(financials).toHaveBeenCalled();
   });
+
+  it("is not told on the People page that they set compensation", async () => {
+    withoutPay();
+    renderWithHub(<PeoplePage />, adminHub, { path: "/people", pattern: "/people" });
+    expect(await screen.findByText(/set their goals and KPIs, and it is all waiting/)).toBeInTheDocument();
+    expect(screen.queryByText(/compensation/)).toBeNull();
+  });
+});
+
+it("an admin with pay is told on the People page that they set compensation", async () => {
+  renderWithHub(<PeoplePage />, adminHub, { path: "/people", pattern: "/people" });
+  expect(await screen.findByText(/set their goals, KPIs and compensation, and it is all waiting/)).toBeInTheDocument();
 });
 
 it("an owner still sees compensation", async () => {
@@ -153,8 +168,46 @@ describe("the company Activity tab", () => {
     expect(within(nav).getByRole("link", { name: "Activity" })).toBeInTheDocument();
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ companyId: kingdom, limit: 100 }));
     expect(spy.mock.calls.every(([filter]) => filter?.companyId === kingdom)).toBe(true);
-    expect(await screen.findByText(/^companies: modules/)).toBeInTheDocument();
-    expect(screen.queryByText(/^invitations: added/)).toBeNull();
+    expect(await screen.findByText(/^Company: modules changed from none to/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Invitation/)).toBeNull();
+  });
+
+  it("reads a role change in plain words, naming the person, with no id and no column name", async () => {
+    setMockCapabilities(kingdom, { audit_log: "admin" });
+    const roleChange = {
+      ...AUDIT_EVENTS[1],
+      id: "audit-plain",
+      row_id: "kingdom-user-2",
+      changed: {
+        role: { old: "employee", new: "manager" },
+        reports_to: { old: "kingdom-user-1", new: "3f2a6c1e-8b4d-4e1a-9c2f-1a2b3c4d5e6f" },
+      },
+    };
+    const spy = vi.spyOn(auditService, "listAuditEvents").mockResolvedValue([roleChange]);
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<SettingsPage tab="activity" />, adminHub, { path: "/settings/activity", pattern: "/settings/activity" });
+    const row = await screen.findByText(/^Dana Whitfield: role changed from Employee to Manager/);
+    expect(row.textContent).toContain("Dana Whitfield: role changed from Employee to Manager; reports to changed from Marcus Lee to someone");
+    expect(row.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+    expect(row.textContent).not.toMatch(/reports_to|kingdom-user/);
+    expect(screen.queryByRole("columnheader", { name: "Company" })).toBeNull();
+  });
+
+  it("reads people by company and never lists every company or every person", async () => {
+    setMockCapabilities(kingdom, { audit_log: "admin" });
+    const companies = vi.spyOn(companiesService, "listCompanies");
+    const everyone = vi.spyOn(profilesService, "listAllProfiles");
+    const byCompany = vi.spyOn(profilesService, "listCompanyProfiles");
+    onTestFinished(() => {
+      companies.mockRestore();
+      everyone.mockRestore();
+      byCompany.mockRestore();
+    });
+    renderWithHub(<SettingsPage tab="activity" />, adminHub, { path: "/settings/activity", pattern: "/settings/activity" });
+    expect(await screen.findByText(/^Company: modules changed/)).toBeInTheDocument();
+    expect(byCompany).toHaveBeenCalledWith(kingdom);
+    expect(companies).not.toHaveBeenCalled();
+    expect(everyone).not.toHaveBeenCalled();
   });
 
   it("an admin without audit_log has no Activity tab and /settings/activity sends them to their first tab", async () => {
@@ -175,6 +228,20 @@ it("the Rococo activity page still lists every company", async () => {
   expect(await screen.findByText(/^companies: modules/)).toBeInTheDocument();
   expect(screen.getByText(/^invitations: added/)).toBeInTheDocument();
   expect(spy).toHaveBeenCalledWith({ companyId: undefined, limit: 100 });
+});
+
+it("the Rococo activity page keeps its wording, its Company column and its every-company reads", async () => {
+  const companies = vi.spyOn(companiesService, "listCompanies");
+  const everyone = vi.spyOn(profilesService, "listAllProfiles");
+  onTestFinished(() => {
+    companies.mockRestore();
+    everyone.mockRestore();
+  });
+  renderWithHub(<ActivityPage />, makeHub("rococo", null), { path: "/rococo/activity", pattern: "/rococo/activity" });
+  expect(await screen.findByText("profiles: role employee to admin")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Company" })).toBeInTheDocument();
+  expect(companies).toHaveBeenCalled();
+  expect(everyone).toHaveBeenCalled();
 });
 
 describe("wins, milestones and Production follow their capabilities", () => {

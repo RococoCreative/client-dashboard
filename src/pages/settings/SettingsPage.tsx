@@ -174,7 +174,7 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
         </div>
       ) : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
-      {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} /> : null}
+      {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
     </>
   );
 }

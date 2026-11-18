@@ -24,17 +24,24 @@ export function resetMockCapabilities(): void {
   overridesByCompany.clear();
 }
 
-// The same map loadCapabilities resolves, read synchronously, for the test hub's can().
-export function mockCapabilityMap(companyId: string): CapabilityMap {
-  const rows: CompanyCapability[] = Object.entries(overridesByCompany.get(companyId) ?? {}).map(([capability, min_role]) => ({
+function overrideRows(companyId: string): CompanyCapability[] {
+  return Object.entries(overridesByCompany.get(companyId) ?? {}).map(([capability, min_role]) => ({
     id: `${companyId}-${capability}`,
     company_id: companyId,
     capability: capability as CompanyCapability["capability"],
     min_role: min_role!,
   }));
-  return resolveCapabilities(CATALOG, rows);
+}
+
+// The same map loadCapabilities resolves, read synchronously, for the test hub's can().
+export function mockCapabilityMap(companyId: string): CapabilityMap {
+  return resolveCapabilities(CATALOG, overrideRows(companyId));
 }
 
 export async function loadCapabilities(companyId: string): Promise<CapabilityMap> {
   return mockCapabilityMap(companyId);
+}
+
+export async function listCompanyCapabilities(companyId: string): Promise<CompanyCapability[]> {
+  return overrideRows(companyId);
 }
