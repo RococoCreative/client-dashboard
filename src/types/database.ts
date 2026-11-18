@@ -933,7 +933,8 @@ export interface AuditEvent {
 // Production
 // Projects a company enters by hand (0026), each with an ordered list of milestones and letters.
 // Members read them and admins write them; a milestone takes its company from its project by
-// trigger. There is no status: a milestone is complete when completed_on is set. Nothing is
+// trigger. A milestone is not started, in progress or complete (0043); the database keeps the
+// status and completed_on in step, so complete always has a completed-on date. Nothing is
 // deleted; both are archived.
 export type ProjectSource = "manual";
 export interface Project {
@@ -943,9 +944,11 @@ export interface Project {
 }
 export type MilestoneKind = "milestone" | "letter";
 export const MILESTONE_KIND_LABELS: Record<MilestoneKind, string> = { milestone: "Milestone", letter: "Letter" };
+export type MilestoneStatus = "not_started" | "in_progress" | "complete";
+export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = { not_started: "Not started", in_progress: "In progress", complete: "Complete" };
 export interface ProjectMilestone {
   id: string; company_id: string; project_id: string; title: string; description: string | null;
-  kind: MilestoneKind; sort_order: number; target_date: string | null;
+  kind: MilestoneKind; sort_order: number; target_date: string | null; status: MilestoneStatus;
   responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
   created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
 }

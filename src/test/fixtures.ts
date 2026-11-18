@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -42,7 +42,7 @@ interface CompanySpec {
   sops: SopSpec[];
   resources: ResourceSpec[];
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
-  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
+  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; status?: MilestoneStatus; responsible?: number }> }>;
   wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
   // Seeds the sample tasks (RBA and Kingdom).
   tasks?: boolean;
@@ -139,7 +139,7 @@ const SPECS: Record<string, CompanySpec> = {
         milestones: [
           { title: "Contract signed", kind: "milestone", target_date: "2026-08-01", completed_on: "2026-07-30", responsible: 0 },
           { title: "Welcome letter sent", kind: "letter", target_date: "2026-08-05", completed_on: "2026-08-04" },
-          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, responsible: 1 },
+          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, status: "in_progress", responsible: 1 },
           { title: "Final walkthrough", kind: "milestone", target_date: "2026-11-20", completed_on: null },
         ],
       },
@@ -637,6 +637,8 @@ function build(company: Company): CompanyBundle {
         kind: m.kind,
         sort_order: j + 1,
         target_date: m.target_date,
+        // As the database keeps them (0043): a date means complete, otherwise the spec's open status.
+        status: m.completed_on ? "complete" : (m.status ?? "not_started"),
         responsible_profile_id: m.responsible === undefined ? null : profiles[m.responsible].id,
         completed_on: m.completed_on,
         archived_at: null,

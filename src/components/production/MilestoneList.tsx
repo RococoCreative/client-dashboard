@@ -1,6 +1,8 @@
 // One project's milestones and letters, in order. Admins edit each item in place (every field
 // saves on its own), move it up or down, and archive it; everyone else reads the same list.
-// There is no status: an item is done when it has a completed-on date. Who is responsible is
+// Each item is Not started, In progress or Complete (0043); the database keeps the status and the
+// completed-on date in step, so after every save the row shows what came back, which is how
+// picking Complete shows today's date and clearing the date shows Not started. Who is responsible is
 // named from the company directory, which every member reads; the picker offers the profiles the
 // viewer may see. Every field save returns whether it landed, so a refused one says "Not saved".
 import { useState } from "react";
@@ -16,16 +18,22 @@ import { displayName, formatDate } from "../../lib/format.ts";
 import { nameFromDirectory } from "../../lib/people.ts";
 import { isComplete, moveMilestone, sortMilestones } from "../../lib/milestones.ts";
 import { archiveMilestone, listMilestones, reorderMilestones, updateMilestone, type MilestonePatch } from "../../services/projects.ts";
-import { MILESTONE_KIND_LABELS, keysOf, type DirectoryEntry, type MilestoneKind, type Profile, type ProjectMilestone } from "../../types/database.ts";
+import { MILESTONE_KIND_LABELS, MILESTONE_STATUS_LABELS, keysOf, type DirectoryEntry, type MilestoneKind, type MilestoneStatus, type Profile, type ProjectMilestone } from "../../types/database.ts";
 
 type Directory = ReadonlyMap<string, DirectoryEntry>;
 
+function StatusBadge({ milestone }: { milestone: ProjectMilestone }) {
+  if (isComplete(milestone)) {
+    return <Badge tone="success">{milestone.completed_on ? `Complete ${formatDate(milestone.completed_on)}` : MILESTONE_STATUS_LABELS.complete}</Badge>;
+  }
+  return <Badge tone={milestone.status === "in_progress" ? "info" : "neutral"}>{MILESTONE_STATUS_LABELS[milestone.status]}</Badge>;
+}
 
 function Badges({ milestone }: { milestone: ProjectMilestone }) {
   return (
     <span className="flex shrink-0 flex-wrap items-center gap-1.5">
       {milestone.kind === "letter" ? <Badge tone="neutral">Letter</Badge> : null}
-      {isComplete(milestone) ? <Badge tone="success">Done {formatDate(milestone.completed_on)}</Badge> : <Badge tone="neutral">Open</Badge>}
+      <StatusBadge milestone={milestone} />
     </span>
   );
 }
@@ -87,7 +95,7 @@ function EditableRow({
         </div>
       </div>
       <div className="mt-2"><Badges milestone={milestone} /></div>
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-5">
         <div>
           <label htmlFor={`${id}-kind`} className={labelClass}>Kind</label>
           <select id={`${id}-kind`} aria-label={`Kind of ${title}`} value={milestone.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={selectClass}>
@@ -107,6 +115,14 @@ function EditableRow({
             {hiddenOwner && owner ? <option value={owner}>{nameFromDirectory(directory, owner, "Someone no longer here")}</option> : null}
             {active.map((p) => (
               <option key={p.id} value={p.id}>{displayName(p)}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`${id}-status`} className={labelClass}>Status</label>
+          <select id={`${id}-status`} aria-label={`Status of ${title}`} value={milestone.status} onChange={(e) => void onSave({ status: e.target.value as MilestoneStatus })} className={selectClass}>
+            {keysOf(MILESTONE_STATUS_LABELS).map((k) => (
+              <option key={k} value={k}>{MILESTONE_STATUS_LABELS[k]}</option>
             ))}
           </select>
         </div>

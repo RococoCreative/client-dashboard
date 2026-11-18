@@ -305,7 +305,7 @@ describe("wins, milestones and Production follow their capabilities", () => {
     const done = screen.getByLabelText("Completed on for Sample inspection");
     fireEvent.change(done, { target: { value: "2026-09-14" } });
     fireEvent.blur(done);
-    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Complete Sep 14, 2026")).toBeInTheDocument();
   });
 
   it("a manager still cannot rename or archive the project", async () => {

@@ -1,9 +1,12 @@
 // The projects service on the in-memory fixtures, for page tests and the demo. Same exports as
 // src/services/projects.ts; a milestone takes its company from its project here as the database
-// trigger does, and nothing is ever deleted, only archived.
+// trigger does, its status and completed-on date stay in step as sync_milestone_status keeps them
+// (0043), and nothing is ever deleted, only archived.
 import type { MilestoneKind, Project, ProjectMilestone } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
+import { companyToday } from "../../lib/wins.ts";
+import { timeZoneOf } from "./companies.ts";
 
 const projects = fromAll((b) => b.projects).map((x) => ({ ...x }));
 const milestones = fromAll((b) => b.milestones).map((x) => ({ ...x }));
@@ -22,10 +25,27 @@ function patchProject(id: string, patch: Partial<Project>): Project {
   Object.assign(project, patch, { updated_at: now() });
   return { ...project };
 }
+// sync_milestone_status (0043): when a write changes the date, the date wins (a date completes,
+// clearing it reopens to the open status the write named, or to not started); otherwise
+// completing dates the milestone today in the company's zone and reopening clears the date.
+function syncStatus(before: ProjectMilestone, after: ProjectMilestone): void {
+  const dateChanged = after.completed_on !== before.completed_on;
+  const statusChanged = after.status !== before.status;
+  if (dateChanged) {
+    if (after.completed_on !== null) after.status = "complete";
+    else if (!statusChanged || after.status === "complete") after.status = "not_started";
+  } else if (after.status === "complete" && after.completed_on === null) {
+    after.completed_on = companyToday(timeZoneOf(after.company_id));
+  } else if (after.status !== "complete" && after.completed_on !== null) {
+    after.completed_on = null;
+  }
+}
 function patchMilestone(id: string, patch: Partial<ProjectMilestone>): ProjectMilestone {
   const milestone = milestones.find((x) => x.id === id);
   if (!milestone) throw new Error("Milestone not found.");
+  const before = { ...milestone };
   Object.assign(milestone, patch, { updated_at: now() });
+  syncStatus(before, milestone);
   return { ...milestone };
 }
 function byOrder(a: ProjectMilestone, b: ProjectMilestone): number {
@@ -96,6 +116,7 @@ export async function createMilestone(input: { project_id: string; title: string
     kind: input.kind,
     sort_order: input.sort_order,
     target_date: input.target_date ?? null,
+    status: "not_started",
     responsible_profile_id: input.responsible_profile_id ?? null,
     completed_on: null,
     archived_at: null,
@@ -108,7 +129,7 @@ export async function createMilestone(input: { project_id: string; title: string
   return { ...created };
 }
 
-export type MilestonePatch = Partial<Pick<ProjectMilestone, "title" | "description" | "kind" | "target_date" | "responsible_profile_id" | "completed_on">>;
+export type MilestonePatch = Partial<Pick<ProjectMilestone, "title" | "description" | "kind" | "target_date" | "responsible_profile_id" | "status" | "completed_on">>;
 export async function updateMilestone(id: string, patch: MilestonePatch): Promise<ProjectMilestone> {
   return patchMilestone(id, patch);
 }

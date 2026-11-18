@@ -1402,7 +1402,7 @@ describe("production", () => {
     const done = screen.getByLabelText("Completed on for Foundation poured");
     fireEvent.change(done, { target: { value: "2026-09-14" } });
     fireEvent.blur(done);
-    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Complete Sep 14, 2026")).toBeInTheDocument();
   });
 
   it("adds a letter at the end", async () => {
