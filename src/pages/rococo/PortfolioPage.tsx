@@ -80,11 +80,11 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   // closes it. Reading fewer reports finished reviews as missing. The same set the company
   // dashboard reads.
   const liveCycles = cyclesInPlay(cycles);
-  const rosters = new Map(liveCycles.map((c) => [c.id, cycleRoster(people, reviews, c.id, omissions)]));
+  const rosters = new Map(liveCycles.map((c) => [c.id, cycleRoster(people, reviews, c, omissions)]));
   const cycleReviews = reviews.filter((r) => rosters.get(r.cycle_id)?.some((p) => p.id === r.employee_id) ?? false);
   const scores = cycleReviews.length > 0 ? await listScoresForReviews(cycleReviews.map((r) => r.id)) : [];
-  // A monthly cycle carries no scores by design, so only scored cycles reach the team score.
-  const scoredIds = new Set(liveCycles.filter((c) => c.cadence !== "monthly").map((c) => c.id));
+  // A GSR period carries no scores by design, so only scored cycles reach the team score.
+  const scoredIds = new Set(liveCycles.filter((c) => c.kind !== "gsr").map((c) => c.id));
   const teamScore = averageScore(
     cycleReviews
       .filter((r) => scoredIds.has(r.cycle_id))

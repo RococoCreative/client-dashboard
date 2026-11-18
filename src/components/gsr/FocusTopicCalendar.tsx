@@ -68,7 +68,9 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
   const [error, setError] = useState("");
   const state = useAsync(async () => {
     const [topics, cycles] = await Promise.all([listFocusTopics(companyId, months[0], months[months.length - 1]), listCycles(companyId)]);
-    return { topics, cycles: cycles.filter((c) => c.cadence === "monthly") };
+    // Monthly GSRs carry the topic as their theme. Other rhythms read the topic of the month they
+    // start in, live, so there is nothing to mirror onto them.
+    return { topics, cycles: cycles.filter((c) => c.kind === "gsr" && c.cadence === "monthly") };
   }, [companyId, months]);
 
   // The GSR list links here by anchor; the router does not scroll to one on its own.

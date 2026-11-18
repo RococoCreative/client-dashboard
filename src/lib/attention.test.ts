@@ -32,6 +32,7 @@ function person(overrides: Partial<Profile> = {}): Profile {
     can_view_divisions: false,
     view_all_divisions: false,
     view_division_ids: [],
+    gsr_cadence: "monthly",
     created_at: STAMP,
     updated_at: STAMP,
     ...overrides,
@@ -44,6 +45,8 @@ function cycle(overrides: Partial<ReviewCycle> = {}): ReviewCycle {
     id: `cycle-${seq}`,
     company_id: "co",
     name: `Cycle ${seq}`,
+    // A month is a GSR, any other cadence a scored review, unless the test says otherwise.
+    kind: overrides.cadence && overrides.cadence !== "monthly" ? "review" : "gsr",
     cadence: "monthly",
     period_start: "2026-09-01",
     period_end: "2026-09-30",

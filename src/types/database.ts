@@ -89,6 +89,9 @@ export interface Profile {
   // owner or Rococo sets these; owners always see everyone.
   view_all_divisions: boolean;
   view_division_ids: string[];
+  // How often their Goal Setting Review runs (0040): weekly, every two weeks, monthly or
+  // quarterly. Monthly unless an admin who manages them or a manager who leads them sets another.
+  gsr_cadence: GsrCadence;
   created_at: string;
   updated_at: string;
 }
@@ -304,13 +307,21 @@ export interface GsrCriterion {
   updated_at: string;
 }
 
-export type Cadence = "monthly" | "quarterly" | "annual" | "custom";
+// A cycle's rhythm. Weekly, every two weeks and monthly are GSR rhythms only; annual and custom
+// are review rhythms only; quarterly can be either (0040, review_cycles_kind_cadence_check).
+export type Cadence = "weekly" | "biweekly" | "monthly" | "quarterly" | "annual" | "custom";
+// The rhythms a person's Goal Setting Review can run at (profiles.gsr_cadence, 0040).
+export type GsrCadence = "weekly" | "biweekly" | "monthly" | "quarterly";
+// What a cycle is (0040): a Goal Setting Review period, or a scored review. Kind decides the hub
+// section a cycle lives in; cadence is only its rhythm.
+export type CycleKind = "gsr" | "review";
 export type CycleStatus = "open" | "closed";
 
 export interface ReviewCycle {
   id: string;
   company_id: string;
   name: string;
+  kind: CycleKind;
   cadence: Cadence;
   period_start: string;
   period_end: string;

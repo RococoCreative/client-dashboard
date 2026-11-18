@@ -3,8 +3,8 @@
 // across last cycle, this cycle, and the year, and how a month's goals add up for a company that
 // scores its GSRs. The pillar weighting lives in scoring.ts; this only produces the month figures
 // a 'gsr_goals' pillar's line item carries, the way deliverables.ts does for its module.
-import { cycleSettled, monthsWithin } from "./cycles.ts";
-import type { ActionStep, Goal, GoalKind, GoalStatus, Review } from "../../types/database.ts";
+import { cycleSettled, gsrPeriodsWithin } from "./cycles.ts";
+import type { ActionStep, CycleKind, Goal, GoalKind, GoalStatus, GsrCadence, Review } from "../../types/database.ts";
 
 // The order goals are read in, on every screen that lists them: role goals first, then
 // professional goals, and personal goals last. Shared in code, so every company reads its goals
@@ -166,31 +166,36 @@ export function lockedMonthsIn(target: number): number {
 }
 
 export interface GsrMonthsFigure<C> {
-  // Every month in the period. `locked` is the score its GSR was locked in at, or null while the
-  // month is still open to change; `live` is where it stands now, for reading, never for scoring.
-  // `omitted` is a month an admin left the person out of (0034): shown, never counted.
+  // Every GSR period of the person's inside the scored period, a week, two weeks, a month or a
+  // quarter (0040). `locked` is the score its GSR was locked in at, or null while the period is
+  // still open to change; `live` is where it stands now, for reading, never for scoring. `omitted`
+  // is a period an admin left the person out of (0034): shown, never counted.
   months: Array<{ cycle: C; locked: number | null; live: number; omitted: boolean }>;
   target: number;
   actual: number;
 }
 
-// The months a scored review reads for its Monthly GSRs pillar, and the one line item they make.
-// The months are the Goal Setting Reviews wholly inside its period (monthsWithin). A month counts
-// once an admin has locked its GSR in, and not before: an open month is shown but never applied.
-// The line item is 100 a locked month as the target and their locked scores as the actual, so the
-// pillar's score is their average. A quarter's three months are a third of its pillar each, and
-// across four quarters each month is a twelfth of the year's, the 1.67 points of 20 Justin set.
-// A month the person was left out of never counts, and with no month locked there is no line
-// item, so scoring leaves the pillar out of the review (scoring.ts, pillarLeftOut).
-export function scoreGsrMonths<C extends { id: string; cadence: string; period_start: string; period_end: string }>(
+// The GSR periods a scored review reads for its Monthly GSRs pillar, and the one line item they
+// make. The periods are the person's Goal Setting Reviews wholly inside its period
+// (gsrPeriodsWithin): those of their rhythm, and any other they have a GSR in. A period counts
+// once its GSR is locked in, and not before: an open period is shown but never applied. The line
+// item is 100 a locked period as the target and their locked scores as the actual, so the pillar's
+// score is the average of the locked periods, whatever their length: a quarter of thirteen locked
+// weeks scores the same way as one of three locked months. A period the person was left out of
+// never counts, and with none locked there is no line item, so scoring leaves the pillar out of
+// the review (scoring.ts, pillarLeftOut). `reviews` are the person's own, and `cadence` is their
+// rhythm; without it every GSR period inside counts, as before rhythms existed.
+export function scoreGsrMonths<C extends { id: string; kind: CycleKind; cadence: string; period_start: string; period_end: string }>(
   period: { period_start: string; period_end: string },
   cycles: C[],
   goals: Array<Pick<Goal, "scope" | "cycle_id" | "progress">>,
   reviews: Array<Pick<Review, "cycle_id" | "status" | "gsr_score">>,
   required: number,
   omittedCycleIds: string[] = [],
+  cadence?: GsrCadence,
 ): GsrMonthsFigure<C> {
-  const months = monthsWithin(period, cycles).map((cycle) => {
+  const periods = gsrPeriodsWithin(period, cycles, cadence, reviews.map((r) => r.cycle_id));
+  const months = periods.map((cycle) => {
     const review = reviews.find((r) => r.cycle_id === cycle.id);
     const omitted = omittedCycleIds.includes(cycle.id);
     const locked = !omitted && review?.status === "complete" && review.gsr_score !== null ? review.gsr_score : null;

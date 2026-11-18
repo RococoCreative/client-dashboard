@@ -1,7 +1,9 @@
 // In-memory stand-in for services/profiles.ts, same exports, so page tests and `npm run demo`
 // run against the seeded roster and never touch the network.
-import type { Profile, Role } from "../../types/database.ts";
+import type { GsrCadence, Profile, Role } from "../../types/database.ts";
 import { ALL_PROFILES, personaFromLocation } from "../fixtures.ts";
+import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import type { ProfilePatch as RealProfilePatch } from "../../services/profiles.ts";
 
 const profiles: Profile[] = ALL_PROFILES.map((p) => ({ ...p }));
@@ -11,6 +13,29 @@ const profiles: Profile[] = ALL_PROFILES.map((p) => ({ ...p }));
 // inherit_company_from_employee sees them in the database.
 export function companyOf(profileId: string): string | null {
   return profiles.find((p) => p.id === profileId)?.company_id ?? null;
+}
+
+// A person's GSR rhythm as the store holds it now, for the GSR mock's insert rule (0040).
+export function rhythmOfProfile(profileId: string): GsrCadence {
+  return profiles.find((p) => p.id === profileId)?.gsr_cadence ?? "monthly";
+}
+
+// Who is writing, as the guards of 0040 see them, for the mocks that play those guards. The persona
+// the URL names (the Klasik admin when it names none), judged only inside its own company: a write
+// to another company's rows, or by Rococo, is not judged, the way the SQL editor is not, so a test
+// that seeds data as the default persona is unaffected. Null means not judged.
+export interface Actor {
+  id: string;
+  admin: boolean;
+  // Whether they lead this person (private.led_person_ids), never themselves.
+  leads: (personId: string) => boolean;
+}
+export function actorIn(companyId: string | null): Actor | null {
+  const { profile } = personaFromLocation();
+  if (!companyId || profile.is_rococo_admin || profile.company_id !== companyId) return null;
+  const me = profiles.find((p) => p.id === profile.id) ?? profile;
+  const led = new Set(ledBy(me, profiles.filter((p) => p.company_id === companyId)).map((p) => p.id));
+  return { id: me.id, admin: isCompanyAdminRole(me.role), leads: (personId) => personId !== me.id && led.has(personId) };
 }
 
 export async function getMyProfile(): Promise<Profile | null> {
@@ -48,6 +73,7 @@ export async function createStaffProfile(input: {
     can_view_divisions: false,
     view_all_divisions: false,
     view_division_ids: [],
+    gsr_cadence: "monthly",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -80,6 +106,21 @@ export type ProfilePatch = RealProfilePatch;
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);
   if (index === -1) throw new Error("Profile not found.");
+  // guard_profile_fields (0040): a manager changes only the GSR rhythm of the people they lead, and
+  // nobody sets their own rhythm. Anyone else's row no update policy reaches, so it is not
+  // changed, as the service reports a write RLS filtered out. An admin goes through as before.
+  const actor = actorIn(profiles[index].company_id);
+  if (actor && !actor.admin) {
+    const before = profiles[index] as unknown as Record<string, unknown>;
+    const changed = Object.entries(patch).filter(([key, value]) => value !== undefined && JSON.stringify(value) !== JSON.stringify(before[key])).map(([key]) => key);
+    if (actor.leads(id)) {
+      if (changed.some((key) => key !== "gsr_cadence")) throw new Error("A manager can change only the GSR rhythm of the people they lead.");
+    } else if (id !== actor.id) {
+      throw new Error(NOT_CHANGED_MESSAGE);
+    } else if (changed.includes("gsr_cadence")) {
+      throw new Error("Only admins can change employment details.");
+    }
+  }
   const next = { ...profiles[index], ...patch, updated_at: new Date().toISOString() };
   // division_id mirrors division_ids: the one division, or null for none or several (0038).
   if (patch.division_ids !== undefined) {

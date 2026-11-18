@@ -1,7 +1,7 @@
 // The GSR screens after the team and division sprint: the hardening fixes (a review in a closed
 // cycle stays signed off, a retried sign-off writes one line item, Start all carries on past one
 // failure, a complete month freezes without a score) and the manager on a team member's month,
-// who works its goals and notes but never locks or signs it off, and the tasks linked to a goal
+// who works its goals and notes and locks it in (0040) but never rates it, and the tasks linked to a goal
 // from inside the GSR. Each test reads the in-memory data layer the way the page does; the calls a
 // test needs to fail are wrapped so it can fail them once.
 import { screen, waitFor, within } from "@testing-library/react";
@@ -110,7 +110,7 @@ describe("a complete month with no score", () => {
 });
 
 describe("a manager on a team member's month", () => {
-  it("works the goals and notes of someone they lead, and never signs it off", async () => {
+  it("works the goals and notes of someone they lead, and locks it in but rates nothing", async () => {
     const user = userEvent.setup();
     const review = await ensureReview(september.id, RBA.company.id, rowan.id);
     await createGoal({ company_id: RBA.company.id, employee_id: rowan.id, title: "Walk every site with the crew", kind: "role", scope: "cycle", cycle_id: september.id, sort_order: 1 });
@@ -121,8 +121,9 @@ describe("a manager on a team member's month", () => {
     expect(await screen.findByLabelText("Title for Run the Monday toolbox talk")).toBeInTheDocument();
     expect(screen.getByLabelText("New note for Walk every site with the crew")).toBeInTheDocument();
 
-    // Locking, ratings and sign-off stay with an admin.
-    expect(screen.queryByRole("button", { name: /Mark complete/ })).not.toBeInTheDocument();
+    // A manager locks a GSR in and reopens it as an admin does (0040); ratings and the sign-off of
+    // a scored review stay with an admin.
+    expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Reopen/ })).not.toBeInTheDocument();
     // Back to the person, never to the cycle page a manager cannot open.
     expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}`);

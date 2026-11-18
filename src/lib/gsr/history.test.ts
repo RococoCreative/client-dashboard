@@ -5,7 +5,7 @@ import { latestScoredReview, previousCompletedReview, reviewHistory } from "./hi
 import type { GsrPillar, Review, ReviewCycle, ReviewScore } from "../../types/database.ts";
 
 const cycle = (id: string, start: string, end: string, cadence = "monthly"): ReviewCycle =>
-  ({ id, name: id, cadence, period_start: start, period_end: end, status: "open" }) as ReviewCycle;
+  ({ id, name: id, kind: cadence === "monthly" ? "gsr" : "review", cadence, period_start: start, period_end: end, status: "open" }) as ReviewCycle;
 const review = (id: string, cycleId: string, status = "in_progress", completedAt: string | null = null): Review =>
   ({ id, cycle_id: cycleId, status, completed_at: completedAt }) as Review;
 

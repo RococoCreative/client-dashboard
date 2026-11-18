@@ -1,9 +1,13 @@
-// The cycles list behind two sidebar entries: GSRs (monthly Goal Setting Reviews) and Reviews
-// (every scored cadence), one component keyed on the section. Progress per cycle, the team score
-// where a cycle carries one, the door to settings and company goals on the Reviews side, and the
-// new-cycle form offering only the cadences that belong to the section. A new month starts
-// with that month's topic from the focus topic calendar, which the GSR side links to. The period
-// math (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
+// The cycles list behind two sidebar entries: GSRs (Goal Setting Review periods of every rhythm,
+// kind 'gsr') and Reviews (scored cycles, kind 'review'), one component keyed on the section
+// (0040). Progress per cycle, the team score where a cycle carries one, the door to settings and
+// company goals on the Reviews side, and the new-cycle form offering only the rhythms that belong
+// to the section. A GSR period's dates are canonical, so the form computes them from the rhythm and
+// any day picked inside the period; a review's quarterly and annual dates follow their start, and
+// custom dates are the admin's. A new month starts with that month's topic from the focus topic
+// calendar, which the GSR side links to. The GSR list groups its periods by rhythm when a company
+// runs more than one. The period math (cadence -> dates -> name) and the overlap rule live in
+// lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CalendarDays, Plus, Settings2, Target } from "lucide-react";
@@ -25,7 +29,10 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview } from "../../lib/gsr/scoring.ts";
 import {
   CADENCE_LABELS,
+  GSR_CADENCES,
+  GSR_RHYTHM_LABELS,
   SECTION_LABEL,
+  gsrPeriodCopy,
   cycleProgress,
   cyclePath,
   cycleRoster,
@@ -39,13 +46,16 @@ import {
 } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
-import type { Cadence, ReviewCycle } from "../../types/database.ts";
+import type { Cadence, CycleKind, ReviewCycle } from "../../types/database.ts";
 
-// The cadences a section files: a GSR is monthly by definition, a review is anything scored.
-const SECTION_CADENCES: Record<HubSection, Cadence[]> = {
-  gsr: ["monthly"],
+// The rhythms a section files, and the one its form starts on: a GSR runs weekly, every two
+// weeks, monthly or quarterly; a review is quarterly, annual or custom.
+const SECTION_CADENCES: Record<HubSection, readonly Cadence[]> = {
+  gsr: GSR_CADENCES,
   reviews: ["quarterly", "annual", "custom"],
 };
+const SECTION_DEFAULT: Record<HubSection, Cadence> = { gsr: "monthly", reviews: "quarterly" };
+const SECTION_KIND: Record<HubSection, CycleKind> = { gsr: "gsr", reviews: "review" };
 
 function NewCycleDialog({
   companyId,
@@ -58,13 +68,19 @@ function NewCycleDialog({
   onClose: () => void;
   onCreated: (cycle: ReviewCycle) => void;
 }) {
-  const first = SECTION_CADENCES[section][0];
+  const first = SECTION_DEFAULT[section];
+  const kind = SECTION_KIND[section];
   const [cadence, setCadence] = useState<Cadence>(first);
   const [start, setStart] = useState(() => periodStart(first, new Date()));
   const [end, setEnd] = useState(() => periodEnd(first, periodStart(first, new Date())) ?? todayIso());
   const [name, setName] = useState(() => defaultCycleName(first, periodStart(first, new Date())));
   const [nameTouched, setNameTouched] = useState(false);
-  // A monthly cycle starts from the month's calendar topic. The theme and description shown are
+  // The day a GSR period is picked by, today until the admin picks another: changing the rhythm
+  // keeps the period that holds it, so switching from a month to weeks lands on this week rather
+  // than the week the month began in.
+  const [pickedDay, setPickedDay] = useState(todayIso);
+  // A monthly GSR starts from the month's calendar topic; another rhythm reads the topic of the
+  // month it starts in on the review itself, so nothing is copied onto it here. The theme and description shown are
   // the calendar's until the admin types their own: typing a theme freezes both, so changing
   // the month afterwards keeps what they wrote. A description typed under a calendar theme stays
   // too while the theme still follows the month.
@@ -73,11 +89,14 @@ function NewCycleDialog({
   const [ownTheme, setOwnTheme] = useState(false);
   const [ownDescription, setOwnDescription] = useState(false);
   const calendar = useAsync(
-    async () => (cadence === "monthly" ? ((await listFocusTopics(companyId, start, start))[0] ?? null) : null),
+    async () => (kind === "gsr" && cadence === "monthly" ? ((await listFocusTopics(companyId, start, start))[0] ?? null) : null),
     [companyId, cadence, start],
   );
   const topic = calendar.data ?? null;
-  const shownTheme = ownTheme ? theme : (topic?.theme ?? "");
+  // A theme is a month's or a review's. A week, two weeks or a quarter of GSRs reads the topic of
+  // the month it starts in, live on the review, so the form asks for none.
+  const themed = kind === "review" || cadence === "monthly";
+  const shownTheme = !themed ? "" : ownTheme ? theme : (topic?.theme ?? "");
   const shownDescription = ownDescription ? themeDescription : (topic?.description ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -108,7 +127,7 @@ function NewCycleDialog({
     try {
       // Read fresh at submit rather than from the list behind the dialog, so a month another
       // admin opened a minute ago counts too.
-      const existing = overlappingCycle(await listCycles(companyId), { cadence, period_start: start, period_end: end });
+      const existing = overlappingCycle(await listCycles(companyId), { kind, cadence, period_start: start, period_end: end });
       if (existing) {
         setError(overlapMessage(existing));
         setBusy(false);
@@ -117,6 +136,7 @@ function NewCycleDialog({
       const cycle = await createCycle({
         company_id: companyId,
         name: name.trim(),
+        kind,
         cadence,
         period_start: start,
         period_end: end,
@@ -134,30 +154,38 @@ function NewCycleDialog({
     <Modal onClose={onClose} labelledBy="new-cycle-title">
       <form onSubmit={handleSubmit} className="p-6">
         <h2 id="new-cycle-title" className="font-display text-lg text-heading">{section === "gsr" ? "New Goal Setting Review" : "New review cycle"}</h2>
-        <p className="mt-1 text-[13px] text-ink-2">{section === "gsr" ? "One GSR per person for the month." : "One review per person for the period. You choose the rhythm."}</p>
+        <p className="mt-1 text-[13px] text-ink-2">
+          {section === "gsr"
+            ? "One GSR for each person whose rhythm this is. A week runs Monday to Sunday, so the dates follow the rhythm and the day you pick."
+            : "One review per person for the period. You choose the rhythm."}
+        </p>
         <div className="mt-5 space-y-4">
-          <Field label="Cadence" htmlFor="cycle-cadence">
+          <Field label={section === "gsr" ? "Rhythm" : "Cadence"} htmlFor="cycle-cadence">
             <select
               id="cycle-cadence"
               value={cadence}
               onChange={(e) => {
                 const next = e.target.value as Cadence;
-                applyPeriod(next, next === "custom" ? start : periodStart(next, parseDate(start) ?? new Date()), end);
+                const from = kind === "gsr" ? pickedDay : start;
+                applyPeriod(next, next === "custom" ? start : periodStart(next, parseDate(from) ?? new Date()), end);
               }}
               className={selectClass}
             >
               {SECTION_CADENCES[section].map((key) => (
-                <option key={key} value={key}>{CADENCE_LABELS[key]}</option>
+                <option key={key} value={key}>{section === "gsr" ? GSR_RHYTHM_LABELS[key as keyof typeof GSR_RHYTHM_LABELS] : CADENCE_LABELS[key]}</option>
               ))}
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Starts" htmlFor="cycle-start">
+            <Field label="Starts" htmlFor="cycle-start" hint={kind === "gsr" ? `Any day picks the ${gsrPeriodCopy(cadence).noun} that holds it.` : undefined}>
               <input
                 id="cycle-start"
                 type="date"
                 value={start}
-                onChange={(e) => applyPeriod(cadence, cadence === "custom" ? e.target.value : periodStart(cadence, parseDate(e.target.value) ?? new Date()), end)}
+                onChange={(e) => {
+                  if (parseDate(e.target.value)) setPickedDay(e.target.value);
+                  applyPeriod(cadence, cadence === "custom" ? e.target.value : periodStart(cadence, parseDate(e.target.value) ?? new Date()), end);
+                }}
                 className={inputClass}
               />
             </Field>
@@ -185,25 +213,30 @@ function NewCycleDialog({
               className={inputClass}
             />
           </Field>
-          <Field
-            label="Theme (optional)"
-            htmlFor="cycle-theme"
-            hint={!ownTheme && topic ? "From the focus topic calendar. Change it here for this month only." : "A company-wide focus for the period, like a core value or a process push."}
-          >
-            <input
-              id="cycle-theme"
-              type="text"
-              value={shownTheme}
-              onChange={(e) => {
-                if (!ownDescription) setThemeDescription(shownDescription);
-                setOwnDescription(true);
-                setOwnTheme(true);
-                setTheme(e.target.value);
-              }}
-              placeholder="Core value: Integrity"
-              className={inputClass}
-            />
-          </Field>
+          {!themed ? (
+            <p className="text-[12.5px] text-ink-2">Each {gsrPeriodCopy(cadence).noun} reads the focus topic of the month it starts in, from the focus topic calendar.</p>
+          ) : null}
+          {themed ? (
+            <Field
+              label="Theme (optional)"
+              htmlFor="cycle-theme"
+              hint={!ownTheme && topic ? "From the focus topic calendar. Change it here for this month only." : "A company-wide focus for the period, like a core value or a process push."}
+            >
+              <input
+                id="cycle-theme"
+                type="text"
+                value={shownTheme}
+                onChange={(e) => {
+                  if (!ownDescription) setThemeDescription(shownDescription);
+                  setOwnDescription(true);
+                  setOwnTheme(true);
+                  setTheme(e.target.value);
+                }}
+                placeholder="Core value: Integrity"
+                className={inputClass}
+              />
+            </Field>
+          ) : null}
           {shownTheme.trim() ? (
             <Field label="Theme description" htmlFor="cycle-theme-description">
               <textarea
@@ -247,16 +280,22 @@ export default function CyclesPage({ section }: { section: HubSection }) {
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     return { cycles, reviews, pillars, scores, people, omissions };
   }, [companyId]);
-  const cycles = (state.data?.cycles ?? []).filter((c) => sectionOf(c.cadence) === section);
+  const cycles = (state.data?.cycles ?? []).filter((c) => sectionOf(c) === section);
+  // The GSR side groups its periods by rhythm once a company runs more than one, weekly first.
+  const rhythms = gsr ? GSR_CADENCES.filter((c) => cycles.some((cycle) => cycle.cadence === c)) : [];
+  const groups: Array<{ key: string; label: string | null; cycles: ReviewCycle[] }> =
+    rhythms.length > 1
+      ? rhythms.map((c) => ({ key: c, label: GSR_RHYTHM_LABELS[c], cycles: cycles.filter((cycle) => cycle.cadence === c) }))
+      : [{ key: "all", label: null, cycles }];
 
   return (
     <>
       <PageHeader
-        eyebrow={gsr ? "Monthly" : "Quarterly, annual and custom"}
+        eyebrow={gsr ? "Weekly, every two weeks, monthly or quarterly" : "Quarterly, annual and custom"}
         title={SECTION_LABEL[section]}
         description={
           gsr
-            ? "One month, one meeting per person: last month read back as hit or miss, this month's goals and action steps, the focus topic. Nothing is scored here."
+            ? "One period, one meeting per person, at each person's own rhythm: the last period read back as hit or miss, this period's goals and action steps, the focus topic. Nothing is scored here."
             : "Each cycle creates one review per person. Score the pillars, leave feedback, and watch the team average."
         }
         actions={
@@ -273,7 +312,7 @@ export default function CyclesPage({ section }: { section: HubSection }) {
             <Link to="/settings/reviews">
               <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Review settings</Button>
             </Link>
-            <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button>
+            <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New GSR period" : "New cycle"}</Button>
           </>
         }
       />
@@ -283,65 +322,72 @@ export default function CyclesPage({ section }: { section: HubSection }) {
         <SkeletonRows rows={4} />
       ) : !state.data ? null : cycles.length === 0 ? (
         <EmptyState
-          eyebrow={gsr ? "No months yet" : "No cycles yet"}
-          title={gsr ? "Open the first month" : "Start the first review cycle"}
+          eyebrow={gsr ? "No GSRs yet" : "No cycles yet"}
+          title={gsr ? "Open the first GSR period" : "Start the first review cycle"}
           body={
             gsr
-              ? "A Goal Setting Review is one month: the hub opens a GSR for every person and reads last month back the month after."
+              ? "A Goal Setting Review is one period at each person's rhythm, a week, two weeks, a month or a quarter: the hub opens a GSR for every person on that rhythm and reads the period back the next time."
               : "Pick a cadence (quarterly, annual, or custom dates) and the hub creates a review for every person."
           }
-          action={<Button onClick={() => setCreating(true)}>{gsr ? "New month" : "New cycle"}</Button>}
+          action={<Button onClick={() => setCreating(true)}>{gsr ? "New GSR period" : "New cycle"}</Button>}
         />
       ) : (
-        <ul className="space-y-3">
-          {cycles.map((cycle) => {
-            // Counted the way the cycle page and the dashboard count it: over the cycle's roster
-            // (everybody active, plus anyone deactivated since whose review here was signed off,
-            // less anyone omitted from it), so a person with no review row yet is a review still
-            // owed. Counting the rows that exist read "1/2 complete" here while the dashboard read
-            // "1 of 5".
-            const roster = cycleRoster(state.data!.people, state.data!.reviews, cycle.id, state.data!.omissions);
-            const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id && roster.some((p) => p.id === r.employee_id));
-            const progress = cycleProgress(roster, reviews, cycle.id);
-            const team = averageScore(
-              reviews.map((r) => {
-                const own = state.data!.scores.filter((s) => s.review_id === r.id);
-                return r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, state.data!.pillars), own).overall : null;
-              }),
-            );
-            return (
-              <li key={cycle.id}>
-                <Link
-                  to={cyclePath(cycle)}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-surface px-5 py-4 transition-colors duration-150 hover:border-line-strong"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-display text-lg text-heading">{cycle.name}</h2>
-                      <Badge tone={CYCLE_STATUS_TONE[cycle.status]}>{cycle.status === "open" ? "Open" : "Closed"}</Badge>
-                    </div>
-                    <p className="mt-0.5 text-[13px] text-ink-2">
-                      {formatPeriod(cycle.period_start, cycle.period_end)} · {CADENCE_LABELS[cycle.cadence]}
-                      {cycle.theme ? ` · Theme: ${cycle.theme}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-6 text-right">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-label text-ink-3">Reviews</p>
-                      <p className="tnum text-sm text-ink">{progress.complete}/{progress.total} complete</p>
-                    </div>
-                    {gsr ? null : (
-                      <div>
-                        <p className="text-[11px] uppercase tracking-label text-ink-3">Team</p>
-                        <p className="tnum text-sm text-ink">{team ?? "-"}</p>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <section key={group.key} aria-label={group.label ?? undefined}>
+              {group.label ? <h2 className="eyebrow mb-2">{group.label}</h2> : null}
+              <ul className="space-y-3">
+                {group.cycles.map((cycle) => {
+                  // Counted the way the cycle page and the dashboard count it: over the cycle's roster
+                  // (everybody active, plus anyone deactivated since whose review here was signed off,
+                  // less anyone omitted from it), so a person with no review row yet is a review still
+                  // owed. Counting the rows that exist read "1/2 complete" here while the dashboard read
+                  // "1 of 5".
+                  const roster = cycleRoster(state.data!.people, state.data!.reviews, cycle, state.data!.omissions);
+                  const reviews = state.data!.reviews.filter((r) => r.cycle_id === cycle.id && roster.some((p) => p.id === r.employee_id));
+                  const progress = cycleProgress(roster, reviews, cycle.id);
+                  const team = averageScore(
+                    reviews.map((r) => {
+                      const own = state.data!.scores.filter((s) => s.review_id === r.id);
+                      return r.status === "complete" && hasScoredItem(own) ? computeReviewScore(pillarsForReview(r, state.data!.pillars), own).overall : null;
+                    }),
+                  );
+                  return (
+                    <li key={cycle.id}>
+                      <Link
+                        to={cyclePath(cycle)}
+                        className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-surface px-5 py-4 transition-colors duration-150 hover:border-line-strong"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h2 className="font-display text-lg text-heading">{cycle.name}</h2>
+                            <Badge tone={CYCLE_STATUS_TONE[cycle.status]}>{cycle.status === "open" ? "Open" : "Closed"}</Badge>
+                          </div>
+                          <p className="mt-0.5 text-[13px] text-ink-2">
+                            {formatPeriod(cycle.period_start, cycle.period_end)} · {CADENCE_LABELS[cycle.cadence]}
+                            {cycle.theme ? ` · Theme: ${cycle.theme}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-6 text-right">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-label text-ink-3">Reviews</p>
+                            <p className="tnum text-sm text-ink">{progress.complete}/{progress.total} complete</p>
+                          </div>
+                          {gsr ? null : (
+                            <div>
+                              <p className="text-[11px] uppercase tracking-label text-ink-3">Team</p>
+                              <p className="tnum text-sm text-ink">{team ?? "-"}</p>
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
 
       {creating ? (

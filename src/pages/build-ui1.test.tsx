@@ -161,7 +161,7 @@ describe("new month dialog", () => {
   it("pre-fills the theme from the calendar and follows the month until the admin types their own", async () => {
     const user = userEvent.setup();
     renderWithHub(<CyclesPage section="gsr" />, klasikAdmin);
-    await user.click(await screen.findByRole("button", { name: "New month" }));
+    await user.click(await screen.findByRole("button", { name: "New GSR period" }));
     const dialog = await screen.findByRole("dialog");
     const theme = within(dialog).getByLabelText("Theme (optional)") as HTMLInputElement;
     const [september] = await listFocusTopics(KLASIK.company.id, "2026-09-01", "2026-09-01");
@@ -204,8 +204,8 @@ describe("divisions in Settings > Roles", () => {
     renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
     const section = await panel();
     expect(within(section).getByLabelText("Division name RBA North")).toBeInTheDocument();
-    // Rowan Ellis works in both, so counts in each.
-    expect(within(section).getByText("5 people")).toBeInTheDocument();
+    // Rowan Ellis works in both, so counts in each. Morgan Reyes, on a weekly GSR, is in South.
+    expect(within(section).getByText("6 people")).toBeInTheDocument();
     expect(within(section).getByText("3 people")).toBeInTheDocument();
 
     await user.type(within(section).getByLabelText("New division"), "West office");
@@ -222,13 +222,13 @@ describe("divisions in Settings > Roles", () => {
     // A division people still work in stays: the database refuses, and the dialog says why.
     await user.click(within(section).getByRole("button", { name: "Remove RBA South" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/5 people still work in it/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/6 people still work in it/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Remove division" }));
-    expect(await within(dialog).findByText("Move the 5 people out of RBA South first.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Move the 6 people out of RBA South first.")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(within(section).getByLabelText("Division name RBA South")).toBeInTheDocument();
     const people = await listCompanyProfiles(RBA.company.id);
-    expect(people.filter((p) => p.division_ids.includes("rba-division-south"))).toHaveLength(5);
+    expect(people.filter((p) => p.division_ids.includes("rba-division-south"))).toHaveLength(6);
 
     // An empty one goes.
     await user.type(within(section).getByLabelText("New division"), "Spare yard");

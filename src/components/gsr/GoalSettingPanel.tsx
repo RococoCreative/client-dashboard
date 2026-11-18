@@ -1,22 +1,24 @@
-// The Goal Setting Review for a monthly cycle. The manager and the person set this month's
-// goals together, live: each with an agreed completion where 100 is complete, action steps as
-// checkpoints along the way, and a dated notes log to discuss in the meeting. Only the completion
-// says how a goal landed; steps and notes are there to get it there.
-// The person works their own month the same way the manager does, so they can fill it in
-// before the meeting and the meeting starts from their draft. A manager works the month of someone
-// they lead the same way, goals and notes, while it is open (0038); locking it, ratings and
-// sign-off stay with an admin. Where the company runs tasks, each goal lists the tasks behind it
-// (GoalTasks), which never move its completion.
-// The month's focus topic sits at the top with its explanation, for reference, and the person's #1
-// GSR comes from it: their own words, set as a role or professional goal. The goals their job role
-// brings are offered the same way, one click to file. Goals read the focus topic's GSR first, then
-// role, professional and personal. Where the company scores its GSRs, the month adds up the
-// completion of all its goals against its mandatory ones, and an admin marking the month complete
-// locks the score in and the month with it. Last month's goals read back as hit or miss with a
-// "why" and a one-click carry forward. Yearly goals are not here: they live on the profile and on
-// the quarterly and annual reviews, because a Goal Setting Review is the month and nothing else.
-// Every change saves on its own; a closed or complete month is read-only except for the why,
-// which is written the month after.
+// The Goal Setting Review for one GSR period: a week, two weeks, a month or a quarter, at the
+// person's rhythm (0040). The manager and the person set the period's goals together, live: each
+// with an agreed completion where 100 is complete, action steps as checkpoints along the way, and a
+// dated notes log to discuss in the meeting. Only the completion says how a goal landed; steps and
+// notes are there to get it there. Copy reads in the period's own words ("Goals for this week").
+// The person works their own period the same way the manager does, so they can fill it in
+// before the meeting and the meeting starts from their draft. A manager works the period of
+// someone they lead the same way, goals and notes, while it is open (0038), and locks and reopens
+// it as an admin does (0040); ratings and sign-off of scored reviews stay with an admin. Where the
+// company runs tasks, each goal lists the tasks behind it (GoalTasks), which never move its
+// completion.
+// The focus topic sits at the top with its explanation, for reference: the month's topic, or for
+// another rhythm the topic of the month the period starts in. The person's #1 GSR comes from it:
+// their own words, set as a role or professional goal. The goals their job role brings are offered
+// the same way, one click to file. Goals read the focus topic's GSR first, then role, professional
+// and personal. Where the company scores its GSRs, the period adds up the completion of all its
+// goals against its mandatory ones, and marking it complete locks the score in and the period
+// with it. The last period's goals read back as hit or miss with a "why" and a one-click carry
+// forward. Yearly goals are not here: they live on the profile and on the quarterly and annual
+// reviews, because a Goal Setting Review is the period and nothing else. Every change saves on its
+// own; a closed or complete period is read-only except for the why, which is written in the next.
 // Employees add and own their goals for the month. A goal someone else set for them (goalLockedFor)
 // keeps what it is: its title, description and kind read only and it cannot be deleted, while its
 // agreed completion, action steps and notes stay theirs to work, as the database allows (0035).
@@ -38,7 +40,7 @@ import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
 import { GOAL_KIND_ORDER, carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
-import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
+import { cyclePath, cycleSettled, cycleYear, gsrPeriodCopy, upperFirst, type GsrPeriodCopy } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
 import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
@@ -214,6 +216,7 @@ function LastMonthGoal({
   carriedTitle,
   canCarry,
   canNote,
+  copy,
   onCarry,
   onNote,
   onNotes,
@@ -227,6 +230,8 @@ function LastMonthGoal({
   carriedTitle: string | null;
   canCarry: boolean;
   canNote: boolean;
+  // How the period reads, from the rhythm ("Carry into this week").
+  copy: GsrPeriodCopy;
   onCarry: () => void;
   onNote: (note: string | null) => Promise<boolean>;
   onNotes: NotesUpdate;
@@ -293,11 +298,11 @@ function LastMonthGoal({
         <div className="mt-2">
           {carriedTitle ? (
             <span className="inline-flex items-center gap-1 text-[12px] text-ink-3">
-              <ArrowRight size={12} aria-hidden /> Carried into this month
+              <ArrowRight size={12} aria-hidden /> Carried into {copy.this}
             </span>
           ) : canCarry ? (
-            <Button variant="secondary" size="sm" aria-label={`Carry ${goal.title} into this month`} onClick={onCarry}>
-              <ArrowRight size={13} aria-hidden /> Carry into this month
+            <Button variant="secondary" size="sm" aria-label={`Carry ${goal.title} into ${copy.this}`} onClick={onCarry}>
+              <ArrowRight size={13} aria-hidden /> Carry into {copy.this}
             </Button>
           ) : null}
         </div>
@@ -314,12 +319,14 @@ function FocusTopicCard({
   focusGoal,
   canEdit,
   isOwn,
+  copy,
   onAdd,
 }: {
   cycle: ReviewCycle;
   focusGoal: Goal | null;
   canEdit: boolean;
   isOwn: boolean;
+  copy: GsrPeriodCopy;
   onAdd: (title: string, kind: GoalKind) => void;
 }) {
   const [composing, setComposing] = useState(false);
@@ -345,7 +352,7 @@ function FocusTopicCard({
         </p>
       ) : !canEdit ? null : composing ? (
         <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={`What will ${isOwn ? "you" : "they"} do this month on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
+          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={`What will ${isOwn ? "you" : "they"} do ${copy.this} on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
           <select value={kind} aria-label="Kind for the focus topic GSR" onChange={(e) => setKind(e.target.value as GoalKind)} className={`${selectClass} mt-0 w-auto`}>
             {FOCUS_KINDS.map((k) => (
               <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
@@ -358,7 +365,7 @@ function FocusTopicCard({
         </form>
       ) : (
         <Button variant="secondary" size="sm" className="mt-3" onClick={() => setComposing(true)}>
-          <Plus size={13} aria-hidden /> Set {whose} monthly GSR based on this focus topic
+          <Plus size={13} aria-hidden /> Set {whose} {copy.adjective} GSR based on this focus topic
         </Button>
       )}
     </div>
@@ -585,24 +592,27 @@ export default function GoalSettingPanel({
 
   // Said to whoever is reading: an admin reopens the review themselves; anyone else is told an
   // admin can, never "your manager", because the reader may be the manager.
-  const reopenLine = isAdmin ? "reopen the review to change them." : "an admin can reopen the review to change them.";
+  // A leader locks and reopens a GSR as an admin does (0040), so they are told the same.
+  const reopenLine = isAdmin || isLeader ? "reopen the review to change them." : "an admin can reopen the review to change them.";
+  // The period's words, from its rhythm: "this week", "last month", "these two weeks".
+  const copy = gsrPeriodCopy(cycle.cadence);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-1">
         <Section
-          eyebrow={previousCycle ? previousCycle.name : "Last month"}
-          title="Last month at a glance"
+          eyebrow={previousCycle ? previousCycle.name : upperFirst(copy.last)}
+          title={`${upperFirst(copy.last)} at a glance`}
           description={previousCycle && lastCycle.length > 0 ? `${summary.hit} of ${pluralize(summary.total, "goal")} hit` : undefined}
         >
           {!previousCycle ? (
-            <p className="text-sm text-ink-2">No earlier month yet. The goals set here are read back next month as hit or miss.</p>
+            <p className="text-sm text-ink-2">No earlier {copy.noun} yet. The goals set here are read back next {copy.noun} as hit or miss.</p>
           ) : lastCycle.length === 0 ? (
             <p className="text-sm text-ink-2">No goals were set for {previousCycle.name}.</p>
           ) : (
             <ul className="divide-y divide-line">
               {lastCycle.map((goal) => (
-                <LastMonthGoal key={goal.id} goal={goal} notes={notesFor(goal)} names={names} taskLinks={taskLinks} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={canWork} onCarry={() => void carry(goal)} onNote={(note) => saveNote(goal, note)} onNotes={onNotes} onError={onError} />
+                <LastMonthGoal key={goal.id} goal={goal} notes={notesFor(goal)} names={names} taskLinks={taskLinks} settled={lastSettled} carriedTitle={carriedTitle(goal)} canCarry={canEdit} canNote={canWork} copy={copy} onCarry={() => void carry(goal)} onNote={(note) => saveNote(goal, note)} onNotes={onNotes} onError={onError} />
               ))}
             </ul>
           )}
@@ -612,11 +622,11 @@ export default function GoalSettingPanel({
       <div className="space-y-6 lg:col-span-2">
         <Section
           eyebrow={cycle.name}
-          title="Goals for this month"
+          title={`Goals for ${copy.this}`}
           description={
             isOwn && !isAdmin
-              ? "Fill these in before the meeting: the goals you want this month, the steps to get there, and notes as you go. You and your manager agree each goal's completion in the review, and 100 marks it complete. Action steps are your checkpoints and do not count toward the score."
-              : "Set together in the review. Agreed completion is the number for each goal, and 100 marks it complete; action steps are checkpoints along the way and do not count toward the score. Next month reads each goal back as a hit or a miss."
+              ? `Fill these in before the meeting: the goals you want ${copy.this}, the steps to get there, and notes as you go. You and your manager agree each goal's completion in the review, and 100 marks it complete. Action steps are your checkpoints and do not count toward the score.`
+              : `Set together in the review. Agreed completion is the number for each goal, and 100 marks it complete; action steps are checkpoints along the way and do not count toward the score. Next ${copy.noun} reads each goal back as a hit or a miss.`
           }
         >
           {!open && !frozen ? (
@@ -627,28 +637,28 @@ export default function GoalSettingPanel({
           {locked ? (
             <p className="mb-4 rounded-md border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
               <span className="tnum font-medium text-ink">Locked in at {review.gsr_score}%</span>
-              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The month's goals and notes are on record; {reopenLine}
+              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The {copy.noun}'s goals and notes are on record; {reopenLine}
             </p>
           ) : frozen ? (
             <p className="mb-4 rounded-md border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
               <span className="font-medium text-ink">Marked complete</span>
-              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The month's goals and notes are on record as they were; {reopenLine}
+              {review.completed_at ? ` on ${formatDate(review.completed_at)}` : ""}. The {copy.noun}'s goals and notes are on record as they were; {reopenLine}
             </p>
           ) : split && month && gsrRequired ? (
             <p className="mb-4 text-[12.5px] leading-relaxed text-ink-2">
               <span className={`tnum font-medium ${split.missing > 0 ? "text-warning" : "text-ink"}`}>
-                {gsrRequired - split.missing} of {pluralize(gsrRequired, "mandatory GSR")} set · {month.total}% of {month.cap}% so far, a month score of {scoreMonth(thisCycle, gsrRequired)}%
+                {gsrRequired - split.missing} of {pluralize(gsrRequired, "mandatory GSR")} set · {month.total}% of {month.cap}% so far, a {copy.noun} score of {scoreMonth(thisCycle, gsrRequired)}%
               </span>
-              . Every goal adds its completion, up to 100% for each mandatory GSR: the focus topic's GSR is #1, then role and professional goals, and a stretch goal adds to the total without ever lowering it. The score counts once an admin marks the month complete, which locks it in.
+              . Every goal adds its completion, up to 100% for each mandatory GSR: the focus topic's GSR is #1, then role and professional goals, and a stretch goal adds to the total without ever lowering it. The score counts once an admin or a manager over them marks the {copy.noun} complete, which locks it in.
               {cycle.theme && !focusGoal ? " The #1 GSR comes from the focus topic: set it from the card below." : ""}
             </p>
           ) : null}
           {cycle.theme ? (
-            <FocusTopicCard cycle={cycle} focusGoal={focusGoal} canEdit={canEdit} isOwn={isOwn} onAdd={(title, kind) => void add(title, kind, true)} />
+            <FocusTopicCard cycle={cycle} focusGoal={focusGoal} canEdit={canEdit} isOwn={isOwn} copy={copy} onAdd={(title, kind) => void add(title, kind, true)} />
           ) : canEdit && isAdmin ? (
             <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
               No focus topic for {cycle.name} yet.{" "}
-              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the month</Link>, or plan the year in{" "}
+              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the {copy.noun}</Link>, or plan the year in{" "}
               <Link to="/goals/focus" className="text-accent hover:underline">Goals, Monthly focus</Link>.
             </p>
           ) : null}
@@ -657,7 +667,7 @@ export default function GoalSettingPanel({
               <div className="min-w-0">
                 <p className={eyebrowClass}>Role goals</p>
                 <p className="mt-0.5 text-sm text-ink">{pendingRoleGoals.map((g) => g.title).join(" · ")}</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-2">{pluralize(pendingRoleGoals.length, "goal")} {isOwn ? "your" : "their"} job role brings into every month, not filed for {cycle.name} yet.</p>
+                <p className="mt-0.5 text-[12.5px] text-ink-2">{pluralize(pendingRoleGoals.length, "goal")} {isOwn ? "your" : "their"} job role brings into every {copy.noun}, not filed for {cycle.name} yet.</p>
               </div>
               <Button variant="secondary" size="sm" disabled={seeding} onClick={() => void addRoleGoals()}>
                 <Plus size={13} aria-hidden /> Add role goals
@@ -665,7 +675,7 @@ export default function GoalSettingPanel({
             </div>
           ) : null}
           {thisCycle.length === 0 ? (
-            <p className="text-sm text-ink-2">{canEdit ? "No goals yet. Add the first one below, or carry one forward from last month." : "No goals set for this month yet."}</p>
+            <p className="text-sm text-ink-2">{canEdit ? `No goals yet. Add the first one below, or carry one forward from ${copy.last}.` : `No goals set for ${copy.this} yet.`}</p>
           ) : null}
           <ul className="space-y-3">
             {ordered.map((goal) => (
@@ -690,7 +700,7 @@ export default function GoalSettingPanel({
           </ul>
           {canEdit ? (
             <div className={thisCycle.length > 0 ? "mt-4" : "mt-3"}>
-              <AddGoalForm placeholder="Add a goal for this month" onAdd={(title) => void add(title)} />
+              <AddGoalForm placeholder={`Add a goal for ${copy.this}`} onAdd={(title) => void add(title)} />
             </div>
           ) : null}
         </Section>

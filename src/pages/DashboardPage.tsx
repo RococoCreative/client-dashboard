@@ -57,7 +57,7 @@ import { listCampaigns } from "../services/marketing.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { liveCampaignTotals } from "../lib/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
-import { CADENCE_LABELS, cycleOmitted, cycleProgress, cyclePath, cycleRoster, cycleSettled, cyclesInPlay, gsrCycleInPlay, omittedCycleIdsFor, reviewPath, scoredCycleInPlay, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
+import { CADENCE_LABELS, cycleOmitted, cycleProgress, cyclePath, cycleRoster, cycleSettled, cyclesInPlay, gsrCycleInPlayFor, gsrPeriodCopy, gsrPeriodFor, omittedCycleIdsFor, reviewPath, rhythmOf, runsGsrs, scoredCycleInPlay, sectionOf, type HubSection } from "../lib/gsr/cycles.ts";
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
@@ -123,8 +123,8 @@ function CycleProgress({
   // Counted over the roster the cycle covers, so a person with no review row yet reads as a
   // review still owed rather than vanishing from both halves of the fraction.
   const progress = cycleProgress(people, own.map((s) => s.review), cycle.id);
-  // A monthly cycle is a Goal Setting Review and carries no scores, so it shows no score column.
-  const showScore = cycle.cadence !== "monthly";
+  // A GSR period is a Goal Setting Review and carries no scores, so it shows no score column.
+  const showScore = cycle.kind !== "gsr";
   // Still open after its period: the reviews in it are being finished, and it says so.
   const ended = cycleSettled(cycle);
   return (
@@ -332,7 +332,7 @@ function AdminDashboard() {
   // Who each live cycle covers (cycleRoster: everybody active, plus anyone deactivated since whose
   // review in it was signed off, less anyone omitted from it), read once and used by the tiles,
   // the team score and the cycle cards alike.
-  const rosters = new Map(live.map((c) => [c.id, cycleRoster(people, reviews, c.id, omissions)]));
+  const rosters = new Map(live.map((c) => [c.id, cycleRoster(people, reviews, c, omissions)]));
   const rosterOf = (cycleId: string) => rosters.get(cycleId) ?? [];
   // Every live cycle owes a review for everybody in it, so a tile adds the per-cycle fractions
   // and cannot report all clear while a cycle has no rows in it at all. GSRs and reviews are
@@ -340,7 +340,7 @@ function AdminDashboard() {
   // would have said something false under the wrong word.
   const standingOf = (section: HubSection) =>
     live
-      .filter((c) => sectionOf(c.cadence) === section)
+      .filter((c) => sectionOf(c) === section)
       .reduce(
         (sum, c) => {
           const own = cycleProgress(rosterOf(c.id), reviews, c.id);
@@ -350,9 +350,9 @@ function AdminDashboard() {
       );
   const gsrs = standingOf("gsr");
   const scoredCycles = standingOf("reviews");
-  // A monthly cycle is a Goal Setting Review and carries no scores, so averaging it in would
-  // drag the team score toward nothing. Only scored cycles count, and only the people each covers.
-  const scoredCycleIds = new Set(live.filter((c) => c.cadence !== "monthly").map((c) => c.id));
+  // A GSR period is a Goal Setting Review and carries no scores, so averaging it in would drag
+  // the team score toward nothing. Only scored cycles count, and only the people each covers.
+  const scoredCycleIds = new Set(live.filter((c) => c.kind !== "gsr").map((c) => c.id));
   const teamAverage = averageScore(
     scored
       .filter((s) => scoredCycleIds.has(s.review.cycle_id) && rosterOf(s.review.cycle_id).some((p) => p.id === s.review.employee_id))
@@ -453,7 +453,7 @@ function AdminDashboard() {
                 key={c.id}
                 cycle={c}
                 people={rosterOf(c.id)}
-                omittedCount={cycleOmitted(people, reviews, c.id, omissions).length}
+                omittedCount={cycleOmitted(people, reviews, c, omissions).length}
                 scored={scored}
               />
             ))
@@ -621,17 +621,18 @@ function EmployeeDashboard() {
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     // Scored reviews only: a monthly GSR is not a review and, with leftover scores, would
     // otherwise be featured over the quarter it sits inside. The GSR gets a block of its own.
-    const history = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.cadence !== "monthly");
+    const history = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.kind !== "gsr");
     const featured = latestScoredReview(history) ?? history[0] ?? null;
     // The impact score is the person's current ratings, measured against the last signed-off
     // review; the current GSR is this month's Goal Setting Review, if the manager has opened it.
     const baseline = previousCompletedReview(history);
     const baselineScores = baseline ? scores.filter((s) => s.review_id === baseline.review.id) : [];
-    // The month covering today, else the latest one still open after its period ended: a quarter
-    // covering today must not hide a GSR the person still has to finish (the same month My GSR opens).
-    const gsrCycle = gsrCycleInPlay(cycles);
-    const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
+    // The period of their rhythm covering today, else the latest one still open after it ended
+    // with their GSR unfinished: a quarter covering today must not hide a GSR the person still has
+    // to finish (the same period My GSR opens). Null when nobody has opened their period yet.
     const omitted = omittedCycleIdsFor(omissions, reviews, profile.id);
+    const gsrCycle = gsrCycleInPlayFor(profile, cycles, reviews, new Date(), omitted);
+    const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
     return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted };
   }, [companyId, profile.id, profile.job_role_id, year]);
 
@@ -660,7 +661,11 @@ function EmployeeDashboard() {
   // cycles first, so a month covering today never hides one that is over but still open.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = scoredCycleInPlay(cycles);
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds, rhythmOf(profile)) : null;
+  // The person's rhythm, and the period My GSR would open for them when nobody has yet.
+  const copy = gsrPeriodCopy(rhythmOf(profile));
+  const runs = runsGsrs(cycles);
+  const periodName = gsrCycle?.name ?? gsrPeriodFor(rhythmOf(profile)).name;
   const ratingPillars = pillars.filter((p) => p.scoring_type === "rating" && p.is_active);
   // Up or down since the last signed-off review, per criterion, the way a season's ratings move.
   const moves = criteria
@@ -724,22 +729,22 @@ function EmployeeDashboard() {
 
         <Section
           eyebrow="Goal Setting Review"
-          title={gsrCycle ? gsrCycle.name : "No month open"}
+          title={runs ? periodName : "No GSRs yet"}
           className={ratingPillars.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}
           actions={
-            gsrCycle && !gsrOmitted ? (
+            runs && !gsrOmitted ? (
               <Link to="/my/gsr">
                 <Button variant="secondary" size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
               </Link>
             ) : undefined
           }
         >
-          {!gsrCycle ? (
-            <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
-          ) : gsrOmitted ? (
-            <p className="text-sm text-ink-2">You're not part of the {gsrCycle.name} GSRs. Nothing is needed from you this month.</p>
-          ) : !gsrReview ? (
-            <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Start it to fill in your goals before the meeting.</p>
+          {!runs ? (
+            <p className="text-sm text-ink-2">An admin starts the company's Goal Setting Reviews. Your goals appear here once they do.</p>
+          ) : gsrOmitted && gsrCycle ? (
+            <p className="text-sm text-ink-2">You're not part of the {gsrCycle.name} GSRs. Nothing is needed from you {copy.this}.</p>
+          ) : !gsrCycle || !gsrReview ? (
+            <p className="text-sm text-ink-2">Your GSR for {periodName} is not started yet. Start it to fill in your goals before the meeting.</p>
           ) : monthGoals.length === 0 ? (
             <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. Add yours on the GSR tab before the meeting.</p>
           ) : (
@@ -775,7 +780,7 @@ function EmployeeDashboard() {
               <div className="min-w-0 text-sm">
                 <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                 <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-accent hover:underline">
+                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : "/my/reviews"} className="mt-2 inline-block text-accent hover:underline">
                   View review
                 </Link>
               </div>

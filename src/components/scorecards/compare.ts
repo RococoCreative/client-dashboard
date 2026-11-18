@@ -36,9 +36,10 @@ export function peopleInScope<P extends Pick<Profile, "division_ids">>(people: r
   return people.filter((p) => p.division_ids.includes(scope));
 }
 
-// The month's Goal Setting Review: the monthly cycle whose period starts in that month.
+// The month's Goal Setting Review: the monthly GSR cycle whose period starts in that month. Only
+// the monthly rhythm lines up with a month's scorecard results; a week or a quarter does not.
 export function monthCycle(cycles: readonly ReviewCycle[], month: string): ReviewCycle | null {
-  return cycles.find((c) => c.cadence === "monthly" && monthOf(c.period_start) === month) ?? null;
+  return cycles.find((c) => c.kind === "gsr" && c.cadence === "monthly" && monthOf(c.period_start) === month) ?? null;
 }
 
 // The month a summary opens on: the latest one up to this month that has any result in, so early
@@ -84,7 +85,7 @@ export function divisionCompareRows(input: {
       label,
       people: active.length,
       optimization: summarizeResults(active.map((p) => optimizationOf(p, metrics, entries, month))),
-      reviews: cycle ? cycleProgress(cycleRoster(group, reviewList, cycle.id, [...omissions]), reviewList, cycle.id) : null,
+      reviews: cycle ? cycleProgress(cycleRoster(group, reviewList, cycle, [...omissions]), reviewList, cycle.id) : null,
     };
   };
   const rows = [row(COMBINED, combinedLabel), ...divisions.map((d) => row(d.id, d.name))];

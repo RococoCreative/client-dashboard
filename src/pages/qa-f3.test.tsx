@@ -73,7 +73,7 @@ describe("the quarter's GSR line", () => {
     // October 5: October's GSR covers today, Q3 is over but nobody has closed it, and Q4 does not
     // exist yet. The months Jamie is being scored on in Q3 still count toward a review he owes.
     const gsrPillar = await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
-    const october = await createCycle({ company_id: RBA.company.id, name: "October 2026", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" });
+    const october = await createCycle({ company_id: RBA.company.id, name: "October 2026", kind: "gsr", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" });
     vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
     try {
       const dash = renderWithHub(<DashboardPage />, rbaEmployee);
@@ -93,7 +93,7 @@ describe("the quarter's GSR line", () => {
   it("stays when nothing covers today and the most recently opened cycle is a month opened early", async () => {
     // October 5: Q3 is over but still open, September's GSR is over, and November was opened early.
     const gsrPillar = await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 });
-    const november = await createCycle({ company_id: RBA.company.id, name: "November 2026", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" });
+    const november = await createCycle({ company_id: RBA.company.id, name: "November 2026", kind: "gsr", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" });
     vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
     try {
       renderWithHub(<DashboardPage />, rbaEmployee);

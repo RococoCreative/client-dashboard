@@ -2,6 +2,7 @@
 // run against seeded cycles, reviews, pillars, criteria, scores and goals and never touch the network.
 import type {
   ActionStep,
+  Cadence,
   CompanyGoal,
   CycleOmission,
   Goal,
@@ -10,6 +11,7 @@ import type {
   GoalPrivate,
   GoalScope,
   GoalStatus,
+  GsrCadence,
   GsrCriterion,
   GsrPillar,
   ImpactScore,
@@ -20,6 +22,8 @@ import type {
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
+import { defaultCycleName, gsrPeriodCopy, gsrPeriodFor, isCanonicalPeriod, isGsrCadence } from "../../lib/gsr/cycles.ts";
+import { actorIn, rhythmOfProfile } from "./profiles.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -55,17 +59,44 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 // review starts in one, and a signed-off review stays signed off while it is closed.
 export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cycle first.";
 
-// The task link rule of 0039, for the tasks mock: a task may be linked only to a monthly goal of
-// its own assignee in its own company, and only while that month is open, not complete and the
+// The refusal 0040 makes on a GSR opened in a period that is not the person's rhythm
+// (guard_review_rhythm), word for word.
+export function rhythmMessage(personRhythm: GsrCadence, cycleCadence: Cadence): string {
+  return `This person's GSRs run ${gsrPeriodCopy(personRhythm).every}, so this ${gsrPeriodCopy(cycleCadence).adjective} GSR is not theirs. Change their GSR rhythm first.`;
+}
+
+// guard_review_cycle_period (0040): a GSR runs at a GSR rhythm on a canonical period of it, and a
+// review at a review rhythm. Returns the refusal word for word, or null when the cycle is fine.
+export function cyclePeriodProblem(cycle: Pick<ReviewCycle, "kind" | "cadence" | "period_start" | "period_end">): string | null {
+  if (cycle.kind === "gsr" && !isGsrCadence(cycle.cadence)) return "A GSR runs weekly, every two weeks, monthly or quarterly.";
+  if (cycle.kind === "review" && !["quarterly", "annual", "custom"].includes(cycle.cadence)) return "A scored review runs quarterly, yearly or on dates you choose.";
+  if (cycle.kind === "gsr" && !isCanonicalPeriod(cycle.cadence, cycle.period_start, cycle.period_end)) {
+    switch (cycle.cadence) {
+      case "weekly": return "A weekly GSR runs from a Monday to the Sunday after it.";
+      case "biweekly": return "A GSR every two weeks runs from a Monday to the second Sunday after it, on the shared two-week calendar that started Monday, January 1, 2024.";
+      case "monthly": return "A monthly GSR runs from the first to the last day of one month.";
+      default: return "A quarterly GSR runs for one calendar quarter, from its first day to its last.";
+    }
+  }
+  return null;
+}
+
+// What a manager may change on a GSR of someone they lead (0040): lock it in and reopen it.
+const LOCK_FIELDS: ReadonlyArray<keyof ReviewPatch> = ["status", "completed_at", "gsr_score", "reviewer_id"];
+// What a person may change on their own review (0035).
+const OWN_FIELDS: ReadonlyArray<keyof ReviewPatch> = ["employee_reflection", "support_discussion"];
+
+// The task link rule of 0039 and 0040, for the tasks mock: a task may be linked only to a goal in a
+// GSR cycle (kind 'gsr', any rhythm) of its own assignee in its own company, and only while that month is open, not complete and the
 // person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
 // reaches here.
 export function goalLinkProblem(task: { company_id: string; assignee_id: string | null; goal_id: string | null }): string | null {
   if (task.goal_id === null) return null;
   const goal = goals.find((g) => g.id === task.goal_id);
   if (!goal || goal.company_id !== task.company_id) return "That goal is not here any more.";
-  if (goal.scope !== "cycle" || goal.cycle_id === null) return "Only a monthly GSR goal can have tasks.";
-  if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
   const cycle = cycles.find((c) => c.id === goal.cycle_id);
+  if (goal.scope !== "cycle" || goal.cycle_id === null || cycle?.kind !== "gsr") return "Only a monthly GSR goal can have tasks.";
+  if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
   const review = reviews.find((r) => r.cycle_id === goal.cycle_id && r.employee_id === goal.employee_id);
   const omitted = cycleOmissions.some((o) => o.cycle_id === goal.cycle_id && o.employee_id === goal.employee_id);
   if (!cycle || cycle.status !== "open" || review?.status === "complete" || omitted) return "That month is closed, so its goals take no new tasks.";
@@ -111,16 +142,49 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   if (!found) throw new Error("Cycle not found.");
   return found;
 }
-export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
+export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "kind" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
+// Plays 0040 as well: the period rules for every writer, and a member who is not an admin opens
+// only an open GSR period of their own company with no theme, named by the database and filed
+// under them ("Members open a GSR period", guard_review_cycle_period).
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
-  const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), ...input };
+  const problem = cyclePeriodProblem(input);
+  if (problem) throw new Error(problem);
+  const actor = actorIn(input.company_id);
+  const member = actor !== null && !actor.admin;
+  if (member && (input.kind !== "gsr" || (input.status ?? "open") !== "open" || input.theme || input.theme_description)) {
+    throw new Error('new row violates row-level security policy for table "review_cycles"');
+  }
+  const created: ReviewCycle = {
+    id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), ...input,
+    ...(member ? { name: defaultCycleName(input.cadence, input.period_start, input.period_end), created_by: actor.id } : {}),
+  };
   cycles.push(created);
   return created;
+}
+// The canonical period of the rhythm covering today, opened once: a second call finds the first
+// (0040, the insert that ignores a duplicate).
+export async function ensureGsrCycle(companyId: string, cadence: GsrCadence, today = new Date()): Promise<ReviewCycle> {
+  const period = gsrPeriodFor(cadence, today);
+  const existing = cycles.find(
+    (c) => c.company_id === companyId && c.kind === "gsr" && c.cadence === cadence && c.period_start === period.period_start && c.period_end === period.period_end,
+  );
+  if (existing) return existing;
+  return createCycle({ company_id: companyId, kind: "gsr", cadence, ...period });
 }
 export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "company_id">>): Promise<ReviewCycle> {
   // Only a full-scope admin changes a cycle (0038, "Full-scope admins change cycles"); anyone else's
   // update matches no row, and the service's .single() reports it as not changed.
   if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
+  const before = cycles.find((c) => c.id === id);
+  if (before) {
+    // A cycle's kind is set when it is made, and its period is judged when it moves (0040).
+    if (patch.kind !== undefined && patch.kind !== before.kind) throw new Error("A cycle's kind is set when it is made. Start a new cycle instead.");
+    const moved = { ...before, ...patch };
+    if (moved.cadence !== before.cadence || moved.period_start !== before.period_start || moved.period_end !== before.period_end) {
+      const problem = cyclePeriodProblem(moved);
+      if (problem) throw new Error(problem);
+    }
+  }
   return patchIn(cycles, id, { ...patch, updated_at: now() } as Partial<ReviewCycle>);
 }
 export async function deleteCycle(id: string): Promise<void> {
@@ -146,6 +210,9 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
   if (existing) return existing;
   if (cycles.find((c) => c.id === cycleId)?.status === "closed") throw new Error(CLOSED_CYCLE_MESSAGE);
   if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
+  // A GSR is opened only in a period of the person's own rhythm (0040).
+  const cycle = cycles.find((c) => c.id === cycleId);
+  if (cycle?.kind === "gsr" && cycle.cadence !== rhythmOfProfile(employeeId)) throw new Error(rhythmMessage(rhythmOfProfile(employeeId), cycle.cadence));
   const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
@@ -153,6 +220,23 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
+  // guard_review_employee_fields (0040): someone who is not an admin of the company changes, on a
+  // GSR of a person they lead, only what locks and reopens it; on their own review, only their
+  // reflection and the opening discussion. Any other review (a scored one of someone they lead,
+  // or anyone else's) no update policy reaches, so the row is not changed, as the service reports
+  // a write RLS filtered out.
+  const actor = before ? actorIn(before.company_id) : null;
+  if (before && actor && !actor.admin) {
+    const changed = (Object.keys(patch) as Array<keyof ReviewPatch>).filter((key) => patch[key] !== undefined && patch[key] !== before[key]);
+    const gsrReview = cycles.find((c) => c.id === before.cycle_id)?.kind === "gsr";
+    if (actor.leads(before.employee_id) && gsrReview) {
+      if (changed.some((key) => !LOCK_FIELDS.includes(key))) throw new Error("A manager can lock and reopen a GSR, and nothing else on it.");
+    } else if (before.employee_id !== actor.id) {
+      throw new Error(NOT_CHANGED_MESSAGE);
+    } else if (changed.some((key) => !OWN_FIELDS.includes(key))) {
+      throw new Error("Only admins can edit review scores, status, and feedback.");
+    }
+  }
   // A signed-off review stays signed off while its cycle is closed (0039).
   if (before?.status === "complete" && patch.status !== undefined && patch.status !== "complete" && cycles.find((c) => c.id === before.cycle_id)?.status === "closed") {
     throw new Error(CLOSED_CYCLE_MESSAGE);

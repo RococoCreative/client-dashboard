@@ -251,8 +251,9 @@ describe("Scorecards report", () => {
     expect(await screen.findByLabelText("Noor Haddad, Optimization rate, September 2026: 85%, hit; year to date 81%, hit")).toBeInTheDocument();
     expect(screen.getByLabelText("Avery Cole, Daily logs, September 2026: 3 / 5, missed; year to date 3.5 / 5, missed")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Noor Haddad" })).toHaveAttribute("href", `/people/${noor.id}`);
-    // Jamie's role has no metrics, and Alex and Harper Quinn's team have no role: all are still listed.
-    const unscored = screen.getByRole("heading", { name: "5 people" }).closest("section") as HTMLElement;
+    // Jamie's role has no metrics, and Alex, Harper Quinn's team and Morgan Reyes have no role: all
+    // are still listed.
+    const unscored = screen.getByRole("heading", { name: "6 people" }).closest("section") as HTMLElement;
     expect(within(unscored).getByRole("link", { name: "Jamie Fox" })).toBeInTheDocument();
     expect(within(unscored).getByRole("link", { name: "Alex Morgan" })).toBeInTheDocument();
   });
@@ -307,12 +308,12 @@ describe("dashboard division split", () => {
     renderWithHub(<DashboardPage />, rbaAdmin);
     const division = await screen.findByRole("group", { name: "Division" });
     expect(screen.getByRole("region", { name: "Division compare" })).toBeInTheDocument();
-    expect(within(peopleTile()).getByText("7")).toBeInTheDocument();
+    expect(within(peopleTile()).getByText("8")).toBeInTheDocument();
     // Noor, Kai Bennett, and Rowan Ellis, who works in both divisions and so counts in each.
     await user.click(within(division).getByRole("button", { name: "RBA North" }));
     expect(within(peopleTile()).getByText("3")).toBeInTheDocument();
     await user.click(within(division).getByRole("button", { name: "Combined" }));
-    expect(within(peopleTile()).getByText("7")).toBeInTheDocument();
+    expect(within(peopleTile()).getByText("8")).toBeInTheDocument();
   });
 
   it("is unchanged for an admin without division access, and reads nothing for it", async () => {
@@ -320,7 +321,7 @@ describe("dashboard division split", () => {
     const entriesSpy = vi.spyOn(scorecardsService, "listMetricEntries");
     renderWithHub(<DashboardPage />, plainAdmin);
     expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
-    await waitFor(() => expect(within(peopleTile()).getByText("7")).toBeInTheDocument());
+    await waitFor(() => expect(within(peopleTile()).getByText("8")).toBeInTheDocument());
     expect(screen.queryByRole("group", { name: "Division" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Division compare" })).not.toBeInTheDocument();
     expect(divisionsSpy).not.toHaveBeenCalled();

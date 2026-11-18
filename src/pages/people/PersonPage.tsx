@@ -1,5 +1,5 @@
 // One person, for an admin or a manager, in one fixed order: Details (position, hire date,
-// department, who they report to, their job role and divisions), this month's GSR, their role
+// department, who they report to, their job role, divisions and GSR rhythm), their current GSR, their role
 // Scorecard (the month-by-month results an admin enters against the role's targets), their Goals for
 // this year, next year and their BHAG, the Projects they are on, their Tasks, this year's KPIs,
 // financial figures and deliverables, their impact score, Compensation, and Review history. A goal's
@@ -8,7 +8,7 @@
 //
 // An admin runs the record. A manager reads it for the people they lead or may see: the profile,
 // scorecard, goals, KPIs, deliverables and ratings read only; they add and edit the person's tasks
-// and open or start this month's GSR. Pay and financial figures are an admin's alone, so a manager's
+// open or start their current GSR, and set the rhythm it runs at. Pay and financial figures are an admin's alone, so a manager's
 // page never asks for them, and profile fields read as plain text. Everything is read by the active
 // company, so a person the database does not show the viewer (another division, another company, a
 // stale id after the switcher moved) reads as no access rather than leaking a record.
@@ -45,7 +45,7 @@ import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableCla
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { ensureReview, listCriteria, listCycleOmissions, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
+import { ensureGsrCycle, ensureReview, listCriteria, listCycleOmissions, listCycles, listEmployeeReviews, listGoals, listImpactScores, listPillars, listScoresForReviews, upsertImpactScore } from "../../services/gsr.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { listCompanyProfiles, updateProfile, type ProfilePatch } from "../../services/profiles.ts";
 import { listCompensation, listEmployeeFinancials, listEmployeeKpis } from "../../services/employees.ts";
@@ -57,12 +57,12 @@ import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts
 import { hasModule } from "../../lib/modules.ts";
 import { averageScore, scoreProfile } from "../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
-import { gsrCycleInPlay, omittedCycleIdsFor, reviewPath, scoredCycleInPlay } from "../../lib/gsr/cycles.ts";
+import { GSR_CADENCES, GSR_RHYTHM_LABELS, gsrCycleInPlayFor, gsrPeriodCopy, gsrPeriodFor, omittedCycleIdsFor, reviewPath, rhythmOf, runsGsrs, scoredCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatMoney, formatPeriod, pluralize } from "../../lib/format.ts";
 import { canGrantRole, canSetDivisionAccess, canViewDivision, directoryById, divisionLabel, formatTenure, grantableRoles, hasAccount, ledBy, nameFromDirectory, totalAnnual } from "../../lib/people.ts";
-import { REVIEW_STATUS_LABELS, ROLE_LABELS, type CompanyDivision, type Goal, type ImpactScore, type Profile, type Review, type ReviewCycle, type Role } from "../../types/database.ts";
+import { REVIEW_STATUS_LABELS, ROLE_LABELS, type CompanyDivision, type Goal, type GsrCadence, type ImpactScore, type Profile, type Review, type ReviewCycle, type Role } from "../../types/database.ts";
 
 type Patch = (patch: ProfilePatch) => Promise<boolean>;
 
@@ -264,12 +264,33 @@ function DivisionFields({ companyId, person, me, canEdit, onPatch }: { companyId
   );
 }
 
-// This month's Goal Setting Review for the person, for an admin or someone who leads them: a link
-// into it when it is open, or a way to start it. Starting is an insert that ignores a duplicate
-// (ensureReview), so two people starting at once land on the same review. A company that has never
-// run a monthly GSR gets nothing here; one with no month open, or a person left out of it, gets a
-// line saying so.
-function ThisMonthGsr({
+// How often the person's Goal Setting Review runs (profiles.gsr_cadence, 0040): a select for an
+// admin who manages them or a manager who leads them, plain text for anyone else. A change applies
+// from their next GSR period; a GSR already started stays as it is.
+function RhythmField({ person, canEdit, onPatch }: { person: Profile; canEdit: boolean; onPatch: Patch }) {
+  const rhythm = rhythmOf(person);
+  if (!canEdit) return <ReadOnlyField label="GSR rhythm">{GSR_RHYTHM_LABELS[rhythm]}</ReadOnlyField>;
+  return (
+    <div>
+      <label htmlFor="person-gsr-rhythm" className={labelClass}>GSR rhythm</label>
+      <select id="person-gsr-rhythm" value={rhythm} onChange={(e) => void onPatch({ gsr_cadence: e.target.value as GsrCadence })} className={selectClass}>
+        {GSR_CADENCES.map((c) => (
+          <option key={c} value={c}>{GSR_RHYTHM_LABELS[c]}</option>
+        ))}
+      </select>
+      <p className={helpClass}>How often their Goal Setting Review runs. A change applies from their next GSR; one already started stays as it is.</p>
+    </div>
+  );
+}
+
+// The person's current Goal Setting Review, at their rhythm, for an admin or someone who leads
+// them: a link into it when it is open, or a way to start it. The period opens itself (0040), so
+// starting opens the period when nobody has yet (ensureGsrCycle) and then their review in it; both
+// are inserts that ignore a duplicate, so two people starting at once land on the same rows. A
+// period they still owe comes first (gsrCycleInPlayFor), the same one their own My GSR opens. A
+// company that has never run a GSR gets nothing here; a person left out of the period, or
+// inactive, gets a line saying so.
+function CurrentGsr({
   companyId,
   person,
   cycles,
@@ -285,18 +306,22 @@ function ThisMonthGsr({
   const navigate = useNavigate();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
-  if (!cycles.some((c) => c.cadence === "monthly")) return null;
-  const cycle = gsrCycleInPlay(cycles);
+  if (!runsGsrs(cycles)) return null;
+  const rhythm = rhythmOf(person);
+  const copy = gsrPeriodCopy(rhythm);
+  const cycle = gsrCycleInPlayFor(person, cycles, reviews, new Date(), omittedCycleIds);
   const review = cycle ? (reviews.find((r) => r.cycle_id === cycle.id) ?? null) : null;
+  const periodName = cycle?.name ?? gsrPeriodFor(rhythm).name;
   const first = displayName(person).split(" ")[0];
 
   async function start() {
-    if (!cycle || starting) return;
+    if (starting) return;
     setStarting(true);
     setError("");
     try {
-      const opened = await ensureReview(cycle.id, companyId, person.id);
-      navigate(reviewPath(opened.id, cycle.cadence));
+      const opened = cycle ?? (await ensureGsrCycle(companyId, rhythm));
+      const started = await ensureReview(opened.id, companyId, person.id);
+      navigate(reviewPath(started.id, opened));
     } catch (err) {
       setError(errorMessage(err));
       setStarting(false);
@@ -304,34 +329,32 @@ function ThisMonthGsr({
   }
 
   let body: ReactNode;
-  if (!cycle) {
-    body = <p className="text-[13px] text-ink-2">No month is open for GSRs. An admin opens each month in Monthly GSRs.</p>;
-  } else if (review) {
+  if (review && cycle) {
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="flex items-center gap-2 text-sm text-ink">
           {cycle.name}
           <Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge>
         </span>
-        <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] font-medium text-accent hover:underline">Open {cycle.name} GSR</Link>
+        <Link to={reviewPath(review.id, cycle)} className="text-[13px] font-medium text-accent hover:underline">Open {cycle.name} GSR</Link>
       </div>
     );
-  } else if (omittedCycleIds.includes(cycle.id)) {
+  } else if (cycle && omittedCycleIds.includes(cycle.id)) {
     body = <p className="text-[13px] text-ink-2">{first} is left out of the {cycle.name} GSRs, so there is nothing to start.</p>;
   } else if (!person.is_active) {
-    body = <p className="text-[13px] text-ink-2">{first} is inactive, so they are not in the {cycle.name} GSRs.</p>;
+    body = <p className="text-[13px] text-ink-2">{first} is inactive, so they are not in the {periodName} GSRs.</p>;
   } else {
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[13px] text-ink-2">{cycle.name} is open. {first}'s GSR has not been started.</span>
+        <span className="text-[13px] text-ink-2">{cycle ? `${cycle.name} is open.` : `${periodName} is not open yet.`} {first}'s GSR has not been started.</span>
         <Button size="sm" disabled={starting} onClick={() => void start()}>
-          <PencilLine size={14} aria-hidden /> {starting ? "Starting..." : "Start this month's GSR"}
+          <PencilLine size={14} aria-hidden /> {starting ? "Starting..." : `Start ${copy.possessive} GSR`}
         </Button>
       </div>
     );
   }
   return (
-    <Section eyebrow="Goal Setting Review" title="This month's GSR">
+    <Section eyebrow={`Current GSR · ${GSR_RHYTHM_LABELS[rhythm]}`} title={copy.heading} description={`${first}'s Goal Setting Review runs ${copy.every}.`}>
       {body}
       {error ? <Notice tone="error" className="mt-3">{error}</Notice> : null}
     </Section>
@@ -483,7 +506,7 @@ export default function PersonPage() {
   // stand. The same scored cycle the person's own dashboard reads, found among scored cycles first.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = scoredCycleInPlay(cycles);
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
+  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds, rhythmOf(person)) : null;
   // The role they are in, and whether it puts their figures on their dashboard. A retired role
   // stays on their record but carries nothing, which is how the dashboard reads it too.
   const jobRole = jobRoles.find((r) => r.id === person.job_role_id) ?? null;
@@ -571,6 +594,9 @@ export default function PersonPage() {
   const managerIsEmployee = manager?.role === "employee";
   // The viewer runs the record (an admin), or leads this person (a manager over their chain).
   const isLeader = isAdmin || ledBy(me, people).some((p) => p.id === person.id);
+  // Who sets the rhythm their GSR runs at (0040): an admin who manages them, or a manager who leads
+  // them. Nobody sets their own; whoever is over them does.
+  const canSetRhythm = !rococo && !self && ledBy(me, people).some((p) => p.id === person.id);
   // How a task's GSR goal reads on the Tasks list: the month it belongs to.
   const goalById = new Map<string, Goal>(goals.map((g) => [g.id, g]));
   const goalLabel = (goalId: string): string | null => {
@@ -698,6 +724,7 @@ export default function PersonPage() {
                   ) : null}
                 </div>
                 <DivisionFields companyId={companyId} person={person} me={me} canEdit onPatch={patch} />
+                <RhythmField person={person} canEdit={canSetRhythm} onPatch={patch} />
                 <div>
                   <label htmlFor="person-phone" className={labelClass}>Phone</label>
                   <BlurInput id="person-phone" value={person.phone ?? ""} placeholder="(555) 010-0000" onSave={(next) => patch({ phone: next.trim() || null })} />
@@ -729,6 +756,7 @@ export default function PersonPage() {
                 <ReadOnlyField label="Reports to">{managerName ? `${managerName}${managerInactive ? " (inactive)" : ""}` : "Nobody"}</ReadOnlyField>
                 <ReadOnlyField label="Job role">{jobRole ? `${jobRole.name}${jobRole.is_active ? "" : " (retired)"}` : "Not set"}</ReadOnlyField>
                 <DivisionFields companyId={companyId} person={person} me={me} canEdit={false} onPatch={patch} />
+                <RhythmField person={person} canEdit={canSetRhythm} onPatch={patch} />
                 <ReadOnlyField label="Phone">{person.phone || "Not set"}</ReadOnlyField>
                 <ReadOnlyField label="Role">{rococo ? "Rococo Creative" : ROLE_LABELS[person.role]}</ReadOnlyField>
                 <p className={helpClass}>An owner or admin changes these.</p>
@@ -743,7 +771,7 @@ export default function PersonPage() {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          {isLeader && !rococo ? <ThisMonthGsr companyId={companyId} person={person} cycles={cycles} reviews={reviews} omittedCycleIds={omittedCycleIds} /> : null}
+          {isLeader && !rococo ? <CurrentGsr companyId={companyId} person={person} cycles={cycles} reviews={reviews} omittedCycleIds={omittedCycleIds} /> : null}
           {rococo ? null : <PersonTeam companyId={companyId} person={person} people={people} self={self} isAdmin={isAdmin} />}
           {rococo ? goalsBlock : (
             <ScorecardAndProjects
@@ -910,7 +938,7 @@ export default function PersonPage() {
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                         <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
+                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
                       </tr>
                     ))}
                   </tbody>

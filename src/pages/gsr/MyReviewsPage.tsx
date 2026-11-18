@@ -38,9 +38,9 @@ export default function MyReviewsPage() {
   if (!state.data) return <SkeletonRows rows={6} />;
 
   const { reviews, cycles, pillars, scores } = state.data;
-  // Scored cycles only. A monthly GSR with leftover scores would otherwise be the featured
+  // Scored cycles only. A GSR with leftover scores would otherwise be the featured
   // "review" on a page the sidebar calls My Reviews.
-  const rows = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.cadence !== "monthly");
+  const rows = reviewHistory(reviews, cycles, pillars, scores).filter((r) => r.cycle?.kind !== "gsr");
   // The newest review is not the newest scored one once a monthly Goal Setting Review, which
   // carries no scores, sits inside a scored quarter: reading the ring off row zero showed an
   // empty ring and "Not scored" bars with a finished, rated review one line down in the table.
@@ -64,7 +64,7 @@ export default function MyReviewsPage() {
       ) : (
         <div className="space-y-6">
           {featured ? (
-            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : `/gsr/reviews/${featured.review.id}`} className="text-[13px] text-accent hover:underline">Open full review</Link>}>
+            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : `/gsr/reviews/${featured.review.id}`} className="text-[13px] text-accent hover:underline">Open full review</Link>}>
               <div className="grid gap-6 md:grid-cols-3">
                 <div className="flex items-center gap-4">
                   <ScoreRing score={featured.result?.overall ?? null} size={96} label="Overall" />
@@ -109,7 +109,7 @@ export default function MyReviewsPage() {
                       <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                       <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                       <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
+                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
                     </tr>
                   ))}
                 </tbody>

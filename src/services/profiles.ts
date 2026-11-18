@@ -10,7 +10,7 @@ import { requireRows } from "../lib/errors.ts";
 import type { Profile, Role } from "../types/database.ts";
 
 const COLUMNS =
-  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, division_ids, can_view_divisions, view_all_divisions, view_division_ids, created_at, updated_at";
+  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, division_ids, can_view_divisions, view_all_divisions, view_division_ids, gsr_cadence, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
@@ -56,6 +56,8 @@ export async function listAllProfiles(): Promise<Profile[]> {
 
 // division_ids is an admin's to set, within the divisions they can view; can_view_divisions,
 // view_all_divisions and view_division_ids are an owner's or Rococo's (guard_profile_fields, 0038).
+// gsr_cadence, a person's GSR rhythm, is set by an admin who manages them or a manager who leads
+// them (0040).
 // division_id is a read-only mirror of division_ids now, so it is not patchable here.
 export type ProfilePatch = Partial<
   Pick<
@@ -75,6 +77,7 @@ export type ProfilePatch = Partial<
     | "can_view_divisions"
     | "view_all_divisions"
     | "view_division_ids"
+    | "gsr_cadence"
   >
 >;
 

@@ -130,6 +130,40 @@ select tests.assert(
   and not private.gsr_period_ok(null, '2031-01-01', '2031-12-31'),
   'canonical: a period that is not canonical was accepted'
 );
+-- case: periods_match_the_app
+-- The periods, refusals and names src/lib/gsr/cycles.test.ts asserts for isCanonicalPeriod and
+-- defaultCycleName ("agrees with the database on the periods around a year end..."), so the
+-- database and the app cannot drift apart.
+select tests.assert(
+  (select bool_and(private.gsr_period_ok(c, s::date, e::date)
+                   and private.gsr_period_name(c, s::date, e::date) = n)
+     from (values
+       ('weekly', '2026-12-28', '2027-01-03', 'Dec 28, 2026 to Jan 3, 2027'),
+       ('biweekly', '2026-12-14', '2026-12-27', 'Dec 14 to Dec 27, 2026'),
+       ('biweekly', '2026-12-28', '2027-01-10', 'Dec 28, 2026 to Jan 10, 2027'),
+       ('biweekly', '2027-01-11', '2027-01-24', 'Jan 11 to Jan 24, 2027'),
+       ('biweekly', '2023-12-18', '2023-12-31', 'Dec 18 to Dec 31, 2023'),
+       ('biweekly', '2024-01-01', '2024-01-14', 'Jan 1 to Jan 14, 2024'),
+       ('monthly', '2028-02-01', '2028-02-29', 'February 2028'),
+       ('quarterly', '2026-10-01', '2026-12-31', 'Q4 2026')
+     ) as v (c, s, e, n)),
+  'periods_match_the_app: a period the app computes was refused or named differently'
+);
+select tests.assert(
+  (select bool_and(not private.gsr_period_ok(c, s::date, e::date))
+     from (values
+       ('weekly', '2026-12-29', '2027-01-04'),
+       ('weekly', '2026-12-28', '2027-01-04'),
+       ('biweekly', '2027-01-04', '2027-01-17'),
+       ('biweekly', '2023-12-25', '2024-01-07'),
+       ('biweekly', '2026-12-28', '2027-01-03'),
+       ('monthly', '2028-02-01', '2028-02-28'),
+       ('quarterly', '2026-10-01', '2026-12-30'),
+       ('quarterly', '2026-11-01', '2027-01-31')
+     ) as v (c, s, e)),
+  'periods_match_the_app: a period the app refuses was accepted'
+);
+
 select tests.assert_raises(
   format($q$insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
             values (%L, 'Sample bad 40', 'weekly', '2031-06-03', '2031-06-09')$q$, tests.company('rba')),

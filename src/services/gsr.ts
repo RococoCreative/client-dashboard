@@ -4,14 +4,15 @@
 // behalf of a chosen company), and child rows are re-stamped by database triggers so a
 // score can never land under the wrong company.
 import { requireRows } from "../lib/errors.ts";
+import { gsrPeriodFor } from "../lib/gsr/cycles.ts";
 import { db } from "./supabase.ts";
-import type { ActionStep, CompanyGoal, CycleOmission, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
+import type { ActionStep, CompanyGoal, CycleOmission, Goal, GoalKind, GoalNote, GoalPrivate, GoalScope, GoalStatus, GsrCadence, GsrCriterion, GsrPillar, ImpactScore, Review, ReviewCycle, ReviewScore } from "../types/database.ts";
 
 const PILLAR_COLUMNS =
   "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
 const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_order, is_active, created_at, updated_at";
 const CYCLE_COLUMNS =
-  "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
+  "id, company_id, name, kind, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
   "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, support_discussion, created_at, updated_at";
 const SCORE_COLUMNS =
@@ -105,13 +106,48 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   return data as ReviewCycle;
 }
 
-export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "cadence" | "period_start" | "period_end"> &
+// A cycle is a GSR period or a scored review (kind, 0040). A GSR's dates must be a canonical
+// period of its cadence; the database refuses anything else.
+export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "kind" | "cadence" | "period_start" | "period_end"> &
   Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
 
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
   const { data, error } = await db().from("review_cycles").insert(input).select(CYCLE_COLUMNS).single();
   if (error) throw error;
   return data as ReviewCycle;
+}
+
+// Opens the GSR period of a rhythm that covers `today`, or finds it when it is open already. Any
+// member of the company may insert it, open and with its default name (0040); the insert ignores
+// a duplicate and the row is read back, so two people opening the same week at once land on the
+// same cycle rather than one of them failing.
+export async function ensureGsrCycle(companyId: string, cadence: GsrCadence, today = new Date()): Promise<ReviewCycle> {
+  const period = gsrPeriodFor(cadence, today);
+  const find = async () => {
+    const { data, error } = await db()
+      .from("review_cycles")
+      .select(CYCLE_COLUMNS)
+      .eq("company_id", companyId)
+      .eq("kind", "gsr")
+      .eq("cadence", cadence)
+      .eq("period_start", period.period_start)
+      .eq("period_end", period.period_end)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ReviewCycle | null) ?? null;
+  };
+  const existing = await find();
+  if (existing) return existing;
+  const { error } = await db()
+    .from("review_cycles")
+    .upsert(
+      { company_id: companyId, kind: "gsr", cadence, name: period.name, period_start: period.period_start, period_end: period.period_end },
+      { onConflict: "company_id,kind,cadence,period_start,period_end", ignoreDuplicates: true },
+    );
+  if (error) throw error;
+  const opened = await find();
+  if (!opened) throw new Error("That GSR could not be opened. Reload the page and try again.");
+  return opened;
 }
 
 export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "company_id">>): Promise<ReviewCycle> {

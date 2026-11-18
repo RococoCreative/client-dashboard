@@ -375,6 +375,7 @@ function build(company: Company): CompanyBundle {
     can_view_divisions: false,
     view_all_divisions: person.role === "admin",
     view_division_ids: [],
+    gsr_cadence: "monthly",
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -416,6 +417,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-current"),
       company_id: company.id,
       name: quarterly ? "Q3 2026" : "September 2026",
+      kind: quarterly ? "review" : "gsr",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-07-01" : "2026-09-01",
       period_end: quarterly ? "2026-09-30" : "2026-09-30",
@@ -430,6 +432,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-previous"),
       company_id: company.id,
       name: quarterly ? "Q2 2026" : "August 2026",
+      kind: quarterly ? "review" : "gsr",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-04-01" : "2026-08-01",
       period_end: quarterly ? "2026-06-30" : "2026-08-31",
@@ -447,6 +450,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-overlapping"),
       company_id: company.id,
       name: quarterly ? "September 2026" : "Q3 2026",
+      kind: quarterly ? "gsr" : "review",
       cadence: quarterly ? "monthly" : "quarterly",
       period_start: quarterly ? "2026-09-01" : "2026-07-01",
       period_end: "2026-09-30",
@@ -1158,6 +1162,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1183,6 +1188,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1361,6 +1367,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: EARLIER,
       updated_at: EARLIER,
     });
@@ -1368,7 +1375,25 @@ function build(company: Company): CompanyBundle {
       member("manager", "Harper Quinn", "Operations Manager", "manager", alex.id, [p("division-south")], true),
       member("crew-lead", "Rowan Ellis", "Crew Lead", "employee", p("manager"), [p("division-south"), p("division-north")], true),
       member("crew", "Kai Bennett", "Carpenter", "employee", p("crew-lead"), [p("division-north")], false),
+      // Morgan Reyes runs a weekly GSR (0040) and reports to Alex in RBA South, so Harper's chain
+      // is unchanged. This week's GSR is open and nobody has started Morgan's in it yet.
+      { ...member("weekly", "Morgan Reyes", "Estimator", "employee", alex.id, [p("division-south")], true), gsr_cadence: "weekly" },
     );
+    cycles.push({
+      id: p("cycle-week"),
+      company_id: company.id,
+      name: "Sep 14 to Sep 20, 2026",
+      kind: "gsr",
+      cadence: "weekly",
+      period_start: "2026-09-14",
+      period_end: "2026-09-20",
+      theme: null,
+      theme_description: null,
+      status: "open",
+      created_by: profiles[0].id,
+      created_at: NOW,
+      updated_at: NOW,
+    });
 
     const metric = (key: string, role: string, name: string, kind: RoleMetric["kind"], target: number | null, sort: number, extra: Partial<RoleMetric> = {}): RoleMetric => ({
       id: p(`metric-${key}`), company_id: company.id, job_role_id: p(role), name, description: null, kind, target, scale_max: 5,
@@ -1454,6 +1479,7 @@ const ROCOCO: Profile = {
   can_view_divisions: false,
   view_all_divisions: false,
   view_division_ids: [],
+  gsr_cadence: "monthly",
   created_at: EARLIER,
   updated_at: EARLIER,
 };

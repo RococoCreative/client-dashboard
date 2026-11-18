@@ -190,10 +190,10 @@ describe("a month's GSRs, for a company that scores them", () => {
   it("counts a month in a scored review only once its GSR is locked in", () => {
     const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
     const cycles = [
-      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
-      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
-      { id: "dec", cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
-      { id: "q4", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" },
+      { id: "oct", kind: "gsr" as const, cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+      { id: "nov", kind: "gsr" as const, cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+      { id: "dec", kind: "gsr" as const, cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
+      { id: "q4", kind: "review" as const, cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" },
     ];
     const goals = [g("oct-1", "role", 100, 1, "oct"), g("nov-1", "professional", 90, 1, "nov"), g("nov-2", "role", 60, 2, "nov")];
     const reviews = [
@@ -211,7 +211,7 @@ describe("a month's GSRs, for a company that scores them", () => {
 
   it("reads the locked-in month count back from a signed-off line item's target", () => {
     const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
-    const cycles = ["10", "11", "12"].map((m) => ({ id: m, cadence: "monthly", period_start: `2026-${m}-01`, period_end: `2026-${m}-28` }));
+    const cycles = ["10", "11", "12"].map((m) => ({ id: m, kind: "gsr" as const, cadence: "monthly", period_start: `2026-${m}-01`, period_end: `2026-${m}-28` }));
     const locked = (ids: string[]) => ids.map((id) => ({ cycle_id: id, status: "complete" as const, gsr_score: 70 }));
     for (const ids of [[], ["10"], ["10", "11"], ["10", "11", "12"]]) {
       const figure = scoreGsrMonths(quarter, cycles, [], locked(ids), 2);
@@ -222,9 +222,9 @@ describe("a month's GSRs, for a company that scores them", () => {
   it("never counts a month the person was left out of", () => {
     const quarter = { period_start: "2026-10-01", period_end: "2026-12-31" };
     const cycles = [
-      { id: "oct", cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
-      { id: "nov", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
-      { id: "dec", cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
+      { id: "oct", kind: "gsr" as const, cadence: "monthly", period_start: "2026-10-01", period_end: "2026-10-31" },
+      { id: "nov", kind: "gsr" as const, cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" },
+      { id: "dec", kind: "gsr" as const, cadence: "monthly", period_start: "2026-12-01", period_end: "2026-12-31" },
     ];
     const goals = [g("oct-1", "role", 100, 1, "oct"), g("nov-1", "professional", 90, 1, "nov")];
     const reviews = [
@@ -238,6 +238,37 @@ describe("a month's GSRs, for a company that scores them", () => {
     // pillar out of the review rather than scoring it zero.
     const none = scoreGsrMonths(quarter, cycles, goals, reviews, 2, ["oct", "nov", "dec"]);
     expect([none.target, none.actual]).toEqual([0, 0]);
+  });
+
+  it("averages a weekly person's locked weeks, whatever their count, and reads only their periods", () => {
+    const quarter = { period_start: "2026-07-01", period_end: "2026-09-30" };
+    const cycles = [
+      { id: "jul", kind: "gsr" as const, cadence: "monthly", period_start: "2026-07-01", period_end: "2026-07-31" },
+      { id: "w1", kind: "gsr" as const, cadence: "weekly", period_start: "2026-08-31", period_end: "2026-09-06" },
+      { id: "w2", kind: "gsr" as const, cadence: "weekly", period_start: "2026-09-07", period_end: "2026-09-13" },
+      { id: "w3", kind: "gsr" as const, cadence: "weekly", period_start: "2026-09-14", period_end: "2026-09-20" },
+      // Straddles the quarter's end, so it belongs to no quarter it does not sit wholly inside.
+      { id: "w4", kind: "gsr" as const, cadence: "weekly", period_start: "2026-09-28", period_end: "2026-10-04" },
+      // A scored review is never a GSR period, whatever its dates.
+      { id: "q3", kind: "review" as const, cadence: "quarterly", period_start: "2026-07-01", period_end: "2026-09-30" },
+    ];
+    const reviews = [
+      { cycle_id: "w1", status: "complete", gsr_score: 60 },
+      { cycle_id: "w2", status: "complete", gsr_score: 90 },
+      { cycle_id: "w3", status: "in_progress", gsr_score: null },
+    ] as Array<{ cycle_id: string; status: "complete" | "in_progress"; gsr_score: number | null }>;
+    const figure = scoreGsrMonths(quarter, cycles, [], reviews, 2, [], "weekly");
+    // July is a monthly period they have no GSR in, so it is not theirs; the open week is shown,
+    // never applied; the two locked weeks average to 75, the same math a month uses.
+    expect(figure.months.map((m) => m.cycle.id)).toEqual(["w1", "w2", "w3"]);
+    expect([figure.target, figure.actual]).toEqual([200, 150]);
+    expect(lockedMonthsIn(figure.target)).toBe(2);
+    // A month they ran before moving to weekly keeps its record and counts beside the weeks.
+    const moved = scoreGsrMonths(quarter, cycles, [], [...reviews, { cycle_id: "jul", status: "complete", gsr_score: 30 }], 2, [], "weekly");
+    expect(moved.months.map((m) => m.cycle.id)).toEqual(["jul", "w1", "w2", "w3"]);
+    expect([moved.target, moved.actual]).toEqual([300, 180]);
+    // A monthly person never reads the weekly periods they have no GSR in.
+    expect(scoreGsrMonths(quarter, cycles, [], [], 2, [], "monthly").months.map((m) => m.cycle.id)).toEqual(["jul"]);
   });
 
   it("says when a month is locked in", () => {

@@ -61,7 +61,7 @@ describe("cycle dialogs", () => {
     const user = userEvent.setup();
     const before = (await listCycles(KLASIK.company.id)).length;
     renderWithHub(<CyclesPage section="gsr" />, admin);
-    await user.click(await screen.findByRole("button", { name: /New month/ }));
+    await user.click(await screen.findByRole("button", { name: /New GSR period/ }));
     const dialog = await screen.findByRole("dialog");
     // The form opens on this month, and September is already open.
     expect(within(dialog).getByLabelText("Starts")).toHaveValue("2026-09-01");
@@ -110,7 +110,7 @@ describe("cycle dialogs", () => {
 describe("cycle page", () => {
   it("tells a company with nobody on the roster to add the team, not to wait for sign-ins", async () => {
     const empty = { ...KLASIK.company, id: "co-empty", slug: "empty", name: "Empty Co" };
-    const cycle = await createCycle({ company_id: empty.id, name: "September 2026", cadence: "monthly", period_start: "2026-09-01", period_end: "2026-09-30" });
+    const cycle = await createCycle({ company_id: empty.id, name: "September 2026", kind: "gsr", cadence: "monthly", period_start: "2026-09-01", period_end: "2026-09-30" });
     try {
       renderCycle(cycle.id, makeHub("admin", empty));
       expect(await screen.findByText(/Nobody on the roster yet/)).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("an employee's month", () => {
   it("keeps a still-open month on My GSR and the dashboard while a quarter covers today", async () => {
     // October 5: Q4 covers today, September is over but nobody has closed it, and October has
     // not been opened. Sam still has September's GSR to finish.
-    const q4 = await createCycle({ company_id: KLASIK.company.id, name: "Q4 2026", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" });
+    const q4 = await createCycle({ company_id: KLASIK.company.id, name: "Q4 2026", kind: "review", cadence: "quarterly", period_start: "2026-10-01", period_end: "2026-12-31" });
     vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
     try {
       const gsr = renderWithHub(<MyGsrPage />, employee);
@@ -185,7 +185,7 @@ describe("an employee's month", () => {
     // October 5: nothing covers today, September is over but still open, and November has been
     // opened early. November is the most recently started open cycle, but Sam still owes
     // September, so that is the month My GSR and the dashboard open.
-    const november = await createCycle({ company_id: KLASIK.company.id, name: "November 2026", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" });
+    const november = await createCycle({ company_id: KLASIK.company.id, name: "November 2026", kind: "gsr", cadence: "monthly", period_start: "2026-11-01", period_end: "2026-11-30" });
     vi.setSystemTime(new Date("2026-10-05T12:00:00.000Z"));
     try {
       const gsr = renderWithHub(<MyGsrPage />, employee);

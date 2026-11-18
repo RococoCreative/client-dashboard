@@ -557,8 +557,8 @@ describe("admin", () => {
     expect(screen.getByText("Alex Morgan")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filter by company"), "co-rba");
     // RBA is the one company these tests never add anyone to, so its count is stable: four on the
-    // roster from the start, and Harper Quinn's team of three.
-    expect(screen.getByText("7 users")).toBeInTheDocument();
+    // roster from the start, Harper Quinn's team of three, and Morgan Reyes on a weekly GSR.
+    expect(screen.getByText("8 users")).toBeInTheDocument();
     expect(screen.queryByText("Austin Rococo (you)")).not.toBeInTheDocument();
   });
 

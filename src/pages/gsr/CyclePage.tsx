@@ -1,6 +1,7 @@
 // One review cycle: the team table. Everyone in the cycle and their review status; on a scored
-// cycle their pillar scores and overall, with the team average on top; on a month (a Goal
-// Setting Review) the GSR score an admin locked in, where the company scores its GSRs. Which
+// cycle their pillar scores and overall, with the team average on top; on a GSR period (a Goal
+// Setting Review, kind 'gsr', at any rhythm) the GSR score locked in, where the company scores its
+// GSRs. A GSR period covers only the people on its rhythm (0040). Which
 // columns a cycle carries, and who the cycle covers, are decided in lib/gsr/cycles.ts. Reviews
 // are created on demand (or all at once) so an admin can start anyone with one click. An admin
 // also chooses who is in the cycle: a person omitted from it leaves its progress, its team score
@@ -53,6 +54,7 @@ import {
   cycleOmitted,
   cycleRoster,
   overlapMessage,
+  gsrPeriodCopy,
   overlappingCycle,
   periodEnd,
   periodStart,
@@ -64,20 +66,21 @@ import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../../lib/format.ts";
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
-import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
+import { REVIEW_STATUS_LABELS, type Cadence, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
 
-// A month is a calendar month, here as in the New month form: the start snaps to the first and
-// the end follows it. Other cadences keep the dates the admin types.
-function monthOf(date: string): { start: string; end: string } {
-  const start = periodStart("monthly", parseDate(date) ?? new Date());
-  return { start, end: periodEnd("monthly", start) ?? start };
+// A GSR period is canonical (0040), here as in the New GSR period form: the start snaps to the
+// first day of the period of its rhythm that holds the picked day, and the end follows it. A
+// review keeps the dates the admin types.
+function periodOf(cadence: Cadence, date: string): { start: string; end: string } {
+  const start = periodStart(cadence, parseDate(date) ?? new Date());
+  return { start, end: periodEnd(cadence, start) ?? start };
 }
 
 function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onClose: () => void; onSaved: (c: ReviewCycle) => void }) {
-  const monthly = cycle.cadence === "monthly";
+  const gsrPeriod = cycle.kind === "gsr";
   const [name, setName] = useState(cycle.name);
-  const [start, setStart] = useState(() => (monthly ? monthOf(cycle.period_start).start : cycle.period_start));
-  const [end, setEnd] = useState(() => (monthly ? monthOf(cycle.period_start).end : cycle.period_end));
+  const [start, setStart] = useState(() => (gsrPeriod ? periodOf(cycle.cadence, cycle.period_start).start : cycle.period_start));
+  const [end, setEnd] = useState(() => (gsrPeriod ? periodOf(cycle.cadence, cycle.period_start).end : cycle.period_end));
   const [theme, setTheme] = useState(cycle.theme ?? "");
   const [themeDescription, setThemeDescription] = useState(cycle.theme_description ?? "");
   const [busy, setBusy] = useState(false);
@@ -92,7 +95,7 @@ function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onCl
     setError("");
     try {
       // Read fresh, the way the New cycle form does, so the check sees every cycle as it is now.
-      const existing = overlappingCycle(await listCycles(cycle.company_id), { id: cycle.id, cadence: cycle.cadence, period_start: start, period_end: end });
+      const existing = overlappingCycle(await listCycles(cycle.company_id), { id: cycle.id, kind: cycle.kind, cadence: cycle.cadence, period_start: start, period_end: end });
       if (existing) {
         setError(overlapMessage(existing));
         setBusy(false);
@@ -127,8 +130,8 @@ function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onCl
                 type="date"
                 value={start}
                 onChange={(e) => {
-                  if (!monthly) return setStart(e.target.value);
-                  const month = monthOf(e.target.value);
+                  if (!gsrPeriod) return setStart(e.target.value);
+                  const month = periodOf(cycle.cadence, e.target.value);
                   setStart(month.start);
                   setEnd(month.end);
                 }}
@@ -136,7 +139,7 @@ function EditCycleDialog({ cycle, onClose, onSaved }: { cycle: ReviewCycle; onCl
               />
             </Field>
             <Field label="Ends" htmlFor="edit-cycle-end">
-              <input id="edit-cycle-end" type="date" value={end} min={start} disabled={monthly} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
+              <input id="edit-cycle-end" type="date" value={end} min={start} disabled={gsrPeriod} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
             </Field>
           </div>
           <Field label="Theme (optional)" htmlFor="edit-cycle-theme">
@@ -176,7 +179,7 @@ function OmitDialog({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const monthly = sectionOf(cycle.cadence) === "gsr";
+  const gsrPeriod = sectionOf(cycle) === "gsr";
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -196,7 +199,7 @@ function OmitDialog({
       <form onSubmit={handleSubmit} className="p-6">
         <h2 id="omit-title" className="font-display text-lg text-heading">Omit {displayName(person)} from {cycle.name}?</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-2">
-          {`They stop counting toward this cycle's progress and team score${monthly ? ", and are not asked for this month's GSR" : ""}. `}
+          {`They stop counting toward this cycle's progress and team score${gsrPeriod ? `, and are not asked for ${gsrPeriodCopy(cycle.cadence).possessive} GSR` : ""}. `}
           {hasReview ? "Their review is set aside as it is, and comes back if you add them back." : "You can add them back while the cycle is open."}
         </p>
         <div className="mt-5">
@@ -254,16 +257,16 @@ export default function CyclePage() {
   const canRunCycle = hasFullScope(profile);
   // A scored cycle carries pillar columns, an overall and a team score; a month carries none of
   // them, only the GSR score locked in on it where the company scores its GSRs.
-  const columns = cycleColumns(cycle.cadence, pillars);
-  const gsr = sectionOf(cycle.cadence) === "gsr";
+  const columns = cycleColumns(cycle, pillars);
+  const gsr = sectionOf(cycle) === "gsr";
   // Everyone active on the roster, whether or not they have signed in yet, less anyone omitted
   // from this cycle. A company sets its reviews up before anyone has an account, which is exactly
   // the state it is in on the day it starts, so a cycle covers the whole team unless an admin
   // says otherwise. The row says who cannot see theirs yet. Someone deactivated since, or omitted
   // since, keeps their row when their review here was signed off (cycleRoster).
-  const team = cycleRoster(people, reviews, cycle.id, omissions);
+  const team = cycleRoster(people, reviews, cycle, omissions);
   const open = cycle.status === "open";
-  const omitted = cycleOmitted(people, reviews, cycle.id, omissions).map((person) => ({
+  const omitted = cycleOmitted(people, reviews, cycle, omissions).map((person) => ({
     person,
     omission: omissions.find((o) => o.cycle_id === cycle.id && o.employee_id === person.id)!,
     review: reviews.find((r) => r.employee_id === person.id) ?? null,
@@ -289,7 +292,7 @@ export default function CyclePage() {
     setActionError("");
     try {
       const review = await ensureReview(cycle.id, companyId, personId);
-      navigate(reviewPath(review.id, cycle.cadence));
+      navigate(reviewPath(review.id, cycle));
     } catch (err) {
       setActionError(errorMessage(err));
       setBusy(false);
@@ -350,7 +353,7 @@ export default function CyclePage() {
     setBusy(true);
     try {
       await deleteCycle(cycle.id);
-      navigate(SECTION_HOME[sectionOf(cycle.cadence)]);
+      navigate(SECTION_HOME[sectionOf(cycle)]);
     } catch (err) {
       setActionError(errorMessage(err));
       setBusy(false);
@@ -361,9 +364,9 @@ export default function CyclePage() {
   return (
     <>
       <PageHeader
-        backTo={SECTION_HOME[sectionOf(cycle.cadence)]}
-        backLabel={SECTION_LABEL[sectionOf(cycle.cadence)]}
-        eyebrow={`${CADENCE_LABELS[cycle.cadence]} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
+        backTo={SECTION_HOME[sectionOf(cycle)]}
+        backLabel={SECTION_LABEL[sectionOf(cycle)]}
+        eyebrow={`${CADENCE_LABELS[cycle.cadence]}${gsr ? " GSR" : ""} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
         title={cycle.name}
         description={cycle.theme ? `Theme: ${cycle.theme}${cycle.theme_description ? `. ${cycle.theme_description}` : ""}` : undefined}
         actions={
@@ -502,7 +505,7 @@ export default function CyclePage() {
                     <td className={`${tdClass} text-right`}>
                       <div className="flex items-center justify-end gap-3">
                         {review ? (
-                          <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-accent hover:underline">Open</Link>
+                          <Link to={reviewPath(review.id, cycle)} className="text-[13px] text-accent hover:underline">Open</Link>
                         ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review
@@ -593,7 +596,7 @@ export default function CyclePage() {
           title={`Close ${cycle.name}?`}
           body={
             notComplete > 0
-              ? `${notComplete} of ${pluralize(rows.length, gsr ? "GSR" : "review")} in it ${notComplete === 1 ? "is" : "are"} not complete. Closing keeps them as they are: nothing can be started, marked complete or changed until the cycle is reopened${gsr ? ", and a month that is not locked in does not count toward a scored review" : ""}.`
+              ? `${notComplete} of ${pluralize(rows.length, gsr ? "GSR" : "review")} in it ${notComplete === 1 ? "is" : "are"} not complete. Closing keeps them as they are: nothing can be started, marked complete or changed until the cycle is reopened${gsr ? `, and a ${gsrPeriodCopy(cycle.cadence).noun} that is not locked in does not count toward a scored review` : ""}.`
               : `Every ${gsr ? "GSR" : "review"} in it is complete. Closing keeps them as they are until the cycle is reopened.`
           }
           confirmLabel="Close cycle"

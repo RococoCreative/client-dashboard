@@ -19,19 +19,19 @@ export interface ReviewHistoryRow {
 }
 
 // A review's score of record, or null when it has none: it is open, its rows carry nothing to
-// score, or it belongs to a monthly cycle. A month is a Goal Setting Review whose number is the
-// GSR score an admin locks in (reviews.gsr_score), never a pillar score. Locking a month in still
-// flips it to complete, and the database freezes the person's ratings into it like any review
-// (0017), so without the cadence check a month read as a review scored on its ratings alone,
+// score, or it belongs to a GSR cycle (kind 'gsr', 0040). A GSR period is a Goal Setting Review
+// whose number is the GSR score locked in on it (reviews.gsr_score), never a pillar score. Locking
+// a period in still flips it to complete, and the database freezes the person's ratings into it
+// like any review (0017), so without the kind check a period read as a review scored on its ratings alone,
 // with its deliverables and GSR pillars at zero. Every screen that lists review scores reads them
 // through here, so none of them can forget.
 export function scoreOfRecord(
   review: Review,
-  cycle: Pick<ReviewCycle, "cadence"> | null,
+  cycle: Pick<ReviewCycle, "kind"> | null,
   pillars: PillarConfig[],
   own: ReviewScore[],
 ): ReviewScoreResult | null {
-  if (review.status !== "complete" || cycle?.cadence === "monthly" || !hasScoredItem(own)) return null;
+  if (review.status !== "complete" || cycle?.kind === "gsr" || !hasScoredItem(own)) return null;
   return computeReviewScore(pillarsForReview(review, pillars), own);
 }
 
@@ -77,7 +77,7 @@ export function latestScoredReview(rows: ReviewHistoryRow[]): ReviewHistoryRow |
 export function previousCompletedReview(rows: ReviewHistoryRow[], except?: { id: string }): ReviewHistoryRow | null {
   return (
     [...rows]
-      .filter((r) => r.result !== null && r.review.id !== except?.id && r.cycle?.cadence !== "monthly")
+      .filter((r) => r.result !== null && r.review.id !== except?.id && r.cycle?.kind !== "gsr")
       .sort(
         (a, b) =>
           (b.review.completed_at ?? "").localeCompare(a.review.completed_at ?? "") ||
