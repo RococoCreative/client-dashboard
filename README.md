@@ -140,8 +140,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   set up yet." until all three are set. The version in this repo is live (version 4,
   2026-11-18): it sends only for the task's creator, an owner or admin, or Rococo.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
-  Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
-  Companies. Kingdom's owners are Maddie Cothran and marvin waters. Running
+  Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
+  (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
   `kingdom_intake.sql` changes that if their live addresses are the listed ones
   (`marvin@kingdomcustomconstruction.com`, `maddie@kingdomcustomconstruction.com`): Eli Cothran and
   Davis Nix become the owners, Marvin Waters an admin and Maddie Cothran an employee. Confirm the
