@@ -29,7 +29,7 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
 | Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, mark done, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
-| Wins (`wins`) | Log, edit and archive wins; the five most recent on Home | Read; the five most recent on Home |
+| Wins (`wins`) | Log, edit and archive wins; the five most recent on Home, or those of the last few days when the company sets a number; older wins in an Archive view | Read; the same Home list and the Archive view |
 | Tasks (`tasks`) | Assign tasks to anyone with a due date, a priority, ordered steps and a repeat; see every task, filter by person, priority, campaign or state; attach a task to a marketing campaign; the assignee gets an email | Own assigned tasks: tick steps, complete and reopen; create tasks for themselves |
 | Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
 | Home cards (`switchboard`, `data_sources`) | Attention items, section shortcuts, data freshness | Shortcuts, wins |
@@ -149,7 +149,16 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   (`marvin@kingdomcustomconstruction.com`, `maddie@kingdomcustomconstruction.com`): Eli Cothran and
   Davis Nix become the owners, Marvin Waters an admin and Maddie Cothran an employee. Confirm the
   two owners' addresses before running it (see Applying capabilities and the Kingdom roster).
-- **Next free number:** `0042`.
+- **Written, not applied:** `0042_company_display_settings`, `0043_milestone_status`,
+  `0044_milestone_templates` and `0045_sync_weekdays` (Phase 2, see Applying Phase 2). Nothing in
+  them is live. They go in as a set, in order; each changes nothing visible for any company on its
+  own, except that a milestone badge reads "Not started" where it read "Open". Once `0042` is in,
+  pasting `0024` or `0037` again puts back the old company guard and audit, which no longer
+  protect or watch `wins_home_days` and `manual_financials`; paste `0042` straight after it. Once
+  `0045` is in, pasting `0030` again puts back the old source audit and schedule check; paste
+  `0045` straight after it. Go forwards only.
+- **Rococo Permissions page** (Rococo, Permissions) is live with the 2026-11-18 app.
+- **Next free number:** `0046`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -177,6 +186,21 @@ exactly as it did before modules existed. Turning a module off hides its screens
 rows, so turning it back on brings everything back as it was. Turning `data_sources` off also
 stops its syncs: the hourly tick skips that company's sources and Sync now refuses, so nothing is
 read from Google Sheets or QuickBooks while it is off.
+
+### Display settings (not modules)
+
+Two settings sit beside the modules on Rococo > Companies, set by Rococo only (0042). Both are
+columns on the company, and each defaults to what every company has today.
+
+- **Days a win stays on Home** (`companies.wins_home_days`). Empty means the five newest wins with
+  no age limit. With a number, a win stays on Home that many days counting the day it was won,
+  judged in the company's own time zone. Older wins move to an Archive view on the Wins page that
+  everyone can browse. A win an admin removed stays hidden everywhere.
+- **Manual Financials** (`companies.manual_financials`, default on). Off removes the Financials
+  nav item and route, the Home section and shortcut, the Sales & Finance pointer, and the
+  portfolio figure, alert and button. "Your figures" on a person is a different feature and is
+  unaffected. This is a company setting and not a module because modules are opt-in: a module
+  would have switched Financials off for every new company, while a setting defaults to on.
 
 ## How people get in
 
@@ -287,13 +311,27 @@ Known limits, as built:
   (0038), and a manager manages nobody.
 - The company Activity tab shows every change in the company, whatever divisions the reader
   sees.
-- A manager given `sync_run` can read the company's data source rows through the API, but has no
-  Sync now button until one is added to Production; until then the power is only in the database.
+- A person who holds `sync_run` and is not an admin gets Sync now on the Production page: a
+  button and a last-updated stamp for each Production source. They never see the raw error, the
+  sheet or the field map; those stay in Settings > Connections for admins.
 - Keep `audit_log` at admin or above. There is no screen for it below admin, and the log includes
   invitation addresses and connection details.
 - Capabilities load when a company opens and again when the tab returns to the front (at most once
   every 30 seconds), so a change reaches a person who has the hub open on their next return to the
   tab.
+
+## Production milestones
+
+A milestone is Not started, In progress or Complete, the same three for every company (0043). A
+trigger keeps the status in step with the completed date: a date completes it, and when a write
+sends both, the date wins; marking complete with no date takes today in the company's time zone;
+reopening clears the date. The badge reads Not started, In progress, or Complete with its date.
+
+A company's standard milestones are its own list, set by its admins in Settings > Production (the
+tab shows only with the `production` module on; 0044). Each project created afterwards, including
+projects the system creates, gets a copy of the list in order. Projects that already exist are
+untouched, and later edits to the list do not reach back into a project. With no list, new
+projects start with no milestones, as before.
 
 ## Personal KPIs and deliverables
 
@@ -695,8 +733,13 @@ through sources it configures. The steps, in order:
     the stale threshold if one is agreed.
 13. They press Sync now once to see the first run land.
 
-Each source keeps its own weekday, time and time zone; the hourly tick works out which are due
-and makes one attempt per weekly slot. A run is all or nothing, and rows that are entirely blank
+Each source keeps its own days, time and time zone; the hourly tick works out which are due and
+makes one attempt per slot. A source syncs on a set of weekdays (`sync_weekdays`, 0045), and
+`sync_weekday` stays as the lowest day of the set so the function deployed before 0045 keeps
+working. Staleness can count Monday to Friday hours only (`stale_business_days`), in the source's
+time zone, or the company's when the source has none. The `connections` function must be
+redeployed after `0045` for multi-day schedules to run; until then a source runs on its lowest day
+only. A run is all or nothing, and rows that are entirely blank
 are skipped and counted. The QuickBooks reader is GET only and reads Invoice and Payment
 records.
 
@@ -810,6 +853,20 @@ until `0040` is pasted.
 7. Sign in as a Rococo admin, step into Kingdom, and confirm the Company tab, a person's
    compensation and the Activity tab.
 8. Record `0040`, `0041` and the seed as applied in What is applied live.
+
+### Applying Phase 2 (0042 to 0045)
+
+Company display settings, milestone statuses and templates, and sync days. None of it is applied.
+
+1. Back up, then paste `0042`, `0043`, `0044` and `0045` in order, once each. Each is idempotent;
+   go forwards only. Each changes nothing visible for any company on its own, except that a
+   milestone badge reads "Not started" where it read "Open".
+2. Merge and deploy the app.
+3. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
+   source runs on its lowest day only.
+4. In the app, set each company's display settings on Rococo > Companies, add standard milestones
+   in Settings > Production, and set sync days and weekdays-only staleness on each source.
+5. Record `0042` to `0045` as applied in What is applied live.
 
 ## Deploy
 
