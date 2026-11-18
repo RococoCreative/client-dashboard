@@ -1,7 +1,7 @@
 // The Rococo Permissions page against the mocked capabilities store: the grid reads what the
 // database returned, a change is written, re-read and then shown from that re-read, the changed
 // level is what loadCapabilities then returns for the company, and only a Rococo admin gets in.
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -139,13 +139,44 @@ describe("the Permissions page", () => {
     expect((await loadCapabilities(kingdom)).wins_post).toBe("admin");
   });
 
-  it("shows what the re-read returned, not what was picked", async () => {
+  it("shows what the re-read returned, and says Not changed when it differs from the pick", async () => {
     set.mockImplementation(async (companyId, capability, level) => ({ id: "x", company_id: companyId, capability, min_role: level }));
     const user = userEvent.setup();
     open();
     await user.selectOptions(await cell("Edit milestones", "Kingdom Custom Construction"), "Managers and up");
-    await screen.findByText(/^Saved\./);
+    expect(await screen.findByText("Not changed. Edit milestones for Kingdom Custom Construction is still Default.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Saved\./)).toBeNull();
     expect(shown(await cell("Edit milestones", "Kingdom Custom Construction"))).toBe("Default");
+  });
+
+  it("says Not changed when a clear leaves the row in place", async () => {
+    setMockCapabilities(kingdom, { wins_post: "employee" });
+    clear.mockImplementation(async () => undefined);
+    const user = userEvent.setup();
+    open();
+    await user.selectOptions(await cell("Record wins", "Kingdom Custom Construction"), "Default");
+    expect(await screen.findByText("Not changed. Record wins for Kingdom Custom Construction is still Everyone.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Saved\./)).toBeNull();
+    expect(shown(await cell("Record wins", "Kingdom Custom Construction"))).toBe("Everyone");
+  });
+
+  it("drops a read started before a save that lands after the save's re-read", async () => {
+    const user = userEvent.setup();
+    open();
+    await cell("Edit milestones", "Kingdom Custom Construction");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    reread.mockImplementationOnce(async () => {
+      const before = await realReread();
+      await gate;
+      return before;
+    });
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => expect(reread).toHaveBeenCalledTimes(2));
+    await user.selectOptions(await cell("Edit milestones", "Kingdom Custom Construction"), "Managers and up");
+    await screen.findByText("Saved. Edit milestones for Kingdom Custom Construction: Managers and up.");
+    await act(async () => release());
+    expect(shown(await cell("Edit milestones", "Kingdom Custom Construction"))).toBe("Managers and up");
   });
 
   it("shows a friendly line and the stored value when the write is rejected", async () => {

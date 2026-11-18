@@ -4,7 +4,6 @@
 // not return. The database applies a stored level at once (0040, 0041); a person with the hub open
 // picks it up when they next return to the tab.
 import { useEffect, useRef, useState } from "react";
-import { useAsync } from "../../hooks/useAsync.ts";
 import Button from "../../components/ui/Button.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -20,7 +19,7 @@ import {
   listCapabilityCatalog,
   setCompanyCapability,
 } from "../../services/capabilities.ts";
-import type { CapabilityKey, CapabilityLevel, Company, CompanyCapability } from "../../types/database.ts";
+import type { Capability, CapabilityKey, CapabilityLevel, Company, CompanyCapability } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
 type Status = { tone: "info" | "success" | "error" | "warning"; text: string; reload?: boolean };
@@ -71,29 +70,67 @@ function LevelCell({
 
 export default function PermissionsPage() {
   const { companies } = useHub();
-  // The catalog and every company's rows, read together. useAsync keeps what is on screen if a later
-  // read fails, and reload() asks the same question again.
-  const grid = useAsync(async () => {
-    const [catalog, rows] = await Promise.all([listCapabilityCatalog(), listAllCompanyCapabilities()]);
-    return { catalog, rows };
-  }, []);
-  const catalog = grid.data?.catalog ?? null;
-  const rows = grid.data?.rows ?? [];
-  const loadError = grid.error;
+  const [grid, setGrid] = useState<{ catalog: Capability[]; rows: CompanyCapability[] } | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState<ReadonlySet<string>>(new Set());
   const [status, setStatus] = useState<Status | null>(null);
-  // Re-reads after a write are numbered in the order they are asked for; one that lands after a
-  // later one is dropped, so an older answer never replaces a newer one.
+  const catalog = grid?.catalog ?? null;
+  const rows = grid?.rows ?? [];
+  // Every read, the first one, a focus refresh, Reload and the one after a write, is numbered in the
+  // order it was asked for. An answer older than one already shown is dropped, so rows read before a
+  // write can never replace rows read after it.
   const askedRef = useRef(0);
   const appliedRef = useRef(0);
+  const rowsRef = useRef<CompanyCapability[]>([]);
+  const savingRef = useRef(0);
   const mountedRef = useRef(true);
+
+  // Resolves to the rows now on screen, which are the newest answer asked for so far. Throws.
+  async function read(): Promise<CompanyCapability[]> {
+    const mine = ++askedRef.current;
+    const [nextCatalog, nextRows] = await Promise.all([listCapabilityCatalog(), listAllCompanyCapabilities()]);
+    if (mountedRef.current && mine > appliedRef.current) {
+      appliedRef.current = mine;
+      rowsRef.current = nextRows;
+      setGrid({ catalog: nextCatalog, rows: nextRows });
+      setLoadError("");
+    }
+    return rowsRef.current;
+  }
+  const readRef = useRef(read);
+  useEffect(() => {
+    readRef.current = read;
+  });
 
   useEffect(() => {
     mountedRef.current = true;
+    const first = () => {
+      readRef.current().catch((err: unknown) => {
+        if (mountedRef.current) setLoadError(errorMessage(err));
+      });
+    };
+    // Coming back to the tab reads again, unless a save is mid-flight (its own re-read follows it).
+    const back = () => {
+      if (document.visibilityState !== "visible" || savingRef.current > 0) return;
+      readRef.current().catch(() => undefined);
+    };
+    void Promise.resolve().then(first);
+    document.addEventListener("visibilitychange", back);
+    window.addEventListener("focus", back);
     return () => {
       mountedRef.current = false;
+      document.removeEventListener("visibilitychange", back);
+      window.removeEventListener("focus", back);
     };
   }, []);
+
+  function reload() {
+    setStatus(null);
+    setLoadError("");
+    read().catch((err: unknown) => {
+      if (mountedRef.current) setLoadError(errorMessage(err));
+    });
+  }
 
   function storedFor(source: CompanyCapability[], companyId: string, key: CapabilityKey) {
     return source.find((r) => r.company_id === companyId && r.capability === key)?.min_role;
@@ -111,6 +148,7 @@ export default function PermissionsPage() {
         return next;
       });
     mark(true);
+    savingRef.current += 1;
     setStatus({ tone: "info", text: "Saving" });
     try {
       if (value === DEFAULT) await clearCompanyCapability(company.id, key);
@@ -118,27 +156,28 @@ export default function PermissionsPage() {
     } catch (err) {
       if (!mountedRef.current) return;
       setStatus({ tone: "error", text: errorMessage(err) });
+      savingRef.current -= 1;
       mark(false);
       return;
     }
-    // The write landed. What the page shows next is what the database returns, not what was picked.
-    const mine = ++askedRef.current;
+    // The write call came back. What the page shows next, and whether it says Saved, is decided by
+    // what the database returns on a fresh read, not by the call having resolved.
     try {
-      const next = await listAllCompanyCapabilities();
+      const next = await read();
       if (!mountedRef.current) return;
-      if (mine > appliedRef.current) {
-        appliedRef.current = mine;
-        grid.setData((prev) => (prev ? { ...prev, rows: next } : prev));
-      }
       const level = storedFor(next, company.id, key);
-      setStatus({
-        tone: "success",
-        text: `Saved. ${label} for ${company.name}: ${level ? LEVEL_LABELS[level] : "Default"}.`,
-      });
+      const shownLevel = level ? LEVEL_LABELS[level] : "Default";
+      const wanted = value === DEFAULT ? undefined : value;
+      setStatus(
+        level === wanted
+          ? { tone: "success", text: `Saved. ${label} for ${company.name}: ${shownLevel}.` }
+          : { tone: "warning", text: `Not changed. ${label} for ${company.name} is still ${shownLevel}.` },
+      );
     } catch {
       if (!mountedRef.current) return;
       setStatus({ tone: "warning", text: "The change was saved, but the page could not refresh.", reload: true });
     }
+    savingRef.current -= 1;
     mark(false);
   }
 
@@ -161,10 +200,7 @@ export default function PermissionsPage() {
         <Notice tone={status.tone} className="mb-4">
           {status.text}
           {status.reload && (
-            <Button variant="secondary" className="ml-3" onClick={() => {
-                setStatus(null);
-                grid.reload();
-              }}>
+            <Button variant="secondary" className="ml-3" disabled={saving.size > 0} onClick={reload}>
               Reload
             </Button>
           )}
@@ -173,7 +209,7 @@ export default function PermissionsPage() {
       {loadError && (
         <Notice tone="error" className="mb-4">
           {loadError}
-          <Button variant="secondary" className="ml-3" onClick={grid.reload}>
+          <Button variant="secondary" className="ml-3" disabled={saving.size > 0} onClick={reload}>
             Reload
           </Button>
         </Notice>

@@ -293,7 +293,7 @@ Known limits, as built:
   invitation addresses and connection details.
 - Capabilities load when a company opens and again when the tab returns to the front (at most once
   every 30 seconds), so a change reaches a person who has the hub open on their next return to the
-  tab. Make changes off hours.
+  tab.
 
 ## Personal KPIs and deliverables
 

@@ -59,7 +59,8 @@ export async function setCompanyCapability(
   return requireRows(data ? [data as CompanyCapability] : [])[0];
 }
 
-// Back to the catalog default. A row that is already gone is not an error.
+// Back to the catalog default. A row that is already gone is not an error, and a delete that
+// removes nothing returns no error either, so the caller reads the rows back to see what is stored.
 export async function clearCompanyCapability(companyId: string, capability: CapabilityKey): Promise<void> {
   const { error } = await db().from("company_capabilities").delete().eq("company_id", companyId).eq("capability", capability);
   if (error) throw error;
