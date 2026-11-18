@@ -12,6 +12,7 @@ import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "./services/supabase.ts";
 import { getMyProfile } from "./services/profiles.ts";
 import { getCompany, listCompanies } from "./services/companies.ts";
+import { loadCapabilities } from "./services/capabilities.ts";
 import { signOut } from "./services/auth.ts";
 import { useSession } from "./hooks/useSession.ts";
 import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
@@ -19,6 +20,7 @@ import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import { hasModule, type ModuleKey } from "./lib/modules.ts";
 import { isCompanyAdminRole, isLeadRole } from "./lib/people.ts";
+import { meets, type CapabilityMap } from "./lib/capabilities.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -55,7 +57,7 @@ import TasksPage from "./pages/tasks/TasksPage.tsx";
 import TaskPage from "./pages/tasks/TaskPage.tsx";
 import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
 import { SETTINGS_TABS } from "./pages/settings/settingsTabs.ts";
-import type { Company, Profile } from "./types/database.ts";
+import type { CapabilityKey, Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
   return (
@@ -76,6 +78,19 @@ function FullScreenLoading({ label }: { label: string }) {
     <div className="flex min-h-screen items-center justify-center bg-bg">
       <Spinner label={label} />
     </div>
+  );
+}
+
+function CompanyLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <CenteredCard>
+      <p className="eyebrow">Connection</p>
+      <h1 className="mt-3 font-display text-3xl tracking-display text-heading">Could not load your company</h1>
+      <p className="mt-3 text-sm leading-relaxed text-ink-2">Check your signal and try again.</p>
+      <Button className="mt-6" onClick={onRetry}>
+        Try again
+      </Button>
+    </CenteredCard>
   );
 }
 
@@ -222,6 +237,29 @@ function SignedIn({ session }: { session: Session }) {
     return companies[0] ?? null;
   }, [companies, activeCompanyId, profileIsRococo]);
 
+  // A company's capabilities, loaded once per active company and tagged with the company they
+  // belong to. A map for another company is never read (see the gate below), and a failure is
+  // remembered by company and attempt, so neither can carry across a switch for even one render. The
+  // portfolio has no company and loads nothing.
+  const companyId = company?.id ?? null;
+  const [capabilities, setCapabilities] = useState<{ companyId: string; map: CapabilityMap } | null>(null);
+  // A failure belongs to one company and one attempt, so a retry or a switch clears it by itself.
+  const [capabilitiesFailed, setCapabilitiesFailed] = useState<{ companyId: string; attempt: number } | null>(null);
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    loadCapabilities(companyId)
+      .then((map) => {
+        if (active) setCapabilities({ companyId, map });
+      })
+      .catch(() => {
+        if (active) setCapabilitiesFailed({ companyId, attempt: retryTick });
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId, retryTick]);
+
   // Theme before the shell mounts: onboarding wears the company's theme when there is one.
   // Once AppLayout mounts it owns the theme, because the portfolio is Rococo-branded
   // regardless of the active company.
@@ -306,16 +344,7 @@ function SignedIn({ session }: { session: Session }) {
 
   if (!companies) {
     if (companiesError) {
-      return (
-        <CenteredCard>
-          <p className="eyebrow">Connection</p>
-          <h1 className="mt-3 font-display text-3xl tracking-display text-heading">Could not load your company</h1>
-          <p className="mt-3 text-sm leading-relaxed text-ink-2">Check your signal and try again.</p>
-          <Button className="mt-6" onClick={() => setRetryTick((t) => t + 1)}>
-            Try again
-          </Button>
-        </CenteredCard>
-      );
+      return <CompanyLoadError onRetry={() => setRetryTick((t) => t + 1)} />;
     }
     return <FullScreenLoading label="Loading your company" />;
   }
@@ -324,10 +353,23 @@ function SignedIn({ session }: { session: Session }) {
     return <Onboarding profile={profile} companyName={company?.name ?? null} onDone={refreshProfile} />;
   }
 
+  // The app does not render in a company until that company's capabilities are in: a power that
+  // has not loaded is never granted, and nothing is shown on the strength of another company's map.
+  if (companyId && capabilitiesFailed?.companyId === companyId && capabilitiesFailed.attempt === retryTick) {
+    return <CompanyLoadError onRetry={() => setRetryTick((t) => t + 1)} />;
+  }
+  if (companyId && capabilities?.companyId !== companyId) return <FullScreenLoading label="Loading your company" />;
+  const capabilityMap = companyId ? capabilities?.map : undefined;
+
   const isRococo = profile.is_rococo_admin;
   const inCompany = profile.company_id !== null && profile.company_id === company?.id;
   const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && inCompany);
   const isLead = isRococo || (isLeadRole(profile.role) && inCompany);
+
+  // A company member qualifies only inside their own company, the same test isAdmin uses. On the
+  // portfolio there is no company, so only a Rococo admin passes.
+  const can = (capability: CapabilityKey) =>
+    isRococo ? !companyId || meets(profile.role, true, capabilityMap?.[capability]) : inCompany && meets(profile.role, false, capabilityMap?.[capability]);
 
   const value: HubValue = {
     session,
@@ -337,6 +379,7 @@ function SignedIn({ session }: { session: Session }) {
     isRococo,
     isAdmin,
     isLead,
+    can,
     setActiveCompanyId,
     refreshProfile,
     refreshCompanies,

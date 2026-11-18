@@ -5,7 +5,7 @@
 // from here, so the same pages serve a Klasik owner and Austin looking at Klasik.
 import { createContext, useContext } from "react";
 import type { Session } from "@supabase/supabase-js";
-import type { Company, Profile } from "../types/database.ts";
+import type { CapabilityKey, Company, Profile } from "../types/database.ts";
 
 export interface HubValue {
   session: Session;
@@ -20,6 +20,10 @@ export interface HubValue {
   // A manager gets the People tab and the team's tasks for the people the database lets them
   // see; isAdmin keeps the admin-only screens.
   isLead: boolean;
+  // Whether the signed-in person holds a capability in the active company: the company's own
+  // level for it, read from data (lib/capabilities.ts). Never true for a capability that has not
+  // loaded, and never true for another company's. A Rococo admin on the portfolio holds all.
+  can: (capability: CapabilityKey) => boolean;
   // Rococo admins only: enter a company, or null to return to the portfolio.
   setActiveCompanyId: (id: string | null) => void;
   refreshProfile: () => Promise<void>;

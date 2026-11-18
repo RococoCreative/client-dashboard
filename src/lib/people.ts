@@ -45,7 +45,7 @@ export function totalAnnual(items: Array<{ annual_amount: number }>): number {
 
 // The app's reading of the same role ranking the database enforces (0033). The database is the
 // wall; these only decide what a select offers and whether it is locked.
-const ROLE_RANK: Record<Role, number> = { employee: 1, manager: 2, admin: 3, owner: 4 };
+export const ROLE_RANK: Record<Role, number> = { employee: 1, manager: 2, admin: 3, owner: 4 };
 
 // Owners and admins get the admin screens of the hub for their company. A manager is not one: they
 // lead people (isLeadRole) without running the company.

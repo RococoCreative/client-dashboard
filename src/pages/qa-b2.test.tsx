@@ -31,6 +31,7 @@ vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLink
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
+vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCycle, createPillar, deleteCycle, deletePillar, listCycles, updateReview } from "../services/gsr.ts";
