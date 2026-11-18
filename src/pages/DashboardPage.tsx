@@ -9,6 +9,9 @@
 // in a company that has divisions, a Combined / per-division switch narrows the people tiles and
 // the cycle cards to one division, and the compare strip sets each division next to the whole.
 // Everyone else reads the combined picture, exactly as before, and none of those reads is made.
+// The people are the ones the database shows the viewer, and a person in two divisions counts in
+// each. An admin who sees only some divisions gets chips for those divisions alone, and the
+// company-wide tiles say they cover the people in your divisions.
 // An employee whose job role carries scorecard metrics reads their own scorecard here.
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -58,7 +61,7 @@ import { CADENCE_LABELS, cycleOmitted, cycleProgress, cyclePath, cycleRoster, cy
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../lib/gsr/history.ts";
 import { displayName, formatDate, formatMoney, formatPercent, formatPeriod, pluralize } from "../lib/format.ts";
-import { canSeeDivisions, financialProgress, hasAccount, isCompanyAdminRole } from "../lib/people.ts";
+import { canSeeDivisions, financialProgress, hasAccount, isCompanyAdminRole, isDivisionLimited, viewerDivisions } from "../lib/people.ts";
 import { hasModule } from "../lib/modules.ts";
 import {
   CAMPAIGN_STATUS_LABELS,
@@ -276,10 +279,14 @@ function AdminDashboard() {
   // The division split, read only for someone allowed to see it, and only past the divisions
   // themselves when the company has some. Null means the combined picture alone.
   const allowed = canSeeDivisions(profile);
+  const limited = isDivisionLimited(profile);
+  const combinedLabel = limited ? "In your divisions" : "Combined";
+  // Which divisions the viewer may see, as a key, so new access reloads the split.
+  const viewKey = profile.view_all_divisions ? "all" : profile.view_division_ids.join(",");
   const [scope, setScope] = useState(COMBINED);
   const split = useAsync(async () => {
     if (!allowed) return null;
-    const divisions = await listDivisions(companyId);
+    const divisions = viewerDivisions(profile, await listDivisions(companyId));
     if (divisions.length === 0) return null;
     const today = monthOf(new Date());
     const [metrics, entries, cycles] = await Promise.all([
@@ -291,7 +298,7 @@ function AdminDashboard() {
     const cycle = monthCycle(cycles, month);
     const monthReviews = cycle ? await listCycleReviews(cycle.id) : [];
     return { divisions, metrics, entries, month, cycle, monthReviews };
-  }, [companyId, allowed]);
+  }, [companyId, allowed, viewKey]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
@@ -312,7 +319,7 @@ function AdminDashboard() {
   const activeScope = splitData && (scope === COMBINED || splitData.divisions.some((d) => d.id === scope)) ? scope : COMBINED;
   const people = peopleInScope(everyone, activeScope);
   const compare = splitData
-    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions })
+    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions, combinedLabel })
     : [];
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
@@ -365,12 +372,12 @@ function AdminDashboard() {
         eyebrow={company!.name}
         title="Home"
         description={`Everything that matters for the ${formatDate(new Date().toISOString(), "long")} meeting, in one place.`}
-        actions={splitData ? <DivisionSwitch divisions={splitData.divisions} value={activeScope} onChange={setScope} /> : undefined}
+        actions={splitData ? <DivisionSwitch divisions={splitData.divisions} value={activeScope} onChange={setScope} combinedLabel={combinedLabel} /> : undefined}
       />
       {split.error && !split.data ? <Notice tone="warning" className="mb-4">The division split did not load, so this is the combined picture. {split.error}</Notice> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat label="People" value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
+        <Stat label={limited ? "People in your divisions" : "People"} value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
         <Stat
           label="GSRs complete"
           value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
@@ -389,7 +396,9 @@ function AdminDashboard() {
               ? "Open a cycle to start scoring"
               : scoredCycleIds.size === 0
                 ? "Monthly cycles are not scored"
-                : "Average of scored reviews"
+                : limited
+                  ? "Average of scored reviews in your divisions"
+                  : "Average of scored reviews"
           }
         />
         <Stat label="Resources" value={published} hint={`${pluralize(published, "published SOP")} · ${pluralize(resources.length, "file")}`} />

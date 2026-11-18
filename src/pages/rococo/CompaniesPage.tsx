@@ -58,27 +58,42 @@ export default function CompaniesPage() {
   const queueRef = useRef<Record<string, Promise<void>>>({});
   const [pendingModules, setPendingModules] = useState<Record<string, string[]>>({});
   const [savingModules, setSavingModules] = useState<Record<string, number>>({});
+  // The company whose new domain is on its way, so a double Enter does not send it twice.
+  const [addingDomain, setAddingDomain] = useState<string | null>(null);
 
   const state = useAsync(async () => {
     const [companies, domains, profiles] = await Promise.all([listCompanies(), listAllDomains(), listAllProfiles()]);
     return { companies, domains, profiles };
   }, []);
 
-  async function run(action: () => Promise<void>) {
+  // True when the action landed, false once the page shows why not.
+  async function run(action: () => Promise<void>): Promise<boolean> {
     setError("");
     try {
       await action();
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
-  async function patchCompany(company: Company, patch: Parameters<typeof updateCompany>[1]) {
-    await run(async () => {
-      const next = await updateCompany(company.id, patch);
-      state.setData((prev) => (prev ? { ...prev, companies: prev.companies.map((c) => (c.id === next.id ? next : c)) } : prev));
-      await refreshCompanies();
-    });
+  // Every write to a company returns the whole row, so a company's writes (its name, its logo, its
+  // modules) go out one after another: out of order, an older response would put an older name or
+  // module list back on screen. Refreshing the switcher afterwards is best effort, so a refresh that
+  // fails never reports a save that landed as a failure.
+  async function patchCompany(company: Company, patch: Parameters<typeof updateCompany>[1]): Promise<boolean> {
+    const id = company.id;
+    const mine = (queueRef.current[id] ?? Promise.resolve()).then(() =>
+      run(async () => {
+        const next = await updateCompany(id, patch);
+        state.setData((prev) => (prev ? { ...prev, companies: prev.companies.map((c) => (c.id === next.id ? next : c)) } : prev));
+      }),
+    );
+    queueRef.current[id] = mine.then(() => undefined);
+    const ok = await mine;
+    if (ok) await refreshCompanies().catch(() => undefined);
+    return ok;
   }
 
   async function toggleModule(company: Company, key: ModuleKey, on: boolean) {
@@ -88,9 +103,7 @@ export default function CompaniesPage() {
     savingRef.current = { ...savingRef.current, [id]: (savingRef.current[id] ?? 0) + 1 };
     setPendingModules(pendingRef.current);
     setSavingModules(savingRef.current);
-    const save = (queueRef.current[id] ?? Promise.resolve()).then(() => patchCompany(company, { modules }));
-    queueRef.current[id] = save;
-    await save;
+    await patchCompany(company, { modules });
     const left = (savingRef.current[id] ?? 1) - 1;
     savingRef.current = { ...savingRef.current, [id]: left };
     // Once the last save settles, the checkboxes read the company as stored again: the saved list,
@@ -105,13 +118,16 @@ export default function CompaniesPage() {
   }
 
   async function addDomain(company: Company) {
+    if (addingDomain) return;
     const domain = normalizeDomain(newDomain[company.id] ?? "");
     if (!domain) return setError("Enter a domain like company.com.");
+    setAddingDomain(company.id);
     await run(async () => {
       const created = await addCompanyDomain(company.id, domain);
       state.setData((prev) => (prev ? { ...prev, domains: [...prev.domains, created] } : prev));
       setNewDomain((prev) => ({ ...prev, [company.id]: "" }));
     });
+    setAddingDomain(null);
   }
 
   async function dropDomain(domain: string) {
@@ -226,7 +242,7 @@ export default function CompaniesPage() {
                 <div className="grid gap-4 md:grid-cols-12">
                   <div className="md:col-span-4">
                     <label htmlFor={`co-name-${company.id}`} className={labelClass}>Name</label>
-                    <BlurInput id={`co-name-${company.id}`} value={company.name} required onSave={(next) => void patchCompany(company, { name: next.trim() })} />
+                    <BlurInput id={`co-name-${company.id}`} value={company.name} required onSave={(next) => patchCompany(company, { name: next.trim() })} />
                   </div>
                   <div className="md:col-span-3">
                     <label htmlFor={`co-theme-${company.id}`} className={labelClass}>Theme</label>
@@ -238,7 +254,7 @@ export default function CompaniesPage() {
                   </div>
                   <div className="md:col-span-5">
                     <label htmlFor={`co-logo-${company.id}`} className={labelClass}>Logo URL</label>
-                    <BlurInput id={`co-logo-${company.id}`} value={company.logo_url ?? ""} placeholder="https://" onSave={(next) => void patchCompany(company, { logo_url: next.trim() || null })} />
+                    <BlurInput id={`co-logo-${company.id}`} value={company.logo_url ?? ""} placeholder="https://" onSave={(next) => patchCompany(company, { logo_url: next.trim() || null })} />
                   </div>
                   <fieldset aria-label={`Modules for ${company.name}`} disabled={(savingModules[company.id] ?? 0) > 0} className="md:col-span-12">
                     <legend className={labelClass}>Modules</legend>
@@ -282,7 +298,7 @@ export default function CompaniesPage() {
                         className="flex items-center gap-1.5"
                       >
                         <input type="text" value={newDomain[company.id] ?? ""} onChange={(e) => setNewDomain((prev) => ({ ...prev, [company.id]: e.target.value }))} placeholder="company.com" aria-label={`Add domain for ${company.name}`} className={`${inputClass} mt-0 w-48 py-1 text-[12.5px]`} />
-                        <Button type="submit" variant="secondary" size="sm" disabled={!(newDomain[company.id] ?? "").trim()}><Plus size={12} aria-hidden /> Add</Button>
+                        <Button type="submit" variant="secondary" size="sm" disabled={!(newDomain[company.id] ?? "").trim() || addingDomain !== null}><Plus size={12} aria-hidden /> Add</Button>
                       </form>
                     </div>
                     <p className="mt-1.5 text-[12px] text-ink-3">Anyone with an email on these domains can create an account without an invitation.</p>

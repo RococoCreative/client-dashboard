@@ -2,6 +2,7 @@
 // run against seeded campaigns and never touch the network.
 import type { CampaignStatus, MarketingCampaign } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const campaigns = fromAll((b) => b.campaigns).map((x) => ({ ...x }));
 let counter = 0;
@@ -25,5 +26,6 @@ export async function updateCampaign(id: string, patch: Partial<Omit<CampaignInp
 }
 export async function deleteCampaign(id: string): Promise<void> {
   const index = campaigns.findIndex((c) => c.id === id);
-  if (index !== -1) campaigns.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  campaigns.splice(index, 1);
 }

@@ -28,6 +28,7 @@ vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLink
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
@@ -555,8 +556,9 @@ describe("admin", () => {
     expect(screen.getByText("Marcus Lee")).toBeInTheDocument();
     expect(screen.getByText("Alex Morgan")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Filter by company"), "co-rba");
-    // RBA is the one company these tests never add anyone to, so its count is stable.
-    expect(screen.getByText("4 users")).toBeInTheDocument();
+    // RBA is the one company these tests never add anyone to, so its count is stable: four on the
+    // roster from the start, and Harper Quinn's team of three.
+    expect(screen.getByText("7 users")).toBeInTheDocument();
     expect(screen.queryByText("Austin Rococo (you)")).not.toBeInTheDocument();
   });
 
@@ -989,11 +991,12 @@ describe("employee profile", () => {
     expect(screen.getByLabelText("Department")).toHaveValue("Production");
   });
 
-  it("lists department and tenure in the people table", async () => {
+  it("lists who each person reports to in the people table, and leaves department and hire date to the person page", async () => {
     renderWithHub(<PeoplePage />, admin);
     expect(await screen.findByText("Jordan Vale (you)")).toBeInTheDocument();
-    expect(screen.getAllByText("Production").length).toBeGreaterThan(0);
-    expect(screen.getByText("May 26, 2026")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Jordan Vale" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("columnheader", { name: "Department" })).not.toBeInTheDocument();
+    expect(screen.queryByText("May 26, 2026")).not.toBeInTheDocument();
   });
 
   it("puts people who have never signed in into the review cycle, marked as not signed in", async () => {
@@ -2010,7 +2013,8 @@ describe("roles", () => {
       .spyOn(profilesService, "listCompanyProfiles")
       .mockImplementation(async (id) => [...(await original(id)), ...(id === KINGDOM.company.id ? [rosterOwner] : [])]);
     onTestFinished(() => spy.mockRestore());
-    const rowOf = (name: string) => screen.getByText(name).closest("tr")!;
+    // The name in the Person column; the same name also shows as someone's Reports to.
+    const rowOf = (name: string) => screen.getByText(name, { selector: "span" }).closest("tr")!;
 
     const first = renderWithHub(<PeoplePage />, kingdomAdmin);
     expect(await screen.findByText("Sample Roster Owner")).toBeInTheDocument();
@@ -2041,7 +2045,7 @@ describe("roles", () => {
     const role = screen.getByLabelText("Role");
     expect(optionsOf(role)).not.toContain("Owner");
     await user.selectOptions(role, "manager");
-    expect(screen.getByText("Managers see what employees see for now. Team access comes later.")).toBeInTheDocument();
+    expect(screen.getByText("Sees the people who report to them, and their teams. Assigns their tasks and works their monthly goals.")).toBeInTheDocument();
   });
 
   it("keeps an owner's role out of an admin's hands on the person page", async () => {

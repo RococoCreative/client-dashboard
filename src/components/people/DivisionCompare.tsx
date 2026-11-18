@@ -2,9 +2,11 @@
 // numbers leadership compares them by. Average optimization rate against target (each person
 // against their own role's target), how many people that average covers, and how many of the
 // month's reviews are complete. Shared by the dashboard and the Scorecards report; the figures
-// arrive worked out (compare.ts, over lib/scorecard.ts), so this only lays them out.
+// arrive worked out (compare.ts, over lib/scorecard.ts), so this only lays them out. Someone who
+// works in more than one division counts in each, so when the groups add up to more than the
+// whole the strip says why.
 import { formatMetricValue } from "../../lib/scorecard.ts";
-import type { CompareRow } from "../scorecards/compare.ts";
+import { COMBINED, type CompareRow } from "../scorecards/compare.ts";
 
 const PERCENT = { kind: "percent", scale_max: 5 } as const;
 
@@ -17,11 +19,16 @@ function gapLine(gap: number | null): { text: string; tone: string } {
 }
 
 export default function DivisionCompare({ rows, monthLabel, active }: { rows: readonly CompareRow[]; monthLabel: string; active?: string }) {
+  const whole = rows.find((r) => r.key === COMBINED)?.people ?? 0;
+  const groups = rows.filter((r) => r.key !== COMBINED).reduce((sum, r) => sum + r.people, 0);
   return (
     <section aria-label="Division compare" className="rounded-lg border border-line bg-surface">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-2.5">
         <p className="eyebrow">Divisions compared</p>
-        <p className="text-[12px] text-ink-3">{monthLabel} · optimization rate against each role's target</p>
+        <p className="text-[12px] text-ink-3">
+          {monthLabel} · optimization rate against each role's target
+          {groups > whole ? " · someone in more than one division counts in each" : ""}
+        </p>
       </header>
       <ul className="grid grid-cols-1 divide-y divide-line sm:grid-cols-2 sm:divide-y-0 lg:grid-flow-col lg:auto-cols-fr lg:grid-cols-none lg:divide-x">
         {rows.map((row) => {

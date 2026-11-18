@@ -2,6 +2,7 @@
 // role goal is stamped from the role by trigger, so the caller sends the role and the text.
 import type { DashboardModule, JobRole, JobRoleGoal } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const ROLE_COLUMNS = "id, company_id, name, description, dashboard_modules, sort_order, is_active, created_at, updated_at";
 const ROLE_GOAL_COLUMNS = "id, company_id, job_role_id, title, description, kind, sort_order, is_active, created_at, updated_at";
@@ -25,8 +26,9 @@ export async function updateJobRole(id: string, patch: Partial<Pick<JobRole, "na
   return data as JobRole;
 }
 export async function deleteJobRole(id: string): Promise<void> {
-  const { error } = await db().from("job_roles").delete().eq("id", id);
+  const { data, error } = await db().from("job_roles").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listJobRoleGoals(companyId: string, jobRoleId?: string): Promise<JobRoleGoal[]> {
@@ -48,6 +50,7 @@ export async function updateJobRoleGoal(id: string, patch: Partial<Pick<JobRoleG
   return data as JobRoleGoal;
 }
 export async function deleteJobRoleGoal(id: string): Promise<void> {
-  const { error } = await db().from("job_role_goals").delete().eq("id", id);
+  const { data, error } = await db().from("job_role_goals").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

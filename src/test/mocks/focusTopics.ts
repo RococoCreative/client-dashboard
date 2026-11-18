@@ -3,6 +3,7 @@
 // it, and a blank theme is refused as its check constraint refuses it.
 import type { FocusTopic } from "../../types/database.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const topics = fromAll((b) => b.focusTopics).map((x) => ({ ...x }));
 
@@ -33,5 +34,6 @@ export async function upsertFocusTopic(companyId: string, month: string, theme: 
 
 export async function deleteFocusTopic(id: string): Promise<void> {
   const index = topics.findIndex((t) => t.id === id);
-  if (index !== -1) topics.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  topics.splice(index, 1);
 }

@@ -1,16 +1,19 @@
 // The Home card that lists what needs an admin's attention, from signals the hub already holds
 // (lib/attention.ts owns the rules). Only a company with the switchboard module mounts it, so a
 // company without it makes none of these calls; data sources are read only when the company has
-// that module too.
+// that module too. People are the ones the database shows the viewer, so for an admin who sees
+// only some divisions the not-signed-in count says it covers their divisions.
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { attentionItems } from "../../lib/attention.ts";
 import { todayIso } from "../../lib/format.ts";
 import { hasModule } from "../../lib/modules.ts";
+import { isDivisionLimited } from "../../lib/people.ts";
 import { listConnections } from "../../services/connections.ts";
 import { listCycles } from "../../services/gsr.ts";
 import { listCampaigns } from "../../services/marketing.ts";
@@ -19,6 +22,8 @@ import { listSyncSources } from "../../services/sync.ts";
 import type { Company } from "../../types/database.ts";
 
 export default function AttentionCard({ company }: { company: Company }) {
+  const { profile } = useHub();
+  const limited = isDivisionLimited(profile);
   const companyId = company.id;
   const withSources = hasModule(company, "data_sources");
   const state = useAsync(async () => {
@@ -29,8 +34,9 @@ export default function AttentionCard({ company }: { company: Company }) {
       listConnections(companyId),
       withSources ? listSyncSources(companyId) : Promise.resolve(undefined),
     ]);
-    return attentionItems({ people, cycles, campaigns, connections, sources, now: new Date(), today: todayIso() });
-  }, [companyId, withSources]);
+    const items = attentionItems({ people, cycles, campaigns, connections, sources, now: new Date(), today: todayIso() });
+    return limited ? items.map((item) => (item.kind === "not_signed_in" ? { ...item, title: `${item.title}, in your divisions` } : item)) : items;
+  }, [companyId, withSources, limited]);
 
   return (
     <Section eyebrow="Attention" title="Needs attention" padded={false}>

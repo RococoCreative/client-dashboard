@@ -2,6 +2,7 @@
 // run against seeded resources and never touch the network.
 import type { Resource, ResourceKind } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const resources = fromAll((b) => b.resources).map((x) => ({ ...x, tags: [...x.tags] }));
 let counter = 0;
@@ -24,7 +25,8 @@ export async function updateResource(id: string, patch: Partial<Omit<ResourceInp
 }
 export async function deleteResource(id: string): Promise<void> {
   const index = resources.findIndex((r) => r.id === id);
-  if (index !== -1) resources.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  resources.splice(index, 1);
 }
 export function parseTags(raw: string): string[] {
   const seen = new Set<string>();

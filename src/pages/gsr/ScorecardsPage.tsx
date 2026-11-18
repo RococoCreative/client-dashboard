@@ -2,7 +2,9 @@
 // chosen month's result on each of their role's metrics against target and the year to date.
 // Filter by role; for the people allowed to see the split (an owner, Rococo, or someone given
 // the view), a Combined / per-division switch and the division compare strip on top. A row opens
-// the person, where results are entered. The numbers all come from lib/scorecard.ts.
+// the person, where results are entered. The numbers all come from lib/scorecard.ts. The people
+// are the ones the database shows the viewer, so a viewer who sees only some divisions gets chips
+// for those divisions and reads the whole as "In your divisions".
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
@@ -25,7 +27,7 @@ import { listDivisions } from "../../services/divisions.ts";
 import { listCycleOmissions, listCycleReviews, listCycles } from "../../services/gsr.ts";
 import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts";
 import { formatMetricValue, monthOf, monthResult, monthsOfYear, ytd, type MetricResult } from "../../lib/scorecard.ts";
-import { canSeeDivisions } from "../../lib/people.ts";
+import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, RoleMetric } from "../../types/database.ts";
 
@@ -116,6 +118,7 @@ export default function ScorecardsPage() {
   const { company, profile } = useHub();
   const companyId = company!.id;
   const allowed = canSeeDivisions(profile);
+  const limited = isDivisionLimited(profile);
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   // Null until someone picks one: then the latest month with results in (see latestResultMonth).
@@ -151,7 +154,7 @@ export default function ScorecardsPage() {
     <PageHeader
       eyebrow="Reviews"
       title="Scorecards"
-      description="Each person's role metrics for the month against target, with the year to date. Results are entered on each person's profile."
+      description={`Each person's role metrics for the month against target, with the year to date${limited ? ", for the people in your divisions" : ""}. Results are entered on each person's profile.`}
     />
   );
 
@@ -172,7 +175,9 @@ export default function ScorecardsPage() {
     );
   }
 
-  const { people, jobRoles, metrics, divisions } = state.data;
+  const { people, jobRoles, metrics, divisions: allDivisions } = state.data;
+  const divisions = viewerDivisions(profile, allDivisions);
+  const combinedLabel = limited ? "In your divisions" : "Combined";
   const entries = results.data ?? [];
   const split = allowed && divisions.length > 0;
   const activeScope = split ? scope : COMBINED;
@@ -193,9 +198,9 @@ export default function ScorecardsPage() {
   const scoredRoleIds = new Set(scoredRoles.map((r) => r.id));
   const unscored = roleFilter === "" ? inScope.filter((p) => !p.job_role_id || !scoredRoleIds.has(p.job_role_id)).sort((a, b) => displayName(a).localeCompare(displayName(b))) : [];
   const roleName = (id: string | null) => jobRoles.find((r) => r.id === id)?.name ?? null;
-  const divisionName = (person: Profile) => (split ? (divisions.find((d) => d.id === person.division_id)?.name ?? null) : null);
+  const divisionName = (person: Profile) => (split && person.division_ids.length > 0 ? divisionLabel(person.division_ids, allDivisions) : null);
   const compare = split
-    ? divisionCompareRows({ people, divisions, metrics, entries, month, cycle, reviews: monthReviews.data ?? [], omissions: state.data.omissions })
+    ? divisionCompareRows({ people, divisions, metrics, entries, month, cycle, reviews: monthReviews.data ?? [], omissions: state.data.omissions, combinedLabel })
     : [];
 
   return (
@@ -222,7 +227,7 @@ export default function ScorecardsPage() {
         {split ? (
           <div className="sm:ml-auto">
             <p className={`${labelClass} mb-1.5`}>Division</p>
-            <DivisionSwitch divisions={divisions} value={activeScope} onChange={setScope} />
+            <DivisionSwitch divisions={divisions} value={activeScope} onChange={setScope} combinedLabel={combinedLabel} />
           </div>
         ) : null}
       </div>

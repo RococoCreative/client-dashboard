@@ -3,6 +3,7 @@
 import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { companyOf } from "./profiles.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const kpis = fromAll((b) => b.kpis).map((x) => ({ ...x }));
 const compensation = fromAll((b) => b.compensation).map((x) => ({ ...x }));
@@ -19,9 +20,11 @@ function patchIn<T extends { id: string }>(list: T[], id: string, patch: Partial
   return list[index];
 }
 
+// A delete that finds nothing is refused, as the service refuses a delete that removed no row.
 function removeFrom<T extends { id: string }>(list: T[], id: string): void {
   const index = list.findIndex((x) => x.id === id);
-  if (index !== -1) list.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  list.splice(index, 1);
 }
 
 export async function listEmployeeKpis(companyId: string, employeeId: string, year: number): Promise<EmployeeKpi[]> {

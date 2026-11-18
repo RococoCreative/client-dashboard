@@ -3,6 +3,7 @@
 // trigger does, and nothing is ever deleted, only archived.
 import type { MilestoneKind, Project, ProjectMilestone } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const projects = fromAll((b) => b.projects).map((x) => ({ ...x }));
 const milestones = fromAll((b) => b.milestones).map((x) => ({ ...x }));
@@ -113,9 +114,11 @@ export async function updateMilestone(id: string, patch: MilestonePatch): Promis
 }
 
 export async function reorderMilestones(projectId: string, orderedIds: string[]): Promise<ProjectMilestone[]> {
+  // Each write must find its row, as the service checks; a missing one stops the reorder there.
   orderedIds.forEach((id, index) => {
     const milestone = milestones.find((x) => x.id === id && x.project_id === projectId);
-    if (milestone) Object.assign(milestone, { sort_order: index + 1, updated_at: now() });
+    if (!milestone) throw new Error(NOT_CHANGED_MESSAGE);
+    Object.assign(milestone, { sort_order: index + 1, updated_at: now() });
   });
   return listMilestones(projectId);
 }

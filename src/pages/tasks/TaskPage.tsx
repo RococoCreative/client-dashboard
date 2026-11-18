@@ -2,7 +2,10 @@
 // and admins tick steps, mark it complete and reopen it; whoever may edit the task (an admin, or an
 // employee on a task they made for themselves) edits it and deletes it. A finished copy of a
 // repeating task whose next one is open is locked, and the page links to the next one. Loaded by
-// the id in the URL, so it must belong to the active company (lib/tenancy.ts).
+// the id in the URL, so it must belong to the active company (lib/tenancy.ts). Who it is for and
+// who assigned it are named from the company directory, which everyone reads, so an employee sees
+// the name of the admin who assigned their task; the assignee picker stays on the profiles the
+// viewer may see.
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import StepList from "../../components/tasks/StepList.tsx";
@@ -19,7 +22,8 @@ import { labelClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDate, todayIso } from "../../lib/format.ts";
+import { formatDate, todayIso } from "../../lib/format.ts";
+import { directoryById, nameFromDirectory } from "../../lib/people.ts";
 import {
   PRIORITY_LABELS,
   RECURRENCE_LABELS,
@@ -30,6 +34,7 @@ import {
   percentComplete,
 } from "../../lib/tasks.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
+import { listDirectory } from "../../services/directory.ts";
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { completeTask, deleteTask, getTask, reopenTask } from "../../services/tasks.ts";
@@ -62,15 +67,19 @@ export default function TaskPage() {
     // navigating, so the task must be this company's before anything of it is shown.
     assertInCompany(task, companyId, "task");
     // Campaigns are admin-only in the database too, so an employee never asks for them.
-    const [people, campaigns] = await Promise.all([listCompanyProfiles(companyId), isAdmin ? listCampaigns(companyId) : Promise.resolve([] as MarketingCampaign[])]);
-    return { task, people, campaigns };
+    const [people, campaigns, directory] = await Promise.all([
+      listCompanyProfiles(companyId),
+      isAdmin ? listCampaigns(companyId) : Promise.resolve([] as MarketingCampaign[]),
+      listDirectory(companyId),
+    ]);
+    return { task, people, campaigns, directory };
   }, [taskId, companyId, isAdmin]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
   const { task, people, campaigns } = state.data;
-  const names = new Map(people.map((p) => [p.id, displayName(p)]));
+  const names = directoryById(state.data.directory);
   const done = isDone(task);
   const locked = isLocked(task);
   const overdue = isOverdue(task, todayIso());
@@ -160,9 +169,9 @@ export default function TaskPage() {
         <Section eyebrow="Details" title={done ? "Done" : "Open"}>
           {task.description ? <p className="mb-4 whitespace-pre-line text-sm leading-relaxed text-ink-2">{task.description}</p> : null}
           <dl className="space-y-3">
-            <Detail label="Assignee">{task.assignee_id ? (names.get(task.assignee_id) ?? "Not on the roster") : "Unassigned"}</Detail>
-            {/* A creator missing from the company's roster is a Rococo admin who stepped in to assign it. */}
-            <Detail label="Assigned by">{task.created_by ? (names.get(task.created_by) ?? "Hub admin") : "Not recorded"}</Detail>
+            <Detail label="Assignee">{task.assignee_id ? nameFromDirectory(names, task.assignee_id, "Not on the roster") : "Unassigned"}</Detail>
+            {/* A creator missing from the company's directory is a Rococo admin who stepped in to assign it. */}
+            <Detail label="Assigned by">{task.created_by ? nameFromDirectory(names, task.created_by, "Hub admin") : "Not recorded"}</Detail>
             <Detail label="Due">
               {task.due_date ? formatDate(task.due_date) : "No due date"}
               {overdue ? <Badge tone="danger">Overdue</Badge> : null}

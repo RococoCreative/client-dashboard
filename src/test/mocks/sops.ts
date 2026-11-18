@@ -2,6 +2,7 @@
 // run against seeded SOPs, versions and attachments and never touch the network.
 import type { Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const sops = fromAll((b) => b.sops).map((x) => ({ ...x }));
 const versions = fromAll((b) => b.versions).map((x) => ({ ...x }));
@@ -37,7 +38,8 @@ export async function updateSop(id: string, patch: Partial<Pick<Sop, "title" | "
 }
 export async function deleteSop(id: string): Promise<void> {
   const index = sops.findIndex((s) => s.id === id);
-  if (index !== -1) sops.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  sops.splice(index, 1);
 }
 export async function listSopVersions(sopId: string): Promise<SopVersion[]> {
   return versions.filter((v) => v.sop_id === sopId).sort((a, b) => b.version - a.version);
@@ -64,7 +66,8 @@ export async function addSopAttachment(input: { sop_id: string; company_id: stri
 }
 export async function removeSopAttachment(id: string): Promise<void> {
   const index = attachments.findIndex((a) => a.id === id);
-  if (index !== -1) attachments.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  attachments.splice(index, 1);
 }
 export async function listRecentSops(companyId: string, limit = 5): Promise<Sop[]> {
   return sops.filter((s) => s.company_id === companyId).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)).slice(0, limit);

@@ -3,6 +3,7 @@
 // asking, and audience is decided by RLS, which the SQL test proves, never by UI code.
 import type { ExternalLink, LinkAudience, LinkNavGroup, LinkProvider } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 export interface ExternalLinkInput {
   company_id: string; nav_group: LinkNavGroup; label: string; url: string; provider: LinkProvider;
@@ -58,6 +59,6 @@ export async function updateExternalLink(id: string, patch: ExternalLinkPatch): 
 
 export async function deleteExternalLink(id: string): Promise<void> {
   const index = links.findIndex((x) => x.id === id);
-  if (index === -1) throw new Error("Link not found.");
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
   links.splice(index, 1);
 }

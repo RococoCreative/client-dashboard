@@ -64,8 +64,9 @@ function CellEditor({
   cell: GridCell;
   label: string;
   error: string;
-  onValue: (value: number) => void;
-  onNote: (note: string | null) => void;
+  // Each resolves true when the change landed, so the field can show saved or not saved.
+  onValue: (value: number) => Promise<boolean>;
+  onNote: (note: string | null) => Promise<boolean> | false;
   onClear: () => void;
   onClose: () => void;
 }) {
@@ -102,7 +103,7 @@ function CellEditor({
                 return false;
               }
               setHint("");
-              onValue(value);
+              return onValue(value);
             }}
           />
         </div>
@@ -197,9 +198,33 @@ export default function PersonScorecard({
     setOpen((prev) => (prev && prev.key === rowKey(row) && prev.month === month ? null : { key: rowKey(row), month }));
   }
 
-  async function save(row: GridRow, cell: GridCell, value: number, note: string | null) {
+  // A cell's result and its note are one row, so each write sends both. Typing a result and then a
+  // note at once put two writes in flight, each carrying the other's old half; whichever landed
+  // last undid the first. Writes for one cell therefore queue, and each starts from the row the one
+  // before it left: { entry } once a write has landed (null after a clear), or nothing when the
+  // write ahead of it failed and the cell as shown is the best guess.
+  const cellChains = useRef(new Map<string, Promise<{ entry: MetricEntry | null } | undefined>>());
+
+  function queue(row: GridRow, cell: GridCell, work: (current: MetricEntry | null) => Promise<MetricEntry | null>): Promise<boolean> {
+    const key = `${rowKey(row)}|${cell.month}`;
+    const before = cellChains.current.get(key) ?? Promise.resolve(undefined);
+    const chained = before.then(async (latest) => ({ entry: await work(latest ? latest.entry : cell.entry) }));
+    cellChains.current.set(key, chained.catch(() => undefined));
     setEditError("");
-    try {
+    return chained.then(
+      () => true,
+      (err: unknown) => {
+        setEditError(errorMessage(err));
+        return false;
+      },
+    );
+  }
+
+  function save(row: GridRow, cell: GridCell, change: { value: number } | { note: string | null }): Promise<boolean> {
+    return queue(row, cell, async (current) => {
+      const value = "value" in change ? change.value : current?.value;
+      // A note needs a result to sit on; the note box stays shut until there is one.
+      if (value === undefined) throw new Error("Enter the result first.");
       const saved = await upsertMetricEntry({
         company_id: companyId,
         employee_id: employeeId,
@@ -207,22 +232,20 @@ export default function PersonScorecard({
         period_month: cell.month,
         project_id: row.level === "project" ? row.projectId : null,
         value,
-        note,
+        note: "note" in change ? change.note : (current?.note ?? null),
       });
       onEntries((list) => (list.some((e) => e.id === saved.id) ? list.map((e) => (e.id === saved.id ? saved : e)) : [...list, saved]));
-    } catch (err) {
-      setEditError(errorMessage(err));
-    }
+      return saved;
+    });
   }
 
-  async function clear(entry: MetricEntry) {
-    setEditError("");
-    try {
-      await deleteMetricEntry(entry.id);
-      onEntries((list) => list.filter((e) => e.id !== entry.id));
-    } catch (err) {
-      setEditError(errorMessage(err));
-    }
+  function clear(row: GridRow, cell: GridCell): Promise<boolean> {
+    return queue(row, cell, async (current) => {
+      if (!current) return null;
+      await deleteMetricEntry(current.id);
+      onEntries((list) => list.filter((e) => e.id !== current.id));
+      return null;
+    });
   }
 
   const yearPicker = (
@@ -339,9 +362,9 @@ export default function PersonScorecard({
           cell={openCell}
           label={`${rowLabel(openRow)}, ${monthLabel(openCell.month)}`}
           error={editError}
-          onValue={(value) => void save(openRow, openCell, value, openCell.entry?.note ?? null)}
-          onNote={(note) => (openCell.entry ? void save(openRow, openCell, openCell.entry.value, note) : undefined)}
-          onClear={() => (openCell.entry ? void clear(openCell.entry) : undefined)}
+          onValue={(value) => save(openRow, openCell, { value })}
+          onNote={(note) => (openCell.entry ? save(openRow, openCell, { note }) : false)}
+          onClear={() => (openCell.entry ? void clear(openRow, openCell) : undefined)}
           onClose={() => setOpen(null)}
         />
       ) : (

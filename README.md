@@ -118,6 +118,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-11:
   `0037_company_time_zone` is written and is to be applied next, after `0036`: it gives every
   company a time zone (default `America/New_York`) and makes a repeating task's next due date
   count from the company's own day.
+  `0038_team_and_division_access` is written, not applied: managers see the people below them
+  in the reporting chain, admins and managers see the divisions an owner gives them, and every
+  table that holds a person's records reads and writes through those rules. Paste it after
+  `0037` and before `0039`, then deploy the app the same day. Existing admins start with every
+  division, so nothing changes for them until an owner narrows it.
+  `0039` is reserved for the GSR and task link migration that follows it.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
@@ -131,7 +137,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-11:
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
   Companies. Kingdom's owners are Maddie Cothran and marvin waters.
-- **Next free number:** `0038`.
+- **Next free number:** `0040`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.

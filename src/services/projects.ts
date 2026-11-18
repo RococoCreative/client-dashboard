@@ -3,6 +3,7 @@
 // from its project by trigger, so it is never sent.
 import type { MilestoneKind, Project, ProjectMilestone } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const PROJECT_COLUMNS = "id, company_id, name, reference, notes, source, source_key, archived_at, created_by, updated_by, created_at, updated_at";
 const MILESTONE_COLUMNS = "id, company_id, project_id, title, description, kind, sort_order, target_date, responsible_profile_id, completed_on, archived_at, created_by, updated_by, created_at, updated_at";
@@ -75,10 +76,18 @@ export async function updateMilestone(id: string, patch: MilestonePatch): Promis
 }
 
 // Writes each id's place in the list (1, 2, 3...) and returns the project's items in their new order.
+// Each write asks for its row back, so a milestone that is gone or refused stops the reorder with a
+// message instead of being skipped in silence; the caller reloads to show the order that stands.
 export async function reorderMilestones(projectId: string, orderedIds: string[]): Promise<ProjectMilestone[]> {
   for (const [index, id] of orderedIds.entries()) {
-    const { error } = await db().from("project_milestones").update({ sort_order: index + 1 }).eq("id", id).eq("project_id", projectId);
+    const { data, error } = await db()
+      .from("project_milestones")
+      .update({ sort_order: index + 1 })
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .select("id");
     if (error) throw error;
+    requireRows(data);
   }
   return listMilestones(projectId);
 }

@@ -4,7 +4,7 @@
 // GSR when the GSR has no theme of its own, and its description follows while the GSR still carries
 // the calendar's theme; a theme an admin typed on the GSR itself is never overwritten. Removing a
 // topic clears the calendar row only. The New month dialog reads the same rows to pre-fill.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
@@ -69,10 +69,26 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
   const topicFor = (month: string) => state.data?.topics.find((t) => t.month === month);
   const cycleFor = (month: string) => state.data?.cycles.find((c) => c.period_start === month);
 
-  async function save(month: string, theme: string, description: string | null) {
+  // A month's theme and description are one row and each write sends both, so a theme left by a
+  // click into the description put two writes in flight, each carrying the other's old half.
+  // Writes for one month queue, and each takes the half it does not change from the topic the one
+  // before it saved (or from the row as shown when that one failed).
+  const monthChains = useRef(new Map<string, Promise<FocusTopic | undefined>>());
+
+  // True when the topic landed, false once the panel shows why not.
+  async function save(month: string, change: { theme: string } | { description: string | null }): Promise<boolean> {
     setError("");
+    const before = monthChains.current.get(month) ?? Promise.resolve(undefined);
+    const shown = topicFor(month);
+    const chained = before.then((latest) => {
+      const current = latest ?? shown;
+      const theme = "theme" in change ? change.theme : (current?.theme ?? "");
+      const description = "description" in change ? change.description : (current?.description ?? null);
+      return upsertFocusTopic(companyId, month, theme, description);
+    });
+    monthChains.current.set(month, chained.catch(() => undefined));
     try {
-      const topic = await upsertFocusTopic(companyId, month, theme, description);
+      const topic = await chained;
       state.setData((prev) => (prev ? { ...prev, topics: [...prev.topics.filter((t) => t.month !== month), topic] } : prev));
       const cycle = cycleFor(month);
       const patch = cycle ? cyclePatch(cycle, topic) : null;
@@ -80,8 +96,10 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
         const next = await updateCycle(cycle.id, patch);
         state.setData((prev) => (prev ? { ...prev, cycles: prev.cycles.map((c) => (c.id === next.id ? next : c)) } : prev));
       }
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -89,6 +107,8 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
     setError("");
     try {
       await deleteFocusTopic(topic.id);
+      // A later write for the month starts from nothing, not from the topic just removed.
+      monthChains.current.delete(topic.month);
       state.setData((prev) => (prev ? { ...prev, topics: prev.topics.filter((t) => t.id !== topic.id) } : prev));
     } catch (err) {
       setError(errorMessage(err));
@@ -132,7 +152,7 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
                       value={topic?.theme ?? ""}
                       placeholder="No topic yet"
                       required
-                      onSave={(next) => void save(month, next, topic?.description ?? null)}
+                      onSave={(next) => save(month, { theme: next })}
                       className={`${inputClass} mt-0 text-[13px]`}
                     />
                     <CycleNote cycle={cycleFor(month)} topic={topic} />
@@ -145,7 +165,7 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
                         ariaLabel={`Description for ${label}`}
                         value={topic.description ?? ""}
                         placeholder="What it asks of people (optional)"
-                        onSave={(next) => void save(month, topic.theme, next)}
+                        onSave={(next) => save(month, { description: next })}
                         className={`${inputClass} mt-0 text-[13px]`}
                       />
                     </div>

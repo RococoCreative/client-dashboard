@@ -40,13 +40,16 @@ export default function ReviewProjects({
   for (const n of notes) if (!ids.includes(n.project_id)) ids.push(n.project_id);
   if (ids.length === 0) return null;
 
-  async function save(projectId: string, note: string | null) {
+  // True when the note landed, false once the section shows why not.
+  async function save(projectId: string, note: string | null): Promise<boolean> {
     setError("");
     try {
       const saved = await upsertReviewProjectNote({ company_id: review.company_id, review_id: review.id, project_id: projectId, note });
       onNotes((list) => (list.some((n) => n.id === saved.id) ? list.map((n) => (n.id === saved.id ? saved : n)) : [...list, saved]));
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -86,7 +89,7 @@ export default function ReviewProjects({
                   value={note ?? ""}
                   ariaLabel={`Note on ${name}`}
                   placeholder="How the project is going, what was agreed..."
-                  onSave={(next) => void save(projectId, next.trim() || null)}
+                  onSave={(next) => save(projectId, next.trim() || null)}
                   className={`${textareaClass} mt-2 min-h-[56px] text-[13px]`}
                 />
               ) : note ? (

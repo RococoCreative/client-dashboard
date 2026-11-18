@@ -3,6 +3,7 @@
 // the shape is three levels deep; the database derives company and person on the child rows, so
 // nothing here sends them. Plain async functions that throw.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { DeliverableCategory, DeliverableTask, EmployeeDeliverable } from "../types/database.ts";
 
 const CATEGORY_COLUMNS = "id, company_id, name, sort_order, is_active, created_at, updated_at";
@@ -40,8 +41,9 @@ export async function updateDeliverableCategory(
 }
 
 export async function deleteDeliverableCategory(id: string): Promise<void> {
-  const { error } = await db().from("deliverable_categories").delete().eq("id", id);
+  const { data, error } = await db().from("deliverable_categories").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listEmployeeDeliverables(employeeId: string, year: number): Promise<EmployeeDeliverable[]> {
@@ -79,8 +81,9 @@ export async function updateEmployeeDeliverable(
 }
 
 export async function deleteEmployeeDeliverable(id: string): Promise<void> {
-  const { error } = await db().from("employee_deliverables").delete().eq("id", id);
+  const { data, error } = await db().from("employee_deliverables").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listDeliverableTasks(employeeId: string, year: number): Promise<DeliverableTask[]> {
@@ -126,6 +129,7 @@ export async function updateDeliverableTask(
 }
 
 export async function deleteDeliverableTask(id: string): Promise<void> {
-  const { error } = await db().from("deliverable_tasks").delete().eq("id", id);
+  const { data, error } = await db().from("deliverable_tasks").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

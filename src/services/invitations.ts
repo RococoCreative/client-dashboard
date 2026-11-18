@@ -5,6 +5,7 @@
 // invitation's profile_id only ranks which invitation is settled, never picks the row), stamps
 // accepted_at, and withdraws other companies' pending invitations for the address.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import { appOrigin } from "../lib/appUrl.ts";
 import type { Invitation, Role } from "../types/database.ts";
 
@@ -20,6 +21,12 @@ export async function listInvitations(companyId: string): Promise<Invitation[]> 
   return (data as Invitation[]) ?? [];
 }
 
+// One invitation per address per company (0001). A spent one, accepted when the person signed in
+// before, is history once they are back on the roster unclaimed (removed and added again, say), so
+// it is cleared and the new invitation takes its place. One still waiting is the invitation to
+// use: its link is already on the People page.
+const INVITATION_WAITING_MESSAGE = "There is already an invitation waiting for that address. Copy its link from the People page.";
+
 export async function createInvitation(input: {
   company_id: string;
   email: string;
@@ -27,18 +34,38 @@ export async function createInvitation(input: {
   title?: string | null;
   profile_id?: string | null;
 }): Promise<Invitation> {
-  const { data, error } = await db()
+  const row = { ...input, email: input.email.trim().toLowerCase(), title: input.title?.trim() || null };
+  const insert = () => db().from("invitations").insert(row).select(COLUMNS).single();
+  const first = await insert();
+  if (!first.error) return first.data as Invitation;
+  if (first.error.code !== "23505") throw first.error;
+  const { data: existing, error: lookupError } = await db()
     .from("invitations")
-    .insert({ ...input, email: input.email.trim().toLowerCase(), title: input.title?.trim() || null })
     .select(COLUMNS)
-    .single();
-  if (error) throw error;
-  return data as Invitation;
+    .eq("company_id", row.company_id)
+    .eq("email", row.email)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  const spent = existing as Invitation | null;
+  if (!spent) throw first.error;
+  if (!spent.accepted_at) throw new Error(INVITATION_WAITING_MESSAGE);
+  const { data: cleared, error: clearError } = await db()
+    .from("invitations")
+    .delete()
+    .eq("id", spent.id)
+    .not("accepted_at", "is", null)
+    .select("id");
+  if (clearError) throw clearError;
+  requireRows(cleared);
+  const second = await insert();
+  if (second.error) throw second.error;
+  return second.data as Invitation;
 }
 
 export async function deleteInvitation(id: string): Promise<void> {
-  const { error } = await db().from("invitations").delete().eq("id", id);
+  const { data, error } = await db().from("invitations").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // The login screen reads ?email= and pre-fills the field, so this link is all a new

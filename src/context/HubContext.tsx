@@ -16,6 +16,10 @@ export interface HubValue {
   isRococo: boolean;
   // May manage the active company: company admins of it, and Rococo admins anywhere.
   isAdmin: boolean;
+  // Leads people in the active company: its owners, admins and managers, and Rococo admins.
+  // A manager gets the People tab and the team's tasks for the people the database lets them
+  // see; isAdmin keeps the admin-only screens.
+  isLead: boolean;
   // Rococo admins only: enter a company, or null to return to the portfolio.
   setActiveCompanyId: (id: string | null) => void;
   refreshProfile: () => Promise<void>;

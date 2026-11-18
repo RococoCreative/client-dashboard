@@ -3,6 +3,7 @@
 // the document), never rewrites an old one. Attachments are rows pointing at files in the
 // private hub-files bucket (see storage.ts).
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { Sop, SopAttachment, SopCategory, SopStatus, SopVersion } from "../types/database.ts";
 
 const SOP_COLUMNS =
@@ -63,8 +64,9 @@ export async function updateSop(
 }
 
 export async function deleteSop(id: string): Promise<void> {
-  const { error } = await db().from("sops").delete().eq("id", id);
+  const { data, error } = await db().from("sops").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listSopVersions(sopId: string): Promise<SopVersion[]> {
@@ -128,8 +130,9 @@ export async function addSopAttachment(input: {
 }
 
 export async function removeSopAttachment(id: string): Promise<void> {
-  const { error } = await db().from("sop_attachments").delete().eq("id", id);
+  const { data, error } = await db().from("sop_attachments").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Recently updated documents for the dashboard card.

@@ -18,7 +18,7 @@ import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
 import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import { hasModule, type ModuleKey } from "./lib/modules.ts";
-import { isCompanyAdminRole } from "./lib/people.ts";
+import { isCompanyAdminRole, isLeadRole } from "./lib/people.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -108,6 +108,14 @@ function AdminOnly({ children }: { children: ReactNode }) {
   const { company, isAdmin } = useHub();
   if (!company) return <RedirectTo path="/rococo" />;
   return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// Pages for anyone who leads people here: admins, and managers for the people the database lets
+// them see. Everyone else lands on Home, the way AdminOnly sends them.
+export function LeadOnly({ children }: { children: ReactNode }) {
+  const { company, isLead } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return isLead ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 // Where the connections Edge Function sends the browser once the provider's sign-in is done, with
@@ -317,7 +325,9 @@ function SignedIn({ session }: { session: Session }) {
   }
 
   const isRococo = profile.is_rococo_admin;
-  const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && profile.company_id !== null && profile.company_id === company?.id);
+  const inCompany = profile.company_id !== null && profile.company_id === company?.id;
+  const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && inCompany);
+  const isLead = isRococo || (isLeadRole(profile.role) && inCompany);
 
   const value: HubValue = {
     session,
@@ -326,6 +336,7 @@ function SignedIn({ session }: { session: Session }) {
     companies,
     isRococo,
     isAdmin,
+    isLead,
     setActiveCompanyId,
     refreshProfile,
     refreshCompanies,
@@ -338,10 +349,11 @@ function SignedIn({ session }: { session: Session }) {
           <Route element={<AppLayout />}>
             <Route index element={company ? <DashboardPage /> : <RedirectTo path="/rococo" />} />
             <Route path="wins" element={<ModuleOnly module="wins"><WinsPage /></ModuleOnly>} />
-            {/* Tasks: Mine for everyone, Everyone for admins. Everyone is declared before a task's
-                own address so it never reads as a task id. */}
+            {/* Tasks: Mine for everyone, Everyone for leads (a manager's Team: the database narrows
+                it to the people they may see). Everyone is declared before a task's own address so
+                it never reads as a task id. */}
             <Route path="tasks" element={<ModuleOnly module="tasks"><TasksPage tab="mine" /></ModuleOnly>} />
-            <Route path="tasks/everyone" element={<AdminOnly><ModuleOnly module="tasks"><TasksPage tab="everyone" /></ModuleOnly></AdminOnly>} />
+            <Route path="tasks/everyone" element={<LeadOnly><ModuleOnly module="tasks"><TasksPage tab="everyone" /></ModuleOnly></LeadOnly>} />
             <Route path="tasks/:taskId" element={<ModuleOnly module="tasks"><TaskRoute /></ModuleOnly>} />
             {/* Two sections keyed on cadence: Monthly GSRs (monthly) and Reviews (every scored
                 cadence). A cycle and a review are reachable under either prefix so old links keep
@@ -369,8 +381,8 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/gsr" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGsrPage /></WithCompany>} />
             <Route path="my/reviews" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyReviewsPage /></WithCompany>} />
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
-            <Route path="people" element={<AdminOnly><PeoplePage /></AdminOnly>} />
-            <Route path="people/:profileId" element={<AdminOnly><PersonPage /></AdminOnly>} />
+            <Route path="people" element={<LeadOnly><PeoplePage /></LeadOnly>} />
+            <Route path="people/:profileId" element={<LeadOnly><PersonPage /></LeadOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself

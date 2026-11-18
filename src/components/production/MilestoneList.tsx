@@ -1,6 +1,8 @@
 // One project's milestones and letters, in order. Admins edit each item in place (every field
 // saves on its own), move it up or down, and archive it; everyone else reads the same list.
-// There is no status: an item is done when it has a completed-on date.
+// There is no status: an item is done when it has a completed-on date. Who is responsible is
+// named from the company directory, which every member reads; the picker offers the profiles the
+// viewer may see. Every field save returns whether it landed, so a refused one says "Not saved".
 import { useState } from "react";
 import { Archive, ArrowDown, ArrowUp } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
@@ -11,9 +13,12 @@ import Notice from "../ui/Notice.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
+import { nameFromDirectory } from "../../lib/people.ts";
 import { isComplete, moveMilestone, sortMilestones } from "../../lib/milestones.ts";
 import { archiveMilestone, reorderMilestones, updateMilestone, type MilestonePatch } from "../../services/projects.ts";
-import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type Profile, type ProjectMilestone } from "../../types/database.ts";
+import { MILESTONE_KIND_LABELS, keysOf, type DirectoryEntry, type MilestoneKind, type Profile, type ProjectMilestone } from "../../types/database.ts";
+
+type Directory = ReadonlyMap<string, DirectoryEntry>;
 
 
 function Badges({ milestone }: { milestone: ProjectMilestone }) {
@@ -25,8 +30,8 @@ function Badges({ milestone }: { milestone: ProjectMilestone }) {
   );
 }
 
-function ReadOnlyRow({ milestone, people }: { milestone: ProjectMilestone; people: Profile[] }) {
-  const owner = people.find((p) => p.id === milestone.responsible_profile_id);
+function ReadOnlyRow({ milestone, directory }: { milestone: ProjectMilestone; directory: Directory }) {
+  const owner = nameFromDirectory(directory, milestone.responsible_profile_id, milestone.responsible_profile_id ? "Someone no longer here" : "No one assigned");
   return (
     <li className="px-5 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -36,7 +41,7 @@ function ReadOnlyRow({ milestone, people }: { milestone: ProjectMilestone; peopl
       <p className="mt-1 text-[12.5px] text-ink-2">
         {milestone.target_date ? `Target ${formatDate(milestone.target_date)}` : "No target date"}
         <span className="px-1.5 text-ink-3" aria-hidden>·</span>
-        {owner ? displayName(owner) : "No one assigned"}
+        {owner}
       </p>
       {milestone.description ? <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{milestone.description}</p> : null}
     </li>
@@ -46,6 +51,7 @@ function ReadOnlyRow({ milestone, people }: { milestone: ProjectMilestone; peopl
 function EditableRow({
   milestone,
   people,
+  directory,
   first,
   last,
   busy,
@@ -55,15 +61,19 @@ function EditableRow({
 }: {
   milestone: ProjectMilestone;
   people: Profile[];
+  directory: Directory;
   first: boolean;
   last: boolean;
   busy: boolean;
-  onSave: (patch: MilestonePatch) => void;
+  onSave: (patch: MilestonePatch) => Promise<boolean>;
   onMove: (direction: "up" | "down") => void;
   onArchive: () => void;
 }) {
   const { id, title } = milestone;
   const active = people.filter((p) => p.is_active || p.id === milestone.responsible_profile_id);
+  // The owner may be someone this viewer cannot pick (out of their divisions); they still show.
+  const owner = milestone.responsible_profile_id;
+  const hiddenOwner = owner !== null && !active.some((p) => p.id === owner);
   return (
     <li className="px-5 py-3">
       <div className="flex items-start gap-2">
@@ -80,7 +90,7 @@ function EditableRow({
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
         <div>
           <label htmlFor={`${id}-kind`} className={labelClass}>Kind</label>
-          <select id={`${id}-kind`} aria-label={`Kind of ${title}`} value={milestone.kind} onChange={(e) => onSave({ kind: e.target.value as MilestoneKind })} className={selectClass}>
+          <select id={`${id}-kind`} aria-label={`Kind of ${title}`} value={milestone.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={selectClass}>
             {keysOf(MILESTONE_KIND_LABELS).map((k) => (
               <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
             ))}
@@ -92,8 +102,9 @@ function EditableRow({
         </div>
         <div>
           <label htmlFor={`${id}-owner`} className={labelClass}>Responsible</label>
-          <select id={`${id}-owner`} aria-label={`Responsible for ${title}`} value={milestone.responsible_profile_id ?? ""} onChange={(e) => onSave({ responsible_profile_id: e.target.value || null })} className={selectClass}>
+          <select id={`${id}-owner`} aria-label={`Responsible for ${title}`} value={milestone.responsible_profile_id ?? ""} onChange={(e) => void onSave({ responsible_profile_id: e.target.value || null })} className={selectClass}>
             <option value="">No one</option>
+            {hiddenOwner && owner ? <option value={owner}>{nameFromDirectory(directory, owner, "Someone no longer here")}</option> : null}
             {active.map((p) => (
               <option key={p.id} value={p.id}>{displayName(p)}</option>
             ))}
@@ -114,11 +125,13 @@ function EditableRow({
 export default function MilestoneList({
   milestones,
   people,
+  directory,
   canEdit,
   onChanged,
 }: {
   milestones: ProjectMilestone[];
   people: Profile[];
+  directory: Directory;
   canEdit: boolean;
   onChanged: (next: ProjectMilestone[]) => void;
 }) {
@@ -127,13 +140,15 @@ export default function MilestoneList({
   const [archiving, setArchiving] = useState<ProjectMilestone | null>(null);
   const ordered = sortMilestones(milestones);
 
-  async function save(milestone: ProjectMilestone, patch: MilestonePatch) {
+  async function save(milestone: ProjectMilestone, patch: MilestonePatch): Promise<boolean> {
     setError("");
     try {
       const next = await updateMilestone(milestone.id, patch);
       onChanged(milestones.map((m) => (m.id === next.id ? next : m)));
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -178,15 +193,16 @@ export default function MilestoneList({
                 key={milestone.id}
                 milestone={milestone}
                 people={people}
+                directory={directory}
                 first={i === 0}
                 last={i === ordered.length - 1}
                 busy={busy}
-                onSave={(patch) => void save(milestone, patch)}
+                onSave={(patch) => save(milestone, patch)}
                 onMove={(direction) => void move(milestone, direction)}
                 onArchive={() => setArchiving(milestone)}
               />
             ) : (
-              <ReadOnlyRow key={milestone.id} milestone={milestone} people={people} />
+              <ReadOnlyRow key={milestone.id} milestone={milestone} directory={directory} />
             ),
           )}
         </ul>

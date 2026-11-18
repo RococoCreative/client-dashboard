@@ -6,10 +6,11 @@
 // section; RLS plus the guard_profile_fields trigger decide what each caller may actually
 // change, and only handle_new_user ever sets user_id.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { Profile, Role } from "../types/database.ts";
 
 const COLUMNS =
-  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, can_view_divisions, created_at, updated_at";
+  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, division_ids, can_view_divisions, view_all_divisions, view_division_ids, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
@@ -53,11 +54,31 @@ export async function listAllProfiles(): Promise<Profile[]> {
   return (data as Profile[]) ?? [];
 }
 
-// division_id is an admin's to set; can_view_divisions an owner's or Rococo's (guard_profile_fields).
+// division_ids is an admin's to set, within the divisions they can view; can_view_divisions,
+// view_all_divisions and view_division_ids are an owner's or Rococo's (guard_profile_fields, 0038).
+// division_id is a read-only mirror of division_ids now, so it is not patchable here.
 export type ProfilePatch = Partial<
-  Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id" | "division_id" | "can_view_divisions">
+  Pick<
+    Profile,
+    | "full_name"
+    | "title"
+    | "role"
+    | "is_active"
+    | "company_id"
+    | "is_rococo_admin"
+    | "hire_date"
+    | "phone"
+    | "department"
+    | "reports_to"
+    | "job_role_id"
+    | "division_ids"
+    | "can_view_divisions"
+    | "view_all_divisions"
+    | "view_division_ids"
+  >
 >;
 
+// .single() turns a refused update (no row came back) into an error rather than a quiet success.
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const { data, error } = await db().from("profiles").update(patch).eq("id", id).select(COLUMNS).single();
   if (error) throw error;
@@ -67,13 +88,16 @@ export async function updateProfile(id: string, patch: ProfilePatch): Promise<Pr
 
 // Put someone on the roster before they have an account. They can be filled in completely
 // (title, department, hire date, who they report to, compensation, KPIs) and invited whenever
-// the company is ready. RLS pins the company and forbids setting user_id here.
+// the company is ready. RLS pins the company and forbids setting user_id here; the profile guards
+// refuse a division the admin cannot view or a manager they cannot see, each with its own message.
 export async function createStaffProfile(input: {
   company_id: string;
   email: string;
   full_name?: string | null;
   title?: string | null;
   role?: Role;
+  division_ids?: string[];
+  reports_to?: string | null;
 }): Promise<Profile> {
   const { data, error } = await db()
     .from("profiles")
@@ -83,6 +107,8 @@ export async function createStaffProfile(input: {
       full_name: input.full_name?.trim() || null,
       title: input.title?.trim() || null,
       role: input.role ?? "employee",
+      division_ids: input.division_ids ?? [],
+      reports_to: input.reports_to ?? null,
     })
     .select(COLUMNS)
     .single();
@@ -91,8 +117,10 @@ export async function createStaffProfile(input: {
 }
 
 // Only for someone who never signed in; RLS refuses the rest. Anyone with an account is
-// deactivated instead, which keeps their reviews and goals intact.
+// deactivated instead, which keeps their reviews and goals intact. A delete RLS filtered out
+// returns no error and no row, so the id comes back and an empty answer reads as a refusal.
 export async function deleteStaffProfile(id: string): Promise<void> {
-  const { error } = await db().from("profiles").delete().eq("id", id);
+  const { data, error } = await db().from("profiles").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data, "That person was not removed. They may have signed in, or they are not yours to remove.");
 }

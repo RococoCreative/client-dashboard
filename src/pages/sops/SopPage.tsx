@@ -24,6 +24,14 @@ import { errorMessage } from "../../lib/errors.ts";
 import { formatDateTime, pluralize } from "../../lib/format.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, type SopAttachment, type SopStatus } from "../../types/database.ts";
 
+// Whether the database answered a write with a refusal (a Postgres or PostgREST error code), so
+// the row is known not to have been written. A dropped connection comes back with no code: the
+// write may have landed, and nobody can say.
+function refused(err: unknown): boolean {
+  const code = typeof err === "object" && err !== null ? (err as { code?: unknown }).code : undefined;
+  return typeof code === "string" && code.length > 0;
+}
+
 export default function SopPage() {
   const { sopId = "" } = useParams();
   const { company, isAdmin } = useHub();
@@ -86,20 +94,30 @@ export default function SopPage() {
     navigate("/resources/sops");
   }
 
+  // Upload, then the row that points at it: two writes. When the database refuses the row, the
+  // uploaded file is one nobody points at, so it goes again. When the connection dropped the row
+  // may have landed, so the file stays: a spare file is only unused storage, an attachment
+  // pointing at nothing is broken for everyone.
   async function handleUpload(file: File) {
     setBusy(true);
     setError("");
     try {
       const path = buildObjectPath(sop.company_id, "sops", sop.id, file.name);
       await uploadFile(path, file);
-      const attachment = await addSopAttachment({
-        sop_id: sop.id,
-        company_id: sop.company_id,
-        file_name: file.name,
-        file_path: path,
-        content_type: file.type || null,
-        size_bytes: file.size,
-      });
+      let attachment: SopAttachment;
+      try {
+        attachment = await addSopAttachment({
+          sop_id: sop.id,
+          company_id: sop.company_id,
+          file_name: file.name,
+          file_path: path,
+          content_type: file.type || null,
+          size_bytes: file.size,
+        });
+      } catch (err) {
+        if (refused(err)) await removeFile(path).catch(() => undefined);
+        throw err;
+      }
       state.setData((prev) => (prev ? { ...prev, attachments: [...prev.attachments, attachment] } : prev));
     } catch (err) {
       setError(errorMessage(err));

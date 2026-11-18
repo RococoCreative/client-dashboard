@@ -69,7 +69,8 @@ function TaskRow({
 }: {
   task: DeliverableTask;
   canEdit: boolean;
-  onSave: (patch: Partial<Pick<DeliverableTask, "name" | "note" | "rating">>) => void;
+  // Resolves true when the change landed, so the field can show saved or not saved.
+  onSave: (patch: Partial<Pick<DeliverableTask, "name" | "note" | "rating">>) => Promise<boolean>;
   onRemove: () => void;
 }) {
   return (
@@ -103,7 +104,7 @@ function TaskRow({
           <RatingChoice
             value={task.rating}
             label={`Rating for ${task.name}`}
-            onChange={canEdit ? (next) => onSave({ rating: next }) : undefined}
+            onChange={canEdit ? (next) => void onSave({ rating: next }) : undefined}
           />
           {canEdit ? (
             <IconButton label={`Remove task ${task.name}`} onClick={onRemove}>
@@ -170,12 +171,15 @@ export default function DeliverablesPanel({
     if (onRollup) onRollup(state.data ? scoreCategory(state.data.deliverables, state.data.tasks) : null);
   }, [state.data, onRollup]);
 
-  async function run(work: () => Promise<void>) {
+  // True when the work landed, false once the panel shows why not, so a field can say which.
+  async function run(work: () => Promise<void>): Promise<boolean> {
     setError("");
     try {
       await work();
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -263,7 +267,7 @@ export default function DeliverablesPanel({
       state.setData((prev) => (prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === next.id ? next : t)) } : prev));
     });
     saveChains.current.set(task.id, chained);
-    await run(() => chained);
+    return run(() => chained);
   }
 
   // The heading's name box and its category pulldown sit in the same row, so correcting the
@@ -276,7 +280,7 @@ export default function DeliverablesPanel({
       state.setData((prev) => (prev ? { ...prev, deliverables: prev.deliverables.map((d) => (d.id === next.id ? next : d)) } : prev));
     });
     saveChains.current.set(deliverable.id, chained);
-    await run(() => chained);
+    return run(() => chained);
   }
 
   async function refileDeliverable(deliverable: EmployeeDeliverable, choice: string) {
@@ -416,7 +420,7 @@ export default function DeliverablesPanel({
                               value={deliverable.name}
                               required
                               ariaLabel={`Deliverable ${deliverable.name}`}
-                              onSave={(next) => void saveDeliverable(deliverable, { name: next.trim() })}
+                              onSave={(next) => saveDeliverable(deliverable, { name: next.trim() })}
                               className={`${inputClass} mt-0 font-medium`}
                             />
                           ) : (
@@ -462,7 +466,7 @@ export default function DeliverablesPanel({
                               key={task.id}
                               task={task}
                               canEdit={canEdit}
-                              onSave={(patch) => void saveTask(task, patch)}
+                              onSave={(patch) => saveTask(task, patch)}
                               onRemove={() => setRemovingTask(task)}
                             />
                           ))}

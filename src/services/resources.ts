@@ -1,6 +1,7 @@
 // Data layer for the resource library: links, files, templates, videos, documents, each
 // with tags. Admins manage, everyone browses; RLS decides, not this module.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { Resource, ResourceKind } from "../types/database.ts";
 
 const COLUMNS = "id, company_id, title, description, kind, url, file_path, file_name, tags, created_by, created_at, updated_at";
@@ -39,8 +40,9 @@ export async function updateResource(id: string, patch: Partial<Omit<ResourceInp
 }
 
 export async function deleteResource(id: string): Promise<void> {
-  const { error } = await db().from("resources").delete().eq("id", id);
+  const { data, error } = await db().from("resources").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // "safety, Onboarding ,safety" -> ["safety", "onboarding"]

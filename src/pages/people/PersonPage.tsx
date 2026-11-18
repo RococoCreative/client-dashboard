@@ -74,7 +74,7 @@ function DivisionFields({ companyId, person, me, onPatch }: { companyId: string;
     <div className="space-y-2">
       <div>
         <label htmlFor="person-division" className={labelClass}>Division</label>
-        <select id="person-division" value={person.division_id ?? ""} onChange={(e) => onPatch({ division_id: e.target.value || null })} className={selectClass}>
+        <select id="person-division" value={person.division_id ?? ""} onChange={(e) => onPatch({ division_ids: e.target.value ? [e.target.value] : [] })} className={selectClass}>
           <option value="">No division</option>
           {divisions.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>

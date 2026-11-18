@@ -1,6 +1,6 @@
 // The divisions service on the in-memory fixtures, for page tests and the demo. Same exports as
-// src/services/divisions.ts. Deleting a division leaves its people with none, as the foreign key
-// does, through the profiles mock.
+// src/services/divisions.ts. A division someone still works in is refused, as the database refuses
+// it (0038); deleting an empty one strips it from everyone's view access, through the profiles mock.
 import type { CompanyDivision } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { listAllProfiles, updateProfile } from "./profiles.ts";
@@ -42,9 +42,14 @@ export async function updateDivision(id: string, patch: Partial<Pick<CompanyDivi
 
 export async function deleteDivision(id: string): Promise<void> {
   const index = divisions.findIndex((d) => d.id === id);
-  if (index === -1) return;
+  if (index === -1) throw new Error("That is not here any more, or it is not yours to change.");
+  const everyone = await listAllProfiles();
+  const members = everyone.filter((p) => p.division_ids.includes(id)).length;
+  if (members > 0) {
+    throw new Error(`Move the ${members === 1 ? "1 person" : `${members} people`} out of ${divisions[index].name} first.`);
+  }
   divisions.splice(index, 1);
-  for (const person of (await listAllProfiles()).filter((p) => p.division_id === id)) {
-    await updateProfile(person.id, { division_id: null });
+  for (const person of everyone.filter((p) => p.view_division_ids.includes(id))) {
+    await updateProfile(person.id, { view_division_ids: person.view_division_ids.filter((d) => d !== id) });
   }
 }

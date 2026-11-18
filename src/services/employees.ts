@@ -2,6 +2,7 @@
 // KPIs for the year and the compensation table. Both live in their own tables so RLS can
 // keep them to the person and their company's admins. Plain async functions that throw.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../types/database.ts";
 
 const KPI_COLUMNS =
@@ -37,8 +38,9 @@ export async function updateEmployeeKpi(id: string, patch: Partial<Omit<Employee
 }
 
 export async function deleteEmployeeKpi(id: string): Promise<void> {
-  const { error } = await db().from("employee_kpis").delete().eq("id", id);
+  const { data, error } = await db().from("employee_kpis").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listCompensation(companyId: string, employeeId: string): Promise<CompensationItem[]> {
@@ -71,8 +73,9 @@ export async function updateCompensationItem(id: string, patch: Partial<Omit<Com
 }
 
 export async function deleteCompensationItem(id: string): Promise<void> {
-  const { error } = await db().from("compensation_items").delete().eq("id", id);
+  const { data, error } = await db().from("compensation_items").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // A person's own financial figures for the year. company_id is stamped from the person by
@@ -104,6 +107,7 @@ export async function updateEmployeeFinancial(id: string, patch: Partial<Pick<Em
   return data as EmployeeFinancial;
 }
 export async function deleteEmployeeFinancial(id: string): Promise<void> {
-  const { error } = await db().from("employee_financials").delete().eq("id", id);
+  const { data, error } = await db().from("employee_financials").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

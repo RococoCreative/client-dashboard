@@ -3,6 +3,7 @@
 // real named zone, 0037); slug, theme, modules, domains, and creation are Rococo-only, enforced
 // by RLS and the guard_company_fields trigger, not by this module.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { Company, CompanyDomain, ThemeKey } from "../types/database.ts";
 
 const COLUMNS = "id, slug, name, theme_key, logo_url, modules, time_zone, created_at, updated_at";
@@ -35,8 +36,9 @@ export async function updateCompany(id: string, patch: CompanyPatch): Promise<Co
 }
 
 export async function deleteCompany(id: string): Promise<void> {
-  const { error } = await db().from("companies").delete().eq("id", id);
+  const { data, error } = await db().from("companies").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function listAllDomains(): Promise<CompanyDomain[]> {
@@ -64,6 +66,7 @@ export async function addCompanyDomain(companyId: string, domain: string): Promi
 }
 
 export async function removeCompanyDomain(domain: string): Promise<void> {
-  const { error } = await db().from("company_domains").delete().eq("domain", domain);
+  const { data, error } = await db().from("company_domains").delete().eq("domain", domain).select("domain");
   if (error) throw error;
+  requireRows(data);
 }

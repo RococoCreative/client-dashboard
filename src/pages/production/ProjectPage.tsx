@@ -1,6 +1,7 @@
 // One project: its details and its milestones and letters, in order. Members read everything
 // here; admins edit the details, add, edit, reorder and archive items, and archive the project.
-// Loaded by the id in the URL, so it must belong to the active company (lib/tenancy.ts).
+// Loaded by the id in the URL, so it must belong to the active company (lib/tenancy.ts). Milestone
+// owners are named from the company directory, so an employee reads every owner's name.
 import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
@@ -18,6 +19,8 @@ import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
 import { nextSortOrder } from "../../lib/milestones.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
+import { directoryById } from "../../lib/people.ts";
+import { listDirectory } from "../../services/directory.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { archiveProject, createMilestone, getProject, listMilestones, updateProject, type ProjectPatch } from "../../services/projects.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type ProjectMilestone } from "../../types/database.ts";
@@ -80,26 +83,29 @@ export default function ProjectPage() {
   const [error, setError] = useState("");
 
   const state = useAsync(async () => {
-    const [project, milestones, people] = await Promise.all([getProject(projectId), listMilestones(projectId), listCompanyProfiles(companyId)]);
+    const [project, milestones, people, directory] = await Promise.all([getProject(projectId), listMilestones(projectId), listCompanyProfiles(companyId), listDirectory(companyId)]);
     // Edits and archiving are live here, and a Rococo admin's switcher changes company without
     // navigating, so the project must be this company's.
     assertInCompany(project, companyId, "project");
-    return { project, milestones, people };
+    return { project, milestones, people, directory: directoryById(directory) };
   }, [projectId, companyId]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { project, milestones, people } = state.data;
+  const { project, milestones, people, directory } = state.data;
   const shown = filter === "all" ? milestones : milestones.filter((m) => m.kind === filter);
 
-  async function save(patch: ProjectPatch) {
+  // Returns whether it saved, so a details field keeps its draft and says "Not saved" when not.
+  async function save(patch: ProjectPatch): Promise<boolean> {
     setError("");
     try {
       const next = await updateProject(project.id, patch);
       state.setData((prev) => (prev ? { ...prev, project: next } : prev));
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -150,7 +156,7 @@ export default function ProjectPage() {
           }
         >
           {isAdmin && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
-          <MilestoneList milestones={shown} people={people} canEdit={isAdmin && filter === "all"} onChanged={setMilestones} />
+          <MilestoneList milestones={shown} people={people} directory={directory} canEdit={isAdmin && filter === "all"} onChanged={setMilestones} />
           {isAdmin && filter === "all" ? (
             <AddMilestoneForm projectId={project.id} all={milestones} onAdded={(m) => setMilestones([...milestones, m])} />
           ) : null}
@@ -161,15 +167,15 @@ export default function ProjectPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="project-name" className={labelClass}>Name</label>
-                <BlurInput id="project-name" value={project.name} required ariaLabel="Project name" onSave={(next) => void save({ name: next.trim() })} />
+                <BlurInput id="project-name" value={project.name} required ariaLabel="Project name" onSave={(next) => save({ name: next.trim() })} />
               </div>
               <div>
                 <label htmlFor="project-reference" className={labelClass}>Reference</label>
-                <BlurInput id="project-reference" value={project.reference ?? ""} ariaLabel="Reference" onSave={(next) => void save({ reference: next.trim() || null })} />
+                <BlurInput id="project-reference" value={project.reference ?? ""} ariaLabel="Reference" onSave={(next) => save({ reference: next.trim() || null })} />
               </div>
               <div>
                 <label htmlFor="project-notes" className={labelClass}>Notes</label>
-                <BlurInput id="project-notes" multiline value={project.notes ?? ""} ariaLabel="Notes" onSave={(next) => void save({ notes: next.trim() || null })} />
+                <BlurInput id="project-notes" multiline value={project.notes ?? ""} ariaLabel="Notes" onSave={(next) => save({ notes: next.trim() || null })} />
               </div>
               <div className="border-t border-line pt-4">
                 <Button variant="danger" size="sm" onClick={() => setArchiving(true)}>Archive project</Button>

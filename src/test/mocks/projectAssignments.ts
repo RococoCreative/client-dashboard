@@ -6,7 +6,8 @@
 import type { Project, ProjectAssignment } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { companyOf } from "./profiles.ts";
-import { createProject, getProject } from "./projects.ts";
+import { archiveProject, createProject, getProject } from "./projects.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const assignments = fromAll((b) => b.projectAssignments).map((x) => ({ ...x }));
 
@@ -43,11 +44,18 @@ export async function updateProjectAssignment(id: string, patch: { role: string 
 
 export async function unassignProject(id: string): Promise<void> {
   const index = assignments.findIndex((a) => a.id === id);
-  if (index !== -1) assignments.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  assignments.splice(index, 1);
 }
 
 export async function createProjectAndAssign(input: { company_id: string; name: string; employee_id: string; role?: string | null }): Promise<{ project: Project; assignment: ProjectAssignment }> {
   const project = await createProject({ company_id: input.company_id, name: input.name.trim() });
-  const assignment = await assignProject({ company_id: input.company_id, project_id: project.id, employee_id: input.employee_id, role: input.role ?? null });
-  return { project, assignment };
+  try {
+    const assignment = await assignProject({ company_id: input.company_id, project_id: project.id, employee_id: input.employee_id, role: input.role ?? null });
+    return { project, assignment };
+  } catch (err) {
+    // Taken back as the service takes it back: archived, since projects are never deleted.
+    await archiveProject(project.id).catch(() => undefined);
+    throw err;
+  }
 }

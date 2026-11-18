@@ -8,6 +8,7 @@ import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { companyOf } from "./profiles.ts";
 import { getProject } from "./projects.ts";
 import { listJobRoles } from "./jobRoles.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const metrics = fromAll((b) => b.roleMetrics).map((x) => ({ ...x }));
 const entries = fromAll((b) => b.metricEntries).map((x) => ({ ...x }));
@@ -96,7 +97,8 @@ export async function deleteRoleMetric(id: string): Promise<void> {
     throw new Error("This metric has results entered, so it cannot be deleted. Untick Active to retire it instead.");
   }
   const index = metrics.findIndex((m) => m.id === id);
-  if (index !== -1) metrics.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  metrics.splice(index, 1);
 }
 
 export async function listMetricEntries(companyId: string, opts: { employeeId?: string; year: number }): Promise<MetricEntry[]> {
@@ -153,5 +155,6 @@ export async function upsertMetricEntry(input: MetricEntryInput): Promise<Metric
 
 export async function deleteMetricEntry(id: string): Promise<void> {
   const index = entries.findIndex((e) => e.id === id);
-  if (index !== -1) entries.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  entries.splice(index, 1);
 }
