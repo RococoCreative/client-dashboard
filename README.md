@@ -103,44 +103,31 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 ### What is applied live
 
 Kept current by whoever pastes a migration, so the next session knows where it stands. Live
-project `jjdcejevdqpwuastsmpq`, as of 2026-11-11:
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
   `0026_projects_milestones`, then `0027_wins`, `0030_sync_engine`, `0031_external_links`,
   `0033_role_hierarchy` and `0034_cycle_omissions` together in one transaction (2026-11-10),
   then `0035_scorecards_divisions_focus_calendar` (2026-11-10, after `0034`), then `0036_tasks`
-  (2026-11-11).
+  (2026-11-11), then `0037_company_time_zone`, then `0038_team_and_division_access` and
+  `0039_gsr_guards_and_task_goal_links` (2026-11-18, the app and `notify` deployed the same day).
+  `0038` puts every person's records behind the reporting chain and division view access; both
+  live admins kept every division. `0039` froze the monthly GSRs that were already complete.
   `0026` and `0027` went in after `0029` even though their numbers are lower, because they
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-  `0037_company_time_zone` is written and is to be applied next, after `0036`: it gives every
-  company a time zone (default `America/New_York`) and makes a repeating task's next due date
-  count from the company's own day.
-  `0038_team_and_division_access` is written, not applied: managers see the people below them
-  in the reporting chain, admins and managers see the divisions an owner gives them, and every
-  table that holds a person's records reads and writes through those rules. Paste it after
-  `0037` and before `0039`, then deploy the app the same day. Existing admins start with every
-  division, so nothing changes for them until an owner narrows it.
-  `0039_gsr_guards_and_task_goal_links` is written, not applied: a carried goal keeps its
-  creator, the "set for you" lock binds only the goal's own person, a monthly GSR marked complete
-  freezes its goals and notes whether or not it was scored (months already complete freeze when it
-  is pasted), a re-sign drops ratings for retired criteria, reviews stay out of closed cycles and
-  inside their cycle's company, tasks can link to a monthly goal, and tasks are read through
-  their assignee and written by whoever leads them. Paste it straight after `0038`, then deploy
-  the app (and the `notify` function, which now sends only for the task's creator or an admin)
-  the same day.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   and `SYNC_CRON_SECRET` are set and `0032` is applied.
-- **The `notify` Edge Function** is deployed with the gateway's JWT check on (2026-11-11). It
-  reads the secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails
-  are not set up yet." until all three are set. The version in this repo, which builds the task
-  link from `APP_URL`, is deployed along with `0037`.
+- **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
+  secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
+  set up yet." until all three are set. The version in this repo is live (version 4,
+  2026-11-18): it sends only for the task's creator, an owner or admin, or Rococo.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
   Companies. Kingdom's owners are Maddie Cothran and marvin waters.
