@@ -7,7 +7,10 @@ import { describe, expect, it } from "vitest";
 import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
-import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, type NavItem, type NavLayout } from "./navigation.ts";
+import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, type CanFn, type NavItem, type NavLayout } from "./navigation.ts";
+
+// Every capability held: navFor takes can() from the hub and has no default, so these pass one.
+const all: CanFn = () => true;
 
 interface Expected { to: string; label: string; icon: LucideIcon; end?: boolean }
 type Sections = Array<[string | null, Expected[]]>;
@@ -96,42 +99,42 @@ const kingdom: Company = KINGDOM.company;
 
 describe("navFor for a company with no modules", () => {
   it("gives a Klasik admin the sections with the standard items", () => {
-    expect(read(navFor(klasik, true, false))).toEqual(expected(PLAIN_ADMIN));
+    expect(read(navFor(klasik, true, false, true, all))).toEqual(expected(PLAIN_ADMIN));
   });
 
   it("gives a Klasik employee Home, their own pages and Resources", () => {
-    expect(read(navFor(klasik, false, false))).toEqual(expected(PLAIN_EMPLOYEE));
+    expect(read(navFor(klasik, false, false, false, all))).toEqual(expected(PLAIN_EMPLOYEE));
   });
 
   it("gives a Rococo admin inside Klasik the admin sidebar without My GSR", () => {
-    expect(read(navFor(klasik, true, true))).toEqual(expected(PLAIN_ROCOCO));
+    expect(read(navFor(klasik, true, true, true, all))).toEqual(expected(PLAIN_ROCOCO));
   });
 
   it("gives RBA the same three sidebars plus Tasks, the one module it has on", () => {
     const withTasks = (sections: Sections): Sections => [[null, [HOME, TASKS]], ...sections.slice(1)];
-    expect(read(navFor(rba, true, false))).toEqual(expected(withTasks(PLAIN_ADMIN)));
-    expect(read(navFor(rba, false, false))).toEqual(expected(withTasks(PLAIN_EMPLOYEE)));
-    expect(read(navFor(rba, true, true))).toEqual(expected(withTasks(PLAIN_ROCOCO)));
+    expect(read(navFor(rba, true, false, true, all))).toEqual(expected(withTasks(PLAIN_ADMIN)));
+    expect(read(navFor(rba, false, false, false, all))).toEqual(expected(withTasks(PLAIN_EMPLOYEE)));
+    expect(read(navFor(rba, true, true, true, all))).toEqual(expected(withTasks(PLAIN_ROCOCO)));
   });
 
   it("ignores an unknown module key entirely", () => {
     const future = { ...klasik, modules: ["future"] };
-    expect(read(navFor(future, true, false))).toEqual(expected(PLAIN_ADMIN));
-    expect(read(navFor(future, false, false))).toEqual(expected(PLAIN_EMPLOYEE));
+    expect(read(navFor(future, true, false, true, all))).toEqual(expected(PLAIN_ADMIN));
+    expect(read(navFor(future, false, false, false, all))).toEqual(expected(PLAIN_EMPLOYEE));
   });
 });
 
 describe("navFor for a company with every module", () => {
   it("gives a Kingdom admin every section", () => {
-    expect(read(navFor(kingdom, true, false))).toEqual(expected(FULL_ADMIN));
+    expect(read(navFor(kingdom, true, false, true, all))).toEqual(expected(FULL_ADMIN));
   });
 
   it("gives a Kingdom employee no Sales & Finance", () => {
-    expect(read(navFor(kingdom, false, false))).toEqual(expected(FULL_EMPLOYEE));
+    expect(read(navFor(kingdom, false, false, false, all))).toEqual(expected(FULL_EMPLOYEE));
   });
 
   it("drops My GSR for a Rococo admin inside Kingdom", () => {
-    expect(read(navFor(kingdom, true, true))).toEqual(expected(FULL_ROCOCO));
+    expect(read(navFor(kingdom, true, true, true, all))).toEqual(expected(FULL_ROCOCO));
   });
 });
 
@@ -148,14 +151,14 @@ describe("each module adds only its own items", () => {
   ] as const)("%s adds %j and nothing else", (module, items) => {
     const company = { ...klasik, modules: [module] };
     const others = [WINS, TASKS, PROJECTS, REPORTING, CONTROLS, LINKS].filter((i) => !(items as readonly Expected[]).includes(i));
-    expect(read(navFor(company, true, false))).toEqual(expected(without(FULL_ADMIN, others)));
-    expect(read(navFor(company, false, false))).toEqual(expected(without(FULL_EMPLOYEE, others)));
+    expect(read(navFor(company, true, false, true, all))).toEqual(expected(without(FULL_ADMIN, others)));
+    expect(read(navFor(company, false, false, false, all))).toEqual(expected(without(FULL_EMPLOYEE, others)));
   });
 
   it("switchboard changes nothing in the sidebar: every company has the sections", () => {
     const company = { ...klasik, modules: ["switchboard"] };
-    expect(read(navFor(company, true, false))).toEqual(expected(PLAIN_ADMIN));
-    expect(read(navFor(company, false, false))).toEqual(expected(PLAIN_EMPLOYEE));
+    expect(read(navFor(company, true, false, true, all))).toEqual(expected(PLAIN_ADMIN));
+    expect(read(navFor(company, false, false, false, all))).toEqual(expected(PLAIN_EMPLOYEE));
   });
 });
 
@@ -164,14 +167,14 @@ describe("the Tasks item", () => {
 
   it("shows for an admin and an employee of a company with the module, and for neither without it", () => {
     const on = { ...klasik, modules: ["tasks"] };
-    expect(labels(navFor(on, true, false))).toContain("Tasks");
-    expect(labels(navFor(on, false, false))).toContain("Tasks");
-    expect(labels(navFor(klasik, true, false))).not.toContain("Tasks");
-    expect(labels(navFor(klasik, false, false))).not.toContain("Tasks");
+    expect(labels(navFor(on, true, false, true, all))).toContain("Tasks");
+    expect(labels(navFor(on, false, false, false, all))).toContain("Tasks");
+    expect(labels(navFor(klasik, true, false, true, all))).not.toContain("Tasks");
+    expect(labels(navFor(klasik, false, false, false, all))).not.toContain("Tasks");
   });
 
   it("sits in the Home group, right after Wins", () => {
-    const home = sectionsOf(navFor(kingdom, false, false))[0];
+    const home = sectionsOf(navFor(kingdom, false, false, false, all))[0];
     expect(home.items.map((i) => i.id)).toEqual(["dashboard", "wins", "tasks"]);
   });
 });
@@ -186,22 +189,22 @@ describe("navFor for a manager", () => {
   ];
 
   it("gives a Klasik manager People beside their own pages, under the People heading", () => {
-    expect(read(navFor(klasik, false, false, true))).toEqual(expected(PLAIN_MANAGER));
+    expect(read(navFor(klasik, false, false, true, all))).toEqual(expected(PLAIN_MANAGER));
   });
 
   it("gives an RBA manager Tasks as well, and a shortcut to People", () => {
-    const layout = navFor(rba, false, false, true);
+    const layout = navFor(rba, false, false, true, all);
     expect(read(layout)).toEqual(expected([[null, [HOME, TASKS]], ...PLAIN_MANAGER.slice(1)]));
     expect(sectionShortcuts(layout)).toContainEqual({ group: "people_hr", heading: "People", to: "/people" });
   });
 
   it("leaves an admin's sidebar as it is whether or not lead is passed", () => {
-    expect(read(navFor(klasik, true, false, true))).toEqual(expected(PLAIN_ADMIN));
-    expect(read(navFor(kingdom, true, false, true))).toEqual(expected(FULL_ADMIN));
+    expect(read(navFor(klasik, true, false, true, all))).toEqual(expected(PLAIN_ADMIN));
+    expect(read(navFor(kingdom, true, false, true, all))).toEqual(expected(FULL_ADMIN));
   });
 
   it("keeps People from an employee", () => {
-    expect(read(navFor(kingdom, false, false, false))).toEqual(expected(FULL_EMPLOYEE));
+    expect(read(navFor(kingdom, false, false, false, all))).toEqual(expected(FULL_EMPLOYEE));
   });
 });
 
@@ -226,13 +229,13 @@ describe("alsoActiveFor", () => {
 
 describe("sectionShortcuts", () => {
   it("points at each working section's first page, except Home and the bottom group", () => {
-    expect(sectionShortcuts(navFor(kingdom, true, false))).toEqual([
+    expect(sectionShortcuts(navFor(kingdom, true, false, true, all))).toEqual([
       { group: "sales_finance", heading: "Sales & Finance", to: "/sales-finance" },
       { group: "production", heading: "Production", to: "/production" },
       { group: "people_hr", heading: "People", to: "/people" },
       { group: "resources", heading: "Resources", to: "/resources/sops" },
     ]);
-    expect(sectionShortcuts(navFor(kingdom, false, false))).toEqual([
+    expect(sectionShortcuts(navFor(kingdom, false, false, false, all))).toEqual([
       { group: "production", heading: "Production", to: "/production" },
       { group: "people_hr", heading: "My development", to: "/my/gsr" },
       { group: "resources", heading: "Resources", to: "/resources/sops" },
@@ -249,5 +252,24 @@ describe("NAV_ITEMS", () => {
     const ids = NAV_ITEMS.map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const item of NAV_ITEMS) expect(NAV_GROUP_ORDER).toContain(item.group);
+  });
+});
+
+describe("the Projects item and the production_view capability", () => {
+  const labels = (layout: NavLayout) => sectionsOf(layout).flatMap((s) => s.items.map((i) => i.label));
+  const lacking = (capability: string) => (asked: string) => asked !== capability;
+
+  it("carries production_view", () => {
+    expect(NAV_ITEMS.find((i) => i.id === "projects")?.capability).toBe("production_view");
+  });
+
+  it("hides Projects from someone who lacks it, for an employee and an admin alike", () => {
+    expect(labels(navFor(kingdom, false, false, false, lacking("production_view")))).not.toContain("Projects");
+    expect(labels(navFor(kingdom, true, false, true, lacking("production_view")))).not.toContain("Projects");
+  });
+
+  it("keeps Projects for someone who holds it, and leaves every other item alone", () => {
+    expect(labels(navFor(kingdom, false, false, false, () => true))).toContain("Projects");
+    expect(labels(navFor(kingdom, false, false, false, lacking("production_view")))).toEqual(labels(navFor(kingdom, false, false, false, all)).filter((l) => l !== "Projects"));
   });
 });

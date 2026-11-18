@@ -22,6 +22,7 @@ vi.mock("../services/tasks.ts", async () => {
   const mock = await import("../test/mocks/tasks.ts");
   return { ...mock, notifyAssignment: vi.fn(mock.notifyAssignment) };
 });
+vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));

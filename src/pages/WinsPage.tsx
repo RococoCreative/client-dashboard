@@ -161,7 +161,7 @@ function NewWinDialog({ companyId, projects, withProjects, onClose, onCreated }:
 }
 
 export default function WinsPage() {
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, can } = useHub();
   const companyId = company!.id;
   // Projects exist only for a company with the production module; without it there is nothing
   // to pick and no call for them.
@@ -210,7 +210,9 @@ export default function WinsPage() {
     }
   }
 
-  const newWin = isAdmin ? <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> New win</Button> : null;
+  // Recording a win follows the wins_post capability; editing and archiving one stay with admins.
+  const canPost = can("wins_post");
+  const newWin = canPost ? <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> New win</Button> : null;
 
   return (
     <>
@@ -224,7 +226,7 @@ export default function WinsPage() {
         <EmptyState
           eyebrow="Wins"
           title="No wins yet"
-          body={isAdmin ? "Record a win by hand. It shows here and on Home." : "Wins your team records show here."}
+          body={canPost ? "Record a win. It shows here and on Home." : "Wins your team records show here."}
         />
       ) : (
         <Section padded={false}>

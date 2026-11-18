@@ -5,11 +5,11 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Section from "../ui/Section.tsx";
-import { navFor, sectionShortcuts } from "../../lib/navigation.ts";
+import { navFor, sectionShortcuts, type CanFn } from "../../lib/navigation.ts";
 import type { Company } from "../../types/database.ts";
 
-export default function ShortcutsCard({ company, isAdmin, isRococo }: { company: Company; isAdmin: boolean; isRococo: boolean }) {
-  const shortcuts = sectionShortcuts(navFor(company, isAdmin, isRococo));
+export default function ShortcutsCard({ company, isAdmin, isRococo, can }: { company: Company; isAdmin: boolean; isRococo: boolean; can: CanFn }) {
+  const shortcuts = sectionShortcuts(navFor(company, isAdmin, isRococo, isAdmin, can));
   if (shortcuts.length === 0) return null;
   return (
     <Section eyebrow="Shortcuts" title="Sections" padded={false}>

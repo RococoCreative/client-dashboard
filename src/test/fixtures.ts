@@ -8,6 +8,8 @@ import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
 import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
+import { meets } from "../lib/capabilities.ts";
+import { mockCapabilityMap } from "./mocks/capabilities.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -1561,6 +1563,13 @@ export function makeHub(persona: Persona, company: Company | null = KLASIK.compa
     isRococo,
     isAdmin: isRococo || isCompanyAdminRole(profile.role),
     isLead: isRococo || isLeadRole(profile.role),
+    // The same rule the app applies, over the mock's map, so a test can change what a role may
+    // do with setMockCapabilities. Read live, so a change takes effect on the next call.
+    can: (capability) => {
+      if (!company) return isRococo;
+      const level = mockCapabilityMap(company.id)[capability];
+      return isRococo ? meets(profile.role, true, level) : company.id === profile.company_id && meets(profile.role, false, level);
+    },
     setActiveCompanyId: () => undefined,
     refreshProfile: async () => undefined,
     refreshCompanies: async () => undefined,

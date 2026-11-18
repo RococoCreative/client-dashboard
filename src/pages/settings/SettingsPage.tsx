@@ -5,6 +5,8 @@
 //   Reviews: pillars, weights and criteria, the Monthly GSRs rule, and deliverable categories.
 //   Connections: the company's own connections to outside systems and, with the module, its data
 //     sources. Links to outside tools live in Resources > Links, which this tab points to.
+//   Activity: this company's own change log, for whoever the company lets read it.
+// Company and Activity show only to people the company's permissions allow.
 // What shows is the company's data and modules (rule 12), never its name.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -28,7 +30,8 @@ import { THEMES } from "../../lib/theme.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Company, ConnectionProvider } from "../../types/database.ts";
-import { SETTINGS_TABS, type SettingsTab } from "./settingsTabs.ts";
+import ActivityList from "../../components/audit/ActivityList.tsx";
+import { settingsTabsFor, type SettingsTab } from "./settingsTabs.ts";
 
 // A company with data sources also connects its own Google account for them.
 const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
@@ -43,6 +46,7 @@ const DESCRIPTIONS: Record<SettingsTab, string> = {
   roles: "The jobs people do here, what each role sees and is scored on, and the divisions the company reports by.",
   reviews: "How people are reviewed: the pillars and their weights, the criteria rated, the Monthly GSRs rule, and the categories deliverables are filed under.",
   connections: "The company's own accounts in outside systems, and the sources the hub reads from them.",
+  activity: "Changes to roles, access and settings for this company.",
 };
 
 function CompanyTab({ company }: { company: Company }) {
@@ -150,12 +154,12 @@ function ConnectionsTab({ company }: { company: Company }) {
 }
 
 export default function SettingsPage({ tab }: { tab: SettingsTab }) {
-  const { company } = useHub();
+  const { company, can } = useHub();
   const current = company!;
   return (
     <>
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
-      <Tabs items={SETTINGS_TABS} label="Settings" />
+      <Tabs items={settingsTabsFor(can)} label="Settings" />
       {tab === "company" ? <CompanyTab company={current} /> : null}
       {tab === "roles" ? (
         <div className="space-y-6">
@@ -170,6 +174,7 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
         </div>
       ) : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
+      {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
     </>
   );
 }

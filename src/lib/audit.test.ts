@@ -1,8 +1,9 @@
-// Pins how an audit event reads on the Activity page: the raw table name first, then what moved,
-// with yes and no for flags, a list for arrays and "none" for an empty value.
+// Pins how an audit event reads: on Rococo's Activity page the raw table name first, then what
+// moved, with yes and no for flags, a list for arrays and "none" for an empty value; on a
+// company's own Activity tab, plain words with names in place of ids.
 import { describe, expect, it } from "vitest";
 import type { AuditAction, AuditEvent } from "../types/database.ts";
-import { AUDIT_TABLE_LABELS, describeAuditEvent } from "./audit.ts";
+import { AUDIT_TABLE_LABELS, auditNames, describeAuditEvent, describeAuditEventPlain } from "./audit.ts";
 
 function event(table_name: string, action: AuditAction, changed: AuditEvent["changed"]): AuditEvent {
   return {
@@ -66,7 +67,89 @@ describe("AUDIT_TABLE_LABELS", () => {
       "job_roles",
       "sync_sources",
       "external_links",
+      "company_capabilities",
     ]);
     expect(AUDIT_TABLE_LABELS.company_domains).toBe("Sign-in domain");
+  });
+});
+
+describe("describeAuditEventPlain", () => {
+  const JANE = "3f2a6c1e-8b4d-4e1a-9c2f-1a2b3c4d5e6f";
+  const SAM = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+  const GONE = "9e8d7c6b-5a49-4382-a1b0-c9d8e7f6a5b4";
+  const names = auditNames({
+    people: [
+      { id: JANE, full_name: "Jane Rivera", email: "jane@example.com" },
+      { id: SAM, full_name: "Sam Ortiz", email: "sam@example.com" },
+    ],
+    jobRoles: [{ id: "jr-1", name: "Estimator" }],
+    divisions: [{ id: "div-1", name: "North" }],
+    companies: [{ id: "co-1", name: "Example Co" }],
+    capabilityRows: [{ id: "cap-row-1", capability: "sync_run" }],
+    events: [event("invitations", "insert", { role: { old: null, new: "employee" }, email: { old: null, new: "Sam@example.com" } })],
+  });
+  function on(table: string, action: AuditAction, changed: AuditEvent["changed"], row_id: string): AuditEvent {
+    return { ...event(table, action, changed), row_id };
+  }
+
+  const PLAIN: [string, AuditEvent, string][] = [
+    [
+      "a role change, naming the person and the manager",
+      on("profiles", "update", { role: { old: "owner", new: "admin" }, reports_to: { old: SAM, new: null } }, JANE),
+      "Jane Rivera: role changed from Owner to Admin; reports to changed from Sam Ortiz to none",
+    ],
+    [
+      "ids nobody can name",
+      on("profiles", "update", { reports_to: { old: null, new: GONE }, job_role_id: { old: "jr-1", new: GONE } }, GONE),
+      "Someone: reports to changed from none to someone; job role changed from Estimator to a job role no longer listed",
+    ],
+    [
+      "divisions and flags",
+      on("profiles", "update", { division_ids: { old: [], new: ["div-1"] }, view_all_divisions: { old: false, new: true } }, JANE),
+      "Jane Rivera: divisions changed from none to North; sees every division changed from no to yes",
+    ],
+    [
+      "an invitation for someone on the roster",
+      on("invitations", "insert", { role: { old: null, new: "employee" }, email: { old: null, new: "Sam@example.com" } }, "row-1"),
+      "Invitation for Sam Ortiz added (role Employee)",
+    ],
+    [
+      "an invitation edit, named from the event that added it",
+      on("invitations", "update", { role: { old: "employee", new: "manager" } }, "row-1"),
+      "Invitation for Sam Ortiz: role changed from Employee to Manager",
+    ],
+    [
+      "a new permission",
+      on("company_capabilities", "insert", { capability: { old: null, new: "pay" }, min_role: { old: null, new: "owner" } }, "cap-row-2"),
+      "Permission for Pay added (lowest role Owner)",
+    ],
+    [
+      "a permission edit, named from its row",
+      on("company_capabilities", "update", { min_role: { old: "owner", new: "rococo" } }, "cap-row-1"),
+      "Permission for Sync now: lowest role changed from Owner to Rococo only",
+    ],
+    [
+      "company modules",
+      on("companies", "update", { modules: { old: [], new: ["switchboard", "wins"] } }, "co-1"),
+      "Company: modules changed from none to Switchboard, Wins",
+    ],
+    [
+      "a setting that is not shown",
+      on("company_connections", "update", { status: { old: "connected", new: "error" }, external_account_id: { old: "a", new: "b" } }, "row-9"),
+      "Connection: status changed from Connected to Needs attention; account changed",
+    ],
+  ];
+
+  it.each(PLAIN)("reads %s", (_name, input, expected) => {
+    expect(describeAuditEventPlain(input, names)).toBe(expected);
+  });
+
+  it("never shows a raw id, a raw column name or an em dash", () => {
+    for (const [, input] of PLAIN) {
+      const text = describeAuditEventPlain(input, names);
+      expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+      expect(text).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
+      expect(text).not.toContain("\u2014");
+    }
   });
 });

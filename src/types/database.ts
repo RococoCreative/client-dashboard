@@ -10,6 +10,32 @@ export type { FieldType, FieldMapEntry, SourceConfig, SheetsSourceConfig, QuickB
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
 export type Role = "owner" | "admin" | "manager" | "employee";
 
+// Company capabilities (0040). The catalog names each power and the lowest role that holds it by
+// default; a company's override row replaces that level for that company. "rococo" is a level no
+// company role meets.
+export type CapabilityKey =
+  | "pay"
+  | "company_settings"
+  | "audit_log"
+  | "milestones_edit"
+  | "wins_post"
+  | "sync_run"
+  | "production_view";
+export type CapabilityLevel = Role | "rococo";
+
+export interface Capability {
+  key: CapabilityKey;
+  default_min_role: CapabilityLevel;
+  sort_order: number;
+}
+
+export interface CompanyCapability {
+  id: string;
+  company_id: string;
+  capability: CapabilityKey;
+  min_role: CapabilityLevel;
+}
+
 export interface Company {
   id: string;
   slug: string;

@@ -9,7 +9,7 @@
 // their own My GSR, My Reviews and My Goals.
 import type { LucideIcon } from "lucide-react";
 import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
-import type { Company, LinkNavGroup } from "../types/database.ts";
+import type { CapabilityKey, Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
 export type NavGroup = LinkNavGroup | "resources" | "utility";
@@ -25,6 +25,9 @@ export interface NavItem {
   group: NavGroup;
   // The module a company needs on for this item to show at all.
   requires?: ModuleKey;
+  // The capability a person needs for this item to show, on top of its audience and module. A
+  // company can raise or lower it, so the same item reads differently per company by data.
+  capability?: CapabilityKey;
   // Other paths that belong to this item, so it stays marked there too (an SOP opened from the
   // SOPs tab lives at /sops/:id).
   alsoActive?: readonly string[];
@@ -56,7 +59,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "controls", to: "/sales-finance/controls", label: "Controls", icon: ShieldCheck, audience: "admin", group: "sales_finance", requires: "data_sources" },
   { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance" },
   { id: "marketing", to: "/marketing", label: "Marketing", icon: Megaphone, audience: "admin", group: "sales_finance" },
-  { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production" },
+  { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production", capability: "production_view" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
   { id: "gsr", to: "/gsr", label: "Monthly GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
@@ -95,18 +98,23 @@ function audienceSees(audience: NavAudience, isAdmin: boolean, isLead: boolean):
   return !isAdmin;
 }
 
-function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean): boolean {
+function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean, can: CanFn): boolean {
   if (!audienceSees(item.audience, isAdmin, isLead)) return false;
   if (item.requires && !hasModule(company, item.requires)) return false;
+  if (item.capability && !can(item.capability)) return false;
   // Rococo admins have no company of their own, so a "My" page would be empty for them.
   if (isRococo && item.to.startsWith("/my")) return false;
   return true;
 }
 
+// The hub's can(), passed in so this file stays pure. Always passed: there is no default, so a
+// caller that forgets it fails to compile rather than showing every gated item.
+export type CanFn = (capability: CapabilityKey) => boolean;
+
 // The company sidebar, in sections, for every company alike. isLead is the hub's (owners, admins,
-// managers and Rococo); left out, it follows isAdmin.
-export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean = isAdmin): NavLayout {
-  const items = NAV_ITEMS.filter((item) => visible(item, company, isAdmin, isRococo, isLead));
+// managers and Rococo). can is the hub's, and hides an item whose capability the person lacks.
+export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean, can: CanFn): NavLayout {
+  const items = NAV_ITEMS.filter((item) => visible(item, company, isAdmin, isRococo, isLead, can));
   const sections: NavSection[] = [];
   for (const group of NAV_GROUP_ORDER) {
     const inGroup = items.filter((item) => item.group === group);

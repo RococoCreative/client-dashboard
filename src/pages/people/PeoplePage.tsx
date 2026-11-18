@@ -204,7 +204,7 @@ function CountChip({ active, count, onClick, children }: { active: boolean; coun
 }
 
 export default function PeoplePage() {
-  const { company, profile, isAdmin } = useHub();
+  const { company, profile, isAdmin, can } = useHub();
   const companyId = company!.id;
   // A lead who is not an admin: a manager, reading their team.
   const teamView = !isAdmin;
@@ -603,7 +603,7 @@ export default function PeoplePage() {
           ) : (
             <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
               Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
-              set their goals, KPIs and compensation, and it is all waiting on their profile when they arrive. Sending an
+              set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
               invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.
               Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
               either way they take over the profile set up here rather than starting a second one.
@@ -639,7 +639,7 @@ export default function PeoplePage() {
       {removing ? (
         <ConfirmDialog
           title={`Remove ${displayName(removing)} from the team?`}
-          body="This deletes their profile and everything set up for them, including reviews, goals, KPIs and compensation. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead."
+          body={`This deletes their profile and everything set up for them, including reviews, ${can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead.`}
           confirmLabel="Remove"
           busy={busy}
           error={dialogError}
