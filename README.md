@@ -131,7 +131,11 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
   Companies. Kingdom's owners are Maddie Cothran and marvin waters.
-- **Next free number:** `0040`.
+- **Written, not applied:** `0040_gsr_rhythms` (GSR rhythms per person: cycle kind, weekly and
+  biweekly cadences, canonical GSR periods, members opening a period, managers setting a led
+  person's rhythm and locking their GSRs). Paste it after `0039`, then deploy the app that reads
+  `kind` and `gsr_cadence`; the app live today keeps working against it.
+- **Next free number:** `0041`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.

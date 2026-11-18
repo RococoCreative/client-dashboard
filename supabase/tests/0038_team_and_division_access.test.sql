@@ -369,18 +369,13 @@ select tests.assert_raises(
          tests.id('r_peer')),
   '%row-level security%'
 );
-do $$
-declare
-  v_rows integer;
-begin
-  update public.reviews set gsr_score = 80, status = 'complete', completed_at = now()
-   where employee_id = tests.id('r_e1');
-  get diagnostics v_rows = row_count;
-  if v_rows <> 0 then
-    raise exception 'manager_writes: a manager locked a report''s month (% rows)', v_rows;
-  end if;
-end;
-$$;
+-- Changed on purpose by 0040: a leader now locks and reopens a led person's GSR (proved in the
+-- 0040 tests). Feedback on it stays an admin's.
+select tests.assert_raises(
+  format($q$update public.reviews set manager_feedback = 'Mine to say' where employee_id = %L$q$,
+         tests.id('r_e1')),
+  'A manager can lock and reopen a GSR, and nothing else on it.'
+);
 reset role; select set_config('request.jwt.claims', '', true);
 select tests.assert(
   exists (select 1 from public.goals where title = 'Set by the manager' and created_by = tests.id('r_mgr'))
