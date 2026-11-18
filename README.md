@@ -118,8 +118,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-- **Written, not applied:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
-  may do what). Paste `0040`, then `0041`, confirm the API serves the new tables, and only then
+- **Applied 2026-11-18:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
+  may do what), with no override rows for any company yet. For a fresh database the order is:
+  paste `0040`, then `0041`, confirm the API serves the new tables, and only then
   merge and deploy the app (see Applying capabilities and the Kingdom roster for why). With no
   override rows nothing changes for any company. Once `0041` is in, pasting `0001`, `0026`, `0027`, `0030` or
   `0038` again puts back their old policy and function bodies for pay, the company row,
