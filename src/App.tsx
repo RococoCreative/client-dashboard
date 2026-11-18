@@ -250,7 +250,9 @@ function SignedIn({ session }: { session: Session }) {
     let active = true;
     loadCapabilities(companyId)
       .then((map) => {
-        if (active) setCapabilities({ companyId, map });
+        if (!active) return;
+        setCapabilities({ companyId, map });
+        setCapabilitiesFailed(null);
       })
       .catch(() => {
         if (active) setCapabilitiesFailed({ companyId, attempt: retryTick });

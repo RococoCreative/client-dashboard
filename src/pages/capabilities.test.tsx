@@ -10,7 +10,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
 vi.mock("../services/profiles.ts", () => import("../test/mocks/profiles.ts"));
-vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
+vi.mock("../services/companies.ts", async () => {
+  const mock = await import("../test/mocks/companies.ts");
+  return { ...mock, getCompany: vi.fn(mock.getCompany) };
+});
 vi.mock("../services/capabilities.ts", async () => {
   const mock = await import("../test/mocks/capabilities.ts");
   return { ...mock, loadCapabilities: vi.fn(mock.loadCapabilities) };
@@ -20,6 +23,7 @@ vi.mock("../components/AppLayout.tsx", async () => {
   return {
     default: function ProbeLayout() {
       const { company, can, setActiveCompanyId } = useHub();
+      switchCompany = setActiveCompanyId;
       probeLog.push({ company: company?.id ?? null, wins: can("wins_post") });
       return (
         <div>
@@ -34,11 +38,16 @@ vi.mock("../components/AppLayout.tsx", async () => {
 
 import App from "../App.tsx";
 import { loadCapabilities } from "../services/capabilities.ts";
+import { getCompany } from "../services/companies.ts";
+import { COMPANIES } from "../test/fixtures.ts";
+import { CAPABILITY_KEYS } from "../lib/capabilities.ts";
 import { mockCapabilityMap, setMockCapabilities } from "../test/mocks/capabilities.ts";
 
+let switchCompany: (id: string | null) => void = () => undefined;
 const probeLog: Array<{ company: string | null; wins: boolean }> = [];
 const load = vi.mocked(loadCapabilities);
 const realLoad = load.getMockImplementation()!;
+const realGetCompany = vi.mocked(getCompany).getMockImplementation()!;
 
 function signInAs(persona: string) {
   window.history.pushState({}, "", `/?persona=${persona}&company=klasik`);
@@ -48,6 +57,8 @@ beforeEach(() => {
   probeLog.length = 0;
   load.mockReset();
   load.mockImplementation(realLoad);
+  vi.mocked(getCompany).mockReset();
+  vi.mocked(getCompany).mockImplementation(realGetCompany);
 });
 
 describe("capabilities in the app", () => {
@@ -110,11 +121,37 @@ describe("capabilities in the app", () => {
   });
 
   it("keeps a company member's can() false for another company's map", async () => {
-    // Klasik keeps wins_post at admin; Kingdom's lower level must not reach a Klasik employee.
-    setMockCapabilities("co-kingdom", { wins_post: "employee" });
-    signInAs("employee");
+    // The member's profile says Klasik while the company that loads is Kingdom, whose map is as
+    // lenient as it gets. Only the member's own company counts, so nothing is granted.
+    vi.mocked(getCompany).mockImplementation(async () => COMPANIES.find((c) => c.id === "co-kingdom")!);
+    setMockCapabilities("co-kingdom", Object.fromEntries(CAPABILITY_KEYS.map((k) => [k, "employee"])));
+    signInAs("owner");
     render(<App />);
-    expect(await screen.findByTestId("probe")).toHaveTextContent("co-klasik:false");
+    expect(await screen.findByTestId("probe")).toHaveTextContent("co-kingdom:false");
     expect(probeLog.every((r) => r.wins === false)).toBe(true);
+  });
+
+  it("ignores an earlier load that resolves after a later one for the same company", async () => {
+    // Klasik, then Kingdom, then Klasik again; the first Klasik response arrives last and carries
+    // a map that grants nothing. The active load's map must stand.
+    let releaseFirst!: (map: Awaited<ReturnType<typeof loadCapabilities>>) => void;
+    let calls = 0;
+    load.mockImplementation((companyId) =>
+      companyId === "co-klasik" && ++calls === 1 ? new Promise((resolve) => (releaseFirst = resolve)) : realLoad(companyId),
+    );
+    signInAs("rococo");
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Enter Klasik" }));
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+
+    await act(async () => switchCompany("co-kingdom"));
+    expect(await screen.findByTestId("probe")).toHaveTextContent("co-kingdom:true");
+    await act(async () => switchCompany("co-klasik"));
+    expect(await screen.findByTestId("probe")).toHaveTextContent("co-klasik:true");
+
+    await act(async () => releaseFirst({} as Awaited<ReturnType<typeof loadCapabilities>>));
+    expect(screen.getByTestId("probe")).toHaveTextContent("co-klasik:true");
+    expect(probeLog.every((r) => r.wins === true)).toBe(true);
   });
 });
