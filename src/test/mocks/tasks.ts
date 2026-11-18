@@ -132,6 +132,8 @@ function recur(task: Task): void {
     priority: task.priority,
     recurrence: task.recurrence,
     campaign_id: task.campaign_id,
+    // A new copy belongs to a later month, so it does not carry the goal link (0039).
+    goal_id: null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -190,6 +192,7 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
     priority: input.priority ?? "medium",
     recurrence: input.recurrence ?? null,
     campaign_id: input.campaign_id ?? null,
+    goal_id: null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,

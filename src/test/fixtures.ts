@@ -371,7 +371,10 @@ function build(company: Company): CompanyBundle {
     reports_to: i === 0 ? null : p("user-1"),
     job_role_id: null,
     division_id: null,
+    division_ids: [],
     can_view_divisions: false,
+    view_all_divisions: person.role === "admin",
+    view_division_ids: [],
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -679,6 +682,7 @@ function build(company: Company): CompanyBundle {
         priority: "medium",
         recurrence: null,
         campaign_id: null,
+        goal_id: null,
         completed_at: null,
         completed_by: null,
         next_task_id: null,
@@ -1150,7 +1154,10 @@ function build(company: Company): CompanyBundle {
       reports_to: p("user-1"),
       job_role_id: null,
       division_id: null,
+      division_ids: [],
       can_view_divisions: false,
+      view_all_divisions: false,
+      view_division_ids: [],
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1172,7 +1179,10 @@ function build(company: Company): CompanyBundle {
       reports_to: p("user-1"),
       job_role_id: null,
       division_id: null,
+      division_ids: [],
       can_view_divisions: false,
+      view_all_divisions: false,
+      view_division_ids: [],
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1320,10 +1330,10 @@ function build(company: Company): CompanyBundle {
     );
     const [alex, jamie, noor] = profiles;
     const avery = pendingStaff[0];
-    Object.assign(alex, { division_id: p("division-south"), can_view_divisions: true });
-    Object.assign(jamie, { division_id: p("division-south") });
-    Object.assign(noor, { division_id: p("division-north"), job_role_id: p("role-pm") });
-    Object.assign(avery, { division_id: p("division-south"), job_role_id: p("role-super") });
+    Object.assign(alex, { division_id: p("division-south"), division_ids: [p("division-south")], can_view_divisions: true });
+    Object.assign(jamie, { division_id: p("division-south"), division_ids: [p("division-south")] });
+    Object.assign(noor, { division_id: p("division-north"), division_ids: [p("division-north")], job_role_id: p("role-pm") });
+    Object.assign(avery, { division_id: p("division-south"), division_ids: [p("division-south")], job_role_id: p("role-super") });
 
     const metric = (key: string, role: string, name: string, kind: RoleMetric["kind"], target: number | null, sort: number, extra: Partial<RoleMetric> = {}): RoleMetric => ({
       id: p(`metric-${key}`), company_id: company.id, job_role_id: p(role), name, description: null, kind, target, scale_max: 5,
@@ -1405,7 +1415,10 @@ const ROCOCO: Profile = {
   reports_to: null,
   job_role_id: null,
   division_id: null,
+  division_ids: [],
   can_view_divisions: false,
+  view_all_divisions: false,
+  view_division_ids: [],
   created_at: EARLIER,
   updated_at: EARLIER,
 };

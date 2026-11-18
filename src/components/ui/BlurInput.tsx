@@ -10,8 +10,37 @@
 // A field with a rule of its own (a weight from 0 to 100) declines a draft by returning false
 // from onSave, for the same reason: the box goes back to the stored value instead of showing a
 // number the database never took. The caller says why.
-import { useState } from "react";
+//
+// A save that goes to the database returns its promise. While it runs the field reads as saving;
+// when it lands the field flashes saved; when it fails (the promise rejects or resolves false)
+// the field keeps the typed text, is marked "Not saved" in the danger colour, and the next blur
+// tries again. A failed save never looks like a saved one. The state is announced to screen
+// readers through a visually hidden live region that sits outside the layout.
+import { useEffect, useRef, useState } from "react";
 import { inputClass, textareaClass } from "./forms.ts";
+
+export type SaveState = "idle" | "saving" | "saved" | "failed";
+
+// What a caller's onSave may return: nothing (fire and forget, no status), false (declined),
+// or a promise of either, where false or a rejection means the save did not land.
+export type SaveResult = void | boolean | Promise<void | boolean>;
+
+const STATE_RING: Record<SaveState, string> = {
+  idle: "",
+  saving: " opacity-80",
+  saved: " ring-1 ring-success/60",
+  failed: " ring-1 ring-danger",
+};
+
+const STATE_TEXT: Record<SaveState, string> = {
+  idle: "",
+  saving: "Saving",
+  saved: "Saved",
+  failed: "Not saved. Edit the field or leave it again to retry.",
+};
+
+// How long the saved mark stays before the field goes quiet again.
+const SAVED_MS = 1500;
 
 export default function BlurInput({
   id,
@@ -28,7 +57,7 @@ export default function BlurInput({
 }: {
   id?: string;
   value: string;
-  onSave: (next: string) => void | false;
+  onSave: (next: string) => SaveResult | false;
   disabled?: boolean;
   multiline?: boolean;
   placeholder?: string;
@@ -40,46 +69,111 @@ export default function BlurInput({
 }) {
   const [draft, setDraft] = useState(value);
   const [seen, setSeen] = useState(value);
+  const [state, setState] = useState<SaveState>("idle");
+  // Only the latest save may settle the status, so a slow first save that fails after a
+  // quicker second one succeeded never marks the field as failed.
+  const attempt = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (state !== "saved") return;
+    const timer = setTimeout(() => {
+      if (mounted.current) setState("idle");
+    }, SAVED_MS);
+    return () => clearTimeout(timer);
+  }, [state]);
+
   if (value !== seen) {
     setSeen(value);
     setDraft(value);
+    if (state === "failed") setState("idle");
   }
+
   const commit = () => {
     if (required && draft.trim() === "") {
       setDraft(value);
+      if (state === "failed") setState("idle");
       return;
     }
-    if (draft !== value && onSave(draft) === false) setDraft(value);
+    if (draft === value) {
+      if (state === "failed") setState("idle");
+      return;
+    }
+    const result = onSave(draft);
+    if (result === false) {
+      setDraft(value);
+      return;
+    }
+    if (!(result instanceof Promise)) return;
+    const mine = ++attempt.current;
+    setState("saving");
+    result.then(
+      (ok) => {
+        if (!mounted.current || attempt.current !== mine) return;
+        setState(ok === false ? "failed" : "saved");
+      },
+      () => {
+        if (!mounted.current || attempt.current !== mine) return;
+        setState("failed");
+      },
+    );
   };
+
+  const classes = (className ?? (multiline ? textareaClass : inputClass)) + STATE_RING[state];
+  const status = (
+    <span aria-live="polite" className="sr-only">
+      {STATE_TEXT[state]}
+    </span>
+  );
+  const invalid = state === "failed" ? true : undefined;
+  const title = state === "failed" ? "Not saved" : undefined;
+
   if (multiline) {
     return (
-      <textarea
+      <>
+        <textarea
+          id={id}
+          aria-label={ariaLabel}
+          aria-invalid={invalid}
+          title={title}
+          data-save-state={state}
+          value={draft}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          className={classes}
+          rows={rows}
+        />
+        {status}
+      </>
+    );
+  }
+  return (
+    <>
+      <input
         id={id}
         aria-label={ariaLabel}
+        aria-invalid={invalid}
+        title={title}
+        data-save-state={state}
+        type={type}
         value={draft}
         disabled={disabled}
         placeholder={placeholder}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        className={className ?? textareaClass}
-        rows={rows}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className={classes}
       />
-    );
-  }
-  return (
-    <input
-      id={id}
-      aria-label={ariaLabel}
-      type={type}
-      value={draft}
-      disabled={disabled}
-      placeholder={placeholder}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-      className={className ?? inputClass}
-    />
+      {status}
+    </>
   );
 }

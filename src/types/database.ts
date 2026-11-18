@@ -75,13 +75,34 @@ export interface Profile {
   reports_to: string | null;
   // The job they do here (job_roles), set by an admin. Null until placed.
   job_role_id: string | null;
-  // The part of the company they work in (company_divisions), set by an admin. Null for none.
+  // Read-only mirror of division_ids for one release (0038): the single division when there is
+  // exactly one, otherwise null. Read division_ids; never write this.
   division_id: string | null;
+  // The parts of the company they work in (company_divisions), set by an admin. Empty for none;
+  // every division of the company means "Both" at a two-division company (0038).
+  division_ids: string[];
   // Sees the division split (Combined / North / South) though not an owner. Only an owner of the
   // company or a Rococo admin may set it (0035, guard_profile_fields).
   can_view_divisions: boolean;
+  // Which people an admin or manager may see beyond their own reporting chain (0038): every
+  // division, or the listed ones. People with no division are visible to every admin. Only an
+  // owner or Rococo sets these; owners always see everyone.
+  view_all_divisions: boolean;
+  view_division_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+// A person's name card, readable by everyone in their company (0038). Names on screens that are
+// not about the person (who assigned a task, who owns a milestone, who wrote a note) come from
+// here; everything else about a person is read through profiles, which RLS narrows to the
+// people the viewer may see.
+export interface DirectoryEntry {
+  id: string;
+  company_id: string;
+  full_name: string | null;
+  title: string | null;
+  is_active: boolean;
 }
 
 // A job at this company, with the dashboard modules the people in it get. Company data.
@@ -720,6 +741,9 @@ export interface Task {
   id: string; company_id: string; title: string; description: string | null;
   assignee_id: string | null; created_by: string | null; due_date: string | null;
   priority: TaskPriority; recurrence: TaskRecurrence | null; campaign_id: string | null;
+  // The monthly GSR goal (goals, scope 'cycle') this task serves, which must be the assignee's own
+  // (0039). Informational: it never moves the goal's completion or any score.
+  goal_id: string | null;
   completed_at: string | null; completed_by: string | null; next_task_id: string | null;
   notified_assignee_id: string | null; created_at: string; updated_at: string;
 }

@@ -40,7 +40,10 @@ export async function createStaffProfile(input: {
     reports_to: null,
     job_role_id: null,
     division_id: null,
+    division_ids: [],
     can_view_divisions: false,
+    view_all_divisions: false,
+    view_division_ids: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
