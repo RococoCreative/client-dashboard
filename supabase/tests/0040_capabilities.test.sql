@@ -192,3 +192,9 @@ select tests.assert(
       and action = 'update' and changed->'min_role'->>'new' = 'admin') = 1,
   'override_change_is_audited: the Rococo update was not audited'
 );
+select tests.assert(
+  (select count(*) from public.audit_events
+    where table_name = 'company_capabilities' and company_id = tests.company('kingdom')
+      and action = 'insert' and changed->'capability'->>'new' = 'sync_run') = 1,
+  'override_change_is_audited: the insert does not name its capability'
+);

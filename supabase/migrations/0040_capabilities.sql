@@ -9,7 +9,8 @@
 --   1. public.capabilities is the catalog: one row per power and the lowest role that holds it
 --      by default. Seeded here; nobody writes it from the browser.
 --   2. public.company_capabilities holds a company's overrides. No row means the default. Members
---      read their own company's rows; only Rococo writes them. Every change is audited.
+--      read their own company's rows; only Rococo writes them. Every change is audited; an added
+--      or removed row names its capability, and an edit is tied to its row by id.
 --   3. private.can(cid, cap) answers whether the signed-in person holds a capability in a
 --      company. A Rococo admin holds every one. The level 'rococo' is never met by a company
 --      role. An unknown key, another company, an inactive person or no profile is false.
@@ -95,7 +96,7 @@ create policy "Rococo deletes company capabilities"
 drop trigger if exists company_capabilities_audit on public.company_capabilities;
 create trigger company_capabilities_audit
   after insert or update or delete on public.company_capabilities
-  for each row execute function private.audit_change('min_role');
+  for each row execute function private.audit_change('capability', 'min_role');
 
 -- ---------------------------------------------------------------------------------------
 -- 3. private.can()

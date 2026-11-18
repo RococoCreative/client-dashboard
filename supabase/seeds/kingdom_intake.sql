@@ -2,9 +2,11 @@
 -- Kingdom's roster, job roles and capability levels, as data (rule 12: a company's shape is its
 -- rows). This data script is the one place Kingdom is named; it finds the company by its slug.
 --
--- Run order: paste 0040 and 0041, deploy the app the same day, then run this once in the
--- Supabase SQL editor. Safe to run again: a second run finds everything already in place and
--- changes nothing.
+-- Run order: paste 0040 and 0041, confirm the API serves the new tables, merge and deploy the app
+-- (it cannot load a company without 0040's tables, so the migrations go first), then run this once
+-- in the Supabase SQL editor, off hours. It refuses to run, and changes nothing, unless both
+-- migrations are in. Safe to run again: a second run finds everything already in place and changes
+-- nothing. If the check rows at the end do not appear, run it again.
 --
 -- What it does, all in one transaction:
 --   1. Capability levels: the seven Kingdom values below, written as Kingdom's overrides.
@@ -25,8 +27,10 @@
 --   * The listed role wins over whatever the person holds today, in both directions. Anyone in
 --     the list who is marked owner or admin today and listed lower is lowered to the listed role.
 --     As of 2026-11-18 the README lists Maddie Cothran and Marvin Waters as Kingdom's owners, so
---     this run makes Marvin an admin and Maddie an employee. Eli Cothran and Davis Nix become the
---     owners.
+--     if their live addresses are the listed ones, this run makes Marvin an admin and Maddie an
+--     employee. Confirm both owners' addresses before running it: if an owner's real address is a
+--     different one, signing in with it makes a new employee and leaves the owner row unclaimed.
+--     Eli Cothran and Davis Nix become the owners.
 --   * Pay and the company row (company settings) are set to owner. An owner who is not in the
 --     list keeps their role and appears in the check rows, to be handled by hand. If there is no
 --     such owner, then until Eli or Davis signs in, only Rococo reaches Kingdom's pay and company
@@ -48,7 +52,12 @@ begin
   if not exists (select 1 from public.companies where slug = 'kingdom') then
     raise exception 'No company with slug kingdom. Nothing was changed.';
   end if;
-  if to_regclass('public.company_capabilities') is null then
+  -- 0040 adds the table and 0041 moves the policies onto it; rows written before 0041 would hide
+  -- pay on screen while the old policies still serve it, so both must be in.
+  if to_regclass('public.company_capabilities') is null
+     or not exists (select 1 from pg_policies
+                     where schemaname = 'public' and tablename = 'sync_sources'
+                       and policyname = 'Syncers read sync sources') then
     raise exception 'Apply 0040_capabilities.sql and 0041_capability_policies.sql first. Nothing was changed.';
   end if;
 end $$;

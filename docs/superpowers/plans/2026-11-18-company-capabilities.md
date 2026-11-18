@@ -178,7 +178,7 @@ git commit -m "Add the capability catalog, company overrides and private.can (00
 Run: `npm run test:sql`
 Expected: FAIL in `0041_capability_policies.test.sql` at `pay_follows_capability` (the Kingdom admin still reads pay).
 
-- [ ] **Step 3: Write `0041_capability_policies.sql`.** Header: what moves, "Paste after 0040; idempotent; deploy the app the same day". For each item, `drop policy if exists` then recreate under the same name, from its latest body:
+- [ ] **Step 3: Write `0041_capability_policies.sql`.** Header: what moves, "Paste after 0040; idempotent", and that 0040 and 0041 go in before the app that reads capabilities is merged and deployed. For each item, `drop policy if exists` then recreate under the same name, from its latest body:
   - **Pay.** The four `compensation_items` policies from 0038 section 6b. In each, the company branch becomes `company_id = private.auth_company_id() and private.can(company_id, 'pay') and (private.has_full_scope() or employee_id in (select private.manageable_person_ids()))`. The Rococo branch and the "own row" read branch are unchanged. `employee_financials` is not touched.
   - **Company row.** The `companies` update policy becomes `private.is_rococo_admin() or private.can(id, 'company_settings')` in both using and with check. `guard_company_fields` is unchanged.
   - **Change log.** Add policy "People with the audit capability read their company's events" on `audit_events` for select: `company_id is not null and private.can(company_id, 'audit_log')`. The Rococo policy stays.
@@ -441,10 +441,13 @@ git commit -m "Add Kingdom's roster and capability rows as a seed, and document 
 
 ---
 
-## Rollout, by hand, after merge
+## Rollout, by hand, migrations before merge
+
+The new app reads `capabilities` and `company_capabilities` whenever it loads a company and shows "Could not load your company" to everyone if either is missing, and `main` deploys to production on merge, so the tables go in first; the old app never reads them, and with no override rows both migrations change nothing. A preview build pointed at the live project fails the same way until 0040 is pasted.
 
 1. Paste 0040, then 0041, in the Supabase SQL editor. With no override rows nothing changes for any company.
-2. Deploy the app the same day.
-3. Run `supabase/seeds/kingdom_intake.sql`. Read the check rows before closing the editor.
-4. Sign in as a Rococo admin, step into Kingdom, and confirm the Company tab, a person's compensation and the Activity tab.
-5. Record 0040, 0041 and the seed as applied in the README ledger.
+2. Confirm the API serves the new tables: `notify pgrst, 'reload schema';` in the SQL editor, or one signed-in read of `capabilities`.
+3. Then merge to `main` and let Vercel deploy the app.
+4. Confirm Kingdom's two owners' live addresses match the seed's list, then run `supabase/seeds/kingdom_intake.sql` off hours. It refuses to run without both migrations. Read the check rows before closing the editor; if they do not appear, run it again, it changes nothing the second time.
+5. Ask Kingdom's people to reload. Sign in as a Rococo admin, step into Kingdom, and confirm the Company tab, a person's compensation and the Activity tab.
+6. Record 0040, 0041 and the seed as applied in the README ledger.

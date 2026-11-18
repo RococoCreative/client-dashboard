@@ -119,8 +119,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
 - **Written, not applied:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
-  may do what). Paste `0040`, then `0041`, then deploy the app the same day. With no override rows
-  nothing changes for any company. Once `0041` is in, pasting `0001`, `0026`, `0027`, `0030` or
+  may do what). Paste `0040`, then `0041`, confirm the API serves the new tables, and only then
+  merge and deploy the app (see Applying capabilities and the Kingdom roster for why). With no
+  override rows nothing changes for any company. Once `0041` is in, pasting `0001`, `0026`, `0027`, `0030` or
   `0038` again puts back their old policy and function bodies for pay, the company row,
   milestones, wins and Sync now, and those stay in force until `0041` is pasted again. Go
   forwards only; if one of those is ever re-pasted, paste `0041` straight after it.
@@ -128,7 +129,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
 - **Seeds written, not run:** `supabase/seeds/kingdom_intake.sql`: Kingdom's seven capability
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
-  after `0040`, `0041` and the deploy. Safe to run again.
+  after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
+  again.
 - **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
   owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
   and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
@@ -140,8 +142,10 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik and RBA have `external_links` only. `tasks` goes on for RBA first, under Rococo,
   Companies. Kingdom's owners are Maddie Cothran and marvin waters. Running
-  `kingdom_intake.sql` changes that: Eli Cothran and Davis Nix become the owners, Marvin Waters
-  an admin and Maddie Cothran an employee.
+  `kingdom_intake.sql` changes that if their live addresses are the listed ones
+  (`marvin@kingdomcustomconstruction.com`, `maddie@kingdomcustomconstruction.com`): Eli Cothran and
+  Davis Nix become the owners, Marvin Waters an admin and Maddie Cothran an employee. Confirm the
+  two owners' addresses before running it (see Applying capabilities and the Kingdom roster).
 - **Next free number:** `0042`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
@@ -278,6 +282,12 @@ Known limits, as built:
   (0038), and a manager manages nobody.
 - The company Activity tab shows every change in the company, whatever divisions the reader
   sees.
+- A manager given `sync_run` can read the company's data source rows through the API, but has no
+  Sync now button until one is added to Production; until then the power is only in the database.
+- Keep `audit_log` at admin or above. There is no screen for it below admin, and the log includes
+  invitation addresses and connection details.
+- Capabilities load once per company per page load. After changing a company's rows, ask its people
+  to reload, and run the seed (or any change to them) off hours.
 
 ## Personal KPIs and deliverables
 
@@ -764,10 +774,21 @@ pastes it first. `0032` must follow the Vault entries. No migration seeds module
 
 ### Applying capabilities and the Kingdom roster
 
+The order matters. The new app reads `capabilities` and `company_capabilities` whenever it loads a company and shows "Could not load your company" to everyone if either is missing, and `main` deploys to production on merge, so the tables go in first; the old app never reads them, and with no override rows both migrations change nothing. A preview build pointed at the live project fails the same way
+until `0040` is pasted.
+
 1. Paste `0040`, then `0041`, in the SQL editor. With no override rows nothing changes for any
    company.
-2. Deploy the app the same day.
-3. Run `supabase/seeds/kingdom_intake.sql`. It sets Kingdom's seven capability levels (`pay` and
+2. Confirm the API serves the new tables: run `notify pgrst, 'reload schema';` in the SQL editor,
+   or make one signed-in read of `capabilities`.
+3. Only then merge to `main` and let Vercel deploy the app.
+4. Confirm Kingdom's owners' live addresses first. The seed matches people by address, so it
+   makes Marvin Waters an admin and Maddie Cothran an employee only if their live addresses are
+   `marvin@kingdomcustomconstruction.com` and `maddie@kingdomcustomconstruction.com`. If an
+   owner's real address is a different one, signing in with it makes a new employee and leaves
+   the owner row unclaimed. Correct the address in the seed or on the roster before running it.
+5. Run `supabase/seeds/kingdom_intake.sql`, off hours. It refuses to run, and changes nothing,
+   unless both `0040` and `0041` are in. It sets Kingdom's seven capability levels (`pay` and
    `company_settings` owner, `audit_log` admin, `milestones_edit`, `sync_run` and
    `production_view` manager, `wins_post` employee), adds any missing job roles, and puts the ten
    listed people on Kingdom's roster with their listed role and title. The listed role wins in
@@ -776,10 +797,12 @@ pastes it first. `0032` must follow the Vault entries. No migration seeds module
    it stops and changes nothing. Read the check rows before closing the editor: one per listed
    person (role before, role now, signed in), any other active Kingdom person to handle by hand,
    and the seven capability rows. Until Eli or Davis signs in, only Rococo reaches Kingdom's pay
-   and company row.
-4. Sign in as a Rococo admin, step into Kingdom, and confirm the Company tab, a person's
+   and company row. If the check rows do not appear, run the script again; it changes nothing the
+   second time and ends with them.
+6. Ask Kingdom's people to reload the app, since capabilities load once per page load.
+7. Sign in as a Rococo admin, step into Kingdom, and confirm the Company tab, a person's
    compensation and the Activity tab.
-5. Record `0040`, `0041` and the seed as applied in What is applied live.
+8. Record `0040`, `0041` and the seed as applied in What is applied live.
 
 ## Deploy
 

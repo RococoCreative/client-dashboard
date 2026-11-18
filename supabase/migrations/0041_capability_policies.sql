@@ -1,6 +1,7 @@
 -- 0041_capability_policies.sql
--- Six behaviours move onto private.can() (0040). Paste after 0040; idempotent; deploy the app the
--- same day.
+-- Six behaviours move onto private.can() (0040). Paste after 0040; idempotent. Paste 0040 and this
+-- before the app that reads capabilities is merged and deployed: that app cannot load a company
+-- without 0040's tables, while the app before it never reads them.
 --
 -- Why: who may see pay, change the company row, read the change log, edit milestones, post wins
 -- and press Sync now was fixed in code. Each now asks private.can(company, capability), so a
