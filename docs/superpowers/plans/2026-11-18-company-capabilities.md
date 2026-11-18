@@ -95,7 +95,7 @@ select tests.assert(private.can(tests.company('kingdom'), 'milestones_edit') and
 -- case: members_read_only_their_rows  kingdom_employee selects 7 from capabilities,
 --   sees kingdom override rows, sees 0 klasik override rows.
 -- case: only_rococo_writes          kingdom_owner insert into company_capabilities is refused
---   (tests.expect_error or the file's existing refusal pattern); rococo_admin insert succeeds;
+--   (`tests.assert_raises`); rococo_admin insert succeeds;
 --   nobody but system writes public.capabilities.
 -- case: bad_level_refused           min_role 'boss' violates the check constraint.
 -- case: override_change_is_audited  after a Rococo insert and update, audit_events holds a row
