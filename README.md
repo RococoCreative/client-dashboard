@@ -28,7 +28,7 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Resources: Files & media | Add files, templates, videos and saved links with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
-| Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, mark done, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
+| Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, set each one Not started, In progress or Complete, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
 | Wins (`wins`) | Log, edit and archive wins; the five most recent on Home, or those of the last few days when the company sets a number; older wins in an Archive view | Read; the same Home list and the Archive view |
 | Tasks (`tasks`) | Assign tasks to anyone with a due date, a priority, ordered steps and a repeat; see every task, filter by person, priority, campaign or state; attach a task to a marketing campaign; the assignee gets an email | Own assigned tasks: tick steps, complete and reopen; create tasks for themselves |
 | Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
@@ -134,10 +134,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
   after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
   again.
-- **The `connections` Edge Function** live is the version in this repo (deployed 2026-11-10):
-  owners and admins manage connections, plus Google Sheets and the sync routes. Google Sheets
-  and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-  and `SYNC_CRON_SECRET` are set and `0032` is applied.
+- **The `connections` Edge Function** live is the build from before Phase 2 (deployed
+  2026-11-10): owners and admins manage connections, plus Google Sheets and the sync routes. It
+  reads only `sync_weekday`, not the Phase 2 `sync_weekdays`. The version in this repo is the
+  Phase 2 one and is not deployed; the last steps of Applying Phase 2 redeploy it and record it
+  here. Google Sheets and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
   set up yet." until all three are set. The version in this repo is live (version 4,
@@ -151,13 +153,19 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   two owners' addresses before running it (see Applying capabilities and the Kingdom roster).
 - **Written, not applied:** `0042_company_display_settings`, `0043_milestone_status`,
   `0044_milestone_templates` and `0045_sync_weekdays` (Phase 2, see Applying Phase 2). Nothing in
-  them is live. They go in as a set, in order; each changes nothing visible for any company on its
-  own, except that a milestone badge reads "Not started" where it read "Open". Once `0042` is in,
-  pasting `0024` or `0037` again puts back the old company guard and audit, which no longer
-  protect or watch `wins_home_days` and `manual_financials`; paste `0042` straight after it. Once
-  `0045` is in, pasting `0030` again puts back the old source audit and schedule check; paste
-  `0045` straight after it. Go forwards only.
-- **Rococo Permissions page** (Rococo, Permissions) is live with the 2026-11-18 app.
+  them is live, and neither is the app or `connections` function that reads them. They go in as a
+  set, in order, before the app; on their own they change nothing visible for any company. Once
+  they are in, these re-pastes undo part of them (go forwards only; if one happens, paste the
+  named Phase 2 file straight after it):
+  - `0001`, `0009` or `0024` puts back an older `guard_company_fields`, and `0025` or `0037` an
+    older `companies_audit`; neither older one protects or watches `wins_home_days` and
+    `manual_financials`. Paste `0042` after it.
+  - `0030` puts back the old `sync_sources_audit`, which does not watch `sync_weekdays` or
+    `stale_business_days`. That is all it restores: its schedule check sits inside
+    `create table if not exists`, so the check `0045` rebuilt stays. Paste `0045` after it.
+  - `0026` and `0030` touch nothing `0043` or `0044` creates (the milestone status column, its
+    check and trigger, `milestone_templates` and the trigger that copies it onto new projects).
+- **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
 - **Next free number:** `0046`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
@@ -192,15 +200,17 @@ read from Google Sheets or QuickBooks while it is off.
 Two settings sit beside the modules on Rococo > Companies, set by Rococo only (0042). Both are
 columns on the company, and each defaults to what every company has today.
 
-- **Days a win stays on Home** (`companies.wins_home_days`). Empty means the five newest wins with
-  no age limit. With a number, a win stays on Home that many days counting the day it was won,
+- **Days a win stays on Home** (`companies.wins_home_days`, 1 to 3650). Empty means the five
+  newest wins with no age limit. With a number, a win stays on Home that many days counting the day it was won,
   judged in the company's own time zone. Older wins move to an Archive view on the Wins page that
   everyone can browse. A win an admin removed stays hidden everywhere.
 - **Manual Financials** (`companies.manual_financials`, default on). Off removes the Financials
   nav item and route, the Home section and shortcut, the Sales & Finance pointer, and the
   portfolio figure, alert and button. "Your figures" on a person is a different feature and is
-  unaffected. This is a company setting and not a module because modules are opt-in: a module
-  would have switched Financials off for every new company, while a setting defaults to on.
+  unaffected. The switch hides screens only: the financial snapshots and the rules on who may
+  read and write them are untouched. This is a company setting and not a module because modules
+  are opt-in: a module would have switched Financials off for every new company, while a setting
+  defaults to on.
 
 ## How people get in
 
@@ -312,8 +322,8 @@ Known limits, as built:
 - The company Activity tab shows every change in the company, whatever divisions the reader
   sees.
 - A person who holds `sync_run` and is not an admin gets Sync now on the Production page: a
-  button and a last-updated stamp for each Production source. They never see the raw error, the
-  sheet or the field map; those stay in Settings > Connections for admins.
+  button and a last-updated stamp for each Production source. The screen does not show them the
+  raw error, the sheet or the field map; those stay in Settings > Connections for admins.
 - Keep `audit_log` at admin or above. There is no screen for it below admin, and the log includes
   invitation addresses and connection details.
 - Capabilities load when a company opens and again when the tab returns to the front (at most once
@@ -729,7 +739,7 @@ through sources it configures. The steps, in order:
 
 11. A company admin connects Google Sheets and QuickBooks from Settings > Connections.
 12. They add sources in Settings > Connections, Data sources: paste the sheet link with the tab open, press
-    Read headers, map the fields, pick the record key, set the weekly day, time and zone, and
+    Read headers, map the fields, pick the record key, set the sync days, time and zone, and
     the stale threshold if one is agreed.
 13. They press Sync now once to see the first run land.
 
@@ -739,7 +749,9 @@ makes one attempt per slot. A source syncs on a set of weekdays (`sync_weekdays`
 working. Staleness can count Monday to Friday hours only (`stale_business_days`), in the source's
 time zone, or the company's when the source has none. The `connections` function must be
 redeployed after `0045` for multi-day schedules to run; until then a source runs on its lowest day
-only. A run is all or nothing, and rows that are entirely blank
+only. It must never be deployed before `0045`: its column list names `sync_weekdays`, so against
+an earlier database every Sync now fails ("The source could not be read. Try again.") and the
+hourly tick, once `0032` schedules it, fails on every run. A run is all or nothing, and rows that are entirely blank
 are skipped and counted. The QuickBooks reader is GET only and reads Invoice and Payment
 records.
 
@@ -858,15 +870,25 @@ until `0040` is pasted.
 
 Company display settings, milestone statuses and templates, and sync days. None of it is applied.
 
+The order matters. The new app loads the company with `wins_home_days` and `manual_financials`
+at sign-in, so if it is deployed before `0042` every user of all three companies sees "Could not
+load your company"; it also reads milestone statuses, `milestone_templates` and `sync_weekdays`.
+The new `connections` function names `sync_weekdays`, so it never goes in before `0045`. The
+migrations go in first; the app and function running today never read the new columns.
+
 1. Back up, then paste `0042`, `0043`, `0044` and `0045` in order, once each. Each is idempotent;
-   go forwards only. Each changes nothing visible for any company on its own, except that a
-   milestone badge reads "Not started" where it read "Open".
-2. Merge and deploy the app.
-3. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
+   go forwards only. On their own they change nothing visible for any company.
+2. Confirm the API serves the new columns and table: run `notify pgrst, 'reload schema';` in the
+   SQL editor, or make one signed-in read of `milestone_templates`.
+3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live
+   project fails the same way until `0042` is in. The milestone badge wording changes with this
+   deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes
+   "Complete {date}".
+4. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
    source runs on its lowest day only.
-4. In the app, set each company's display settings on Rococo > Companies, add standard milestones
+5. In the app, set each company's display settings on Rococo > Companies, add standard milestones
    in Settings > Production, and set sync days and weekdays-only staleness on each source.
-5. Record `0042` to `0045` as applied in What is applied live.
+6. Record `0042` to `0045` as applied, and the `connections` redeploy, in What is applied live.
 
 ## Deploy
 

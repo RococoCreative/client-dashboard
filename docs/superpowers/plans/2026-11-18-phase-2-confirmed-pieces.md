@@ -377,7 +377,11 @@ it("an admin still gets the full source panel as before", ...);
 
 ## Rollout, by hand
 
-1. Paste 0042, 0043, 0044 and 0045 in order. Each changes nothing visible on its own for any company, except that a milestone badge reads "Not started" where it read "Open".
-2. Merge and deploy the app.
-3. Redeploy the `connections` function: `supabase functions deploy connections --no-verify-jwt`.
-4. In the app, for Kingdom: set 14 days on Rococo > Companies; add the standard milestones in Settings > Production; set sync days and weekdays-only staleness on each source once sources exist.
+The order matters. The new app loads the company with `wins_home_days` and `manual_financials` at sign-in, so if it is deployed before 0042 every user of all three companies sees "Could not load your company"; it also reads milestone statuses, `milestone_templates` and `sync_weekdays`. The new `connections` function names `sync_weekdays`, so it never goes in before 0045. The migrations go in first; the app and function running today never read the new columns.
+
+1. Back up, then paste 0042, 0043, 0044 and 0045 in order, once each. On their own they change nothing visible for any company.
+2. Confirm the API serves the new columns and table: run `notify pgrst, 'reload schema';` in the SQL editor, or make one signed-in read of `milestone_templates`.
+3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live project fails the same way until 0042 is in. The milestone badge wording changes with this deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes "Complete {date}".
+4. Redeploy the `connections` function: `supabase functions deploy connections --no-verify-jwt`. Until then a source runs on its lowest day only.
+5. In the app, for Kingdom: set 14 days on Rococo > Companies; add the standard milestones in Settings > Production; set sync days and weekdays-only staleness on each source once sources exist.
+6. Record 0042 to 0045 as applied, and the `connections` redeploy, in the README's What is applied live.
