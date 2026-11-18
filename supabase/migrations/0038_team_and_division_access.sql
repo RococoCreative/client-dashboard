@@ -14,15 +14,21 @@
 --      when the columns are created, so pasting this again never widens access an owner narrowed.
 --   2. Helpers in private answer three questions for the signed-in person: whom they see
 --      (viewable_person_ids), whom they manage like an admin (manageable_person_ids) and whom they
---      lead like a manager (led_person_ids), built on their reporting chain (chain_ids, team_ids)
---      and on has_full_scope (an owner, Rococo, or an admin who sees every division). Each one
---      returns nothing, never an error, for Rococo, an inactive person or someone with no company.
+--      lead like a manager (led_person_ids), built on their reporting chain (chain_ids_up_to,
+--      chain_reach_ids, team_ids) and on has_full_scope (an owner, Rococo, or an admin who sees
+--      every division). The rank rule runs through all of them: below an owner and a full-scope
+--      admin, a chain is walked only through people at the caller's rank or below, a division view
+--      or an admin's view of unplaced people shows only people ranked below the caller, and nobody
+--      leads or manages someone at their rank or above. Each one returns nothing, never an error,
+--      for Rococo, an inactive person or someone with no company.
 --   3. profiles: a person is read by themselves, Rococo, and whoever sees them. The read rule is
 --      written over the row's own columns (sees_profile), so a new row's RETURNING is judged on
 --      what it says. Admins edit the people they manage.
---   4. The profile guards place people: an admin who does not see every division places people
---      only in divisions they see, points reports_to only at people they see, and changes a
---      person's manager only when they already see that person's whole chain. Only an owner or
+--   4. The profile guards place people: an admin who does not see every division adds only people
+--      ranked below them, places people only in divisions they see, points reports_to only at
+--      people they see, never changes whom someone at their rank or above reports to, and changes
+--      a person's manager, or raises them to manager or above, only when they already see that
+--      person's whole chain. Only an owner or
 --      Rococo sets view access, and a role change by anyone else clears it. A person edits only
 --      their own name, title and phone; any column added later is an admin's by default.
 --   5. profile_directory: the names and titles every member of a company may read, kept by a
@@ -98,8 +104,11 @@ create index if not exists profiles_reports_to_idx on public.profiles (reports_t
 
 -- Everyone below a person in the reporting chain, at any depth up to 50, inside the person's own
 -- company (a line that crossed companies before 0033 reaches nobody). Active and inactive alike:
--- an inactive person's history stays with their manager.
-create or replace function private.chain_ids(p_root uuid)
+-- an inactive person's history stays with their manager. With p_max_rank the walk stops at anyone
+-- ranked above it: they are left out and so is everyone below them through them. That is how a
+-- chain is read for someone's own reach (chain_reach_ids), so a person ranked above you never
+-- carries their reports into your view, however they came to sit under you. Null walks it all.
+create or replace function private.chain_ids_up_to(p_root uuid, p_max_rank integer)
 returns setof uuid
 language sql
 stable
@@ -112,21 +121,61 @@ as $$
       join public.profiles r on r.id = p_root
      where p.reports_to = p_root
        and p.company_id = r.company_id
+       and (p_max_rank is null or private.role_rank(p.role) <= p_max_rank)
     union all
     select p.id, c.depth + 1
       from chain c
       join public.profiles p on p.reports_to = c.id
      where c.depth < 50
        and p.company_id = (select r.company_id from public.profiles r where r.id = p_root)
+       and (p_max_rank is null or private.role_rank(p.role) <= p_max_rank)
   )
   select distinct id from chain where id <> p_root
+$$;
+revoke all on function private.chain_ids_up_to(uuid, integer) from public, anon;
+grant execute on function private.chain_ids_up_to(uuid, integer) to authenticated, service_role;
+
+-- The whole chain below a person, whatever anyone in it is ranked. The guards use it to ask
+-- whether a caller already sees everyone a change would hand to someone.
+create or replace function private.chain_ids(p_root uuid)
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select c.id from private.chain_ids_up_to(p_root, null) as c (id)
 $$;
 revoke all on function private.chain_ids(uuid) from public, anon;
 grant execute on function private.chain_ids(uuid) to authenticated, service_role;
 
--- The signed-in person's chain, if they lead at all: managers, admins and owners do, and an
--- employee whom someone reports to does not. Nobody leads someone ranked at or above them, except
--- an owner.
+-- The signed-in person's reach down their own chain, if they lead at all (managers, admins and
+-- owners; an employee whom someone reports to gets nothing): everyone below them at their own rank
+-- or under it, never walking past someone ranked above them. So a senior manager reaches a
+-- manager below them and that manager's team, and nobody reaches an owner's reports by having the
+-- owner put under them.
+create or replace function private.chain_reach_ids()
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select c.id
+    from public.profiles me
+    cross join lateral private.chain_ids_up_to(me.id, private.role_rank(me.role)) as c (id)
+   where me.user_id = (select auth.uid())
+     and me.is_active
+     and not me.is_rococo_admin
+     and me.company_id is not null
+     and me.role in ('manager', 'admin', 'owner')
+$$;
+revoke all on function private.chain_reach_ids() from public, anon;
+grant execute on function private.chain_reach_ids() to authenticated, service_role;
+
+-- The people the signed-in person leads through their chain: their reach, minus anyone at their
+-- rank or above. Nobody leads someone ranked at or above them, except an owner, who leads their
+-- whole chain.
 create or replace function private.team_ids()
 returns setof uuid
 language sql
@@ -136,13 +185,11 @@ set search_path = ''
 as $$
   select c.id
     from public.profiles me
-    cross join lateral private.chain_ids(me.id) as c (id)
+    cross join lateral private.chain_reach_ids() as c (id)
     join public.profiles p on p.id = c.id
    where me.user_id = (select auth.uid())
      and me.is_active
      and not me.is_rococo_admin
-     and me.company_id is not null
-     and me.role in ('manager', 'admin', 'owner')
      and (me.role = 'owner' or private.role_rank(p.role) < private.role_rank(me.role))
 $$;
 revoke all on function private.team_ids() from public, anon;
@@ -173,10 +220,11 @@ grant execute on function private.has_full_scope() to authenticated, service_rol
 -- being inserted or changed is judged on what it will say. The one statement of the rule for one
 -- row; viewable_person_ids below is the same rule over the whole company, and the 0038 tests hold
 -- the two to the same answer.
---   * themselves, always; an owner, everyone in the company;
---   * an admin: everyone with no division, and everyone when they see every division;
---   * an admin or manager: people ranked below them who are in their chain or in a division they
---     see. A manager's division view shows employees only.
+--   * themselves, always; an owner, and an admin who sees every division, everyone in the company;
+--   * an admin or manager: their reach down their chain (chain_reach_ids: people at their rank or
+--     below, never past someone ranked above them);
+--   * an admin or manager: people ranked below them in a division they see, and an admin also
+--     people ranked below them with no division. A manager's division view shows employees only.
 create or replace function private.sees_profile(
   p_id           uuid,
   p_company      uuid,
@@ -200,22 +248,24 @@ begin
   if not found or v_me.company_id is null or p_company is distinct from v_me.company_id then
     return false;
   end if;
-  if p_id = v_me.id or v_me.role = 'owner' then
+  if p_id = v_me.id or v_me.role = 'owner' or (v_me.role = 'admin' and v_me.view_all_divisions) then
     return true;
   end if;
-  if v_me.role = 'admin'
-     and (v_me.view_all_divisions or coalesce(cardinality(p_division_ids), 0) = 0) then
+  if v_me.role not in ('admin', 'manager') then
+    return false;
+  end if;
+  if p_reports_to is not null
+     and private.role_rank(p_role) <= private.role_rank(v_me.role)
+     and (p_reports_to = v_me.id
+          or exists (select 1 from private.chain_reach_ids() c (id) where c.id = p_reports_to)) then
     return true;
   end if;
-  if v_me.role not in ('admin', 'manager')
-     or private.role_rank(p_role) >= private.role_rank(v_me.role) then
+  if private.role_rank(p_role) >= private.role_rank(v_me.role) then
     return false;
   end if;
   return v_me.view_all_divisions
       or coalesce(p_division_ids && v_me.view_division_ids, false)
-      or (p_reports_to is not null
-          and (p_reports_to = v_me.id
-               or exists (select 1 from private.chain_ids(v_me.id) c (id) where c.id = p_reports_to)));
+      or (v_me.role = 'admin' and coalesce(cardinality(p_division_ids), 0) = 0);
 end;
 $$;
 revoke all on function private.sees_profile(uuid, uuid, text, uuid[], uuid) from public, anon;
@@ -237,27 +287,29 @@ as $$
        and not p.is_rococo_admin
        and p.company_id is not null
   ),
-  chain as (
-    select c.id from me cross join lateral private.chain_ids(me.id) as c (id)
+  reach as (
+    select c.id from private.chain_reach_ids() as c (id)
   )
   select p.id
     from public.profiles p
     join me on p.company_id = me.company_id
    where p.id = me.id
       or me.role = 'owner'
-      or (me.role = 'admin' and (me.view_all_divisions or cardinality(p.division_ids) = 0))
+      or (me.role = 'admin' and me.view_all_divisions)
+      or (me.role in ('admin', 'manager') and p.id in (select reach.id from reach))
       or (me.role in ('admin', 'manager')
           and private.role_rank(p.role) < private.role_rank(me.role)
           and (me.view_all_divisions
                or p.division_ids && me.view_division_ids
-               or p.reports_to = me.id
-               or p.reports_to in (select chain.id from chain)))
+               or (me.role = 'admin' and cardinality(p.division_ids) = 0)))
 $$;
 revoke all on function private.viewable_person_ids() from public, anon;
 grant execute on function private.viewable_person_ids() to authenticated, service_role;
 
 -- Admin-level powers: an owner and an admin who sees every division manage the whole company, any
--- other admin manages everyone they see, and managers and employees manage nobody.
+-- other admin manages themselves and the people ranked below them that they see (never someone at
+-- their rank or above, though a peer in their chain is in view), and managers and employees manage
+-- nobody.
 create or replace function private.manageable_person_ids()
 returns setof uuid
 language sql
@@ -266,7 +318,7 @@ security definer
 set search_path = ''
 as $$
   with me as (
-    select p.company_id, p.role, p.view_all_divisions
+    select p.id, p.company_id, p.role, p.view_all_divisions
       from public.profiles p
      where p.user_id = (select auth.uid())
        and p.is_active
@@ -278,9 +330,11 @@ as $$
     join me on p.company_id = me.company_id
    where me.role = 'owner' or (me.role = 'admin' and me.view_all_divisions)
   union
-  select v.id
+  select p.id
     from private.viewable_person_ids() as v (id)
-   where exists (select 1 from me where me.role = 'admin')
+    join public.profiles p on p.id = v.id
+    join me on me.role = 'admin'
+   where p.id = me.id or private.role_rank(p.role) < private.role_rank(me.role)
 $$;
 revoke all on function private.manageable_person_ids() from public, anon;
 grant execute on function private.manageable_person_ids() to authenticated, service_role;
@@ -391,6 +445,36 @@ create trigger profiles_guard_division
   before insert or update on public.profiles
   for each row execute function public.guard_profile_division();
 
+-- At a company with no divisions there is nothing to limit, so an admin there always sees every
+-- division. Without this a newly made admin at such a company would count as division limited and
+-- lose sight of the owner and their fellow admins, which no company without divisions should ever
+-- notice. When the company adds its first division its admins keep that, the same as every admin
+-- did when this migration was pasted; an owner narrows them from then on. Named to fire after the
+-- profiles_guard_* triggers (BEFORE triggers run in name order), so the owner-only rule on view
+-- access and the clearing on a role change have already run and this has the last word.
+create or replace function public.set_division_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.role = 'admin'
+     and not new.view_all_divisions
+     and new.company_id is not null
+     and not exists (select 1 from public.company_divisions d where d.company_id = new.company_id) then
+    new.view_all_divisions := true;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.set_division_scope() from public, anon, authenticated;
+
+drop trigger if exists profiles_set_division_scope on public.profiles;
+create trigger profiles_set_division_scope
+  before insert or update on public.profiles
+  for each row execute function public.set_division_scope();
+
 -- The 0035 body with these additions:
 --   * the division cleanup (section 8) passes like the foreign key clears: under
 --     hub.division_cleanup, losing ids that no longer exist from division_ids or view_division_ids
@@ -398,9 +482,12 @@ create trigger profiles_guard_division
 --   * in the company-admin branch: an admin who does not see every division edits only people they
 --     manage, places people only in divisions they see (judged on what is added and what is
 --     removed), never puts someone at their own rank or above into a division (they would drop out
---     of view), and changes someone's manager only when they already see that person's whole
---     chain; reports_to points only at someone the admin sees; only an owner changes view access;
---     and a role change by anyone but an owner clears it;
+--     of view) or raises anyone to their rank (the same, and the update would fail on its own
+--     read-back), never changes whom someone at their rank or above reports to (themselves included),
+--     and changes someone's manager, or raises them to manager or above, only when they already
+--     see that person's whole chain (either would hand that chain to someone); reports_to points
+--     only at someone the admin sees; only an owner changes view access; and a role change by
+--     anyone but an owner clears it;
 --   * the person's own branch is a list of what they may change (name, title, phone), compared
 --     over the whole row as guard_review_employee_fields does, so a column added later is an
 --     admin's by default. The familiar messages stay for the familiar cases.
@@ -533,15 +620,34 @@ begin
       if exists (select 1 from unnest(v_changed) as d (id) where not (d.id = any (coalesce(v_view_ids, '{}')))) then
         raise exception 'You can only place people in divisions you can see.';
       end if;
+      if new.role is distinct from old.role
+         and old.user_id is distinct from (select auth.uid())
+         and private.role_rank(new.role) >= private.auth_role_rank() then
+        raise exception 'Only an owner or an admin who sees every division can raise someone to your rank or above.';
+      end if;
       if old.user_id is distinct from (select auth.uid())
          and cardinality(new.division_ids) > 0
          and private.role_rank(new.role) >= private.auth_role_rank()
          and (new.division_ids is distinct from old.division_ids or new.role is distinct from old.role) then
         raise exception 'Only an owner or an admin who sees every division can put someone at your rank or above in a division.';
       end if;
+      if new.role is distinct from old.role
+         and private.role_rank(new.role) > private.role_rank(old.role)
+         and private.role_rank(new.role) >= private.role_rank('manager')
+         and exists (
+           select c.id from private.chain_ids(old.id) as c (id)
+           except
+           select v.id from private.viewable_person_ids() as v (id)
+         ) then
+        raise exception 'Some of the people who report to this person are outside the divisions you can see, so only an owner or an admin who sees every division can make them a manager or above.';
+      end if;
     end if;
 
     if new.reports_to is distinct from old.reports_to then
+      if not v_full
+         and greatest(private.role_rank(old.role), private.role_rank(new.role)) >= private.auth_role_rank() then
+        raise exception 'Only an owner or an admin who sees every division can change who someone at your rank or above reports to.';
+      end if;
       if new.reports_to is not null
          and not exists (select 1 from private.viewable_person_ids() as v (id) where v.id = new.reports_to) then
         raise exception 'You can only choose a manager you can see.';
@@ -583,8 +689,8 @@ revoke execute on function public.guard_profile_fields() from public, anon, auth
 
 -- The 0035 body with these additions: view access on a new row is an owner's or Rococo's to give;
 -- reports_to points only at someone the adder sees; and an admin who does not see every division
--- places the new person only in divisions they see, and never puts someone at their own rank or
--- above into a division.
+-- never adds someone at their own rank or above (nobody they could see or manage afterwards, so the
+-- insert would only fail on its RETURNING) and places the new person only in divisions they see.
 create or replace function public.guard_profile_insert()
 returns trigger
 language plpgsql
@@ -615,6 +721,9 @@ begin
     raise exception 'You can only choose a manager you can see.';
   end if;
   if not private.has_full_scope() then
+    if private.role_rank(new.role) >= private.auth_role_rank() then
+      raise exception 'Only an owner or an admin who sees every division can add someone at your rank or above.';
+    end if;
     select p.view_division_ids into v_view_ids
       from public.profiles p
      where p.user_id = (select auth.uid()) and p.is_active;
@@ -623,9 +732,6 @@ begin
        where not (d.id = any (coalesce(v_view_ids, '{}')))
     ) then
       raise exception 'You can only place people in divisions you can see.';
-    end if;
-    if cardinality(new.division_ids) > 0 and private.role_rank(new.role) >= private.auth_role_rank() then
-      raise exception 'Only an owner or an admin who sees every division can put someone at your rank or above in a division.';
     end if;
   end if;
   return new;

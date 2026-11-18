@@ -2,8 +2,12 @@
 -- Proves the access rules of 0038: a manager sees and leads the people below them in the
 -- reporting chain and nobody else (unless a division view shows them employees), an employee sees
 -- themselves only even when someone reports to them, an admin who does not see every division
--- sees and manages only their divisions plus anyone unplaced, owners and admins who see every
--- division see the whole company, pay stays with admins, a manager writes a report's monthly goals
+-- sees and manages only their divisions plus anyone unplaced ranked below them, the rank rule
+-- holds (a chain never runs through someone ranked above the person looking, a senior manager
+-- sees a manager below them and that manager's team but leads only the team, and a limited admin
+-- never adds, raises, repoints or manages someone at their rank or above, nor raises someone whose
+-- chain they cannot see), owners and admins who see every division see the whole company, pay
+-- stays with admins, a manager writes a report's monthly goals
 -- and notes but never ratings or sign-off, the profile guards keep placement and view access where
 -- the design puts them, a new row's RETURNING is judged on its own columns, divisions and cycles
 -- are changed only by a full-scope admin, invitations follow the person, the directory is the
@@ -40,7 +44,21 @@ begin
     jsonb_build_object('sub', tests.user_of(tests.id(p_name)), 'role', 'authenticated')::text, true);
 end;
 $$;
-grant execute on function tests.sees(text, text), tests.claims_of(text) to authenticated;
+-- How many rows a statement touched as whoever is acting, so a write that RLS quietly skips reads
+-- as 0.
+create function tests.rows_of(p_sql text)
+returns integer
+language plpgsql
+as $$
+declare
+  v_rows integer;
+begin
+  execute p_sql;
+  get diagnostics v_rows = row_count;
+  return v_rows;
+end;
+$$;
+grant execute on function tests.sees(text, text), tests.claims_of(text), tests.rows_of(text) to authenticated;
 
 -- Setup, as system.
 select tests.create_person('r_owner', tests.company('rba'), 'owner');
@@ -57,6 +75,16 @@ select tests.create_person('r_unplaced', tests.company('rba'));
 select tests.create_person('r_emp_lead', tests.company('rba'));
 select tests.create_person('r_e3', tests.company('rba'));
 select tests.create_person('r_inactive_mgr', tests.company('rba'), 'manager');
+-- The rank rule: an owner and an admin left unplaced, a fellow admin, a senior manager over a
+-- manager and their team, and people who sit under someone ranked above the person looking.
+select tests.create_person('r_owner2', tests.company('rba'), 'owner');
+select tests.create_person('r_pa', tests.company('rba'), 'admin');
+select tests.create_person('r_es', tests.company('rba'));
+select tests.create_person('r_harper', tests.company('rba'), 'manager');
+select tests.create_person('r_sam', tests.company('rba'), 'manager');
+select tests.create_person('r_lee', tests.company('rba'));
+select tests.create_person('r_top_admin', tests.company('rba'), 'admin');
+select tests.create_person('r_under', tests.company('rba'));
 select tests.create_person('l_admin', tests.company('klasik'), 'admin');
 select tests.create_person('nobody', null);
 select tests.create_person('rococo', null, 'employee', true);
@@ -70,10 +98,14 @@ select case name when 'Test North' then 'div_north' when 'Test South' then 'div_
 update public.profiles set view_all_divisions = true where id = tests.id('r_full');
 update public.profiles set division_ids = array[tests.id('div_north')] where id = tests.id('r_owner');
 update public.profiles
-   set division_ids = array[tests.id('div_north')], view_division_ids = array[tests.id('div_north')]
+   set division_ids = array[tests.id('div_north')], view_division_ids = array[tests.id('div_north')],
+       -- RBA had no divisions when these admins were made, so they started with every division
+       -- (set_division_scope); an owner narrows them here.
+       view_all_divisions = false
  where id = tests.id('r_north_admin');
 update public.profiles
-   set division_ids = array[tests.id('div_south')], view_division_ids = array[tests.id('div_south'), tests.id('div_west')]
+   set division_ids = array[tests.id('div_south')], view_division_ids = array[tests.id('div_south'), tests.id('div_west')],
+       view_all_divisions = false
  where id = tests.id('r_south_admin');
 update public.profiles set division_ids = array[tests.id('div_north')] where id = tests.id('r_mgr');
 update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_mgr') where id = tests.id('r_e1');
@@ -83,6 +115,15 @@ update public.profiles set division_ids = array[tests.id('div_south')] where id 
 update public.profiles set division_ids = array[tests.id('div_north'), tests.id('div_south')] where id = tests.id('r_both');
 update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_emp_lead') where id = tests.id('r_e3');
 update public.profiles set is_active = false where id = tests.id('r_inactive_mgr');
+-- An unplaced owner put under the North admin, with a South employee under the owner; Harper over
+-- Sam over Lee; an admin under Harper with their own report.
+update public.profiles set reports_to = tests.id('r_north_admin') where id = tests.id('r_owner2');
+update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_owner2') where id = tests.id('r_es');
+update public.profiles set division_ids = array[tests.id('div_north')] where id = tests.id('r_harper');
+update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_harper') where id = tests.id('r_sam');
+update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_sam') where id = tests.id('r_lee');
+update public.profiles set reports_to = tests.id('r_harper') where id = tests.id('r_top_admin');
+update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('r_top_admin') where id = tests.id('r_under');
 
 insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
 values (tests.company('rba'), 'Test December', 'monthly', '2026-12-01', '2026-12-31'),
@@ -169,7 +210,7 @@ select tests.assert(tests.sees('profiles', 'r_peer'), 'north_admin: cannot see a
 select tests.assert(tests.sees('profiles', 'r_both'), 'north_admin: cannot see someone in Both');
 select tests.assert(tests.sees('profiles', 'r_unplaced'), 'north_admin: cannot see an unplaced person');
 select tests.assert(tests.sees('profiles', 'r_mgr'), 'north_admin: cannot see a North manager');
-select tests.assert(tests.sees('profiles', 'r_full'), 'north_admin: cannot see an unplaced admin');
+select tests.assert(not tests.sees('profiles', 'r_full'), 'north_admin: sees an unplaced admin at their own rank');
 select tests.assert(not tests.sees('profiles', 'r_south'), 'north_admin: sees a South employee');
 select tests.assert(not tests.sees('profiles', 'r_e1'), 'north_admin: sees a South employee in someone else''s chain');
 select tests.assert(not tests.sees('profiles', 'r_south_admin'), 'north_admin: sees a South admin');
@@ -245,7 +286,8 @@ do $$
 declare
   v_name text;
 begin
-  foreach v_name in array array['r_owner', 'r_full', 'r_north_admin', 'r_south_admin', 'r_mgr', 'r_e1', 'r_emp_lead'] loop
+  foreach v_name in array array['r_owner', 'r_owner2', 'r_full', 'r_north_admin', 'r_south_admin', 'r_pa', 'r_mgr',
+                              'r_harper', 'r_sam', 'r_top_admin', 'r_e1', 'r_emp_lead'] loop
     perform tests.claims_of(v_name);
     if (select coalesce(array_agg(v.id order by v.id), '{}') from private.viewable_person_ids() as v (id))
        is distinct from
@@ -425,11 +467,6 @@ select tests.assert_raises(
   format($q$update public.profiles set division_id = %L where id = %L$q$,
          tests.id('div_north'), tests.id('r_both')),
   'This person works in more than one division.%'
-);
-select tests.assert_raises(
-  format($q$update public.profiles set division_ids = %L where id = %L$q$,
-         array[tests.id('div_north')], tests.id('r_full')),
-  'Only an owner or an admin who sees every division can put someone at your rank or above in a division.'
 );
 select tests.assert_raises(
   format($q$update public.profiles set reports_to = %L where id = %L$q$, tests.id('r_south'), tests.id('r_peer')),
@@ -663,6 +700,168 @@ select tests.assert(
 );
 reset role; select set_config('request.jwt.claims', '', true);
 
+-- case: a_limited_admin_leaves_an_unplaced_owner_and_full_scope_admin_alone
+-- An owner or admin left with no division (what the backfill leaves when division_id was null) is
+-- ranked at or above a North-only admin, so they are neither seen nor managed by them.
+insert into public.compensation_items (company_id, employee_id, name, annual_amount)
+select tests.company('rba'), p.id, 'Rank salary', 90000
+  from (values (tests.id('r_owner2')), (tests.id('r_full')), (tests.id('r_es'))) as p (id);
+select tests.act_as(tests.id('r_north_admin'));
+select tests.assert(not tests.sees('profiles', 'r_owner2'), 'rank_unplaced: a North admin sees an unplaced owner');
+select tests.assert(
+  not tests.sees('compensation_items', 'r_owner2') and not tests.sees('compensation_items', 'r_full'),
+  'rank_unplaced: a North admin reads the pay of an unplaced owner or full-scope admin'
+);
+select tests.assert(
+  tests.rows_of(format('update public.compensation_items set annual_amount = 1 where employee_id = %L', tests.id('r_owner2'))) = 0
+  and tests.rows_of(format($q$update public.profiles set hire_date = '2000-01-01' where id = %L$q$, tests.id('r_owner2'))) = 0
+  and tests.rows_of(format($q$update public.profiles set role = 'manager' where id = %L$q$, tests.id('r_full'))) = 0
+  and tests.rows_of(format('update public.profiles set is_active = false where id = %L', tests.id('r_full'))) = 0
+  and tests.rows_of(format('update public.profiles set division_ids = %L where id = %L',
+                           array[tests.id('div_north')], tests.id('r_full'))) = 0,
+  'rank_unplaced: a North admin changed an unplaced owner or full-scope admin'
+);
+select tests.assert_raises(
+  format($q$insert into public.profiles (email, company_id, role) values ('sample.rank.admin@rbaprojects.com', %L, 'admin')$q$,
+         tests.company('rba')),
+  'Only an owner or an admin who sees every division can add someone at your rank or above.'
+);
+do $$
+declare
+  v_id uuid;
+begin
+  insert into public.profiles (email, full_name, company_id, role)
+  values ('sample.rank.manager@rbaprojects.com', 'Sample Rank Manager', tests.company('rba'), 'manager')
+  returning id into v_id;
+  if v_id is null or not exists (select 1 from public.profiles where id = v_id) then
+    raise exception 'rank_unplaced: a North admin could not read back an unplaced manager they added';
+  end if;
+end;
+$$;
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select role = 'admin' and is_active and view_all_divisions and division_ids = '{}'
+     from public.profiles where id = tests.id('r_full'))
+  and (select hire_date is distinct from '2000-01-01'::date from public.profiles where id = tests.id('r_owner2'))
+  and (select annual_amount = 90000 from public.compensation_items where employee_id = tests.id('r_owner2')),
+  'rank_unplaced: the full-scope admin, the owner or the owner''s pay changed'
+);
+delete from public.profiles where email = 'sample.rank.manager@rbaprojects.com';
+
+-- case: a_chain_never_runs_through_someone_ranked_above
+-- The owner sits under the North admin, and a South employee under the owner: the walk stops at
+-- the owner. A limited admin cannot build such a line either: they cannot point an owner, a
+-- fellow admin or themselves at anyone.
+select tests.act_as(tests.id('r_north_admin'));
+select tests.assert(
+  not tests.sees('profiles', 'r_es') and not tests.sees('compensation_items', 'r_es'),
+  'rank_chain: a North admin reaches a South employee through an owner placed under them'
+);
+select tests.assert(
+  tests.rows_of(format('update public.compensation_items set annual_amount = 2 where employee_id = %L', tests.id('r_es'))) = 0,
+  'rank_chain: a North admin changed pay reached through an owner placed under them'
+);
+select tests.assert(
+  tests.rows_of(format('update public.profiles set reports_to = %L where id = %L', tests.id('r_north_admin'), tests.id('r_pa'))) = 0
+  and tests.rows_of(format('update public.profiles set reports_to = %L where id = %L', tests.id('r_north_admin'), tests.id('r_full'))) = 0,
+  'rank_chain: a North admin pointed a fellow admin at themselves'
+);
+select tests.assert_raises(
+  format('update public.profiles set reports_to = %L where id = %L', tests.id('r_mgr'), tests.id('r_north_admin')),
+  'Only an owner or an admin who sees every division can change who someone at your rank or above reports to.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select reports_to is null from public.profiles where id = tests.id('r_pa'))
+  and (select reports_to is null from public.profiles where id = tests.id('r_full'))
+  and (select reports_to is null from public.profiles where id = tests.id('r_north_admin')),
+  'rank_chain: a reporting line changed'
+);
+delete from public.compensation_items where name = 'Rank salary';
+
+-- case: raising someone hands over only a chain the raiser already sees
+-- r_e3 (South) reports to r_emp_lead (an unplaced employee). A North admin who cannot see r_e3
+-- must not make r_emp_lead a manager or an admin, which would hand r_e3 to them.
+select tests.act_as(tests.id('r_north_admin'));
+select tests.assert(not tests.sees('profiles', 'r_e3'), 'rank_raise: a North admin sees a South employee');
+select tests.assert_raises(
+  format($q$update public.profiles set role = 'manager' where id = %L$q$, tests.id('r_emp_lead')),
+  'Some of the people who report to this person are outside the divisions you can see, so only an owner or an admin who sees every division can make them a manager or above.'
+);
+select tests.assert_raises(
+  format($q$update public.profiles set role = 'admin' where id = %L$q$, tests.id('r_emp_lead')),
+  'Only an owner or an admin who sees every division can raise someone to your rank or above.'
+);
+select tests.assert_raises(
+  format($q$update public.profiles set role = 'admin' where id = %L$q$, tests.id('r_unplaced')),
+  'Only an owner or an admin who sees every division can raise someone to your rank or above.'
+);
+select tests.assert(
+  tests.rows_of(format($q$update public.profiles set role = 'manager' where id = %L$q$, tests.id('r_unplaced'))) = 1,
+  'rank_raise: a North admin could not make someone with no reports a manager'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select role = 'employee' from public.profiles where id = tests.id('r_emp_lead'))
+  and (select role = 'manager' from public.profiles where id = tests.id('r_unplaced')),
+  'rank_raise: a role landed wrongly'
+);
+update public.profiles set role = 'employee' where id = tests.id('r_unplaced');
+
+-- case: a_senior_manager_sees_a_sub_manager_and_their_team_and_leads_the_team
+-- Harper (manager) over Sam (manager) over Lee; an admin under Harper with a report of their own.
+insert into public.goals (company_id, employee_id, cycle_id, scope, kind, title)
+select c.company_id, p.id, c.id, 'cycle', 'role', 'Chain goal'
+  from public.review_cycles c
+  cross join (values (tests.id('r_sam')), (tests.id('r_lee'))) as p (id)
+ where c.name = 'Test December';
+select tests.act_as(tests.id('r_harper'));
+select tests.assert(
+  tests.sees('profiles', 'r_sam') and tests.sees('profiles', 'r_lee') and tests.sees('goals', 'r_sam'),
+  'sub_manager: Harper does not see Sam, Lee or Sam''s goals'
+);
+select tests.assert(
+  not tests.sees('profiles', 'r_top_admin') and not tests.sees('profiles', 'r_under'),
+  'sub_manager: Harper sees an admin under them, or reaches past that admin'
+);
+select tests.assert(
+  (select array_agg(t.id) from private.team_ids() as t (id)) = array[tests.id('r_lee')]
+  and (select array_agg(l.id) from private.led_person_ids() as l (id)) = array[tests.id('r_lee')],
+  'sub_manager: Harper does not lead exactly Lee'
+);
+insert into public.goals (company_id, employee_id, cycle_id, scope, kind, title)
+select c.company_id, tests.id('r_lee'), c.id, 'cycle', 'professional', 'Set by Harper'
+  from public.review_cycles c where c.name = 'Test December';
+select tests.assert(
+  tests.rows_of(format($q$update public.goals set progress = 30 where employee_id = %L and title = 'Chain goal'$q$, tests.id('r_lee'))) = 1,
+  'sub_manager: Harper could not write Lee''s goal'
+);
+select tests.assert(
+  tests.rows_of(format($q$update public.goals set progress = 30 where employee_id = %L and title = 'Chain goal'$q$, tests.id('r_sam'))) = 0,
+  'sub_manager: Harper wrote Sam''s goal'
+);
+select tests.assert_raises(
+  format($q$insert into public.goals (company_id, employee_id, cycle_id, scope, kind, title)
+            select c.company_id, %L, c.id, 'cycle', 'professional', 'Set for Sam'
+              from public.review_cycles c where c.name = 'Test December'$q$,
+         tests.id('r_sam')),
+  '%row-level security%'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('r_sam'));
+select tests.assert(
+  tests.sees('profiles', 'r_lee') and not tests.sees('profiles', 'r_harper')
+  and (select array_agg(t.id) from private.team_ids() as t (id)) = array[tests.id('r_lee')],
+  'sub_manager: Sam does not see and lead Lee alone, or sees Harper'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select progress = 30 from public.goals where employee_id = tests.id('r_lee') and title = 'Chain goal')
+  and (select progress is distinct from 30 from public.goals where employee_id = tests.id('r_sam') and title = 'Chain goal')
+  and exists (select 1 from public.goals where employee_id = tests.id('r_lee') and title = 'Set by Harper'),
+  'sub_manager: the goals did not land as expected'
+);
+
 -- case: the_backfill_runs_once
 -- Re-runs the migration's own backfill block, as a second paste would, against an admin an owner
 -- has narrowed. The block is read from the harness's copy of the migration.
@@ -685,3 +884,32 @@ select tests.assert(
   and (select division_ids = array[tests.id('div_north'), tests.id('div_south')] from public.profiles where id = tests.id('r_both')),
   'backfill_once: pasting again widened a narrowed admin or rewrote divisions'
 );
+
+-- case: an_admin_at_a_company_with_no_divisions_sees_everyone
+-- Kingdom has no divisions. An admin made there after 0038 (view_all_divisions never set by an
+-- owner) still sees the owner and their fellow admins, and can make someone an admin.
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.create_person('k_owner_nd', tests.company('kingdom'), 'owner');
+select tests.create_person('k_admin_nd', tests.company('kingdom'), 'admin');
+select tests.create_person('k_emp_nd', tests.company('kingdom'));
+select tests.assert(
+  not exists (select 1 from public.company_divisions where company_id = tests.company('kingdom')),
+  'no_divisions: the case needs a company with no divisions'
+);
+select tests.assert(
+  (select view_all_divisions from public.profiles where id = tests.id('k_admin_nd')),
+  'no_divisions: an admin at a company with no divisions sees every division'
+);
+select tests.act_as(tests.id('k_admin_nd'));
+select tests.assert(
+  (select count(*) from public.profiles where id in (tests.id('k_owner_nd'), tests.id('k_emp_nd'))) = 2,
+  'no_divisions: the admin sees the owner and the employee'
+);
+update public.profiles set role = 'admin' where id = tests.id('k_emp_nd');
+select tests.assert(
+  (select role = 'admin' and view_all_divisions from public.profiles where id = tests.id('k_emp_nd')),
+  'no_divisions: a newly made admin keeps sight of the whole company'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);

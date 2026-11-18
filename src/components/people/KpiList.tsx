@@ -15,6 +15,7 @@ import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import type { EmployeeKpi } from "../../types/database.ts";
 
 export default function KpiList({
@@ -47,7 +48,8 @@ export default function KpiList({
   // Enter files the same KPI twice.
   const [adding, setAdding] = useState(false);
   // Per KPI, the last write in line; it settles to the row that write returned (or nothing when it
-  // failed), which is what the next write in line builds on.
+  // failed), which is what the next write in line builds on. An empty line starts from the KPI as
+  // shown, so a reload that brought a newer row is what the next click flips.
   const saveChains = useRef(new Map<string, Promise<EmployeeKpi | undefined>>());
 
   type Patch = Parameters<typeof updateEmployeeKpi>[1];
@@ -55,14 +57,12 @@ export default function KpiList({
   // True when the change landed, false once the page shows why not. A patch may be worked out
   // from the row as it stands once the writes ahead of it are done.
   async function save(kpi: EmployeeKpi, patch: Patch | ((current: EmployeeKpi) => Patch)): Promise<boolean> {
-    const before = saveChains.current.get(kpi.id) ?? Promise.resolve(undefined);
-    const chained = before.then(async (latest) => {
+    const chained = enqueueWrite(saveChains.current, kpi.id, async (latest) => {
       const current = latest ?? kpi;
       const next = await updateEmployeeKpi(kpi.id, typeof patch === "function" ? patch(current) : patch);
       onChange((list) => list.map((k) => (k.id === next.id ? next : k)));
       return next;
     });
-    saveChains.current.set(kpi.id, chained.catch(() => undefined));
     try {
       await chained;
       return true;

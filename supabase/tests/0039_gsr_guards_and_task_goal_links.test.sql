@@ -47,7 +47,8 @@ select case name when 'Sample North 39' then 'div_north' else 'div_south' end, i
 
 update public.profiles set view_all_divisions = true where id = tests.id('t_full');
 update public.profiles
-   set division_ids = array[tests.id('div_north')], view_division_ids = array[tests.id('div_north')]
+   set division_ids = array[tests.id('div_north')], view_division_ids = array[tests.id('div_north')],
+       view_all_divisions = false
  where id = tests.id('t_north_admin');
 update public.profiles set view_division_ids = array[tests.id('div_north')] where id = tests.id('t_view_mgr');
 update public.profiles set division_ids = array[tests.id('div_south')], reports_to = tests.id('t_mgr') where id = tests.id('t_e1');
@@ -303,6 +304,44 @@ select tests.assert(
   (select status = 'in_progress' from public.reviews where cycle_id = tests.id('c_closed') and employee_id = tests.id('t_e1')),
   'reopen: a review could not be reopened once its cycle was'
 );
+
+-- case: a_review_never_leaves_a_closed_cycle
+-- Moving a signed-off review to an open month in the same write that reopens it, or moving an
+-- unsigned one out, would leave the closed month short a review.
+select tests.act_as(tests.id('t_full'));
+insert into public.reviews (cycle_id, company_id, employee_id)
+values (tests.id('c_closed'), tests.company('rba'), tests.id('t_e2'));
+update public.reviews set status = 'complete', completed_at = now()
+ where cycle_id = tests.id('c_closed') and employee_id = tests.id('t_e1');
+update public.review_cycles set status = 'closed' where id = tests.id('c_closed');
+select tests.assert_raises(
+  format('update public.reviews set cycle_id = %L, status = %L, completed_at = null where cycle_id = %L and employee_id = %L',
+         tests.id('c_next'), 'in_progress', tests.id('c_closed'), tests.id('t_e1')),
+  'This review cycle is closed. Reopen the cycle first.'
+);
+select tests.assert_raises(
+  format('update public.reviews set cycle_id = %L where cycle_id = %L and employee_id = %L',
+         tests.id('c_next'), tests.id('c_closed'), tests.id('t_e2')),
+  'This review cycle is closed. Reopen the cycle first.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert_raises(
+  format('update public.reviews set cycle_id = %L, status = %L, completed_at = null where cycle_id = %L and employee_id = %L',
+         tests.id('c_next'), 'in_progress', tests.id('c_closed'), tests.id('t_e1')),
+  'This review cycle is closed. Reopen the cycle first.'
+);
+select tests.assert(
+  (select count(*) = 2 from public.reviews
+    where cycle_id = tests.id('c_closed') and employee_id in (tests.id('t_e1'), tests.id('t_e2')))
+  and (select status = 'complete' from public.reviews where cycle_id = tests.id('c_closed') and employee_id = tests.id('t_e1')),
+  'closed_move: a review left a closed cycle or reopened on the way out'
+);
+select tests.act_as(tests.id('t_full'));
+update public.review_cycles set status = 'open' where id = tests.id('c_closed');
+update public.reviews set status = 'in_progress', completed_at = null
+ where cycle_id = tests.id('c_closed') and employee_id = tests.id('t_e1');
+reset role; select set_config('request.jwt.claims', '', true);
+delete from public.reviews where cycle_id = tests.id('c_closed') and employee_id = tests.id('t_e2');
 
 -- case: cross_company_review_refused
 select tests.act_as(tests.id('rococo'));

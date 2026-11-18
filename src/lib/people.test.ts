@@ -229,12 +229,22 @@ describe("ledBy", () => {
     expect(ledBy(viewer("admin", { view_all_divisions: true }), people)).toHaveLength(people.length);
   });
 
-  it("gives a division-limited admin everyone the database showed them", () => {
-    expect(ledBy(viewer("admin"), people.slice(0, 3))).toHaveLength(3);
+  it("gives a division-limited admin the people ranked below them that the database showed them", () => {
+    // me (manager), top (owner), peer (manager), adminBelow (admin): the owner and a fellow admin
+    // are seen at most, never led (0038 manageable_person_ids).
+    expect(ids(ledBy(viewer("admin"), people))).toEqual(["me", "peer", "a", "a1", "sub", "sub1", "elsewhere"]);
   });
 
   it("gives a manager their chain below them, minus anyone ranked at or above a manager", () => {
     expect(ids(ledBy(viewer("manager"), people))).toEqual(["a", "a1", "sub1"]);
+  });
+
+  it("walks through a manager under a manager to the employee below, and leads only the employee", () => {
+    // Harper (manager) > Sam (manager) > Lee (employee).
+    const chain = [person("harper", "owner1", "manager"), person("sam", "harper", "manager"), person("lee", "sam")];
+    expect(ids(ledBy(viewer("manager", { id: "harper" }), chain))).toEqual(["lee"]);
+    // Sam leads Lee too, and nobody above.
+    expect(ids(ledBy(viewer("manager", { id: "sam" }), chain))).toEqual(["lee"]);
   });
 
   it("gives an employee nobody, even when someone reports to them", () => {

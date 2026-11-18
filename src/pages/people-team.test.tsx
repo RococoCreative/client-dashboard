@@ -294,6 +294,28 @@ describe("a viewer who sees only some divisions", () => {
     expect(screen.getByText("People in your divisions")).toBeInTheDocument();
   });
 
+  it("gets People chips only for the divisions they can view, though someone listed works in another", async () => {
+    // The North-only admin's list holds Rowan (South and North) and Kai (North), as RLS gives it.
+    onlySees([northOnly.profile.id, rowan.id, kai.id]);
+    renderWithHub(<PeoplePage />, northOnly);
+    const chips = await screen.findByRole("group", { name: "Division" });
+    expect(within(chips).getByRole("button", { name: /^All/ })).toBeInTheDocument();
+    expect(within(chips).getByRole("button", { name: /^RBA North/ })).toBeInTheDocument();
+    expect(within(chips).queryByRole("button", { name: /^RBA South/ })).not.toBeInTheDocument();
+    expect(within(chips).getByRole("button", { name: /^Both/ })).toBeInTheDocument();
+    expect(within(chips).getByRole("button", { name: /^No division/ })).toBeInTheDocument();
+  });
+
+  it("gives a manager with no view access only All, Both and No division", async () => {
+    onlySees([harper.id, rowan.id, kai.id]);
+    renderWithHub(<PeoplePage />, rbaManager);
+    const chips = await screen.findByRole("group", { name: "Division" });
+    expect(within(chips).getAllByRole("button").map((b) => b.textContent?.replace(/\d+$/, "").trim())).toEqual(["All", "Both", "No division"]);
+    // Rowan and Kai still list under All.
+    expect(screen.getByText("Rowan Ellis", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Kai Bennett", { selector: "span" })).toBeInTheDocument();
+  });
+
   it("gets the same on Scorecards", async () => {
     renderWithHub(<ScorecardsPage />, northOnly);
     const chips = await screen.findByRole("group", { name: "Division" });

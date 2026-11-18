@@ -120,6 +120,34 @@ describe("focus topic calendar", () => {
     await updateCycle(rbaSeptember.id, { theme: null, theme_description: null });
   });
 
+  it("saves a division-limited admin's topic and leaves the GSR's theme to a full-scope admin", async () => {
+    const user = userEvent.setup();
+    const northOnly = { ...rbaAdmin, profile: { ...rbaAdmin.profile, view_all_divisions: false, view_division_ids: ["rba-division-north"] } };
+    const update = vi.spyOn(await import("../services/gsr.ts"), "updateCycle");
+    renderWithHub(<GoalsPage tab="focus" />, northOnly);
+    const section = await calendar();
+    await user.type(within(section).getByLabelText("Theme for September 2026"), "Clean sites");
+    await user.tab();
+    expect(await within(section).findByText(/keeps its own theme until an owner or an admin over every division saves this topic/)).toBeInTheDocument();
+    expect((await listFocusTopics(RBA.company.id, "2026-09-01", "2026-09-01")).map((t) => t.theme)).toEqual(["Clean sites"]);
+    // Saved, not "Not saved": the cycle the database would refuse them is never asked.
+    expect(within(section).getByLabelText("Theme for September 2026")).not.toHaveAccessibleDescription(/Not saved/);
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+    expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
+    update.mockRestore();
+  });
+
+  it("is refused a cycle change by the data layer unless full scope, as 0038 refuses it", async () => {
+    window.history.pushState({}, "", "/?persona=employee&company=rba");
+    try {
+      await expect(updateCycle(rbaSeptember.id, { theme: "Anything" })).rejects.toThrow();
+    } finally {
+      window.history.pushState({}, "", "/?persona=admin&company=klasik");
+    }
+    expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
+  });
+
   it("offers Remove only on a month that has a topic", async () => {
     renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
     const section = await calendar();

@@ -198,6 +198,7 @@ export default function GoalTasks({
           campaigns={[]}
           initial={{ assignee_id: goal.employee_id, goal_id: goal.id }}
           lockAssigneeTo={goal.employee_id}
+          goalTitle={goal.title}
           canSetCampaign={false}
           onSaved={(task) => void created(task)}
           onClose={() => setAdding(false)}

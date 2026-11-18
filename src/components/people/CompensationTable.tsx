@@ -120,7 +120,7 @@ export default function CompensationTable({
       {items.length === 0 ? (
         <p className="px-5 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className={tableClass}>
             <thead>
               <tr>

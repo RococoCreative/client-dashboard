@@ -18,7 +18,8 @@ import type {
   ReviewScore,
 } from "../../types/database.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
-import { fromAll } from "../fixtures.ts";
+import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { hasFullScope } from "../../lib/people.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -117,6 +118,9 @@ export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
   return created;
 }
 export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "company_id">>): Promise<ReviewCycle> {
+  // Only a full-scope admin changes a cycle (0038, "Full-scope admins change cycles"); anyone else's
+  // update matches no row, and the service's .single() reports it as not changed.
+  if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
   return patchIn(cycles, id, { ...patch, updated_at: now() } as Partial<ReviewCycle>);
 }
 export async function deleteCycle(id: string): Promise<void> {

@@ -207,7 +207,7 @@ function ImportDialog({ companyId, onClose, onImported }: { companyId: string; o
               </Notice>
             ) : null}
             {parsed.rows.length > 0 ? (
-              <div className="overflow-x-auto rounded-md border border-line">
+              <div className="relative overflow-x-auto rounded-md border border-line">
                 <table className={tableClass}>
                   <thead>
                     <tr>
@@ -360,7 +360,7 @@ export default function FinancialsPage() {
           ) : null}
 
           <Section eyebrow="By period" title={PERIOD_TYPE_LABELS[type]} padded={false}>
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
                   <tr>

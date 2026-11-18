@@ -119,14 +119,22 @@ export function viewerDivisions<D extends Pick<CompanyDivision, "id">>(viewer: O
 
 // The people a viewer leads, out of the people they can see, mirroring the database's led set
 // (private.led_person_ids) as far as the client can: an owner, a Rococo admin and a full-scope
-// admin lead the whole company; any other admin leads everyone the database showed them (the list
-// is already narrowed); a manager leads their chain, minus anyone ranked at or above them; an
-// employee leads nobody. The viewer is in it only when the list holds them and their scope does.
+// admin lead the whole company; any other admin leads themselves and the people ranked below them
+// that the database showed them (the list is already narrowed, and an admin of the same rank in
+// their reach is seen but not led); a manager leads their chain, minus anyone ranked at or above
+// them; an employee leads nobody. The viewer is in it only when the list holds them and their
+// scope does.
+//
+// The chain is walked through everyone in the list, a manager under the viewer included, so the
+// people below that manager are reached. That manager is never in the led set: they are ranked the
+// same as the viewer. This needs the mid-chain manager in the list the viewer reads, which is why
+// the database shows a manager the managers in their chain.
 export function ledBy<T extends Pick<Profile, "id" | "reports_to" | "role">>(viewer: Viewer, people: readonly T[]): T[] {
-  if (hasFullScope(viewer) || viewer.role === "admin") return [...people];
+  if (hasFullScope(viewer)) return [...people];
+  if (viewer.role === "admin") return people.filter((p) => p.id === viewer.id || ROLE_RANK[p.role] < ROLE_RANK.admin);
   if (viewer.role !== "manager") return [];
   const chain = chainOf(people, viewer.id);
-  return people.filter((p) => chain.has(p.id) && ROLE_RANK[p.role] < ROLE_RANK.manager);
+  return people.filter((p) => chain.has(p.id) && ROLE_RANK[p.role] < ROLE_RANK[viewer.role]);
 }
 
 // The company's divisions a person works in, in the company's order. Ids that are not one of the

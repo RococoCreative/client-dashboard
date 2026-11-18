@@ -437,7 +437,7 @@ export default function CyclePage() {
             Nobody on the roster yet. Add the team in <Link to="/people" className="text-accent hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
                 <tr>

@@ -6,7 +6,7 @@
 // test needs to fail are wrapped so it can fail them once.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -33,8 +33,9 @@ vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import * as profilesService from "../services/profiles.ts";
 import * as gsrMock from "../test/mocks/gsr.ts";
-import { createGoal, createPillar, ensureReview, getReview, listReviewScores, updateReview } from "../services/gsr.ts";
+import { createGoal, createPillar, createScore, ensureReview, getReview, listReviewScores, updateReview } from "../services/gsr.ts";
 import { createTask, listTasksForGoals, notifyAssignment } from "../services/tasks.ts";
 import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import CyclePage from "./gsr/CyclePage.tsx";
@@ -128,11 +129,14 @@ describe("a manager on a team member's month", () => {
     expect(screen.queryByText(/your manager/i)).not.toBeInTheDocument();
   });
 
-  it("reads the month of someone outside their team", async () => {
+  it("reads the month of someone outside their team, and goes back to that person", async () => {
     const review = await ensureReview(september.id, RBA.company.id, jamie.id);
     renderWithHub(<ReviewPage />, harper, reviewAt(review.id));
     expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
+    // Seen through division access, not led: the back link still returns to the person.
+    expect(screen.getByRole("link", { name: /Jamie Fox/ })).toHaveAttribute("href", `/people/${jamie.id}`);
+    expect(screen.queryByRole("link", { name: /My GSR/ })).not.toBeInTheDocument();
   });
 });
 
@@ -159,6 +163,9 @@ describe("tasks on a monthly goal", () => {
     // A new task lands on the goal, for the goal's person, and asks for the assignment email.
     await user.click(screen.getByRole("button", { name: `New task for ${goal.title}` }));
     await user.type(await screen.findByLabelText("Title"), "Photograph the finished trim");
+    // The form says whose task it is and which goal, with no picker to show it.
+    expect(within(screen.getByRole("dialog")).getByText("For Rowan Ellis")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText(`Linked to ${goal.title}`)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add task" }));
     expect(await within(list).findByRole("link", { name: "Photograph the finished trim" })).toBeInTheDocument();
     const onGoal = await listTasksForGoals(RBA.company.id, [goal.id]);
@@ -219,5 +226,80 @@ describe("Start all on a cycle", () => {
     expect(within(dialog).getByText(/are not complete/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("button", { name: /Close cycle/ })).toBeInTheDocument();
+  });
+});
+
+// These run last: they start GSRs and sign off reviews that the counts above do not expect.
+describe("a manager over a manager", () => {
+  // Harper (manager) > Rowan, made a manager here > Kai (employee): what the database shows Harper
+  // once the managers in her chain are visible to her.
+  function rowanManages() {
+    const kai = RBA.profiles.find((p) => p.full_name === "Kai Bennett")!;
+    const team = [harper.profile.id, rowan.id, kai.id];
+    const original = profilesService.listCompanyProfiles;
+    const spy = vi.spyOn(profilesService, "listCompanyProfiles").mockImplementation(async (companyId) =>
+      (await original(companyId)).filter((p) => team.includes(p.id)).map((p) => (p.id === rowan.id ? { ...p, role: "manager" as const } : p)),
+    );
+    onTestFinished(() => spy.mockRestore());
+    return kai;
+  }
+
+  it("works the goals of the employee two levels down, through the manager between them", async () => {
+    const kai = rowanManages();
+    const review = await ensureReview(september.id, RBA.company.id, kai.id);
+    renderWithHub(<ReviewPage />, harper, reviewAt(review.id));
+    expect(await screen.findByLabelText("Add a goal for this month")).toBeInTheDocument();
+  });
+
+  it("reads the month of the manager under her without working it", async () => {
+    rowanManages();
+    const review = await ensureReview(september.id, RBA.company.id, rowan.id);
+    renderWithHub(<ReviewPage />, harper, reviewAt(review.id));
+    expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Add a goal for this month")).not.toBeInTheDocument();
+  });
+});
+
+describe("who signed off a review", () => {
+  const q3 = RBA.cycles[0];
+
+  it("reads neutrally when the reviewer is no longer in the company's directory", async () => {
+    const review = RBA.reviews.find((r) => r.cycle_id === q3.id && r.status !== "complete" && r.employee_id !== rowan.id)!;
+    await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: "someone-moved-away" });
+    renderWithHub(<ReviewPage />, rbaAdmin, reviewAt(review.id));
+    expect(await screen.findByText(/by someone no longer listed/)).toBeInTheDocument();
+    expect(screen.queryByText(/by Rococo/)).not.toBeInTheDocument();
+  });
+
+  it("says Rococo to the Rococo admin who signed it off", async () => {
+    const rococo = makeHub("rococo", RBA.company);
+    const review = RBA.reviews.find((r) => r.cycle_id === q3.id && r.employee_id === rowan.id) ?? (await ensureReview(q3.id, RBA.company.id, rowan.id));
+    await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: rococo.profile.id });
+    renderWithHub(<ReviewPage />, rococo, reviewAt(review.id));
+    expect(await screen.findByText(/by Rococo/)).toBeInTheDocument();
+  });
+});
+
+describe("a line item's target and actual", () => {
+  it("refuses text that is not a figure, rather than saving it as a blank", async () => {
+    const user = userEvent.setup();
+    const q3 = RBA.cycles[0];
+    const kai = RBA.profiles.find((p) => p.full_name === "Kai Bennett")!;
+    const pillar = await createPillar({ company_id: RBA.company.id, name: "Projects delivered", weight: 10, scoring_type: "deliverables", sort_order: 10 });
+    const review = await ensureReview(q3.id, RBA.company.id, kai.id);
+    const item = await createScore({ review_id: review.id, company_id: RBA.company.id, pillar_id: pillar.id, label: "Kitchens finished", target: 10, actual: 8, sort_order: 0 });
+    renderWithHub(<ReviewPage />, rbaAdmin, reviewAt(review.id));
+    const target = await screen.findByDisplayValue("10");
+    await user.clear(target);
+    await user.type(target, "12k");
+    await user.tab();
+    expect(await screen.findByText("Enter the target as a number, like 100.")).toBeInTheDocument();
+    const actual = screen.getByDisplayValue("8");
+    await user.clear(actual);
+    await user.type(actual, "n/a");
+    await user.tab();
+    expect(await screen.findByText("Enter the actual as a number, like 100.")).toBeInTheDocument();
+    const stored = (await listReviewScores(review.id)).find((s) => s.id === item.id)!;
+    expect(stored).toMatchObject({ target: 10, actual: 8 });
   });
 });

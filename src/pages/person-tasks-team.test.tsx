@@ -132,6 +132,7 @@ describe("the person page for a manager", () => {
     await user.click(await screen.findByRole("button", { name: "Add task" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByLabelText("Assignee")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("For Rowan Ellis")).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Title"), "Check the scaffold tags");
     await user.click(within(dialog).getByRole("button", { name: "Add task" }));
     const list = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
@@ -384,5 +385,46 @@ describe("the task form started from a GSR goal", () => {
     await user.click(screen.getByRole("button", { name: "Add task" }));
     await waitFor(() => expect(saved).toHaveBeenCalled());
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ assignee_id: rowan.id, goal_id: "goal-x" }));
+  });
+});
+
+describe("a manager over a manager", () => {
+  // Harper (manager) > Rowan, made a manager here > Kai (employee): the list the database hands
+  // Harper once the managers in her chain are visible to her.
+  function rowanManages() {
+    const original = profilesService.listCompanyProfiles;
+    const spy = vi.spyOn(profilesService, "listCompanyProfiles").mockImplementation(async (companyId) =>
+      (await original(companyId)).filter((p) => team.includes(p.id)).map((p) => (p.id === rowan.id ? { ...p, role: "manager" as const } : p)),
+    );
+    onTestFinished(() => spy.mockRestore());
+  }
+
+  it("leads the employee two levels down: Add task and this month's GSR on their page", async () => {
+    rowanManages();
+    renderPerson(kai.id, rbaManager);
+    expect(await screen.findByRole("button", { name: "Add task" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This month's GSR" })).toBeInTheDocument();
+  });
+
+  it("does not lead the manager between them", async () => {
+    rowanManages();
+    renderPerson(rowan.id, rbaManager);
+    expect(await screen.findByRole("heading", { name: "Rowan Ellis" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add task" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "This month's GSR" })).not.toBeInTheDocument();
+  });
+});
+
+describe("copy on a team member's page", () => {
+  it("never tells the manager 'your manager' about the person they lead", async () => {
+    onlySees(team);
+    // An admin set it, as the database stamps it (the mock hands back its stored row).
+    const goal = await createGoal({ company_id: RBA.company.id, employee_id: rowan.id, title: "Earn the site lead ticket", kind: "professional", scope: "year", year: 2026 });
+    Object.assign(goal, { created_by: rbaAdmin.profile.id });
+    renderPerson(rowan.id, rbaManager);
+    expect(await screen.findByText("Earn the site lead ticket")).toBeInTheDocument();
+    expect(await screen.findByText("An admin sets these up with them.")).toBeInTheDocument();
+    expect(screen.queryByText(/your manager/i)).not.toBeInTheDocument();
   });
 });

@@ -3,10 +3,11 @@
 // are given, which each caller narrows to whom the viewer may assign (everyone for an admin, the
 // people a manager leads plus themselves), with people who have not signed in yet marked, never
 // left out. Only admins attach a campaign. A task started from a GSR goal carries the goal
-// (initial.goal_id) into the save and says which goal; a task already on a goal keeps its person,
-// because the database refuses to move it to someone else until it is unlinked. Steps are typed one
-// per line when the task is added; after that they are edited on the task's page. It saves and
-// hands back the task as the database read it; the assignment email is the caller's.
+// (initial.goal_id) into the save and says which goal, and a form with its person fixed says who it
+// is for. A task already on a goal keeps its person, because the database refuses to move it to
+// someone else until it is unlinked. Steps are typed one per line when the task is added; after
+// that they are edited on the task's page. It saves and hands back the task as the database read
+// it; the assignment email is the caller's.
 import { useState, type FormEvent } from "react";
 import Button from "../ui/Button.tsx";
 import Field from "../ui/Field.tsx";
@@ -76,6 +77,8 @@ export default function TaskForm({
   // The whole active roster, plus the current assignee if they have since been deactivated, so
   // the picker never reads as someone else.
   const choices = people.filter((p) => p.is_active || p.id === initial?.assignee_id);
+  // With the picker gone, the form still says who the task is for, so nobody files it blind.
+  const lockedTo = lockAssigneeTo === undefined ? null : (people.find((p) => p.id === lockAssigneeTo) ?? null);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -121,6 +124,7 @@ export default function TaskForm({
     <Modal onClose={onClose} labelledBy="task-form-title" size="lg">
       <form onSubmit={handleSubmit} className="p-6">
         <h2 id="task-form-title" className="font-display text-lg text-heading">{editing ? "Edit task" : "New task"}</h2>
+        {lockedTo ? <p className="mt-1 text-[13px] text-ink-2">For {displayName(lockedTo)}</p> : null}
         {goalId && goalTitle ? <p className="mt-1 text-[13px] text-ink-2">Linked to {goalTitle}</p> : null}
         <div className="mt-5 space-y-4">
           <Field label="Title" htmlFor="task-title">

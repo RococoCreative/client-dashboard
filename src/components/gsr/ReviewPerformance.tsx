@@ -15,6 +15,7 @@ import { inputClass } from "../ui/forms.ts";
 import { deleteMetricEntry, upsertMetricEntry } from "../../services/scorecards.ts";
 import { buildYearGrid, formatMetricValue, type GridCell, type GridRow, type MetricResult, type YtdResult } from "../../lib/scorecard.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import { displayName, moneyProblem, parseDate, parseMoney, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, Project, ProjectAssignment, RoleMetric } from "../../types/database.ts";
 
@@ -119,9 +120,7 @@ export default function ReviewPerformance({
   // True when the write landed. A failed one says why above the list, and the box keeps what was
   // typed, marked not saved, so leaving it again tries again.
   function write(key: string, shown: MetricEntry | null, work: (current: MetricEntry | null) => Promise<MetricEntry | null>): Promise<boolean> {
-    const before = cellChains.current.get(key) ?? Promise.resolve(undefined);
-    const chained = before.then(async (latest) => ({ entry: await work(latest ? latest.entry : shown) }));
-    cellChains.current.set(key, chained.catch(() => undefined));
+    const chained = enqueueWrite(cellChains.current, key, async (latest) => ({ entry: await work(latest ? latest.entry : shown) }));
     setError("");
     return chained.then(
       () => true,

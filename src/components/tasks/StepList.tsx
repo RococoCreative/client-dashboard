@@ -28,7 +28,7 @@ function StepRow({
   canTick: boolean;
   canEdit: boolean;
   busy: boolean;
-  run: (change: () => Promise<TaskWithSteps>) => void;
+  run: (change: () => Promise<TaskWithSteps>) => Promise<boolean>;
 }) {
   const { id, title } = step;
   const done = step.done_at !== null;
@@ -40,7 +40,7 @@ function StepRow({
         className={checkboxClass}
         checked={done}
         disabled={!canTick || busy}
-        onChange={(e) => run(() => setStepDone(id, e.target.checked))}
+        onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
       />
       {canEdit ? (
         <>
@@ -48,9 +48,9 @@ function StepRow({
             <BlurInput value={title} required ariaLabel={`Rename ${title}`} onSave={(next) => run(() => renameStep(id, next.trim()))} className={`${inputClass} mt-0 py-1.5`} />
           </div>
           <div className="flex shrink-0 items-center">
-            <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => run(() => moveStep(id, "up"))}><ArrowUp size={14} aria-hidden /></IconButton>
-            <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => run(() => moveStep(id, "down"))}><ArrowDown size={14} aria-hidden /></IconButton>
-            <IconButton label={`Remove ${title}`} disabled={busy} onClick={() => run(() => removeStep(id))}><X size={14} aria-hidden /></IconButton>
+            <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => void run(() => moveStep(id, "up"))}><ArrowUp size={14} aria-hidden /></IconButton>
+            <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => void run(() => moveStep(id, "down"))}><ArrowDown size={14} aria-hidden /></IconButton>
+            <IconButton label={`Remove ${title}`} disabled={busy} onClick={() => void run(() => removeStep(id))}><X size={14} aria-hidden /></IconButton>
           </div>
         </>
       ) : (
@@ -80,13 +80,17 @@ export default function StepList({
   const [added, setAdded] = useState(0);
   const editable = canEdit && !locked;
 
-  async function run(change: () => Promise<TaskWithSteps>) {
+  // True when the change landed, false once the list shows why not, so a rename that failed never
+  // reads as saved.
+  async function run(change: () => Promise<TaskWithSteps>): Promise<boolean> {
     setBusy(true);
     setError("");
     try {
       onChange(await change());
+      return true;
     } catch (err) {
       setError(errorMessage(err, "That step did not save. Try again."));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -114,7 +118,7 @@ export default function StepList({
               canTick={canTick && !locked}
               canEdit={editable}
               busy={busy}
-              run={(change) => void run(change)}
+              run={run}
             />
           ))}
         </ul>

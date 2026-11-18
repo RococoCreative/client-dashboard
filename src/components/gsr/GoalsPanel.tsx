@@ -375,7 +375,9 @@ export default function GoalsPanel({
                       goal={goal}
                       isOwner={isOwner}
                       canEdit={canEdit}
-                      setForThem={goalLockedFor(goal, isAdmin)}
+                      // "Set by your manager" is said to the goal's own person only; a manager
+                      // reading a team member's goal is that manager.
+                      setForThem={isOwner && goalLockedFor(goal, isAdmin)}
                       steps={stepsFor(goal)}
                       notes={notesFor(goal)}
                       onChange={upsert}

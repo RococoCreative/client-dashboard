@@ -91,7 +91,7 @@ export default function MyReviewsPage() {
           ) : null}
 
           <Section eyebrow="History" title="All reviews" padded={false}>
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
                   <tr>

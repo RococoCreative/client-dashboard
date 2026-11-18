@@ -3,7 +3,9 @@
 // Each row saves on blur. A topic saved for a month whose GSR already exists is copied onto that
 // GSR when the GSR has no theme of its own, and its description follows while the GSR still carries
 // the calendar's theme; a theme an admin typed on the GSR itself is never overwritten. Removing a
-// topic clears the calendar row only. The New month dialog reads the same rows to pre-fill.
+// topic clears the calendar row only. The New month dialog reads the same rows to pre-fill. Any
+// admin keeps the calendar, but only an owner or a full-scope admin changes a cycle (0038), so for
+// anyone else the topic saves and the open GSR keeps its own theme until one of them saves it.
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Trash2 } from "lucide-react";
@@ -14,12 +16,15 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
+import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { deleteFocusTopic, listFocusTopics, upsertFocusTopic } from "../../services/focusTopics.ts";
 import { listCycles, updateCycle } from "../../services/gsr.ts";
 import { defaultCycleName } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import { toDateOnly } from "../../lib/format.ts";
+import { hasFullScope } from "../../lib/people.ts";
 import type { FocusTopic, ReviewCycle } from "../../types/database.ts";
 
 // This month and the next twelve, as first-of-month strings.
@@ -44,8 +49,11 @@ function cyclePatch(cycle: ReviewCycle, topic: FocusTopic): { theme: string; the
 }
 
 // How a month's GSR stands against its calendar row, in one quiet line.
-function CycleNote({ cycle, topic }: { cycle: ReviewCycle | undefined; topic: FocusTopic | undefined }) {
+function CycleNote({ cycle, topic, canMirror }: { cycle: ReviewCycle | undefined; topic: FocusTopic | undefined; canMirror: boolean }) {
   if (!cycle) return null;
+  if (!canMirror && topic && blank(cycle.theme)) {
+    return <p className="mt-1 text-[12px] text-ink-3">The {cycle.name} GSR keeps its own theme until an owner or an admin over every division saves this topic.</p>;
+  }
   if (blank(cycle.theme)) return <p className="mt-1 text-[12px] text-ink-3">The {cycle.name} GSR is open with no theme yet.</p>;
   if (topic && cycle.theme === topic.theme) return <p className="mt-1 text-[12px] text-ink-3">On the {cycle.name} GSR.</p>;
   return <p className="mt-1 text-[12px] text-ink-3">The {cycle.name} GSR keeps its own theme: {cycle.theme}</p>;
@@ -53,6 +61,9 @@ function CycleNote({ cycle, topic }: { cycle: ReviewCycle | undefined; topic: Fo
 
 export default function FocusTopicCalendar({ companyId }: { companyId: string }) {
   const location = useLocation();
+  const { profile } = useHub();
+  // Copying a topic onto an open GSR changes the cycle, which only a full-scope admin may do.
+  const canMirror = hasFullScope(profile);
   const [months] = useState(() => calendarMonths(new Date()));
   const [error, setError] = useState("");
   const state = useAsync(async () => {
@@ -78,20 +89,18 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
   // True when the topic landed, false once the panel shows why not.
   async function save(month: string, change: { theme: string } | { description: string | null }): Promise<boolean> {
     setError("");
-    const before = monthChains.current.get(month) ?? Promise.resolve(undefined);
     const shown = topicFor(month);
-    const chained = before.then((latest) => {
+    const chained = enqueueWrite(monthChains.current, month, (latest) => {
       const current = latest ?? shown;
       const theme = "theme" in change ? change.theme : (current?.theme ?? "");
       const description = "description" in change ? change.description : (current?.description ?? null);
       return upsertFocusTopic(companyId, month, theme, description);
     });
-    monthChains.current.set(month, chained.catch(() => undefined));
     try {
       const topic = await chained;
       state.setData((prev) => (prev ? { ...prev, topics: [...prev.topics.filter((t) => t.month !== month), topic] } : prev));
       const cycle = cycleFor(month);
-      const patch = cycle ? cyclePatch(cycle, topic) : null;
+      const patch = cycle && canMirror ? cyclePatch(cycle, topic) : null;
       if (cycle && patch) {
         const next = await updateCycle(cycle.id, patch);
         state.setData((prev) => (prev ? { ...prev, cycles: prev.cycles.map((c) => (c.id === next.id ? next : c)) } : prev));
@@ -155,7 +164,7 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
                       onSave={(next) => save(month, { theme: next })}
                       className={`${inputClass} mt-0 text-[13px]`}
                     />
-                    <CycleNote cycle={cycleFor(month)} topic={topic} />
+                    <CycleNote cycle={cycleFor(month)} topic={topic} canMirror={canMirror} />
                   </div>
                   {/* A month with no topic has no description to write yet, so the cell stays empty
                       and the row reads as one quiet placeholder. */}

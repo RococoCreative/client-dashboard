@@ -20,6 +20,7 @@ import { inputClass, labelClass, selectClass, tableClass, thClass } from "../ui/
 import { deleteMetricEntry, upsertMetricEntry } from "../../services/scorecards.ts";
 import { buildYearGrid, formatMetricValue, monthOf, type GridCell, type GridRow } from "../../lib/scorecard.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import { METRIC_KIND_LABELS, type MetricEntry, type RoleMetric } from "../../types/database.ts";
 import { monthLabel, scorecardYears } from "./months.ts";
 import { latestResultMonth } from "./compare.ts";
@@ -202,14 +203,13 @@ export default function PersonScorecard({
   // note at once put two writes in flight, each carrying the other's old half; whichever landed
   // last undid the first. Writes for one cell therefore queue, and each starts from the row the one
   // before it left: { entry } once a write has landed (null after a clear), or nothing when the
-  // write ahead of it failed and the cell as shown is the best guess.
+  // write ahead of it failed and the cell as shown is the best guess. Once the line is empty the
+  // next write starts from the cell as shown, so a reload never loses to an old queued row.
   const cellChains = useRef(new Map<string, Promise<{ entry: MetricEntry | null } | undefined>>());
 
   function queue(row: GridRow, cell: GridCell, work: (current: MetricEntry | null) => Promise<MetricEntry | null>): Promise<boolean> {
     const key = `${rowKey(row)}|${cell.month}`;
-    const before = cellChains.current.get(key) ?? Promise.resolve(undefined);
-    const chained = before.then(async (latest) => ({ entry: await work(latest ? latest.entry : cell.entry) }));
-    cellChains.current.set(key, chained.catch(() => undefined));
+    const chained = enqueueWrite(cellChains.current, key, async (latest) => ({ entry: await work(latest ? latest.entry : cell.entry) }));
     setEditError("");
     return chained.then(
       () => true,
@@ -275,7 +275,7 @@ export default function PersonScorecard({
     <p className="p-5 text-sm text-ink-2">No active metrics on {roleName ?? "this role"}.</p>
   ) : (
     <>
-      <div ref={scroller} className="overflow-x-auto">
+      <div ref={scroller} className="relative overflow-x-auto">
         <table className={`${tableClass} min-w-[60rem]`}>
           <thead>
             <tr>

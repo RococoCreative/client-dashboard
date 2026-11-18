@@ -410,8 +410,11 @@ end $$;
 --     when its person or cycle changes (a person who moved company keeps their old reviews,
 --     which stay editable where they are);
 --   * no review is started in a closed cycle (opening one that is already there still reads);
+--   * no review moves into or out of a closed cycle, whatever else the same write changes, so a
+--     closed month never loses or gains a review;
 --   * a signed-off review is not reopened while its cycle is closed: once reopened it could not
---     be signed off again until the whole cycle is.
+--     be signed off again until the whole cycle is. Judged against the cycle it was signed off in,
+--     so moving it to an open cycle in the same write does not get round it.
 -- A cycle that does not exist is left to inherit_company_from_cycle's own message.
 create or replace function public.guard_review_cycle()
 returns trigger
@@ -422,7 +425,22 @@ as $$
 declare
   v_cycle_company uuid;
   v_cycle_status  text;
+  v_old_status    text;
 begin
+  if tg_op = 'UPDATE' then
+    select c.status into v_old_status from public.review_cycles c where c.id = old.cycle_id;
+    if v_old_status = 'closed' then
+      if new.cycle_id is distinct from old.cycle_id then
+        raise exception 'This review cycle is closed. Reopen the cycle first.'
+          using errcode = 'check_violation';
+      end if;
+      if old.status = 'complete' and new.status is distinct from 'complete' then
+        raise exception 'This review cycle is closed. Reopen the cycle first.'
+          using errcode = 'check_violation';
+      end if;
+    end if;
+  end if;
+
   select c.company_id, c.status into v_cycle_company, v_cycle_status
     from public.review_cycles c
    where c.id = new.cycle_id;
@@ -448,11 +466,8 @@ begin
                     where r.cycle_id = new.cycle_id and r.employee_id = new.employee_id) then
       return new;
     end if;
+    -- Leaving complete was judged above, against the cycle the review was signed off in.
     if tg_op = 'INSERT' or new.cycle_id is distinct from old.cycle_id then
-      raise exception 'This review cycle is closed. Reopen the cycle first.'
-        using errcode = 'check_violation';
-    end if;
-    if old.status = 'complete' and new.status <> 'complete' then
       raise exception 'This review cycle is closed. Reopen the cycle first.'
         using errcode = 'check_violation';
     end if;

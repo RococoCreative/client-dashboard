@@ -72,7 +72,7 @@ import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pill
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, omittedCycleIdsFor, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount, lockedMonthsIn, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
+import { displayName, formatDateTime, formatNumber, formatPeriod, moneyFieldError, parseMoney, pluralize } from "../../lib/format.ts";
 import {
   PREVIOUS_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -80,10 +80,20 @@ import {
   type GsrCriterion,
   type GsrPillar,
   type PreviousStatus,
+  type Profile,
   type ReviewCycle,
   type ReviewScore,
   type TaskWithSteps,
 } from "../../types/database.ts";
+
+// Who signed off a review when the company directory does not list them. Rococo only when the page
+// knows it: the viewer is that Rococo admin, or the reviewer is on the list the viewer reads and is
+// Rococo staff. Otherwise the neutral line, since an admin who has since left the company reads the
+// same way and must not be credited to Rococo.
+function reviewerFallback(reviewerId: string, viewer: Pick<Profile, "id" | "is_rococo_admin">, people: ReadonlyArray<Pick<Profile, "id" | "is_rococo_admin">>): string {
+  const known = reviewerId === viewer.id ? viewer : people.find((p) => p.id === reviewerId);
+  return known?.is_rococo_admin ? "Rococo" : "someone no longer listed";
+}
 
 // Table headers must stay table-cells: the shared label class sets display:block.
 const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
@@ -253,9 +263,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // Full names by profile id, from the directory, for everyone the page names who is not its subject.
   const names = new Map(directory.map((entry) => [entry.id, entry.full_name?.trim() || "Unnamed"] as const));
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
-  // signed it off. A Rococo admin is in no company's directory, so a reviewer the directory does
-  // not know reads as Rococo.
-  const reviewerName = review.reviewer_id ? (names.get(review.reviewer_id) ?? "Rococo") : null;
+  // signed it off. The directory lists everyone placed with the company. A reviewer it does not
+  // know is Rococo only when the page can tell (the viewer is that Rococo admin, or the person is on
+  // the list the viewer reads); anyone else, such as an admin since moved to another company, reads
+  // neutrally rather than being credited to the wrong party.
+  const reviewerName = review.reviewer_id ? (names.get(review.reviewer_id) ?? reviewerFallback(review.reviewer_id, profile, people)) : null;
   const isOwn = review.employee_id === profile.id;
   // The viewer leads the person: their manager, or anyone up the chain above them (lib/people.ts,
   // the same rule as private.led_person_ids). An admin's powers already cover everything a leader
@@ -437,6 +449,17 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     }
   }
 
+  // A line item's target or actual. Text that is not a figure is refused with a line saying what to
+  // type, rather than saved as a blank that moves the score; blank clears it on purpose.
+  function saveLineFigure(score: ReviewScore, field: "target" | "actual", text: string): Promise<boolean> | false {
+    const problem = moneyFieldError(field === "target" ? "the target" : "the actual", text, "100");
+    if (problem) {
+      setError(problem);
+      return false;
+    }
+    return saveLineItem(score, field === "target" ? { target: parseMoney(text) } : { actual: parseMoney(text) });
+  }
+
   async function removeLineItem() {
     if (!removing) return;
     setBusy(true);
@@ -580,11 +603,12 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   }
 
   // Back to where the reader came from: their own section for their own review, the person's
-  // page for an admin or a manager reading someone else's.
+  // page for anyone reading someone else's (an admin, a leader, or a manager with division view
+  // access who sees the person without leading them).
   const personName = employee ? displayName(employee) : (names.get(review.employee_id) ?? "Person");
   const back = embedded
     ? null
-    : isOwn || (!isAdmin && !isLeader)
+    : isOwn
       ? { to: SECTION_MY[sectionOf(cycle.cadence)], label: sectionOf(cycle.cadence) === "gsr" ? "My GSR" : "My reviews" }
       : { to: `/people/${review.employee_id}`, label: personName };
   const cycleOpen = cycle.status === "open";
@@ -677,7 +701,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             kpis={kpis}
             companyGoals={companyGoals}
             isAdmin={isAdmin}
-            canOpenProfile={!isOwn && (isAdmin || isLeader)}
+            canOpenProfile={!isOwn}
             onKpis={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))}
             onError={setError}
           />
@@ -691,7 +715,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           className="mb-6"
           description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
         >
-          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} onRollup={reportRollup} />
+          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} isOwn={isOwn} onRollup={reportRollup} />
         </Section>
       ) : null}
 
@@ -919,7 +943,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                           {canScore ? "Add the deliverables agreed for this period with a target and the actual result." : "No deliverables recorded."}
                         </p>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="relative overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left">
@@ -942,10 +966,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                       ) : null}
                                     </td>
                                     <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineItem(item, { target: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "target", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
                                     <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineItem(item, { actual: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "actual", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
                                     <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
                                       {achieved === null ? "-" : `${achieved}%`}

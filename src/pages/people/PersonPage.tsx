@@ -780,7 +780,7 @@ export default function PersonPage() {
             title="Deliverables"
             description="What this person owns, grouped the way the company thinks about it. Each heading is scored by the tasks under it: two points a task, so a Hit on every one lands on target."
           >
-            <DeliverablesPanel companyId={companyId} employeeId={person.id} year={year} canEdit={isAdmin} />
+            <DeliverablesPanel companyId={companyId} employeeId={person.id} year={year} canEdit={isAdmin} isOwn={self} />
           </Section>
           {ratingPillars.length > 0 ? (
             <Section
@@ -890,7 +890,7 @@ export default function PersonPage() {
                 <p className="p-5 text-sm text-ink-2">No reviews yet. They show here once an admin opens a cycle.</p>
               )
             ) : (
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className={tableClass}>
                   <thead>
                     <tr>

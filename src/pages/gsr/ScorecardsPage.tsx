@@ -61,7 +61,7 @@ function RoleTable({
 }) {
   return (
     <Section eyebrow="Job role" title={title} description={`${pluralize(people.length, "person", "people")} · ${monthLabel(month)}`} padded={false}>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className={`${tableClass} min-w-[36rem]`}>
           <thead>
             <tr>

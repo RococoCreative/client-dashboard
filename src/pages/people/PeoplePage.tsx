@@ -46,7 +46,6 @@ import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import {
   canGrantRole,
-  canViewDivision,
   directoryById,
   divisionLabel,
   grantableRoles,
@@ -262,9 +261,11 @@ export default function PeoplePage() {
     return visible ? displayName(visible) : nameFromDirectory(directory, person.reports_to, "Not on the roster");
   };
 
-  // The chips: the divisions the viewer may see, and any division someone in their list works in
-  // (a manager's chain can reach past their own access). Both chips only narrow what is loaded.
-  const chipDivisions = divisions.filter((d) => canViewDivision(profile, d.id) || people.some((p) => p.division_ids.includes(d.id)));
+  // The chips: only the divisions the viewer may view, then Both and No division. Someone in their
+  // list who works in a division they cannot view (a manager's chain can reach past their access)
+  // still shows under All, and under the chip of any division of theirs the viewer can view. Every
+  // chip only narrows what is loaded.
+  const chipDivisions = viewerDivisions(profile, divisions);
   const hasDivisions = divisions.length > 0;
   const everyLabel = divisions.length === 2 ? "Both" : "In every division";
   // A division chosen and then lost (deleted, or the company changed) falls back to everyone.
@@ -467,7 +468,7 @@ export default function PeoplePage() {
               ) : null}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
                   <tr>

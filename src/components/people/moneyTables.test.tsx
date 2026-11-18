@@ -61,6 +61,18 @@ function Kpis() {
   return <KpiList companyId="co-1" employeeId="person-1" year={2026} kpis={kpis} canEdit onChange={(fn) => setKpis(fn)} onError={(m) => errors.push(m)} />;
 }
 
+// The list as the page holds it, with a Reload that stands in for the page reading the KPIs again
+// (a refocus after a change made in another tab) and passing the newer rows down.
+function ReloadingKpis({ reloaded }: { reloaded: EmployeeKpi[] }) {
+  const [kpis, setKpis] = useState<EmployeeKpi[]>([KPI]);
+  return (
+    <>
+      <button type="button" onClick={() => setKpis(reloaded)}>Reload</button>
+      <KpiList companyId="co-1" employeeId="person-1" year={2026} kpis={kpis} canEdit onChange={(fn) => setKpis(fn)} onError={(m) => errors.push(m)} />
+    </>
+  );
+}
+
 beforeEach(() => {
   errors.length = 0;
   for (const fn of Object.values(svc)) fn.mockReset();
@@ -192,6 +204,23 @@ describe("KpiList", () => {
     // Two clicks are an on and an off, not two ons.
     expect(svc.updateEmployeeKpi.mock.calls.map((call) => call[1])).toEqual([{ is_hit: true }, { is_hit: false }]);
     expect(screen.getByRole("button", { name: "Mark Jobs closed hit" })).toBeInTheDocument();
+  });
+
+  it("starts from the reloaded row once its queue has settled, not from the row it last wrote", async () => {
+    svc.updateEmployeeKpi.mockImplementation(async (id: string, patch: Partial<EmployeeKpi>) => ({ ...KPI, id, ...patch }));
+    // Marked not hit in another tab; the page reloads and shows it.
+    render(<ReloadingKpis reloaded={[{ ...KPI, is_hit: false, updated_at: "2026-02-01T00:00:00Z" }]} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Mark Jobs closed hit" }));
+    });
+    expect(screen.getByRole("button", { name: "Mark Jobs closed not hit" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Mark Jobs closed hit" }));
+    });
+    // The click flips what is shown, so it marks the KPI hit again rather than writing not hit.
+    expect(svc.updateEmployeeKpi.mock.calls.map((call) => call[1])).toEqual([{ is_hit: true }, { is_hit: true }]);
+    expect(screen.getByRole("button", { name: "Mark Jobs closed not hit" })).toBeInTheDocument();
   });
 
   it("files one KPI for a double submit", async () => {

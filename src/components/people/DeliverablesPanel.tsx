@@ -122,12 +122,16 @@ export default function DeliverablesPanel({
   employeeId,
   year,
   canEdit,
+  isOwn = false,
   onRollup,
 }: {
   companyId: string;
   employeeId: string;
   year: number;
   canEdit: boolean;
+  // The viewer is the person. Only they are told "your manager"; a manager reading a team member's
+  // deliverables is that manager, so anyone else gets neutral copy.
+  isOwn?: boolean;
   // The year's figure across every heading, reported whenever it changes. The review reads it
   // to score a pillar of type deliverables_module and to write the frozen line item at sign-off.
   // Null while there is nothing loaded for this person and year, so a figure for the person or
@@ -393,7 +397,9 @@ export default function DeliverablesPanel({
           body={
             canEdit
               ? "Add the first heading above, pick the category it belongs to, then add the tasks it is judged by."
-              : "Your manager sets these up with you."
+              : isOwn
+                ? "Your manager sets these up with you."
+                : "An admin sets these up with them."
           }
         />
       ) : (

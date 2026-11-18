@@ -305,8 +305,32 @@ Paste 0038 then 0039 in the SQL editor, then deploy the app the same day. The ne
 the new columns and the directory, so it must not deploy before the migrations. An old client left
 open after the migrations keeps working with blank names on a few employee screens until reload.
 
+### Rank rule, refined
+
+A second review found that the rank rule leaked through people with no division and through the
+chain itself, so it now reads as follows. Owners and Rococo are exempt throughout; an admin who sees
+every division is exempt from the division parts only. A chain is read for someone's own reach by
+walking down `reports_to` and stopping at anyone ranked above them: that person is left out and the
+walk does not pass them (`private.chain_ids_up_to`, `private.chain_reach_ids`). People at the
+viewer's rank or below in it are seen, so a senior manager sees a manager under them and that
+manager's team. Leading is that reach minus anyone at the viewer's rank or above, so Harper (a
+manager) over Sam (a manager) over Lee sees Sam and Lee, leads Lee, and cannot write Sam's goals.
+A division view, and an admin's view of people with no division, shows only people ranked below the
+viewer. An admin who does not see every division manages only themselves and people ranked below
+them that they see; never adds or raises anyone to their own rank or above; never changes whom
+someone at their rank or above reports to, themselves included; and changes a person's manager, or
+raises them to manager or above, only when they already see everyone in that person's whole chain.
+`sees_profile` and `viewable_person_ids` state the same rule, and the 0038 tests hold them to it.
+
 ### Known residual
 
 Two people editing the same field at the same moment still resolve last write wins. Patches send
 only the fields that changed, so different fields never overwrite each other. A concurrency token
 is follow-up work.
+
+### Companies with no divisions
+
+An admin at a company with no divisions always sees every division (`set_division_scope`, 0038),
+so a newly made admin at Klasik or Kingdom keeps sight of the whole company as admins always had.
+When such a company adds its first division its admins keep that access, the same as every admin
+did when 0038 was pasted, and an owner narrows them from then on.
