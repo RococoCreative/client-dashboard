@@ -1810,6 +1810,28 @@ describe("data sources", () => {
     expect(within(dialog).getByDisplayValue("contract_amount")).toBeInTheDocument();
   });
 
+  it("schedules a source on a set of days ticked Mon to Sun", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
+    await screen.findByRole("heading", { name: "Data sources" });
+    const panel = card("Data sources");
+    await within(panel).findByText("Sample sales tab");
+    await user.click(within(panel).getByRole("button", { name: "Edit Sample sales tab" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit data source" });
+    const days = within(within(dialog).getByRole("group", { name: "Sync days" }));
+    expect(days.getAllByRole("checkbox").map((box) => box.closest("label")?.textContent)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(days.getAllByRole("checkbox").filter((box) => (box as HTMLInputElement).checked).map((box) => box.closest("label")?.textContent)).toEqual(["Mon"]);
+    for (const day of ["Tue", "Wed", "Thu", "Fri"]) await user.click(days.getByLabelText(day));
+    await user.clear(within(dialog).getByLabelText("Time"));
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(within(dialog).getByText("Pick a time for the sync days.")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Time"), { target: { value: "08:00" } });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const saved = (await syncService.listSyncSources(KINGDOM.company.id)).find((s) => s.name === "Sample sales tab")!;
+    expect([saved.sync_weekdays, saved.sync_weekday, saved.sync_time]).toEqual([[1, 2, 3, 4, 5], 1, "08:00:00"]);
+  });
+
   it("keeps Read headers off until the link names a tab", async () => {
     const user = userEvent.setup();
     renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });

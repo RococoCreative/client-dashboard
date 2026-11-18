@@ -140,6 +140,11 @@ describe("describeAuditEventPlain", () => {
       on("company_connections", "update", { status: { old: "connected", new: "error" }, external_account_id: { old: "a", new: "b" } }, "row-9"),
       "Connection: status changed from Connected to Needs attention; account changed",
     ],
+    [
+      "a data source's sync days and business days switch",
+      on("sync_sources", "update", { sync_weekdays: { old: [1], new: [1, 2, 3, 4, 5] }, stale_business_days: { old: false, new: true } }, "src-1"),
+      "Data source: sync days changed from Monday to Monday, Tuesday, Wednesday, Thursday, Friday; counts business days only changed from no to yes",
+    ],
   ];
 
   it.each(PLAIN)("reads %s", (_name, input, expected) => {

@@ -867,10 +867,12 @@ export interface SyncSource {
   config: SourceConfig;
   field_map: FieldMapEntry[];
   record_key: string[];
-  sync_weekday: number | null;
+  sync_weekday: number | null; // the lowest day of sync_weekdays, kept in step by the database (0045)
+  sync_weekdays: number[] | null; // 0 = Sunday .. 6 = Saturday, sorted
   sync_time: string | null;
   sync_timezone: string | null;
   stale_after_hours: number | null;
+  stale_business_days: boolean;
   enabled: boolean;
   current_run_id: string | null;
   last_attempt_at: string | null;

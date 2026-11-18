@@ -145,6 +145,9 @@ interface Column {
   kind: Kind;
 }
 
+// A data source's sync days, numbered as the database numbers them (0 = Sunday).
+const WEEKDAY_LABELS: Record<string, string> = { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" };
+
 const COLUMNS: Record<string, Record<string, Column>> = {
   companies: {
     modules: { label: "modules", kind: { labels: MODULE_LABELS } },
@@ -196,10 +199,12 @@ const COLUMNS: Record<string, Record<string, Column>> = {
     config: { label: "settings", kind: "detail" },
     field_map: { label: "field matching", kind: "detail" },
     record_key: { label: "record key", kind: "detail" },
-    sync_weekday: { label: "sync day", kind: { labels: { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" } } },
+    sync_weekday: { label: "sync day", kind: { labels: WEEKDAY_LABELS } },
+    sync_weekdays: { label: "sync days", kind: { labels: WEEKDAY_LABELS } },
     sync_time: { label: "sync time", kind: "text" },
     sync_timezone: { label: "time zone", kind: "text" },
     stale_after_hours: { label: "hours before it reads as stale", kind: "text" },
+    stale_business_days: { label: "counts business days only", kind: "flag" },
     enabled: { label: "on", kind: "flag" },
   },
   external_links: {

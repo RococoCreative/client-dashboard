@@ -1,9 +1,14 @@
-// When a source is due: once a week at a local weekday and time in the source's own time zone,
-// which keeps its wall-clock time across daylight saving changes. Built on Intl.DateTimeFormat
-// alone so the app and the Edge Function share it with no date library.
+// When a source is due: at a local time on each of a set of weekdays, in the source's own time
+// zone, which keeps its wall-clock time across daylight saving changes and judges the weekday by
+// the source's own calendar, never UTC's. Built on Intl.DateTimeFormat alone so the app and the
+// Edge Function share it with no date library.
 import type { SyncSourceSpec } from "./types.ts";
 
-export interface WeeklySchedule { weekday: number; time: string; timezone: string } // weekday 0 = Sunday .. 6 (JS getDay, PG dow); time "HH:MM" or "HH:MM:SS"; IANA zone
+export interface WeeklySchedule { weekdays: number[]; time: string; timezone: string } // weekdays 0 = Sunday .. 6 (JS getDay, PG dow), sorted, at least one; time "HH:MM" or "HH:MM:SS"; IANA zone
+
+// The set may be missing (a row read by a column list from before 0045) or null (a row 0045 has not
+// filled): the single day then stands in for it.
+type ScheduleColumns = Pick<SyncSourceSpec, "sync_weekday" | "sync_time" | "sync_timezone"> & Partial<Pick<SyncSourceSpec, "sync_weekdays">>;
 
 const DAY_MS = 86400000;
 const MINUTE_MS = 60000;
@@ -88,31 +93,36 @@ function isReadableZone(timezone: string): boolean {
   }
 }
 
-export function scheduleOf(source: Pick<SyncSourceSpec, "sync_weekday" | "sync_time" | "sync_timezone">): WeeklySchedule | null {
-  if (source.sync_weekday === null || source.sync_time === null || source.sync_timezone === null) return null;
-  return { weekday: source.sync_weekday, time: source.sync_time, timezone: source.sync_timezone };
+// Null when any part is missing or no day is set, which means the source is never due.
+export function scheduleOf(source: ScheduleColumns): WeeklySchedule | null {
+  const days = source.sync_weekdays ?? (source.sync_weekday === null ? [] : [source.sync_weekday]);
+  const weekdays = [...new Set(days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b);
+  if (weekdays.length === 0 || source.sync_time === null || source.sync_timezone === null) return null;
+  return { weekdays, time: source.sync_time, timezone: source.sync_timezone };
 }
 
-// The latest instant at or before now that falls on the schedule's local weekday and time.
+// The latest instant at or before now that falls on one of the schedule's local weekdays at its
+// local time. Walks back over the zone's own calendar days, today first, so the first slot found
+// that has already happened is the latest; eight days always reach one.
 export function latestSlot(schedule: WeeklySchedule, now: Date): Date {
   const [hour, minute, second = 0] = schedule.time.split(":").map(Number);
   const local = wallAt(now.getTime(), schedule.timezone);
-  const back = (local.weekday - schedule.weekday + 7) % 7;
-  const slotOn = (daysBack: number): number => {
-    const date = new Date(Date.UTC(local.year, local.month - 1, local.day - daysBack));
-    return resolveWall(
+  const days = new Set(schedule.weekdays);
+  for (let back = 0; back <= 7; back += 1) {
+    const date = new Date(Date.UTC(local.year, local.month - 1, local.day - back));
+    if (!days.has(date.getUTCDay())) continue;
+    const slot = resolveWall(
       wallMs({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour, minute, second }),
       schedule.timezone,
     );
-  };
-  let slot = slotOn(back);
-  if (slot > now.getTime()) slot = slotOn(back + 7);
-  return new Date(slot);
+    if (slot <= now.getTime()) return new Date(slot);
+  }
+  throw new Error("A schedule needs at least one day from Sunday (0) to Saturday (6).");
 }
 
 // Due when enabled, scheduled in a zone this can read, and not tried since the latest slot.
 export function isDue(
-  source: Pick<SyncSourceSpec, "enabled" | "sync_weekday" | "sync_time" | "sync_timezone" | "last_attempt_at">,
+  source: ScheduleColumns & Pick<SyncSourceSpec, "enabled" | "last_attempt_at">,
   now: Date,
 ): boolean {
   if (!source.enabled) return false;

@@ -15,7 +15,7 @@ import type { AdapterRegistry, ProviderAdapter, ProviderTokens, SyncProvider, Sy
 import { HttpError, json, requireAdmin, sameBytes, service, signedInUser } from "./http.ts";
 
 const SOURCE_COLUMNS =
-  "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_time, sync_timezone, current_run_id, last_attempt_at, last_success_at";
+  "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_weekdays, sync_time, sync_timezone, stale_business_days, current_run_id, last_attempt_at, last_success_at";
 const CONNECTION_COLUMNS = "id, company_id, provider, status, external_account_id";
 
 // Wall time the tick spends starting sources; the rest stay due and run on the next tick.
@@ -260,7 +260,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
   const started = Date.now();
   const now = new Date();
   const admin = service();
-  const { data: sourceData, error: sourceError } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("enabled", true).not("sync_weekday", "is", null);
+  const { data: sourceData, error: sourceError } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("enabled", true).or("sync_weekdays.not.is.null,sync_weekday.not.is.null");
   if (sourceError) throw new Error("The scheduled sources could not be read.");
   const scheduled = (sourceData ?? []) as unknown as SourceRow[];
   const connectionIds = [...new Set(scheduled.map((s) => s.connection_id))];

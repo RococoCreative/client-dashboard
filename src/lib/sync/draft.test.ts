@@ -34,7 +34,7 @@ describe("emptyDraft", () => {
       entity: "Invoice",
       fields: [{ header: "", key: "", label: "", type: "text", unit: "", required: false }],
       record_key: [],
-      weekday: "",
+      weekdays: [],
       time: "",
       timezone: "America/Chicago",
       stale_after_hours: "",
@@ -54,7 +54,7 @@ describe("draftFromSource and draftToInput", () => {
     const draft = draftFromSource(salesTab);
     expect(draft.spreadsheet_url).toBe("https://docs.google.com/spreadsheets/d/sample-sheet-1/edit#gid=0");
     expect(draft.time).toBe("07:00");
-    expect(draft.weekday).toBe("1");
+    expect(draft.weekdays).toEqual([1]);
     const result = draftToInput(draft);
     if (!result.ok) throw new Error(result.message);
     expect(result.value).toEqual({
@@ -65,6 +65,7 @@ describe("draftFromSource and draftToInput", () => {
       field_map: salesTab.field_map,
       record_key: salesTab.record_key,
       sync_weekday: salesTab.sync_weekday,
+      sync_weekdays: salesTab.sync_weekdays,
       sync_time: salesTab.sync_time,
       sync_timezone: salesTab.sync_timezone,
       stale_after_hours: salesTab.stale_after_hours,
@@ -81,8 +82,8 @@ describe("draftFromSource and draftToInput", () => {
     expect(message(sheetsDraft({ fields: [{ ...fieldFromHeader("Job"), header: " " }] }))).toBe("Every field needs its column header.");
     expect(message(sheetsDraft({ fields: [{ ...fieldFromHeader("Job"), key: "job-no" }] }))).toBe("Field keys use lowercase letters, numbers and underscores.");
     expect(message(sheetsDraft({ fields: [fieldFromHeader("Job"), { ...fieldFromHeader("Job name"), key: "Job" }] }))).toBe("Two fields share the key job.");
-    expect(message(sheetsDraft({ weekday: "1", time: "" }))).toBe("Pick a time for the weekly sync.");
-    expect(message(sheetsDraft({ weekday: "1", time: "07:00", timezone: "Nowhere/Land" }))).toBe("That time zone is not recognized.");
+    expect(message(sheetsDraft({ weekdays: [1], time: "" }))).toBe("Pick a time for the sync days.");
+    expect(message(sheetsDraft({ weekdays: [1], time: "07:00", timezone: "Nowhere/Land" }))).toBe("That time zone is not recognized.");
     expect(message(sheetsDraft({ stale_after_hours: "0" }))).toBe("Stale after is a whole number of hours, one or more.");
   });
 
@@ -100,9 +101,33 @@ describe("draftFromSource and draftToInput", () => {
   });
 
   it("nulls the whole schedule when no weekday is picked", () => {
-    const result = draftToInput(sheetsDraft({ weekday: "", time: "07:00", timezone: "America/Chicago" }));
+    const result = draftToInput(sheetsDraft({ weekdays: [], time: "07:00", timezone: "America/Chicago" }));
     if (!result.ok) throw new Error(result.message);
-    expect([result.value.sync_weekday, result.value.sync_time, result.value.sync_timezone]).toEqual([null, null, null]);
+    expect([result.value.sync_weekday, result.value.sync_weekdays, result.value.sync_time, result.value.sync_timezone]).toEqual([null, null, null, null]);
+  });
+
+  it("refuses days with no time in a plain line", () => {
+    expect(message(sheetsDraft({ weekdays: [1, 2, 3, 4, 5], time: "", timezone: "America/Chicago" }))).toBe("Pick a time for the sync days.");
+  });
+
+  it("reads an empty set with no time and zone as no schedule", () => {
+    const result = draftToInput(sheetsDraft({ weekdays: [], time: "", timezone: "" }));
+    if (!result.ok) throw new Error(result.message);
+    expect([result.value.sync_weekday, result.value.sync_weekdays, result.value.sync_time, result.value.sync_timezone]).toEqual([null, null, null, null]);
+  });
+
+  it("sends the set sorted, with the lowest day as the single day", () => {
+    const result = draftToInput(sheetsDraft({ weekdays: [5, 1, 3, 0], time: "08:00", timezone: "America/New_York" }));
+    if (!result.ok) throw new Error(result.message);
+    expect(result.value.sync_weekdays).toEqual([0, 1, 3, 5]);
+    expect(result.value.sync_weekday).toBe(0);
+    expect([result.value.sync_time, result.value.sync_timezone]).toEqual(["08:00:00", "America/New_York"]);
+  });
+
+  it("reads a source back into its set, and a source with only the single day into a set of one", () => {
+    expect(draftFromSource({ ...salesTab, sync_weekday: 1, sync_weekdays: [1, 2, 3, 4, 5] }).weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(draftFromSource({ ...salesTab, sync_weekday: 4, sync_weekdays: null }).weekdays).toEqual([4]);
+    expect(draftFromSource({ ...salesTab, sync_weekday: null, sync_weekdays: null, sync_time: null, sync_timezone: null }).weekdays).toEqual([]);
   });
 
   it("reads a blank stale threshold as none", () => {

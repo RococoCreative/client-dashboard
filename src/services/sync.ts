@@ -8,7 +8,7 @@ import { db } from "./supabase.ts";
 
 // Every column, listed: a column left out is silently invisible to every screen.
 const SOURCE_COLUMNS =
-  "id, company_id, connection_id, provider, name, target_module, config, field_map, record_key, sync_weekday, sync_time, sync_timezone, stale_after_hours, enabled, current_run_id, last_attempt_at, last_success_at, last_status, last_error, sync_requested_at, created_by, updated_by, created_at, updated_at";
+  "id, company_id, connection_id, provider, name, target_module, config, field_map, record_key, sync_weekday, sync_weekdays, sync_time, sync_timezone, stale_after_hours, stale_business_days, enabled, current_run_id, last_attempt_at, last_success_at, last_status, last_error, sync_requested_at, created_by, updated_by, created_at, updated_at";
 const RUN_COLUMNS = "id, company_id, source_id, connection_id, trigger_kind, requested_by, status, started_at, finished_at, rows_read, rows_applied, rows_blank, error_detail";
 const RECORD_COLUMNS = "id, company_id, source_id, run_id, record_key, data, source_ref, created_at";
 
@@ -25,9 +25,11 @@ export interface SyncSourceInput {
   field_map: FieldMapEntry[];
   record_key: string[];
   sync_weekday: number | null;
+  sync_weekdays: number[] | null;
   sync_time: string | null;
   sync_timezone: string | null;
   stale_after_hours: number | null;
+  stale_business_days?: boolean; // the database defaults it to false
   enabled: boolean;
 }
 export type SyncSourcePatch = Partial<Omit<SyncSourceInput, "company_id" | "provider">>;

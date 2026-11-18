@@ -39,7 +39,16 @@ import {
 } from "../../types/database.ts";
 
 const PROVIDERS: SyncProvider[] = ["google_sheets", "quickbooks"];
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// The sync day checkboxes, Monday first; each value is the day's number in the database (0 = Sunday).
+const WEEKDAYS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+];
 const cellInput = `${inputClass} mt-0 py-1.5 text-[13px]`;
 const cellSelect = `${selectClass} mt-0 py-1.5 text-[13px]`;
 
@@ -141,6 +150,10 @@ function SourceEditor({
     setField(field.uid, field.keyTouched ? { header } : { header, key: normalizeHeader(header) });
   }
 
+  function toggleDay(day: number, on: boolean) {
+    set("weekdays", on ? [...draft.weekdays.filter((d) => d !== day), day].sort((a, b) => a - b) : draft.weekdays.filter((d) => d !== day));
+  }
+
   function toggleKey(key: string, on: boolean) {
     set("record_key", on ? [...draft.record_key.filter((k) => k !== key), key] : draft.record_key.filter((k) => k !== key));
   }
@@ -185,6 +198,7 @@ function SourceEditor({
             field_map: value.field_map,
             record_key: value.record_key,
             sync_weekday: value.sync_weekday,
+            sync_weekdays: value.sync_weekdays,
             sync_time: value.sync_time,
             sync_timezone: value.sync_timezone,
             stale_after_hours: value.stale_after_hours,
@@ -337,15 +351,18 @@ function SourceEditor({
           </div>
 
           <div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Weekly sync" htmlFor="source-weekday">
-                <select id="source-weekday" value={draft.weekday} onChange={(e) => set("weekday", e.target.value)} className={selectClass}>
-                  <option value="">Not scheduled</option>
-                  {WEEKDAYS.map((day, i) => (
-                    <option key={day} value={String(i)}>{day}</option>
-                  ))}
-                </select>
-              </Field>
+            <fieldset>
+              <legend className={labelClass}>Sync days</legend>
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
+                {WEEKDAYS.map((day) => (
+                  <label key={day.value} className="inline-flex items-center gap-2 text-[12.5px] text-ink">
+                    <input type="checkbox" checked={draft.weekdays.includes(day.value)} onChange={(e) => toggleDay(day.value, e.target.checked)} className={checkboxClass} />
+                    {day.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <Field label="Time" htmlFor="source-time">
                 <input id="source-time" type="time" value={draft.time} onChange={(e) => set("time", e.target.value)} className={inputClass} />
               </Field>
@@ -358,7 +375,7 @@ function SourceEditor({
                 </datalist>
               </Field>
             </div>
-            <p className={helpClass}>Without a schedule the source syncs only when someone presses Sync now.</p>
+            <p className={helpClass}>The source syncs at this time on each day ticked, in this time zone. With no day ticked it syncs only when someone presses Sync now.</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
