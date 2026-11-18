@@ -127,7 +127,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   forwards only; if one of those is ever re-pasted, paste `0041` straight after it.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
-- **Seeds written, not run:** `supabase/seeds/kingdom_intake.sql`: Kingdom's seven capability
+- **Seeds written, not run:** `supabase/seeds/kingdom_permissions.sql`: Kingdom's seven capability
+  levels and nothing else. This is the one to run, after `0040`, `0041` and the app deploy.
+- **Seeds on hold:** `supabase/seeds/kingdom_intake.sql`: Kingdom's seven capability
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
   after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
   again.
@@ -787,7 +789,8 @@ until `0040` is pasted.
    `marvin@kingdomcustomconstruction.com` and `maddie@kingdomcustomconstruction.com`. If an
    owner's real address is a different one, signing in with it makes a new employee and leaves
    the owner row unclaimed. Correct the address in the seed or on the roster before running it.
-5. Run `supabase/seeds/kingdom_intake.sql`, off hours. It refuses to run, and changes nothing,
+5. (On hold: Kingdom adds its own people by hand. Set the owners and roles on the People page, then
+   run `supabase/seeds/kingdom_permissions.sql` for the permission levels alone.) Run `supabase/seeds/kingdom_intake.sql`, off hours. It refuses to run, and changes nothing,
    unless both `0040` and `0041` are in. It sets Kingdom's seven capability levels (`pay` and
    `company_settings` owner, `audit_log` admin, `milestones_edit`, `sync_run` and
    `production_view` manager, `wins_post` employee), adds any missing job roles, and puts the ten

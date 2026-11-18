@@ -1,4 +1,7 @@
 -- kingdom_intake.sql
+-- ON HOLD (2026-11-18): Kingdom's owners and admins are adding their own people on the People
+-- page. Do not run this. For the permission levels alone, run kingdom_permissions.sql.
+--
 -- Kingdom's roster, job roles and capability levels, as data (rule 12: a company's shape is its
 -- rows). This data script is the one place Kingdom is named; it finds the company by its slug.
 --
