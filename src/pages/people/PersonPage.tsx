@@ -428,7 +428,9 @@ const keyOf = (companyId: string, profileId: string) => `${companyId}:${profileI
 
 export default function PersonPage() {
   const { profileId = "" } = useParams();
-  const { company, profile: me, isAdmin, isRococo, refreshProfile } = useHub();
+  const { company, profile: me, isAdmin, isRococo, can, refreshProfile } = useHub();
+  // Pay is its own permission: an admin the company has not given it never requests compensation.
+  const canSeePay = isAdmin && can("pay");
   const companyId = company!.id;
   const year = new Date().getFullYear();
   const [error, setError] = useState("");
@@ -460,7 +462,7 @@ export default function PersonPage() {
       listEmployeeKpis(companyId, profileId, year),
       // Pay and financial figures are an admin's alone; the database returns a manager nothing,
       // so a manager's page does not ask.
-      isAdmin ? listCompensation(companyId, profileId) : Promise.resolve([]),
+      canSeePay ? listCompensation(companyId, profileId) : Promise.resolve([]),
       isAdmin ? listEmployeeFinancials(companyId, profileId, year) : Promise.resolve([]),
       // Retired roles too, so a person still in one shows it rather than a blank.
       listJobRoles(companyId, true),
@@ -471,7 +473,7 @@ export default function PersonPage() {
     ]);
     const scores = await listScoresForReviews(reviews.map((r) => r.id));
     return { people, directory, person: people.find((p) => p.id === profileId) ?? null, reviews, cycles, pillars, criteria, impact, scores, kpis, compensation, financials, jobRoles, goals, omittedCycleIds: omittedCycleIdsFor(omissions, reviews, profileId) };
-  }, [companyId, profileId, year, isAdmin]);
+  }, [companyId, profileId, year, isAdmin, canSeePay]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
@@ -736,7 +738,7 @@ export default function PersonPage() {
             )}
           </Section>
           <div className="grid gap-4">
-            {isAdmin ? <Stat label="Annual compensation" value={formatMoney(totalAnnual(compensation))} hint={compensation.length > 0 ? `${formatMoney(totalAnnual(compensation) / 12)} a month` : "Not recorded"} /> : null}
+            {canSeePay ? <Stat label="Annual compensation" value={formatMoney(totalAnnual(compensation))} hint={compensation.length > 0 ? `${formatMoney(totalAnnual(compensation) / 12)} a month` : "Not recorded"} /> : null}
             <Stat label="Latest score" value={<span className={bandClass(latestScored?.result?.overall ?? null)}>{latestScored?.result?.overall ?? "-"}</span>} hint={latestScored?.cycle?.name ?? "Not scored yet"} />
             <Stat label="Average" value={average ?? "-"} hint={pluralize(rows.length, "review")} />
           </div>
@@ -872,8 +874,8 @@ export default function PersonPage() {
               {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
             </Section>
           ) : null}
-          {isAdmin ? (
-            <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Company admins only." padded={false}>
+          {canSeePay ? (
+            <Section eyebrow="Compensation" title="Compensation" description="Annual amounts; the monthly figure is derived. Only people the company gives pay access see this." padded={false}>
               <CompensationTable companyId={companyId} employeeId={person.id} items={compensation} canEdit onChange={(update) => state.setData((prev) => (prev ? { ...prev, compensation: update(prev.compensation) } : prev))} onError={setError} />
             </Section>
           ) : null}

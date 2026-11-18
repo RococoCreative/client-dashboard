@@ -1,4 +1,6 @@
-// Read-only: the database writes audit events by trigger, and only Rococo admins can read them (0025).
+// Read-only: the database writes audit events by trigger. Rococo admins read every company's; a
+// company's own people read only its events, and only if the company's audit_log capability lets
+// their role (0025, 0041).
 import type { AuditEvent } from "../types/database.ts";
 import { db } from "./supabase.ts";
 

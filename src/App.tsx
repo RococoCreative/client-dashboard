@@ -56,7 +56,7 @@ import ActivityPage from "./pages/rococo/ActivityPage.tsx";
 import TasksPage from "./pages/tasks/TasksPage.tsx";
 import TaskPage from "./pages/tasks/TaskPage.tsx";
 import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
-import { SETTINGS_TABS } from "./pages/settings/settingsTabs.ts";
+import { SETTINGS_TABS, settingsTabsFor, type SettingsTab } from "./pages/settings/settingsTabs.ts";
 import type { CapabilityKey, Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
@@ -117,6 +117,15 @@ function RedirectTo({ path }: { path: string }) {
 function WithCompany({ children }: { children: ReactNode }) {
   const { company } = useHub();
   return company ? <>{children}</> : <RedirectTo path="/rococo" />;
+}
+
+// Settings tabs follow the company's permissions: a tab this person may not open sends them to the
+// first one they may, and /settings itself lands there. A person with no tab at all goes Home.
+function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children: ReactNode }) {
+  const { can } = useHub();
+  const allowed = settingsTabsFor(can);
+  if (tab === null || !allowed.some((t) => t.key === tab)) return allowed.length > 0 ? <RedirectTo path={allowed[0].to} /> : <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -444,11 +453,11 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
             <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
-            {/* Settings: one page, a route per tab, landing on Company. The connection return path
+            {/* Settings: one page, a route per tab, landing on the first tab the person may open. The connection return path
                 has one more segment, so it never reads as the Connections tab. */}
-            <Route path="settings" element={<AdminOnly><RedirectTo path="/settings/company" /></AdminOnly>} />
+            <Route path="settings" element={<AdminOnly><SettingsTabOnly tab={null}>{null}</SettingsTabOnly></AdminOnly>} />
             {SETTINGS_TABS.map((t) => (
-              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsPage tab={t.key} /></AdminOnly>} />
+              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsTabOnly tab={t.key}><SettingsPage tab={t.key} /></SettingsTabOnly></AdminOnly>} />
             ))}
             <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
