@@ -150,6 +150,8 @@ const COLUMNS: Record<string, Record<string, Column>> = {
     theme_key: { label: "theme", kind: "text" },
     name: { label: "name", kind: "text" },
     time_zone: { label: "time zone", kind: "text" },
+    wins_home_days: { label: "days a win stays on Home", kind: "text" },
+    manual_financials: { label: "manual Financials page", kind: "flag" },
   },
   profiles: {
     role: { label: "role", kind: "role" },

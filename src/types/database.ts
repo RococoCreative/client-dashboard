@@ -46,6 +46,10 @@ export interface Company {
   modules: string[];
   // The company's own named time zone (0037), America/New_York unless an admin sets another. A repeating task's next due date counts from the day here.
   time_zone: string;
+  // Days a win stays on Home (0042); null keeps the five newest with no age limit. Rococo-only.
+  wins_home_days: number | null;
+  // Whether the company keeps the manual Financials page (0042); true is today's behaviour. Rococo-only.
+  manual_financials: boolean;
   created_at: string;
   updated_at: string;
 }

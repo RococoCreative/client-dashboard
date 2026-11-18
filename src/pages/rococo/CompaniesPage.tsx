@@ -1,5 +1,5 @@
 // Companies tab of the Rococo portfolio: each company's name, theme, logo, the modules it has
-// on, and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
+// on, the display settings (days a win stays on Home, the manual Financials page), and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
 // which already lets Rococo admins do all of this. Deleting a company also tidies what the
 // database cannot reach on its own: the grant each connected provider holds, and the company's
 // stored files.
@@ -115,6 +115,19 @@ export default function CompaniesPage() {
       setPendingModules(rest);
     }
     setSavingModules(savingRef.current);
+  }
+
+  // Blank clears the setting; anything else must be a whole number of days, 1 or more. A refusal
+  // is said in plain words and nothing is sent.
+  function saveWinsDays(company: Company, next: string): Promise<boolean> | false {
+    const text = next.trim();
+    if (text === "") return patchCompany(company, { wins_home_days: null });
+    const days = /^\d+$/.test(text) ? Number(text) : 0;
+    if (!Number.isSafeInteger(days) || days < 1) {
+      setError("Enter a whole number of days, 1 or more, or leave it blank.");
+      return false;
+    }
+    return patchCompany(company, { wins_home_days: days });
   }
 
   async function addDomain(company: Company) {
@@ -280,6 +293,24 @@ export default function CompaniesPage() {
                       })}
                     </div>
                     <p className={helpClass}>With no modules on, the company sees the standard hub.</p>
+                  </fieldset>
+                  <fieldset aria-label={`Display settings for ${company.name}`} className="grid gap-4 md:col-span-12 md:grid-cols-12">
+                    <legend className="sr-only">Display settings</legend>
+                    <div className="md:col-span-4">
+                      <label htmlFor={`co-wins-days-${company.id}`} className={labelClass}>Days a win stays on Home</label>
+                      <BlurInput id={`co-wins-days-${company.id}`} type="number" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
+                      <p className={helpClass}>Blank means the five newest, with no age limit.</p>
+                    </div>
+                    <div className="flex items-start gap-2 md:col-span-8">
+                      <input
+                        type="checkbox"
+                        id={`co-manual-financials-${company.id}`}
+                        className={`${checkboxClass} mt-0.5`}
+                        checked={company.manual_financials}
+                        onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
+                      />
+                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink">Manual Financials page</label>
+                    </div>
                   </fieldset>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>
