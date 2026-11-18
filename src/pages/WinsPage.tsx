@@ -21,7 +21,7 @@ import { inputClass, labelClass, selectClass, textareaClass } from "../component
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { errorMessage } from "../lib/errors.ts";
-import { formatDate, todayIso } from "../lib/format.ts";
+import { formatDate } from "../lib/format.ts";
 import { companyToday, homeCutoff } from "../lib/wins.ts";
 import { hasModule } from "../lib/modules.ts";
 import { listProjects } from "../services/projects.ts";
@@ -131,9 +131,10 @@ function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: 
   );
 }
 
-function NewWinDialog({ companyId, projects, withProjects, onClose, onCreated }: { companyId: string; projects: Project[]; withProjects: boolean; onClose: () => void; onCreated: (win: Win) => void }) {
+// The date starts on the company's own day, the same day the Home cut-off reads, not the browser's.
+function NewWinDialog({ companyId, timeZone, projects, withProjects, onClose, onCreated }: { companyId: string; timeZone: string; projects: Project[]; withProjects: boolean; onClose: () => void; onCreated: (win: Win) => void }) {
   const [title, setTitle] = useState("");
-  const [wonOn, setWonOn] = useState(todayIso());
+  const [wonOn, setWonOn] = useState(() => companyToday(timeZone));
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -297,6 +298,7 @@ export default function WinsPage() {
       {creating ? (
         <NewWinDialog
           companyId={companyId}
+          timeZone={company!.time_zone}
           projects={state.data?.projects ?? []}
           withProjects={withProjects}
           onClose={() => setCreating(false)}

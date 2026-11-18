@@ -21,10 +21,15 @@ export function companyToday(timeZone: string, now: Date = new Date()): string {
 
 // The earliest won_on still on Home: a win is on Home for `days` days counting the day it was
 // won, so a win from days - 1 days ago is the last one kept. Null when the company has no limit.
-// Date arithmetic is on the date string in UTC, never on local time.
+// Date arithmetic is on the date string in UTC, never on local time. The database holds the days
+// to 1 to 3650 (0042); anything outside that, or a date that cannot be read, is no cut-off rather
+// than a throw, so a bad value never breaks Home or the Wins page.
+export const MAX_WINS_HOME_DAYS = 3650;
+
 export function homeCutoff(days: number | null, today: string): string | null {
-  if (days === null) return null;
+  if (days === null || !Number.isInteger(days) || days < 1 || days > MAX_WINS_HOME_DAYS) return null;
   const [y, m, d] = today.split("-").map(Number);
   const cutoff = new Date(Date.UTC(y, m - 1, d - (days - 1)));
+  if (Number.isNaN(cutoff.getTime())) return null;
   return cutoff.toISOString().slice(0, 10);
 }

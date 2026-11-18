@@ -213,3 +213,30 @@ select tests.assert(
       - current_setting('audit.before')::bigint = 1,
   'changes_are_audited: the set and the business days switch were not written to the change log as one event'
 );
+
+-- case: a_day_without_a_set_keeps_its_day
+-- A row with a single day and no set, the state a source is in before the backfill, can only be
+-- built with the checks off and the trigger paused; this rolled-back transaction does that as
+-- system, then turns the trigger back on. An unrelated write must keep the day and give it the
+-- set of that day. 0045 is pasted again at the end, which puts the checks back and proves the row
+-- passes them.
+alter table public.sync_sources drop constraint if exists sync_sources_schedule_check;
+alter table public.sync_sources drop constraint if exists sync_sources_weekdays_check;
+alter table public.sync_sources disable trigger sync_sources_keep_weekdays;
+with s as (
+  insert into public.sync_sources (company_id, connection_id, provider, name, target_module, sync_weekday, sync_weekdays, sync_time, sync_timezone)
+  values (tests.company('kingdom'), tests.id('k_sheets'), 'google_sheets', 'Sample day without a set', 'sales_reporting', 2, null, '07:00', 'America/Chicago')
+  returning id
+)
+insert into tests.fixture (name, id) select 'day_only', id from s;
+alter table public.sync_sources enable trigger sync_sources_keep_weekdays;
+select tests.assert(
+  (select sync_weekday = 2 and sync_weekdays is null from public.sync_sources where id = tests.id('day_only')),
+  'a_day_without_a_set_keeps_its_day: the setup did not leave a day with no set'
+);
+update public.sync_sources set name = 'Sample day without a set, renamed' where id = tests.id('day_only');
+select tests.assert(
+  (select sync_weekday = 2 and sync_weekdays = '{2}'::smallint[] from public.sync_sources where id = tests.id('day_only')),
+  'a_day_without_a_set_keeps_its_day: an unrelated update cleared the day or did not give it the set {2}'
+);
+\ir ../migrations/0045_sync_weekdays.sql

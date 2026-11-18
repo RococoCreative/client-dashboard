@@ -100,3 +100,53 @@ select tests.assert_raises(
 );
 reset role;
 select set_config('request.jwt.claims', '', true);
+
+-- case: insert_complete_without_a_date_takes_today
+select tests.act_as(tests.id('kingdom_admin'));
+insert into public.project_milestones (project_id, title, status)
+values (tests.id('project'), 'Inserted complete', 'complete');
+select tests.assert(
+  (select m.status = 'complete' and m.completed_on = (now() at time zone c.time_zone)::date
+     from public.project_milestones m
+     join public.companies c on c.id = m.company_id
+    where m.project_id = tests.id('project') and m.title = 'Inserted complete'),
+  'insert_complete_without_a_date_takes_today: an insert marked complete did not take today in the company''s time zone'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: insert_in_progress_with_a_date_is_complete
+select tests.act_as(tests.id('kingdom_admin'));
+insert into public.project_milestones (project_id, title, status, completed_on)
+values (tests.id('project'), 'Inserted in progress with a date', 'in_progress', '2026-10-03');
+select tests.assert(
+  (select status = 'complete' and completed_on = '2026-10-03'
+     from public.project_milestones
+    where project_id = tests.id('project') and title = 'Inserted in progress with a date'),
+  'insert_in_progress_with_a_date_is_complete: the date did not win on insert'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: clearing_the_date_to_in_progress_stays_in_progress
+select tests.act_as(tests.id('kingdom_admin'));
+update public.project_milestones set completed_on = '2026-10-04' where id = tests.id('plain');
+update public.project_milestones set completed_on = null, status = 'in_progress' where id = tests.id('plain');
+select tests.assert(
+  (select status = 'in_progress' and completed_on is null
+     from public.project_milestones where id = tests.id('plain')),
+  'clearing_the_date_to_in_progress_stays_in_progress: clearing the date and asking for in progress did not leave it in progress with no date'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: complete_again_keeps_the_date
+select tests.act_as(tests.id('kingdom_admin'));
+update public.project_milestones set status = 'complete', title = 'Already done, renamed' where id = tests.id('done_before');
+select tests.assert(
+  (select status = 'complete' and completed_on = '2026-09-01'
+     from public.project_milestones where id = tests.id('done_before')),
+  'complete_again_keeps_the_date: setting complete on a dated milestone changed its date'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);

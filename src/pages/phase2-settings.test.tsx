@@ -105,13 +105,26 @@ describe("Rococo Companies display settings", () => {
     const field = await daysField("Klasik Construction");
     await user.type(field, "0");
     await user.tab();
-    expect(await screen.findByText("Enter a whole number of days, 1 or more, or leave it blank.")).toBeInTheDocument();
+    expect(await screen.findByText("Enter a whole number of days between 1 and 3650, or leave it blank.")).toBeInTheDocument();
     await user.clear(field);
     await user.type(field, "-3");
     await user.tab();
-    expect(screen.getByText("Enter a whole number of days, 1 or more, or leave it blank.")).toBeInTheDocument();
+    expect(screen.getByText("Enter a whole number of days between 1 and 3650, or leave it blank.")).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
     expect(field.value).toBe("");
+    spy.mockRestore();
+  });
+
+  it("refuses more than 3650 days with the same plain line and does not save", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(companiesService, "updateCompany");
+    open();
+    const field = await daysField("Klasik Construction");
+    await user.type(field, "4000");
+    await user.tab();
+    expect(await screen.findByText("Enter a whole number of days between 1 and 3650, or leave it blank.")).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    expect((await companiesService.getCompany("co-klasik")).wins_home_days).toBeNull();
     spy.mockRestore();
   });
 
@@ -205,6 +218,16 @@ describe("wins leave Home after the company's days", () => {
     renderWithHub(<WinsPage />, adminFor(withDays(365)), winsRoute);
     await user.click(await screen.findByRole("tab", { name: "Archive" }));
     expect(await screen.findByText("No older wins yet.")).toBeInTheDocument();
+  });
+
+  it("a new win opens on the company's date, not the browser's", async () => {
+    // The test clock is 2026-09-15 12:00Z, already the 16th in Kiritimati.
+    const user = userEvent.setup();
+    const ahead = withDays(null, "Pacific/Kiritimati");
+    renderWithHub(<WinsPage />, adminFor(ahead), winsRoute);
+    await user.click(await screen.findByRole("button", { name: "New win" }));
+    const dialog = await screen.findByRole("dialog");
+    expect((within(dialog).getByLabelText("Won on") as HTMLInputElement).value).toBe("2026-09-16");
   });
 
   it("uses the company's day, not the browser's", async () => {

@@ -10,11 +10,13 @@
 --   1. public.sync_sources gains sync_weekdays smallint[] (0 = Sunday .. 6 = Saturday, as
 --      sync_weekday) and stale_business_days boolean not null default false. The second is read
 --      by the staleness rule that follows; here it is only stored, guarded and audited.
---   2. public.keep_sync_weekdays(): a BEFORE trigger that keeps the two day columns in step. The
+--   2. Every scheduled source gets the set of its single day, before the trigger below exists,
+--      so the trigger only ever meets rows that already carry their set.
+--   3. public.keep_sync_weekdays(): a BEFORE trigger that keeps the two day columns in step. The
 --      set wins whenever a write gives or changes it; a write that changes only the single day
---      (an older client) moves the set to that one day. The set is stored sorted with no repeats,
---      and the single day is always its lowest day.
---   3. Every scheduled source gets the set of its single day.
+--      (an older client) moves the set to that one day; a write to a row that has a single day
+--      and no set yet gives it the set of that day rather than clearing the day. The set is
+--      stored sorted with no repeats, and the single day is always its lowest day.
 --   4. sync_sources_schedule_check is rebuilt to cover the set (days, time and zone are all set
 --      or all null), and sync_sources_weekdays_check keeps the set to one to seven days in 0 to 6
 --      with the single day in step.
@@ -34,7 +36,19 @@ alter table public.sync_sources add column if not exists sync_weekdays smallint[
 alter table public.sync_sources add column if not exists stale_business_days boolean not null default false;
 
 -- ---------------------------------------------------------------------------------------
--- 2. Keeping the two day columns in step
+-- 2. Backfill
+-- ---------------------------------------------------------------------------------------
+-- Before the trigger in section 3 is created, so the trigger only ever meets rows that already
+-- carry their set; and before the audit is rebuilt, so filling the set writes no change-log
+-- events. A second paste finds nothing to fill.
+
+update public.sync_sources
+   set sync_weekdays = array[sync_weekday]
+ where sync_weekdays is null
+   and sync_weekday is not null;
+
+-- ---------------------------------------------------------------------------------------
+-- 3. Keeping the two day columns in step
 -- ---------------------------------------------------------------------------------------
 -- Named to fire after sync_sources_guard (triggers fire in name order), so the guard sees the
 -- write as sent. A set holding a null or a day outside 0 to 6 is left for the check in section 4.
@@ -53,6 +67,10 @@ begin
   elsif new.sync_weekdays is not distinct from old.sync_weekdays
         and new.sync_weekday is distinct from old.sync_weekday then
     new.sync_weekdays := case when new.sync_weekday is null then null else array[new.sync_weekday] end;
+  elsif new.sync_weekdays is null and old.sync_weekdays is null and new.sync_weekday is not null then
+    -- A row with a single day and no set yet: an unrelated write gives it the set of its day
+    -- instead of clearing the day below.
+    new.sync_weekdays := array[new.sync_weekday];
   end if;
   if new.sync_weekdays is not null and array_position(new.sync_weekdays, null) is null then
     if (select count(distinct d) from unnest(new.sync_weekdays) as d) <> cardinality(new.sync_weekdays) then
@@ -70,17 +88,6 @@ drop trigger if exists sync_sources_keep_weekdays on public.sync_sources;
 create trigger sync_sources_keep_weekdays
   before insert or update on public.sync_sources
   for each row execute function public.keep_sync_weekdays();
-
--- ---------------------------------------------------------------------------------------
--- 3. Backfill
--- ---------------------------------------------------------------------------------------
--- Before the audit is rebuilt, so filling the set writes no change-log events. A second paste
--- finds nothing to fill.
-
-update public.sync_sources
-   set sync_weekdays = array[sync_weekday]
- where sync_weekdays is null
-   and sync_weekday is not null;
 
 -- ---------------------------------------------------------------------------------------
 -- 4. Checks

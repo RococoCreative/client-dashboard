@@ -1,6 +1,6 @@
 -- 0042_company_display_settings.test.sql
 -- Proves the two display settings on a company (0042): the defaults leave every company as it is
--- today, only a Rococo admin changes them, the days must be positive, and the audit records both.
+-- today, only a Rococo admin changes them, the days must be 1 to 3650, and the audit records both.
 --
 -- Runs inside one transaction the harness opens and rolls back; never begin or commit here.
 
@@ -66,6 +66,26 @@ select tests.assert_raises(
   $q$update public.companies set wins_home_days = 0 where id = tests.company('kingdom')$q$,
   '%check constraint%'
 );
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: days_capped_at_3650
+select tests.act_as(tests.id('rococo_admin'));
+select tests.assert_raises(
+  $q$update public.companies set wins_home_days = 3651 where id = tests.company('kingdom')$q$,
+  '%companies_wins_home_days_check%'
+);
+do $$
+declare
+  v_rows integer;
+begin
+  update public.companies set wins_home_days = 3650 where id = tests.company('kingdom');
+  get diagnostics v_rows = row_count;
+  perform tests.assert(
+    v_rows = 1 and exists (select 1 from public.companies where id = tests.company('kingdom') and wins_home_days = 3650),
+    'days_capped_at_3650: 3650 days was not accepted'
+  );
+end $$;
 reset role;
 select set_config('request.jwt.claims', '', true);
 

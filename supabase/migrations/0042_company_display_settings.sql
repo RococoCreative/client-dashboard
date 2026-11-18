@@ -6,7 +6,8 @@
 -- company has today.
 --
 --   1. companies.wins_home_days: null means the five newest wins with no age limit; a number
---      means wins from the last that many days. Must be positive.
+--      means wins from the last that many days. Must be 1 to 3650 (ten years), so no value can
+--      push the Home cut-off past a date the app can work with.
 --   2. companies.manual_financials: true keeps the manual Financials page, as today.
 --   3. Only Rococo changes either, the same way only Rococo changes a slug, theme or modules:
 --      the 0024 guard_company_fields body with both columns added to the protected fields.
@@ -22,7 +23,7 @@ alter table public.companies add column if not exists manual_financials boolean 
 do $$
 begin
   if not exists (select 1 from pg_catalog.pg_constraint where conname = 'companies_wins_home_days_check') then
-    alter table public.companies add constraint companies_wins_home_days_check check (wins_home_days > 0);
+    alter table public.companies add constraint companies_wins_home_days_check check (wins_home_days between 1 and 3650);
   end if;
 end $$;
 

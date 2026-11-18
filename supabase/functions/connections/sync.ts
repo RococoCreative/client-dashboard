@@ -228,7 +228,12 @@ export async function handleSyncRun(req: Request): Promise<Response> {
   if (requestError || count !== 1) throw new HttpError(403, "That source was not found, or you cannot sync it.");
 
   const admin = service();
-  const { data: source } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("id", sourceId).maybeSingle();
+  const { data: source, error: sourceError } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("id", sourceId).maybeSingle();
+  // A failed read (for example a column this database does not have yet) is not a missing source.
+  if (sourceError) {
+    console.error("source read failed", sourceId, sourceError.message);
+    throw new HttpError(500, "The source could not be read. Try again.");
+  }
   if (!source) throw new HttpError(403, "That source was not found, or you cannot sync it.");
   const spec = source as unknown as SourceRow;
   const { data: company, error: companyError } = await admin.from("companies").select("modules").eq("id", spec.company_id).maybeSingle();

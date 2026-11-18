@@ -26,6 +26,7 @@ import { removeCompanyFiles } from "../../services/storage.ts";
 import { THEMES, THEME_KEYS } from "../../lib/theme.ts";
 import { MODULE_DESCRIPTIONS, MODULE_KEYS, MODULE_LABELS, hasModule, withModule, type ModuleKey } from "../../lib/modules.ts";
 import { normalizeDomain } from "../../lib/email.ts";
+import { MAX_WINS_HOME_DAYS } from "../../lib/wins.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
 import type { Company, ThemeKey } from "../../types/database.ts";
@@ -117,14 +118,14 @@ export default function CompaniesPage() {
     setSavingModules(savingRef.current);
   }
 
-  // Blank clears the setting; anything else must be a whole number of days, 1 or more. A refusal
-  // is said in plain words and nothing is sent.
+  // Blank clears the setting; anything else must be a whole number of days from 1 to 3650, the
+  // range the database holds it to (0042). A refusal is said in plain words and nothing is sent.
   function saveWinsDays(company: Company, next: string): Promise<boolean> | false {
     const text = next.trim();
     if (text === "") return patchCompany(company, { wins_home_days: null });
     const days = /^\d+$/.test(text) ? Number(text) : 0;
-    if (!Number.isSafeInteger(days) || days < 1) {
-      setError("Enter a whole number of days, 1 or more, or leave it blank.");
+    if (!Number.isSafeInteger(days) || days < 1 || days > MAX_WINS_HOME_DAYS) {
+      setError("Enter a whole number of days between 1 and 3650, or leave it blank.");
       return false;
     }
     return patchCompany(company, { wins_home_days: days });

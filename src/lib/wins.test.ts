@@ -8,6 +8,17 @@ describe("homeCutoff", () => {
   it("crosses a month and a year", () => expect(homeCutoff(14, "2027-01-03")).toBe("2026-12-21"));
   it("keeps today's win when the setting is 1", () => expect(homeCutoff(1, "2026-11-18")).toBe("2026-11-18"));
   it("counts leap days", () => expect(homeCutoff(3, "2028-03-01")).toBe("2028-02-28"));
+  it("treats a huge number as no cut-off and does not throw", () => {
+    expect(() => homeCutoff(200000000, "2026-11-18")).not.toThrow();
+    expect(homeCutoff(200000000, "2026-11-18")).toBeNull();
+  });
+  it("keeps the cut-off at the 3650 day limit and drops it just past", () => {
+    expect(homeCutoff(3650, "2026-11-18")).toBe("2016-11-21");
+    expect(homeCutoff(3651, "2026-11-18")).toBeNull();
+  });
+  it("treats zero, negative and fractional days as no cut-off", () => {
+    for (const days of [0, -5, 2.5]) expect(homeCutoff(days, "2026-11-18")).toBeNull();
+  });
 });
 
 describe("companyToday", () => {
