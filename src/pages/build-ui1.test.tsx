@@ -120,6 +120,34 @@ describe("focus topic calendar", () => {
     await updateCycle(rbaSeptember.id, { theme: null, theme_description: null });
   });
 
+  it("saves a division-limited admin's topic and leaves the GSR's theme to a full-scope admin", async () => {
+    const user = userEvent.setup();
+    const northOnly = { ...rbaAdmin, profile: { ...rbaAdmin.profile, view_all_divisions: false, view_division_ids: ["rba-division-north"] } };
+    const update = vi.spyOn(await import("../services/gsr.ts"), "updateCycle");
+    renderWithHub(<GoalsPage tab="focus" />, northOnly);
+    const section = await calendar();
+    await user.type(within(section).getByLabelText("Theme for September 2026"), "Clean sites");
+    await user.tab();
+    expect(await within(section).findByText(/keeps its own theme until an owner or an admin over every division saves this topic/)).toBeInTheDocument();
+    expect((await listFocusTopics(RBA.company.id, "2026-09-01", "2026-09-01")).map((t) => t.theme)).toEqual(["Clean sites"]);
+    // Saved, not "Not saved": the cycle the database would refuse them is never asked.
+    expect(within(section).getByLabelText("Theme for September 2026")).not.toHaveAccessibleDescription(/Not saved/);
+    expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+    expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
+    update.mockRestore();
+  });
+
+  it("is refused a cycle change by the data layer unless full scope, as 0038 refuses it", async () => {
+    window.history.pushState({}, "", "/?persona=employee&company=rba");
+    try {
+      await expect(updateCycle(rbaSeptember.id, { theme: "Anything" })).rejects.toThrow();
+    } finally {
+      window.history.pushState({}, "", "/?persona=admin&company=klasik");
+    }
+    expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
+  });
+
   it("offers Remove only on a month that has a topic", async () => {
     renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
     const section = await calendar();
@@ -176,8 +204,9 @@ describe("divisions in Settings > Roles", () => {
     renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
     const section = await panel();
     expect(within(section).getByLabelText("Division name RBA North")).toBeInTheDocument();
+    // Rowan Ellis works in both, so counts in each.
+    expect(within(section).getByText("5 people")).toBeInTheDocument();
     expect(within(section).getByText("3 people")).toBeInTheDocument();
-    expect(within(section).getByText("1 person")).toBeInTheDocument();
 
     await user.type(within(section).getByLabelText("New division"), "West office");
     await user.click(within(section).getByRole("button", { name: /Add division/ }));
@@ -190,14 +219,26 @@ describe("divisions in Settings > Roles", () => {
     await user.tab();
     await waitFor(async () => expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toContain("North office"));
 
+    // A division people still work in stays: the database refuses, and the dialog says why.
     await user.click(within(section).getByRole("button", { name: "Remove RBA South" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/3 people in it are left with no division/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/5 people still work in it/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Remove division" }));
-    await waitFor(() => expect(within(section).queryByLabelText("Division name RBA South")).not.toBeInTheDocument());
-    expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toEqual(["North office", "West office"]);
+    expect(await within(dialog).findByText("Move the 5 people out of RBA South first.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(within(section).getByLabelText("Division name RBA South")).toBeInTheDocument();
     const people = await listCompanyProfiles(RBA.company.id);
-    expect(people.filter((p) => p.division_id === "rba-division-south")).toEqual([]);
+    expect(people.filter((p) => p.division_ids.includes("rba-division-south"))).toHaveLength(5);
+
+    // An empty one goes.
+    await user.type(within(section).getByLabelText("New division"), "Spare yard");
+    await user.click(within(section).getByRole("button", { name: /Add division/ }));
+    await user.click(await within(section).findByRole("button", { name: "Remove Spare yard" }));
+    const empty = await screen.findByRole("dialog");
+    expect(within(empty).getByText(/Nobody works in it/)).toBeInTheDocument();
+    await user.click(within(empty).getByRole("button", { name: "Remove division" }));
+    await waitFor(() => expect(within(section).queryByLabelText("Division name Spare yard")).not.toBeInTheDocument());
+    expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toEqual(["RBA South", "North office", "West office"]);
   });
 
   it("says why a duplicate name will not save", async () => {

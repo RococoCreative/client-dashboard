@@ -3,13 +3,17 @@
 // its data differs. Every company reads the same sections: Home, Sales & Finance, Production,
 // People, Resources, then My GSR and Settings at the bottom. A module adds or hides whole items
 // (Wins, Tasks, Reporting, Controls, Projects, Links), never a company name.
+//
+// Three audiences read it: admins (owners, admins, Rococo), employees, and leads. A lead item shows
+// to admins and to managers; a manager otherwise keeps every employee item, so People sits beside
+// their own My GSR, My Reviews and My Goals.
 import type { LucideIcon } from "lucide-react";
 import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users } from "lucide-react";
 import type { Company, LinkNavGroup } from "../types/database.ts";
 import { hasModule, type ModuleKey } from "./modules.ts";
 
 export type NavGroup = LinkNavGroup | "resources" | "utility";
-export type NavAudience = "admin" | "employee" | "both";
+export type NavAudience = "admin" | "lead" | "employee" | "both";
 
 export interface NavItem {
   id: string;
@@ -39,7 +43,8 @@ export const NAV_GROUP_LABELS: Record<NavGroup, string | null> = {
   utility: null,
 };
 
-// An employee's People section holds only their own pages, so it reads as theirs.
+// An employee's People section holds only their own pages, so it reads as theirs. A manager's also
+// holds the People tab, so it keeps its name.
 const EMPLOYEE_GROUP_LABELS: Partial<Record<NavGroup, string>> = { people_hr: "My development" };
 
 // Registry order is each section's order.
@@ -52,7 +57,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "financials", to: "/financials", label: "Financials", icon: CircleDollarSign, audience: "admin", group: "sales_finance" },
   { id: "marketing", to: "/marketing", label: "Marketing", icon: Megaphone, audience: "admin", group: "sales_finance" },
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production" },
-  { id: "people", to: "/people", label: "People", icon: Users, audience: "admin", group: "people_hr" },
+  { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
   { id: "gsr", to: "/gsr", label: "Monthly GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
   { id: "reviews", to: "/reviews", label: "Reviews", icon: ClipboardCheck, audience: "admin", group: "people_hr" },
@@ -83,22 +88,29 @@ export interface NavSection {
 
 export type NavLayout = { kind: "flat"; items: NavItem[] } | { kind: "grouped"; sections: NavSection[] };
 
-function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean): boolean {
-  const audienceOk = isAdmin ? item.audience !== "employee" : item.audience !== "admin";
-  if (!audienceOk) return false;
+function audienceSees(audience: NavAudience, isAdmin: boolean, isLead: boolean): boolean {
+  if (audience === "both") return true;
+  if (audience === "lead") return isAdmin || isLead;
+  if (audience === "admin") return isAdmin;
+  return !isAdmin;
+}
+
+function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean): boolean {
+  if (!audienceSees(item.audience, isAdmin, isLead)) return false;
   if (item.requires && !hasModule(company, item.requires)) return false;
   // Rococo admins have no company of their own, so a "My" page would be empty for them.
   if (isRococo && item.to.startsWith("/my")) return false;
   return true;
 }
 
-// The company sidebar, in sections, for every company alike.
-export function navFor(company: Company, isAdmin: boolean, isRococo: boolean): NavLayout {
-  const items = NAV_ITEMS.filter((item) => visible(item, company, isAdmin, isRococo));
+// The company sidebar, in sections, for every company alike. isLead is the hub's (owners, admins,
+// managers and Rococo); left out, it follows isAdmin.
+export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean = isAdmin): NavLayout {
+  const items = NAV_ITEMS.filter((item) => visible(item, company, isAdmin, isRococo, isLead));
   const sections: NavSection[] = [];
   for (const group of NAV_GROUP_ORDER) {
     const inGroup = items.filter((item) => item.group === group);
-    const heading = (!isAdmin ? EMPLOYEE_GROUP_LABELS[group] : undefined) ?? NAV_GROUP_LABELS[group];
+    const heading = (!isAdmin && !isLead ? EMPLOYEE_GROUP_LABELS[group] : undefined) ?? NAV_GROUP_LABELS[group];
     if (inGroup.length > 0) sections.push({ group, heading, items: inGroup });
   }
   return { kind: "grouped", sections };

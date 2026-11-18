@@ -7,7 +7,7 @@ import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDo
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
-import { isCompanyAdminRole } from "../lib/people.ts";
+import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -371,7 +371,10 @@ function build(company: Company): CompanyBundle {
     reports_to: i === 0 ? null : p("user-1"),
     job_role_id: null,
     division_id: null,
+    division_ids: [],
     can_view_divisions: false,
+    view_all_divisions: person.role === "admin",
+    view_division_ids: [],
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -679,6 +682,7 @@ function build(company: Company): CompanyBundle {
         priority: "medium",
         recurrence: null,
         campaign_id: null,
+        goal_id: null,
         completed_at: null,
         completed_by: null,
         next_task_id: null,
@@ -1150,7 +1154,10 @@ function build(company: Company): CompanyBundle {
       reports_to: p("user-1"),
       job_role_id: null,
       division_id: null,
+      division_ids: [],
       can_view_divisions: false,
+      view_all_divisions: false,
+      view_division_ids: [],
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1172,7 +1179,10 @@ function build(company: Company): CompanyBundle {
       reports_to: p("user-1"),
       job_role_id: null,
       division_id: null,
+      division_ids: [],
       can_view_divisions: false,
+      view_all_divisions: false,
+      view_division_ids: [],
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1303,6 +1313,9 @@ function build(company: Company): CompanyBundle {
   const metricEntries: MetricEntry[] = [];
   const projectAssignments: ProjectAssignment[] = [];
   const reviewProjectNotes: ReviewProjectNote[] = [];
+  // A manager's team (0038), RBA only and placed after everyone else so the first people of every
+  // bundle stay who they were.
+  const team: Profile[] = [];
   if (company.slug === "klasik") {
     focusTopics.push(
       { id: p("focus-2026-09"), company_id: company.id, month: "2026-09-01", theme: "Core value: Integrity", description: "Say what you will do, do what you said, and speak up early when something slips.", created_by: profiles[0].id, updated_by: profiles[0].id, created_at: EARLIER, updated_at: EARLIER },
@@ -1320,10 +1333,42 @@ function build(company: Company): CompanyBundle {
     );
     const [alex, jamie, noor] = profiles;
     const avery = pendingStaff[0];
-    Object.assign(alex, { division_id: p("division-south"), can_view_divisions: true });
-    Object.assign(jamie, { division_id: p("division-south") });
-    Object.assign(noor, { division_id: p("division-north"), job_role_id: p("role-pm") });
-    Object.assign(avery, { division_id: p("division-south"), job_role_id: p("role-super") });
+    Object.assign(alex, { division_id: p("division-south"), division_ids: [p("division-south")], can_view_divisions: true });
+    Object.assign(jamie, { division_id: p("division-south"), division_ids: [p("division-south")] });
+    Object.assign(noor, { division_id: p("division-north"), division_ids: [p("division-north")], job_role_id: p("role-pm") });
+    Object.assign(avery, { division_id: p("division-south"), division_ids: [p("division-south")], job_role_id: p("role-super") });
+
+    // Harper Quinn manages operations in RBA South with no division view access of her own, so she
+    // sees exactly her chain: Rowan Ellis, a crew lead who works in both divisions, and under Rowan,
+    // Kai Bennett in RBA North, who has not signed in yet. Nobody else reports to her.
+    const member = (key: string, name: string, title: string, role: Role, reportsTo: string, divisionIds: string[], signedIn: boolean): Profile => ({
+      id: p(key),
+      user_id: signedIn ? p(`auth-${key}`) : null,
+      email: `${slugName(name)}@${spec.domain}`,
+      full_name: name,
+      title,
+      company_id: company.id,
+      role,
+      is_rococo_admin: false,
+      is_active: true,
+      hire_date: "2025-02-03",
+      phone: null,
+      department: null,
+      reports_to: reportsTo,
+      job_role_id: null,
+      division_id: divisionIds.length === 1 ? divisionIds[0] : null,
+      division_ids: divisionIds,
+      can_view_divisions: false,
+      view_all_divisions: false,
+      view_division_ids: [],
+      created_at: EARLIER,
+      updated_at: EARLIER,
+    });
+    team.push(
+      member("manager", "Harper Quinn", "Operations Manager", "manager", alex.id, [p("division-south")], true),
+      member("crew-lead", "Rowan Ellis", "Crew Lead", "employee", p("manager"), [p("division-south"), p("division-north")], true),
+      member("crew", "Kai Bennett", "Carpenter", "employee", p("crew-lead"), [p("division-north")], false),
+    );
 
     const metric = (key: string, role: string, name: string, kind: RoleMetric["kind"], target: number | null, sort: number, extra: Partial<RoleMetric> = {}): RoleMetric => ({
       id: p(`metric-${key}`), company_id: company.id, job_role_id: p(role), name, description: null, kind, target, scale_max: 5,
@@ -1384,7 +1429,7 @@ function build(company: Company): CompanyBundle {
     reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
   }
 
-  return { company, profiles: [...profiles, ...pendingStaff], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
+  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -1405,7 +1450,10 @@ const ROCOCO: Profile = {
   reports_to: null,
   job_role_id: null,
   division_id: null,
+  division_ids: [],
   can_view_divisions: false,
+  view_all_divisions: false,
+  view_division_ids: [],
   created_at: EARLIER,
   updated_at: EARLIER,
 };
@@ -1488,12 +1536,14 @@ export function fakeSession(profile: Profile): Session {
 export type Persona = "admin" | "employee" | "rococo" | "owner" | "manager";
 
 // Each persona is the first person holding that role. At Klasik and RBA the admin is still the
-// first person; at Kingdom the owner is Marcus Lee and the admin is Avery Stone.
+// first person; at Kingdom the owner is Marcus Lee and the admin is Avery Stone. The manager is
+// RBA's Harper Quinn and Kingdom's Jules Carter; Klasik has none, so its manager persona is the
+// employee persona, which is what a company with no manager offers.
 function personaProfile(persona: Persona, bundle: CompanyBundle): Profile {
   if (persona === "rococo") return ROCOCO;
   const first = (role: Role) => bundle.profiles.find((p) => p.role === role);
   if (persona === "owner") return first("owner") ?? bundle.profiles[0];
-  if (persona === "manager") return first("manager") ?? bundle.profiles[1];
+  if (persona === "manager") return first("manager") ?? personaProfile("employee", bundle);
   if (persona === "admin") return first("admin") ?? bundle.profiles[0];
   return bundle.profiles[1];
 }
@@ -1510,6 +1560,7 @@ export function makeHub(persona: Persona, company: Company | null = KLASIK.compa
     companies: isRococo ? COMPANIES : company ? [company] : [],
     isRococo,
     isAdmin: isRococo || isCompanyAdminRole(profile.role),
+    isLead: isRococo || isLeadRole(profile.role),
     setActiveCompanyId: () => undefined,
     refreshProfile: async () => undefined,
     refreshCompanies: async () => undefined,

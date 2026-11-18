@@ -12,7 +12,7 @@ export interface TabItem {
 
 export default function Tabs({ items, label = "Sections" }: { items: TabItem[]; label?: string }) {
   return (
-    <nav className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-line px-1" aria-label={label}>
+    <nav className="relative -mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-line px-1" aria-label={label}>
       {items.map((item) => (
         <NavLink
           key={item.to}

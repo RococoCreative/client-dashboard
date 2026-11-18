@@ -5,7 +5,9 @@
 // own time zone (0037), a completed copy whose next one is open is locked, and deleting the open
 // copy ends the series. tasks.test.ts pins all of it.
 import type { Task, TaskPriority, TaskRecurrence, TaskStep, TaskWithSteps } from "../../types/database.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { goalLinkProblem } from "./gsr.ts";
 import { timeZoneOf } from "./companies.ts";
 import { companyOf } from "./profiles.ts";
 
@@ -21,9 +23,10 @@ export type TaskInput = {
   priority?: TaskPriority;
   recurrence?: TaskRecurrence | null;
   campaign_id?: string | null;
+  goal_id?: string | null;
   steps?: string[];
 };
-export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id">>;
+export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id">>;
 
 const LOCKED = "The next one is already open.";
 const DAYS: Partial<Record<TaskRecurrence, number>> = { daily: 1, weekly: 7, biweekly: 14 };
@@ -60,12 +63,19 @@ function read(task: Task): TaskWithSteps {
 }
 
 // The checks the table constraints and guard_task make on any write.
-function check(task: Pick<Task, "company_id" | "title" | "assignee_id" | "due_date" | "recurrence">): void {
+function check(task: Pick<Task, "company_id" | "title" | "assignee_id" | "due_date" | "recurrence" | "goal_id">, prevGoalId: string | null = null): void {
   if (task.title.trim() === "") throw new Error("A task needs a title.");
   if (task.recurrence !== null && task.due_date === null) throw new Error("A repeating task needs a due date.");
   if (task.assignee_id !== null) {
     const company = companyOf(task.assignee_id);
     if (company !== null && company !== task.company_id) throw new Error("That person belongs to another company.");
+  }
+  // guard_task (0039): linking checks the goal; an unchanged link only checks that its person
+  // still matches the assignee, and unlinking always passes.
+  if (task.goal_id !== null) {
+    const problem = goalLinkProblem(task);
+    const onlyFrozen = problem !== null && problem.startsWith("That month is closed");
+    if (problem && !(onlyFrozen && task.goal_id === prevGoalId)) throw new Error(problem);
   }
 }
 // guard_task_step: a completed copy whose next one is open keeps its steps as they are.
@@ -132,6 +142,8 @@ function recur(task: Task): void {
     priority: task.priority,
     recurrence: task.recurrence,
     campaign_id: task.campaign_id,
+    // A new copy belongs to a later month, so it does not carry the goal link (0039).
+    goal_id: null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -190,6 +202,7 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
     priority: input.priority ?? "medium",
     recurrence: input.recurrence ?? null,
     campaign_id: input.campaign_id ?? null,
+    goal_id: input.goal_id ?? null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -208,16 +221,28 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
 
 export async function updateTask(id: string, patch: TaskPatch): Promise<TaskWithSteps> {
   const task = findTask(id);
-  const { title, description, assignee_id, due_date, priority, recurrence, campaign_id } = { ...task, ...patch };
-  const next = { ...task, title, description, assignee_id, due_date, priority, recurrence, campaign_id };
-  check(next);
+  const { title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id } = { ...task, ...patch };
+  const next = { ...task, title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id };
+  check(next, task.goal_id);
   Object.assign(task, next, { updated_at: now() });
   return read(task);
 }
 
 // Deleting the open copy of a series ends the series on the copy before it.
+export async function listTasksForGoals(companyId: string, goalIds: readonly string[]): Promise<TaskWithSteps[]> {
+  const wanted = new Set(goalIds);
+  return tasks
+    .filter((t) => t.company_id === companyId && t.goal_id !== null && wanted.has(t.goal_id))
+    .sort(byDueThenCreated)
+    .map(read);
+}
+
+export async function linkTaskToGoal(taskId: string, goalId: string | null): Promise<TaskWithSteps> {
+  return updateTask(taskId, { goal_id: goalId });
+}
+
 export async function deleteTask(id: string): Promise<void> {
-  findTask(id);
+  if (!tasks.some((t) => t.id === id)) throw new Error(NOT_CHANGED_MESSAGE);
   tasks.splice(tasks.findIndex((t) => t.id === id), 1);
   for (let i = steps.length - 1; i >= 0; i--) if (steps[i].task_id === id) steps.splice(i, 1);
   for (const t of tasks) {

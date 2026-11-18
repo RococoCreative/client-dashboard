@@ -1,12 +1,13 @@
 // The person at the top of a review, the way the dashboard sheet opens: position, tenure,
 // department, who they report to, this year's personal KPIs (current against target, hit or
 // not), and the company goals everyone is chasing. Admins update KPI progress right here
-// during the meeting. Compensation stays on the person page.
+// during the meeting. Compensation stays on the person page. Who they report to is named from the
+// company directory, because the reader may not be able to open that person's profile.
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import Section from "../ui/Section.tsx";
 import KpiList from "../people/KpiList.tsx";
-import { displayName, formatDate } from "../../lib/format.ts";
+import { formatDate } from "../../lib/format.ts";
 import { formatTenure } from "../../lib/people.ts";
 import type { CompanyGoal, EmployeeKpi, Profile } from "../../types/database.ts";
 
@@ -23,37 +24,42 @@ function Fact({ label, value }: { label: string; value: string | null }) {
 
 export default function EmployeeSnapshot({
   employee,
-  people,
+  names,
   year,
   kpis,
   companyGoals,
   isAdmin,
+  canOpenProfile,
   onKpis,
   onError,
 }: {
   employee: Profile;
-  people: Profile[];
+  // Full names by profile id, from the directory.
+  names: ReadonlyMap<string, string>;
   year: number;
   kpis: EmployeeKpi[];
   companyGoals: CompanyGoal[];
+  // Edits the KPIs.
   isAdmin: boolean;
+  // Links to the person page: an admin, or the person's manager.
+  canOpenProfile: boolean;
   onKpis: (update: (kpis: EmployeeKpi[]) => EmployeeKpi[]) => void;
   onError: (message: string) => void;
 }) {
-  const manager = employee.reports_to ? people.find((p) => p.id === employee.reports_to) ?? null : null;
+  const manager = employee.reports_to ? (names.get(employee.reports_to)?.trim() || null) : null;
   const tenure = formatTenure(employee.hire_date);
   return (
     <Section
       eyebrow="Employee"
       title={employee.title ?? "Profile"}
       description={employee.email}
-      actions={isAdmin ? <Link to={`/people/${employee.id}`} className="text-[13px] text-accent hover:underline">Full profile</Link> : undefined}
+      actions={canOpenProfile ? <Link to={`/people/${employee.id}`} className="text-[13px] text-accent hover:underline">Full profile</Link> : undefined}
     >
       <div className="grid gap-6 md:grid-cols-3">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-1">
           <Fact label="Hired" value={employee.hire_date ? `${formatDate(employee.hire_date)}${tenure ? ` · ${tenure}` : ""}` : null} />
           <Fact label="Department" value={employee.department} />
-          <Fact label="Reports to" value={manager ? displayName(manager) : null} />
+          <Fact label="Reports to" value={manager} />
         </div>
         <div>
           <p className={eyebrowClass}>Personal KPIs {year}</p>

@@ -34,3 +34,13 @@ function friendly(message: string): string {
   }
   return message;
 }
+
+// A delete or bulk update that RLS filtered out, or that found the row already gone, returns no
+// error and no rows. Services that change a known row ask for the ids back and pass them here,
+// so a refused change reads as a refusal instead of looking like it worked.
+export const NOT_CHANGED_MESSAGE = "That is not here any more, or it is not yours to change.";
+
+export function requireRows<T>(rows: readonly T[] | null | undefined, message = NOT_CHANGED_MESSAGE): T[] {
+  if (!rows || rows.length === 0) throw new Error(message);
+  return [...rows];
+}

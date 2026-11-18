@@ -6,6 +6,8 @@
 // The employee starts theirs to prefill their goals before the meeting (0020 lets them, for
 // their own row in an open monthly cycle and nothing else), so the meeting opens on their draft.
 // A person an admin omitted from the month has nothing to start, and the page says so (0034).
+// Opening is an insert that ignores a duplicate (ensureReview), so starting at the same moment an
+// admin runs Start all opens the same review instead of failing.
 import { useState } from "react";
 import { PencilLine } from "lucide-react";
 import Button from "../../components/ui/Button.tsx";
@@ -63,12 +65,12 @@ export default function MyGsrPage() {
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
       ) : !state.data ? null : !cycle ? (
-        <EmptyState eyebrow="Goal Setting Review" title="No month open" body="Your manager opens each month's GSR. This month's appears here the moment they do." />
+        <EmptyState eyebrow="Goal Setting Review" title="No month open" body="An admin opens each month's GSR. This month's appears here the moment they do." />
       ) : state.data.omitted ? (
         <EmptyState
           eyebrow={cycle.name}
           title={`You're not part of the ${cycle.name} GSRs`}
-          body="Your manager has left you out of this month's Goal Setting Review, so nothing is needed from you. Anything you had started is kept as it is."
+          body="An admin has left you out of this month's Goal Setting Review, so nothing is needed from you. Anything you had started is kept as it is."
         />
       ) : !review ? (
         <EmptyState

@@ -5,7 +5,7 @@
 //
 // Every number comes from src/lib/scorecard.ts (buildYearGrid, formatMetricValue), the only
 // scorecard math there is. This file only decides what is shown and writes what is typed.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
@@ -15,6 +15,7 @@ import { inputClass } from "../ui/forms.ts";
 import { deleteMetricEntry, upsertMetricEntry } from "../../services/scorecards.ts";
 import { buildYearGrid, formatMetricValue, type GridCell, type GridRow, type MetricResult, type YtdResult } from "../../lib/scorecard.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import { displayName, moneyProblem, parseDate, parseMoney, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, Project, ProjectAssignment, RoleMetric } from "../../types/database.ts";
 
@@ -82,9 +83,11 @@ export default function ReviewPerformance({
   onEntries: EntriesUpdate;
 }) {
   const [error, setError] = useState("");
-  // A refused save bumps this so the boxes go back to what is stored rather than keep text the
-  // database never took.
-  const [refusals, setRefusals] = useState(0);
+  // A result and its note are one row, so each write sends both. Typing a result and then its note
+  // put two writes in flight, each carrying the other's old half, and the later one undid the
+  // first. Writes for one cell queue instead, each starting from the row the one before it left:
+  // { entry } once a write landed (null after a removal), nothing when it failed.
+  const cellChains = useRef(new Map<string, Promise<{ entry: MetricEntry | null } | undefined>>());
   // Entries whose note box an admin has opened.
   const [noting, setNoting] = useState<string[]>([]);
   const date = parseDate(month);
@@ -114,40 +117,53 @@ export default function ReviewPerformance({
     onEntries((list) => (list.some((e) => e.id === saved.id) ? list.map((e) => (e.id === saved.id ? saved : e)) : [...list, saved]));
   }
 
-  async function write(run: () => Promise<void>) {
+  // True when the write landed. A failed one says why above the list, and the box keeps what was
+  // typed, marked not saved, so leaving it again tries again.
+  function write(key: string, shown: MetricEntry | null, work: (current: MetricEntry | null) => Promise<MetricEntry | null>): Promise<boolean> {
+    const chained = enqueueWrite(cellChains.current, key, async (latest) => ({ entry: await work(latest ? latest.entry : shown) }));
     setError("");
-    try {
-      await run();
-    } catch (err) {
-      setError(errorMessage(err));
-      setRefusals((n) => n + 1);
-    }
+    return chained.then(
+      () => true,
+      (err: unknown) => {
+        setError(errorMessage(err));
+        return false;
+      },
+    );
   }
+
+  const cellKey = (metricId: string, projectId: string | null) => `${metricId}|${projectId ?? ""}`;
 
   // A typed result: blank removes the month's entry, anything else replaces it. "85%" and "1,250"
   // read as typed.
-  function saveValue(metric: RoleMetric, projectId: string | null, entry: MetricEntry | null, text: string): void | false {
+  function saveValue(metric: RoleMetric, projectId: string | null, entry: MetricEntry | null, text: string): Promise<boolean> | false {
     const typed = text.replace(/%/g, "").trim();
+    const key = cellKey(metric.id, projectId);
     if (typed === "") {
-      if (entry) void write(async () => {
-        await deleteMetricEntry(entry.id);
-        onEntries((list) => list.filter((e) => e.id !== entry.id));
+      if (!entry) return false;
+      return write(key, entry, async (current) => {
+        if (!current) return null;
+        await deleteMetricEntry(current.id);
+        onEntries((list) => list.filter((e) => e.id !== current.id));
+        return null;
       });
-      return;
     }
     if (moneyProblem(typed) === "not_a_number") {
       setError("Enter a number.");
       return false;
     }
     const value = parseMoney(typed) as number;
-    void write(async () => {
-      upsertInState(await upsertMetricEntry({ company_id: companyId, employee_id: employee.id, metric_id: metric.id, period_month: month, project_id: projectId, value, note: entry?.note ?? null }));
+    return write(key, entry, async (current) => {
+      const saved = await upsertMetricEntry({ company_id: companyId, employee_id: employee.id, metric_id: metric.id, period_month: month, project_id: projectId, value, note: current?.note ?? null });
+      upsertInState(saved);
+      return saved;
     });
   }
 
-  function saveNote(entry: MetricEntry, text: string) {
-    void write(async () => {
-      upsertInState(await upsertMetricEntry({ company_id: companyId, employee_id: employee.id, metric_id: entry.metric_id, period_month: entry.period_month, project_id: entry.project_id, value: entry.value, note: text.trim() || null }));
+  function saveNote(entry: MetricEntry, text: string): Promise<boolean> {
+    return write(cellKey(entry.metric_id, entry.project_id), entry, async (current) => {
+      const saved = await upsertMetricEntry({ company_id: companyId, employee_id: employee.id, metric_id: entry.metric_id, period_month: entry.period_month, project_id: entry.project_id, value: current?.value ?? entry.value, note: text.trim() || null });
+      upsertInState(saved);
+      return saved;
     });
   }
 
@@ -161,7 +177,6 @@ export default function ReviewPerformance({
       <span className="flex items-center gap-1.5">
         <span className="w-20 shrink-0">
         <BlurInput
-          key={refusals}
           value={entry ? String(entry.value) : ""}
           ariaLabel={`${label}, ${monthLabel}`}
           placeholder="-"
@@ -187,7 +202,7 @@ export default function ReviewPerformance({
     if (canEnter && entry) {
       return (
         <BlurInput
-          key={`${entry.id}:${refusals}`}
+          key={entry.id}
           value={entry.note ?? ""}
           ariaLabel={`Note on ${label}, ${monthLabel}`}
           placeholder="Note (optional)"

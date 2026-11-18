@@ -2,6 +2,7 @@
 // import calls: the unique (company, period type, period start) key means re-uploading a
 // corrected export overwrites the same rows instead of duplicating them.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { FinancialSnapshot, PeriodType, SnapshotSource } from "../types/database.ts";
 
 const COLUMNS =
@@ -44,8 +45,9 @@ export async function updateSnapshot(id: string, patch: Partial<Omit<SnapshotInp
 }
 
 export async function deleteSnapshot(id: string): Promise<void> {
-  const { error } = await db().from("financial_snapshots").delete().eq("id", id);
+  const { data, error } = await db().from("financial_snapshots").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 export async function upsertSnapshots(rows: SnapshotInput[]): Promise<FinancialSnapshot[]> {

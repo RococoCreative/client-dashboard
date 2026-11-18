@@ -3,6 +3,7 @@
 // first of the month (YYYY-MM-01), the same shape the database checks.
 import type { FocusTopic } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const COLUMNS = "id, company_id, month, theme, description, created_by, updated_by, created_at, updated_at";
 
@@ -32,6 +33,7 @@ export async function upsertFocusTopic(companyId: string, month: string, theme: 
 }
 
 export async function deleteFocusTopic(id: string): Promise<void> {
-  const { error } = await db().from("focus_topics").delete().eq("id", id);
+  const { data, error } = await db().from("focus_topics").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

@@ -1,7 +1,11 @@
 // A person's KPIs for one year: the target as people say it, where it stands, hit or not.
 // Full editor on the person page (rename, retarget, add, remove); compact on the review,
 // where the manager updates the current figure and the hit mark during the meeting.
-import { useState, type FormEvent } from "react";
+//
+// Saves for one KPI queue behind each other, so a current figure left by a click on Hit is two
+// writes in order rather than two that can land the wrong way round. Each queued write starts from
+// the row the one before it returned, so two quick clicks on Hit come back where they began.
+import { useRef, useState, type FormEvent } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -11,6 +15,7 @@ import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { enqueueWrite } from "../../lib/writeQueue.ts";
 import type { EmployeeKpi } from "../../types/database.ts";
 
 export default function KpiList({
@@ -39,20 +44,39 @@ export default function KpiList({
   const [deleting, setDeleting] = useState<EmployeeKpi | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The add form waits for its round trip before it takes another submit, or a quick double
+  // Enter files the same KPI twice.
+  const [adding, setAdding] = useState(false);
+  // Per KPI, the last write in line; it settles to the row that write returned (or nothing when it
+  // failed), which is what the next write in line builds on. An empty line starts from the KPI as
+  // shown, so a reload that brought a newer row is what the next click flips.
+  const saveChains = useRef(new Map<string, Promise<EmployeeKpi | undefined>>());
 
-  async function save(kpi: EmployeeKpi, patch: Parameters<typeof updateEmployeeKpi>[1]) {
-    try {
-      const next = await updateEmployeeKpi(kpi.id, patch);
+  type Patch = Parameters<typeof updateEmployeeKpi>[1];
+
+  // True when the change landed, false once the page shows why not. A patch may be worked out
+  // from the row as it stands once the writes ahead of it are done.
+  async function save(kpi: EmployeeKpi, patch: Patch | ((current: EmployeeKpi) => Patch)): Promise<boolean> {
+    const chained = enqueueWrite(saveChains.current, kpi.id, async (latest) => {
+      const current = latest ?? kpi;
+      const next = await updateEmployeeKpi(kpi.id, typeof patch === "function" ? patch(current) : patch);
       onChange((list) => list.map((k) => (k.id === next.id ? next : k)));
+      return next;
+    });
+    try {
+      await chained;
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
 
   async function add(event: FormEvent) {
     event.preventDefault();
     const text = name.trim();
-    if (!text) return;
+    if (!text || adding) return;
+    setAdding(true);
     try {
       const created = await createEmployeeKpi({ company_id: companyId, employee_id: employeeId, year, name: text, target_display: target.trim() || null, sort_order: kpis.length + 1 });
       onChange((list) => [...list, created]);
@@ -60,6 +84,8 @@ export default function KpiList({
       setTarget("");
     } catch (err) {
       onError(errorMessage(err));
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -96,7 +122,7 @@ export default function KpiList({
           <li key={kpi.id} className={compact ? "flex flex-wrap items-center justify-between gap-2" : "flex flex-wrap items-center gap-3 py-2.5 first:pt-0 last:pb-0"}>
             <div className="min-w-0 flex-1">
               {canEdit && !compact ? (
-                <BlurInput value={kpi.name} required ariaLabel={`KPI ${kpi.name}`} onSave={(next) => void save(kpi, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
+                <BlurInput value={kpi.name} required ariaLabel={`KPI ${kpi.name}`} onSave={(next) => save(kpi, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
               ) : (
                 <p className="text-sm text-ink">{kpi.name}</p>
               )}
@@ -104,7 +130,7 @@ export default function KpiList({
                 <div className="tnum mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-3">
                   {canEdit ? (
                     <div className="w-20">
-                      <BlurInput value={kpi.current_display ?? ""} placeholder="Current" ariaLabel={`Current for ${kpi.name}`} onSave={(next) => void save(kpi, { current_display: next.trim() || null })} className={`${inputClass} mt-0 py-0.5 text-[12px]`} />
+                      <BlurInput value={kpi.current_display ?? ""} placeholder="Current" ariaLabel={`Current for ${kpi.name}`} onSave={(next) => save(kpi, { current_display: next.trim() || null })} className={`${inputClass} mt-0 py-0.5 text-[12px]`} />
                     </div>
                   ) : (
                     <span>{kpi.current_display || "-"}</span>
@@ -116,16 +142,16 @@ export default function KpiList({
             {!compact ? (
               <>
                 <div className="w-28">
-                  {canEdit ? <BlurInput value={kpi.target_display ?? ""} placeholder="Target" ariaLabel={`Target for ${kpi.name}`} onSave={(next) => void save(kpi, { target_display: next.trim() || null })} className={`${inputClass} tnum mt-0 text-[13px]`} /> : <span className="tnum text-sm text-ink-2">{kpi.target_display || "-"}</span>}
+                  {canEdit ? <BlurInput value={kpi.target_display ?? ""} placeholder="Target" ariaLabel={`Target for ${kpi.name}`} onSave={(next) => save(kpi, { target_display: next.trim() || null })} className={`${inputClass} tnum mt-0 text-[13px]`} /> : <span className="tnum text-sm text-ink-2">{kpi.target_display || "-"}</span>}
                 </div>
                 <div className="w-28">
-                  {canEdit ? <BlurInput value={kpi.current_display ?? ""} placeholder="Current" ariaLabel={`Current for ${kpi.name}`} onSave={(next) => void save(kpi, { current_display: next.trim() || null })} className={`${inputClass} tnum mt-0 text-[13px]`} /> : <span className="tnum text-sm text-ink-2">{kpi.current_display || "-"}</span>}
+                  {canEdit ? <BlurInput value={kpi.current_display ?? ""} placeholder="Current" ariaLabel={`Current for ${kpi.name}`} onSave={(next) => save(kpi, { current_display: next.trim() || null })} className={`${inputClass} tnum mt-0 text-[13px]`} /> : <span className="tnum text-sm text-ink-2">{kpi.current_display || "-"}</span>}
                 </div>
               </>
             ) : null}
             <div className="flex items-center gap-1.5">
               {canEdit ? (
-                <button type="button" onClick={() => void save(kpi, { is_hit: !kpi.is_hit })} aria-label={kpi.is_hit ? `Mark ${kpi.name} not hit` : `Mark ${kpi.name} hit`}>
+                <button type="button" onClick={() => void save(kpi, (current) => ({ is_hit: !current.is_hit }))} aria-label={kpi.is_hit ? `Mark ${kpi.name} not hit` : `Mark ${kpi.name} hit`}>
                   {hitBadge(kpi)}
                 </button>
               ) : (
@@ -148,8 +174,8 @@ export default function KpiList({
           <div className="w-28">
             <input type="text" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Target" aria-label="New KPI target" className={`${inputClass} mt-0`} />
           </div>
-          <Button type="submit" variant="secondary" disabled={!name.trim()}>
-            <Plus size={14} aria-hidden /> Add
+          <Button type="submit" variant="secondary" disabled={!name.trim() || adding}>
+            <Plus size={14} aria-hidden /> {adding ? "Adding..." : "Add"}
           </Button>
         </form>
       ) : null}

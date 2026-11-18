@@ -14,6 +14,13 @@
 // A monthly GSR also reads the person's role scorecard for its month ("Performance this month"),
 // entered here by an admin.
 //
+// A manager opens the monthly GSR of someone they lead and works its goals and notes the way an
+// admin does while the month is open (0038). Everything else here stays with an admin: locking a
+// month, ratings, line items, feedback, sign-off and reopening. Nothing this page loads is
+// admin-only, so a manager's reads come back narrowed by RLS rather than refused. Names of people
+// who are not the subject (who signed off, who wrote a note, who the person reports to) come from
+// the company directory, which every member reads.
+//
 // Employees open the same page for their own review (RLS makes sure it is theirs). A monthly
 // GSR is theirs to work in full so they can prefill it before the meeting, except what is
 // reserved for an admin: a goal someone else set for them keeps what it is, results are entered
@@ -46,10 +53,14 @@ import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
+import { hasModule } from "../../lib/modules.ts";
+import { ledBy } from "../../lib/people.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
 import { createScore, deleteScore, getCycle, getReview, listCompanyGoals, listCriteria, listCycleOmissions, listCycles, listEmployeeReviews, listGoalNotes, listGoals, listImpactScores, listPillars, listReviewScores, type ReviewPatch, updateReview, updateScore } from "../../services/gsr.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
+import { listDirectory } from "../../services/directory.ts";
+import { listTasksForGoals } from "../../services/tasks.ts";
 import { listEmployeeKpis } from "../../services/employees.ts";
 import { listJobRoleGoals, listJobRoles } from "../../services/jobRoles.ts";
 import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts";
@@ -61,7 +72,7 @@ import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pill
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, omittedCycleIdsFor, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount, lockedMonthsIn, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDateTime, formatNumber, formatPeriod, parseMoney, pluralize } from "../../lib/format.ts";
+import { displayName, formatDateTime, formatNumber, formatPeriod, moneyFieldError, parseMoney, pluralize } from "../../lib/format.ts";
 import {
   PREVIOUS_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
@@ -69,9 +80,20 @@ import {
   type GsrCriterion,
   type GsrPillar,
   type PreviousStatus,
+  type Profile,
   type ReviewCycle,
   type ReviewScore,
+  type TaskWithSteps,
 } from "../../types/database.ts";
+
+// Who signed off a review when the company directory does not list them. Rococo only when the page
+// knows it: the viewer is that Rococo admin, or the reviewer is on the list the viewer reads and is
+// Rococo staff. Otherwise the neutral line, since an admin who has since left the company reads the
+// same way and must not be credited to Rococo.
+function reviewerFallback(reviewerId: string, viewer: Pick<Profile, "id" | "is_rococo_admin">, people: ReadonlyArray<Pick<Profile, "id" | "is_rococo_admin">>): string {
+  const known = reviewerId === viewer.id ? viewer : people.find((p) => p.id === reviewerId);
+  return known?.is_rococo_admin ? "Rococo" : "someone no longer listed";
+}
 
 // Table headers must stay table-cells: the shared label class sets display:block.
 const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
@@ -129,6 +151,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const params = useParams();
   const reviewId = reviewIdProp ?? params.reviewId ?? "";
   const { company, profile, isAdmin } = useHub();
+  const tasksOn = hasModule(company, "tasks");
   const companyId = company!.id;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -149,6 +172,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const [lockError, setLockError] = useState("");
   // Signing off a scored review whose Monthly GSRs pillar has no locked month asks first.
   const [confirmLeftOut, setConfirmLeftOut] = useState(false);
+  // The score the lock dialog shows and writes, worked out from the month's goals as they were
+  // read again when the dialog opened, so a slider the person moved in their own session since this
+  // page loaded counts.
+  const [lockScore, setLockScore] = useState<{ total: number; cap: number; score: number } | null>(null);
 
   // A criterion can have two saves in flight at once: blurring a note commits it as the rating
   // beside it is clicked. Both would read the same render-time scores array, both would see
@@ -162,7 +189,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const state = useAsync(async () => {
     const review = await getReview(reviewId);
     assertInCompany(review, companyId, "review");
-    const [cycle, cycles, pillars, criteria, scores, people, goals] = await Promise.all([
+    const [cycle, cycles, pillars, criteria, scores, people, goals, directory] = await Promise.all([
       getCycle(review.cycle_id),
       listCycles(review.company_id),
       listPillars(review.company_id),
@@ -170,15 +197,21 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       // criterion retired since then is still one of them.
       listCriteria(review.company_id, true),
       listReviewScores(review.id),
+      // The people the viewer may see (RLS), for the person, whether the viewer leads them, and the
+      // task form's picker. Names of anyone else come from the directory.
       listCompanyProfiles(review.company_id),
       listGoals(review.company_id, review.employee_id),
+      listDirectory(review.company_id),
     ]);
     const year = cycleYear(cycle);
     const person = people.find((p) => p.id === review.employee_id) ?? null;
     const roleId = cycle.cadence === "monthly" ? (person?.job_role_id ?? null) : null;
     // A monthly GSR reads the role scorecard for its month; the results are read for that month's year.
     const reviewMonth = cycle.cadence === "monthly" ? monthOf(cycle.period_start) : null;
-    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries] = await Promise.all([
+    // The tasks on this month's and last month's goals, open and done, where the company runs tasks.
+    const shownMonths = cycle.cadence === "monthly" ? [cycle.id, previousCycle(cycles, cycle)?.id].filter((id): id is string => Boolean(id)) : [];
+    const shownGoalIds = goals.filter((g) => g.scope === "cycle" && g.cycle_id !== null && shownMonths.includes(g.cycle_id)).map((g) => g.id);
+    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
@@ -205,9 +238,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       // The company's role metrics, retired ones too, and the person's results for the month's year.
       reviewMonth ? listRoleMetrics(review.company_id, true) : Promise.resolve([]),
       reviewMonth ? listMetricEntries(review.company_id, { employeeId: review.employee_id, year: Number(reviewMonth.slice(0, 4)) }) : Promise.resolve([]),
+      tasksOn && cycle.cadence === "monthly" ? listTasksForGoals(review.company_id, shownGoalIds) : Promise.resolve<TaskWithSteps[] | null>(null),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, reviewMonth, year };
-  }, [reviewId, companyId]);
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, reviewMonth, year };
+  }, [reviewId, companyId, tasksOn]);
 
   // The panel is handed the person and year of the review on screen, so every figure it reports
   // is stamped with the same two. Stable between renders, because the panel reports again
@@ -224,12 +258,21 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, reviewMonth, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, reviewMonth, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
+  // Full names by profile id, from the directory, for everyone the page names who is not its subject.
+  const names = new Map(directory.map((entry) => [entry.id, entry.full_name?.trim() || "Unnamed"] as const));
   // Written on Mark complete; this is where it is read back, so a signed-off review says who
-  // signed it off.
-  const reviewer = review.reviewer_id ? (people.find((p) => p.id === review.reviewer_id) ?? null) : null;
+  // signed it off. The directory lists everyone placed with the company. A reviewer it does not
+  // know is Rococo only when the page can tell (the viewer is that Rococo admin, or the person is on
+  // the list the viewer reads); anyone else, such as an admin since moved to another company, reads
+  // neutrally rather than being credited to the wrong party.
+  const reviewerName = review.reviewer_id ? (names.get(review.reviewer_id) ?? reviewerFallback(review.reviewer_id, profile, people)) : null;
   const isOwn = review.employee_id === profile.id;
+  // The viewer leads the person: their manager, or anyone up the chain above them (lib/people.ts,
+  // the same rule as private.led_person_ids). An admin's powers already cover everything a leader
+  // does, so this matters for managers.
+  const isLeader = !isOwn && !isAdmin && ledBy(profile, people).some((p) => p.id === review.employee_id);
   const frozen = review.status === "complete";
   // Omitted from this cycle (0034): the review is set aside as it is, and nothing scores or signs
   // it off until the person is added back on the cycle page. Read the way the cycle's roster reads
@@ -343,14 +386,15 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
 
   // Only an admin may move a review's status: guard_review_employee_fields rejects the write
   // from anyone else. An employee ticking a step on their own goal would otherwise get a
-  // permission error for a save that actually succeeded.
+  // permission error for a save that actually succeeded. Callers run it only after their own
+  // write landed, so a failed save never moves the review on.
   async function markInProgress() {
     if (!isAdmin || review.status !== "not_started") return;
     const next = await updateReview(review.id, { status: "in_progress" });
     state.setData((prev) => (prev ? { ...prev, review: next } : prev));
   }
 
-  async function saveRating(pillar: GsrPillar, criterion: GsrCriterion, patch: { rating?: number | null; notes?: string | null }) {
+  async function saveRating(pillar: GsrPillar, criterion: GsrCriterion, patch: { rating?: number | null; notes?: string | null }): Promise<boolean> {
     setError("");
     const key = `${review.id}:${criterion.id}`;
     const run = (saveChains.current.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
@@ -367,8 +411,10 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     saveChains.current.set(key, run);
     try {
       await run;
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -384,7 +430,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     }
   }
 
-  async function saveLineItem(score: ReviewScore, patch: { label?: string; target?: number | null; actual?: number | null; notes?: string | null }) {
+  async function saveLineItem(score: ReviewScore, patch: { label?: string; target?: number | null; actual?: number | null; notes?: string | null }): Promise<boolean> {
     setError("");
     // Label, target, actual and notes sit in one row, so tabbing across them puts several
     // whole-row writes in flight at once. Queued per row, the same way saveRating is, because
@@ -396,9 +442,22 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     saveChains.current.set(score.id, run);
     try {
       await run;
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
+  }
+
+  // A line item's target or actual. Text that is not a figure is refused with a line saying what to
+  // type, rather than saved as a blank that moves the score; blank clears it on purpose.
+  function saveLineFigure(score: ReviewScore, field: "target" | "actual", text: string): Promise<boolean> | false {
+    const problem = moneyFieldError(field === "target" ? "the target" : "the actual", text, "100");
+    if (problem) {
+      setError(problem);
+      return false;
+    }
+    return saveLineItem(score, field === "target" ? { target: parseMoney(text) } : { actual: parseMoney(text) });
   }
 
   async function removeLineItem() {
@@ -417,22 +476,33 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     }
   }
 
-  async function patchReview(patch: ReviewPatch) {
+  // Resolves whether the write landed, for the fields that say "Not saved".
+  async function patchReview(patch: ReviewPatch): Promise<boolean> {
     setError("");
     setBusy(true);
     try {
       const next = await updateReview(review.id, patch);
       state.setData((prev) => (prev ? { ...prev, review: next } : prev));
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  async function saveDiscussion(next: string | null) {
-    await patchReview({ support_discussion: next });
-    await markInProgress().catch((err: unknown) => setError(errorMessage(err)));
+  // The discussion moves a not-started review on only once it saved.
+  async function saveDiscussion(next: string | null): Promise<boolean> {
+    const saved = await patchReview({ support_discussion: next });
+    if (saved) await markInProgress().catch((err: unknown) => setError(errorMessage(err)));
+    return saved;
+  }
+
+  // Something on the month saved: an older failure line no longer applies, and the review moves on.
+  function touched() {
+    setError("");
+    void markInProgress().catch((err: unknown) => setError(errorMessage(err)));
   }
 
   const feedbackPatch = (key: "manager_feedback" | "peer_feedback" | "client_feedback", value: string): ReviewPatch => {
@@ -443,17 +513,46 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
 
   // One signed-off figure as a pillar's single line item. A figure with nothing behind it (no
   // tasks, no locked month) removes the line item a previous sign-off left, so re-signing a
-  // reopened review never keeps a figure the period no longer has.
-  async function writeSignedOffLine(pillarId: string, line: { label: string; target: number; actual: number } | null) {
-    const existing = scores.filter((s) => s.pillar_id === pillarId && !s.criterion_id);
+  // reopened review never keeps a figure the period no longer has. It works on the review's line
+  // items as the database holds them (current), not as this page last rendered them, and every row
+  // it writes goes into state as it lands: a sign-off that failed after creating the row, retried,
+  // updates that row instead of adding a second one.
+  async function writeSignedOffLine(current: ReviewScore[], pillarId: string, line: { label: string; target: number; actual: number } | null) {
+    const existing = current.filter((s) => s.pillar_id === pillarId && !s.criterion_id);
+    const drop = async (stale: ReviewScore) => {
+      await deleteScore(stale.id);
+      state.setData((prev) => (prev ? { ...prev, scores: prev.scores.filter((s) => s.id !== stale.id) } : prev));
+    };
     if (!line) {
-      for (const stale of existing) await deleteScore(stale.id);
+      for (const stale of existing) await drop(stale);
       return;
     }
     const [first, ...extra] = existing;
-    if (first) await updateScore(first.id, line);
-    else await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillarId, ...line });
-    for (const stale of extra) await deleteScore(stale.id);
+    if (first) addScoreToState(await updateScore(first.id, line));
+    else addScoreToState(await createScore({ review_id: review.id, company_id: review.company_id, pillar_id: pillarId, ...line }));
+    for (const stale of extra) await drop(stale);
+  }
+
+  // Locking a month in asks first, with the score it will lock in at. The month's goals are read
+  // again before that score is worked out, so the dialog shows, and Mark complete writes, the
+  // score of the goals on record now.
+  async function startLock() {
+    if (!gsrPillars[0]) return;
+    // The page's own failure line stays: it is about an earlier save, not about the lock.
+    setBusy(true);
+    setLockError("");
+    try {
+      const fresh = await listGoals(review.company_id, review.employee_id);
+      state.setData((prev) => (prev ? { ...prev, goals: fresh } : prev));
+      const month = fresh.filter((g) => g.scope === "cycle" && g.cycle_id === cycle.id);
+      const required = gsrPillars[0].required_goals;
+      setLockScore({ ...monthTotal(month, required), score: scoreMonth(month, required) });
+      setLocking(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Sign-off. The module's figure is written as this review's line item first, one row per
@@ -467,8 +566,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     else setError("");
     try {
       if (!monthly) {
+        // The line items as the database holds them now, not as this page last rendered them.
+        const current = await listReviewScores(review.id);
         for (const pillar of modulePillars) {
           await writeSignedOffLine(
+            current,
             pillar.id,
             rollup && rollup.target > 0 ? { label: `Deliverables ${year}`, target: rollup.target, actual: rollup.actual } : null,
           );
@@ -478,15 +580,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         for (const pillar of gsrPillars) {
           const figure = gsrFigures.get(pillar.id);
           await writeSignedOffLine(
+            current,
             pillar.id,
             figure && figure.target > 0 ? { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual } : null,
           );
         }
       }
-      // A month's GSR is locked in with its score, worked out from the month's goals as they stand
-      // after the meeting's last adjustments.
-      await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id, ...(monthScore ? { gsr_score: monthScore.score } : {}) });
+      // A month's GSR is locked in with the score the dialog showed, worked out from the month's
+      // goals as they were read when it opened.
+      const gsrScore = monthly && gsrPillars[0] ? (lockScore ?? monthScore)?.score : undefined;
+      await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: profile.id, ...(gsrScore !== undefined ? { gsr_score: gsrScore } : {}) });
       setLocking(false);
+      setLockScore(null);
       setConfirmLeftOut(false);
       state.reload();
     } catch (err) {
@@ -497,11 +602,22 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     }
   }
 
+  // Back to where the reader came from: their own section for their own review, the person's
+  // page for anyone reading someone else's (an admin, a leader, or a manager with division view
+  // access who sees the person without leading them).
+  const personName = employee ? displayName(employee) : (names.get(review.employee_id) ?? "Person");
+  const back = embedded
+    ? null
+    : isOwn
+      ? { to: SECTION_MY[sectionOf(cycle.cadence)], label: sectionOf(cycle.cadence) === "gsr" ? "My GSR" : "My reviews" }
+      : { to: `/people/${review.employee_id}`, label: personName };
+  const cycleOpen = cycle.status === "open";
+
   return (
     <>
       <PageHeader
-        backTo={embedded ? undefined : isAdmin ? cyclePath(cycle) : SECTION_MY[sectionOf(cycle.cadence)]}
-        backLabel={embedded ? undefined : isAdmin ? cycle.name : sectionOf(cycle.cadence) === "gsr" ? "My GSR" : "My reviews"}
+        backTo={back?.to}
+        backLabel={back?.label}
         eyebrow={`${monthly ? "Goal Setting Review · " : ""}${cycle.name} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
         title={employee ? displayName(employee) : "Review"}
         description={
@@ -512,24 +628,34 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             {review.completed_at ? (
               <span className="text-ink-3">
                 Completed {formatDateTime(review.completed_at)}
-                {reviewer ? ` by ${displayName(reviewer)}` : ""}
+                {reviewerName ? ` by ${reviewerName}` : ""}
               </span>
+            ) : null}
+            {isAdmin && !embedded ? (
+              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Everyone in {cycle.name}</Link>
             ) : null}
           </span>
         }
         actions={
           isAdmin ? (
             review.status === "complete" ? (
-              <Button variant="secondary" size="sm" disabled={busy} onClick={() => void patchReview({ status: "in_progress", completed_at: null })}>
-                <RotateCcw size={14} aria-hidden /> Reopen
-              </Button>
+              // Reopening a review in a closed cycle would strand it: it could not be signed off
+              // again until the cycle reopened, and its score of record would be gone meanwhile.
+              // The database refuses it too (0039).
+              cycleOpen ? (
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void patchReview({ status: "in_progress", completed_at: null })}>
+                  <RotateCcw size={14} aria-hidden /> Reopen
+                </Button>
+              ) : (
+                <p className="max-w-xs text-right text-[12.5px] leading-snug text-ink-3">Reopen the cycle first to reopen this review.</p>
+              )
             ) : (
               <Button
                 size="sm"
-                disabled={busy || cycle.status !== "open" || awaitingRollup || omittedHere}
+                disabled={busy || !cycleOpen || awaitingRollup || omittedHere}
                 onClick={() => {
                   setLockError("");
-                  if (monthScore) setLocking(true);
+                  if (monthScore) void startLock();
                   else if (gsrLeftOut) setConfirmLeftOut(true);
                   else void markComplete();
                 }}
@@ -560,7 +686,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
 
       {/* The review opens with what would help the person do the job better, on every cycle. */}
       <div className="mb-6">
-        <SupportDiscussionCard value={review.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={frozen} onSave={(next) => void saveDiscussion(next)} />
+        <SupportDiscussionCard value={review.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={frozen} onSave={saveDiscussion} />
       </div>
 
       {/* Annual content, the KPIs, company goals, deliverables and yearly goals, belongs to the
@@ -570,11 +696,12 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         <div className="mb-6">
           <EmployeeSnapshot
             employee={employee}
-            people={people}
+            names={names}
             year={year}
             kpis={kpis}
             companyGoals={companyGoals}
             isAdmin={isAdmin}
+            canOpenProfile={!isOwn}
             onKpis={(update) => state.setData((prev) => (prev ? { ...prev, kpis: update(prev.kpis) } : prev))}
             onError={setError}
           />
@@ -588,7 +715,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           className="mb-6"
           description="Rated on the tasks under each heading: two points a task, so a Hit on every one lands on target."
         >
-          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} onRollup={reportRollup} />
+          <DeliverablesPanel companyId={review.company_id} employeeId={review.employee_id} year={year} canEdit={canEditModule} isOwn={isOwn} onRollup={reportRollup} />
         </Section>
       ) : null}
 
@@ -618,16 +745,27 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             cycles={cycles}
             goals={goals}
             notes={notes}
-            people={people}
+            names={names}
             roleGoals={roleGoals}
             isAdmin={isAdmin}
             isOwn={isOwn}
+            isLeader={isLeader}
             omitted={omittedHere}
             gsrRequired={gsrPillars[0]?.required_goals ?? null}
+            taskLinks={
+              goalTasks
+                ? {
+                    tasks: goalTasks,
+                    people,
+                    viewerProfileId: profile.id,
+                    onTasks: (update) => state.setData((prev) => (prev ? { ...prev, goalTasks: update(prev.goalTasks ?? []) } : prev)),
+                  }
+                : null
+            }
             onGoals={(update) => state.setData((prev) => (prev ? { ...prev, goals: update(prev.goals) } : prev))}
             onNotes={(update) => state.setData((prev) => (prev ? { ...prev, notes: update(prev.notes) } : prev))}
             onError={setError}
-            onTouched={() => void markInProgress().catch((err: unknown) => setError(errorMessage(err)))}
+            onTouched={touched}
           />
         </div>
       ) : null}
@@ -754,7 +892,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                 , where they are set and trued up. Signing off freezes them into this review.
                               </>
                             ) : (
-                              "Current ratings from the profile, where your manager sets them. Signing off freezes them into this review."
+                              "Current ratings from the profile, where an admin sets them. Signing off freezes them into this review."
                             )}
                         </li>
                         {pillarCriteria.map((criterion) => {
@@ -778,7 +916,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                     value={score?.notes ?? ""}
                                     disabled={!canScore}
                                     placeholder="Review notes for this criterion"
-                                    onSave={(next) => void saveRating(pillar, criterion, { notes: next.trim() || null })}
+                                    onSave={(next) => saveRating(pillar, criterion, { notes: next.trim() || null })}
                                     className={`${inputClass} mt-0 text-[13px]`}
                                   />
                                 </div>
@@ -805,7 +943,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                           {canScore ? "Add the deliverables agreed for this period with a target and the actual result." : "No deliverables recorded."}
                         </p>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="relative overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left">
@@ -822,16 +960,16 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                 return (
                                   <tr key={item.id} className="border-t border-line">
                                     <td className="py-2 pr-3">
-                                      <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => void saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
+                                      <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
                                       {canScore || item.notes ? (
-                                        <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => void saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
+                                        <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
                                       ) : null}
                                     </td>
                                     <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { target: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "target", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
                                     <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => void saveLineItem(item, { actual: parseMoney(next) })} className={`${inputClass} tnum mt-0 text-right`} />
+                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "actual", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
                                     <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
                                       {achieved === null ? "-" : `${achieved}%`}
@@ -890,7 +1028,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                   <div key={key}>
                     <label htmlFor={key} className={labelClass}>{label}</label>
                     {isAdmin ? (
-                      <BlurInput id={key} multiline value={review[key] ?? ""} disabled={!canScore} placeholder={`${label}...`} onSave={(next) => void patchReview(feedbackPatch(key, next))} />
+                      <BlurInput id={key} multiline value={review[key] ?? ""} disabled={!canScore} placeholder={`${label}...`} onSave={(next) => patchReview(feedbackPatch(key, next))} />
                     ) : (
                       <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review[key] || <span className="text-ink-3">Nothing yet.</span>}</p>
                     )}
@@ -899,7 +1037,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 <div>
                   <label htmlFor="employee_reflection" className={labelClass}>{isOwn ? "Your reflection" : "Employee reflection"}</label>
                   {isOwn ? (
-                    <BlurInput id="employee_reflection" multiline value={review.employee_reflection ?? ""} placeholder="How did the period go from your side? What do you want to focus on next?" onSave={(next) => void patchReview({ employee_reflection: next.trim() || null })} />
+                    <BlurInput id="employee_reflection" multiline value={review.employee_reflection ?? ""} placeholder="How did the period go from your side? What do you want to focus on next?" onSave={(next) => patchReview({ employee_reflection: next.trim() || null })} />
                   ) : (
                     <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{review.employee_reflection || <span className="text-ink-3">Nothing yet.</span>}</p>
                   )}
@@ -910,16 +1048,16 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         </div>
       )}
 
-      {locking && monthScore ? (
+      {locking && lockScore ? (
         <ConfirmDialog
-          title={`Lock in ${employee ? displayName(employee).split(" ")[0] : "this"}'s ${cycle.name} GSR at ${monthScore.score}%?`}
-          body={`The month's goals add up to ${monthScore.total}% of ${monthScore.cap}%. Marking it complete locks that score in, with the month's goals and notes, and it counts in the next scored review. Reopen the review to change it.`}
+          title={`Lock in ${employee ? displayName(employee).split(" ")[0] : "this"}'s ${cycle.name} GSR at ${lockScore.score}%?`}
+          body={`The month's goals add up to ${lockScore.total}% of ${lockScore.cap}%, as they stand now. Marking it complete locks that score in, with the month's goals and notes, and it counts in the next scored review. Reopen the review to change it.`}
           confirmLabel="Mark complete and lock in"
           tone="primary"
           busy={busy}
           error={lockError}
           onConfirm={() => void markComplete()}
-          onCancel={() => setLocking(false)}
+          onCancel={() => { setLocking(false); setLockScore(null); }}
         />
       ) : null}
       {confirmLeftOut ? (

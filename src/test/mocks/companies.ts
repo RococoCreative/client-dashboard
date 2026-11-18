@@ -2,6 +2,7 @@
 // run against the seeded companies and their domains and never touch the network.
 import type { Company, CompanyDomain, ThemeKey } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const companies: Company[] = COMPANIES.map((c) => ({ ...c, modules: [...c.modules] }));
 const domains: CompanyDomain[] = DOMAINS.map((d) => ({ ...d }));
@@ -50,7 +51,8 @@ export async function updateCompany(id: string, patch: CompanyPatch): Promise<Co
 
 export async function deleteCompany(id: string): Promise<void> {
   const index = companies.findIndex((c) => c.id === id);
-  if (index !== -1) companies.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  companies.splice(index, 1);
 }
 
 export async function listAllDomains(): Promise<CompanyDomain[]> {
@@ -69,5 +71,6 @@ export async function addCompanyDomain(companyId: string, domain: string): Promi
 
 export async function removeCompanyDomain(domain: string): Promise<void> {
   const index = domains.findIndex((d) => d.domain === domain);
-  if (index !== -1) domains.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  domains.splice(index, 1);
 }

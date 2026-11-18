@@ -3,6 +3,7 @@
 // Reads go through short-lived signed URLs (the SELECT policy still applies), uploads and
 // deletes are admin-only by policy.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const BUCKET = "hub-files";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -39,9 +40,12 @@ export async function getSignedUrl(path: string, expiresInSeconds = 600): Promis
   return data.signedUrl;
 }
 
+// Storage answers a removal it refused, or of a file already gone, with no error and an empty
+// list, so the list is checked: a file that did not go reads as a refusal.
 export async function removeFile(path: string): Promise<void> {
-  const { error } = await db().storage.from(BUCKET).remove([path]);
+  const { data, error } = await db().storage.from(BUCKET).remove([path]);
   if (error) throw error;
+  requireRows(data, "That file is not here any more, or it is not yours to remove.");
 }
 
 // Every file a company holds, removed when the company itself is deleted. The rows that point
@@ -68,6 +72,7 @@ export async function removeCompanyFiles(companyId: string): Promise<number> {
     }
   }
   await walk(companyId);
+  // Not checked for rows: this is a sweep, and a file another tab already removed is not a failure.
   for (let i = 0; i < paths.length; i += PAGE) {
     const { error } = await bucket.remove(paths.slice(i, i + PAGE));
     if (error) throw error;

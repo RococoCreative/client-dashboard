@@ -72,13 +72,16 @@ function RoleGoalsCard({
       onError(errorMessage(err));
     }
   }
-  async function rename(goal: JobRoleGoal, title: string) {
+  // True when the new title landed, false once the panel shows why not.
+  async function rename(goal: JobRoleGoal, title: string): Promise<boolean> {
     onError("");
     try {
       const next = await updateJobRoleGoal(goal.id, { title: title.trim() });
       onGoals((list) => list.map((g) => (g.id === next.id ? next : g)));
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
   async function remove(goal: JobRoleGoal) {
@@ -106,7 +109,7 @@ function RoleGoalsCard({
           <ul className="divide-y divide-line">
             {goals.map((goal) => (
               <li key={goal.id} className="flex items-center gap-2 py-1.5">
-                <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => void rename(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
+                <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => rename(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
                 <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void remove(goal)}>
                   <Trash2 size={14} aria-hidden />
                 </IconButton>

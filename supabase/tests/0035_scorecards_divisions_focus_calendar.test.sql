@@ -14,6 +14,9 @@ select tests.create_person('r_admin', tests.company('rba'), 'admin');
 select tests.create_person('r_emp', tests.company('rba'));
 select tests.create_person('k_admin', tests.company('klasik'), 'admin');
 select tests.create_person('rococo', null, 'employee', true);
+-- Since 0038 an admin places people only in divisions they can see; this one sees them all, as
+-- every admin did when 0038 went in.
+update public.profiles set view_all_divisions = true where id = tests.id('r_admin');
 
 insert into public.job_roles (company_id, name) values (tests.company('rba'), 'Test Project Manager');
 insert into public.role_metrics (company_id, job_role_id, name, kind, target)

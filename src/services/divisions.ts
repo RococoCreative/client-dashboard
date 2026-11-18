@@ -1,8 +1,10 @@
 // A company's divisions (0035): the parts it splits into for reporting, such as a North and a
-// South. Members read them and admins write them, by RLS. A person's division is set through
-// profiles.updateProfile (division_id); who sees the split is can_view_divisions on the profile.
+// South. Members read them and a full-scope admin writes them, by RLS (0038). The divisions a person
+// works in are set through profiles.updateProfile (division_ids); who sees which is the view access
+// on the profile.
 import type { CompanyDivision } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const COLUMNS = "id, company_id, name, sort_order, created_at, updated_at";
 
@@ -29,8 +31,10 @@ export async function updateDivision(id: string, patch: Partial<Pick<CompanyDivi
   return data as CompanyDivision;
 }
 
-// The people in it are left with no division (the foreign key clears it).
+// Refused while anyone still works in it (0038); an empty one is also taken out of everyone's view
+// access by the database. A delete that removed nothing is a refusal too.
 export async function deleteDivision(id: string): Promise<void> {
-  const { error } = await db().from("company_divisions").delete().eq("id", id);
+  const { data, error } = await db().from("company_divisions").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

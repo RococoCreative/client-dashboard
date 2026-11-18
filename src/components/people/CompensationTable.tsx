@@ -1,7 +1,11 @@
 // A person's compensation as a table: each line with its annual amount, the monthly figure
 // derived, and the total at the foot. Admins edit in place; a note explains a formula-style
 // line ("2% of newly closed sales") without the hub pretending to compute it.
-import { useState, type FormEvent } from "react";
+//
+// An amount that does not read as money is refused with a message and the box goes back to the
+// stored figure, rather than being saved as a zero nobody typed. Saves for one line queue behind
+// each other, so two quick edits never land out of order and undo each other on screen.
+import { useRef, useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
@@ -10,9 +14,15 @@ import IconButton from "../ui/IconButton.tsx";
 import { inputClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { createCompensationItem, deleteCompensationItem, updateCompensationItem } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { formatMoney, parseMoney } from "../../lib/format.ts";
+import { formatMoney, moneyFieldError, parseMoney } from "../../lib/format.ts";
 import { totalAnnual } from "../../lib/people.ts";
 import type { CompensationItem } from "../../types/database.ts";
+
+// The annual amount is never blank: a line with no set figure says 0, typed on purpose.
+function annualAmountProblem(text: string): string | null {
+  if (text.trim() === "") return "Enter the annual amount as a number, like 65000. Use 0 for a line with no set amount.";
+  return moneyFieldError("the annual amount", text, "65000");
+}
 
 export default function CompensationTable({
   companyId,
@@ -36,27 +46,54 @@ export default function CompensationTable({
   // A refused delete has to be said inside the dialog: the page's own notice would sit behind
   // the scrim where nobody reads it.
   const [error, setError] = useState("");
+  // The add form waits for its round trip before it takes another submit, or a quick double
+  // Enter files the same line twice.
+  const [adding, setAdding] = useState(false);
+  // Each response carries the whole row, so two edits to one line in flight at once could land
+  // out of order and put the older figure back on screen. Saves for one line queue instead.
+  const saveChains = useRef(new Map<string, Promise<unknown>>());
 
-  async function save(item: CompensationItem, patch: Parameters<typeof updateCompensationItem>[1]) {
-    try {
+  // True when the change landed, false once the page shows why not.
+  async function save(item: CompensationItem, patch: Parameters<typeof updateCompensationItem>[1]): Promise<boolean> {
+    const chained = (saveChains.current.get(item.id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
       const next = await updateCompensationItem(item.id, patch);
       onChange((list) => list.map((c) => (c.id === next.id ? next : c)));
+    });
+    saveChains.current.set(item.id, chained);
+    try {
+      await chained;
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
+  }
+
+  function saveAnnual(item: CompensationItem, text: string): Promise<boolean> | false {
+    const problem = annualAmountProblem(text);
+    if (problem) {
+      onError(problem);
+      return false;
+    }
+    return save(item, { annual_amount: parseMoney(text) as number });
   }
 
   async function add(event: FormEvent) {
     event.preventDefault();
     const text = name.trim();
-    if (!text) return;
+    if (!text || adding) return;
+    const problem = annualAmountProblem(annual);
+    if (problem) return onError(problem);
+    setAdding(true);
     try {
-      const created = await createCompensationItem({ company_id: companyId, employee_id: employeeId, name: text, annual_amount: parseMoney(annual) ?? 0, sort_order: items.length + 1 });
+      const created = await createCompensationItem({ company_id: companyId, employee_id: employeeId, name: text, annual_amount: parseMoney(annual) as number, sort_order: items.length + 1 });
       onChange((list) => [...list, created]);
       setName("");
       setAnnual("");
     } catch (err) {
       onError(errorMessage(err));
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -83,7 +120,7 @@ export default function CompensationTable({
       {items.length === 0 ? (
         <p className="px-5 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className={tableClass}>
             <thead>
               <tr>
@@ -98,14 +135,14 @@ export default function CompensationTable({
               {items.map((item) => (
                 <tr key={item.id}>
                   <td className={tdClass}>
-                    {canEdit ? <BlurInput value={item.name} required ariaLabel={`Line ${item.name}`} onSave={(next) => void save(item, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} /> : item.name}
+                    {canEdit ? <BlurInput value={item.name} required ariaLabel={`Line ${item.name}`} onSave={(next) => save(item, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} /> : item.name}
                   </td>
                   <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(item.annual_amount / 12)}</td>
                   <td className={`${tdClass} tnum text-right`}>
-                    {canEdit ? <div className="ml-auto w-28"><BlurInput value={String(item.annual_amount)} ariaLabel={`Annual for ${item.name}`} onSave={(next) => void save(item, { annual_amount: parseMoney(next) ?? 0 })} className={`${inputClass} tnum mt-0 text-right text-[13px]`} /></div> : formatMoney(item.annual_amount)}
+                    {canEdit ? <div className="ml-auto w-28"><BlurInput value={String(item.annual_amount)} ariaLabel={`Annual for ${item.name}`} onSave={(next) => saveAnnual(item, next)} className={`${inputClass} tnum mt-0 text-right text-[13px]`} /></div> : formatMoney(item.annual_amount)}
                   </td>
                   <td className={`${tdClass} text-ink-2`}>
-                    {canEdit ? <BlurInput value={item.note ?? ""} placeholder="Optional" ariaLabel={`Note for ${item.name}`} onSave={(next) => void save(item, { note: next.trim() || null })} className={`${inputClass} mt-0 text-[13px]`} /> : item.note ?? ""}
+                    {canEdit ? <BlurInput value={item.note ?? ""} placeholder="Optional" ariaLabel={`Note for ${item.name}`} onSave={(next) => save(item, { note: next.trim() || null })} className={`${inputClass} mt-0 text-[13px]`} /> : item.note ?? ""}
                   </td>
                   {canEdit ? (
                     <td className={`${tdClass} text-right`}>
@@ -136,8 +173,8 @@ export default function CompensationTable({
           <div className="w-32">
             <input type="text" value={annual} onChange={(e) => setAnnual(e.target.value)} placeholder="Annual $" aria-label="New line annual amount" className={`${inputClass} tnum mt-0`} />
           </div>
-          <Button type="submit" variant="secondary" disabled={!name.trim()}>
-            <Plus size={14} aria-hidden /> Add
+          <Button type="submit" variant="secondary" disabled={!name.trim() || adding}>
+            <Plus size={14} aria-hidden /> {adding ? "Adding..." : "Add"}
           </Button>
         </form>
       ) : null}

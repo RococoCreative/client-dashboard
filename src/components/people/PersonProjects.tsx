@@ -1,5 +1,6 @@
 // The projects a person works on, on their person page: each with the role they hold on it.
-// Admins assign an existing project, create one by name and assign it in one step, set the
+// Admins assign an existing project, create one by name and assign it in one step (the project
+// is taken back if the assignment is refused, so a retry never makes a second), set the
 // person's role on it, and unassign. Assignments are rows (0035) and need no production module;
 // a per-project scorecard metric gives each assigned project its own row. The caller loads and
 // keeps the rows, because the scorecard reads the same ones.
@@ -83,13 +84,16 @@ export default function PersonProjects({
     }
   }
 
-  async function saveRole(assignment: ProjectAssignment, next: string) {
+  // True when the role landed, false once the page shows why not.
+  async function saveRole(assignment: ProjectAssignment, next: string): Promise<boolean> {
     onError("");
     try {
       const saved = await updateProjectAssignment(assignment.id, { role: next.trim() || null });
       onAssignments((list) => list.map((a) => (a.id === saved.id ? saved : a)));
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
 
@@ -135,7 +139,7 @@ export default function PersonProjects({
                       value={a.role ?? ""}
                       placeholder="Their role on it"
                       ariaLabel={`Role on ${name}`}
-                      onSave={(next) => void saveRole(a, next)}
+                      onSave={(next) => saveRole(a, next)}
                       className={`${inputClass} mt-0 w-full py-1.5 text-[13px] sm:w-48`}
                     />
                     <IconButton label={`Unassign ${name}`} onClick={() => void unassign(a)}>

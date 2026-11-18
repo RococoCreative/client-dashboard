@@ -5,6 +5,7 @@
 import type { ReviewProjectNote } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { getReview } from "./gsr.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const notes = fromAll((b) => b.reviewProjectNotes).map((x) => ({ ...x }));
 
@@ -37,7 +38,7 @@ export async function upsertReviewProjectNote(input: { company_id: string; revie
 
 export async function deleteReviewProjectNote(id: string): Promise<void> {
   const note = notes.find((n) => n.id === id);
-  if (!note) return;
+  if (!note) throw new Error(NOT_CHANGED_MESSAGE);
   if ((await getReview(note.review_id)).status === "complete") throw new Error(SIGNED_OFF);
   notes.splice(notes.indexOf(note), 1);
 }

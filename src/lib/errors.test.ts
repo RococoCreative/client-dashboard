@@ -1,7 +1,7 @@
 // The friendly line a page shows for what a service threw: a raw database sentence is for us,
 // not for the person reading it.
 import { describe, expect, it } from "vitest";
-import { errorMessage } from "./errors.ts";
+import { NOT_CHANGED_MESSAGE, errorMessage, requireRows } from "./errors.ts";
 
 describe("errorMessage", () => {
   it("says a figure is too large instead of repeating the database", () => {
@@ -11,5 +11,15 @@ describe("errorMessage", () => {
 
   it("leaves a message it does not recognise as it is", () => {
     expect(errorMessage({ message: "This pillar is part of a signed-off review." })).toBe("This pillar is part of a signed-off review.");
+  });
+});
+
+describe("requireRows", () => {
+  it("passes rows through", () => {
+    expect(requireRows([{ id: "a" }])).toEqual([{ id: "a" }]);
+  });
+  it("throws the plain message when nothing changed", () => {
+    expect(() => requireRows([])).toThrow(NOT_CHANGED_MESSAGE);
+    expect(() => requireRows(null)).toThrow(NOT_CHANGED_MESSAGE);
   });
 });

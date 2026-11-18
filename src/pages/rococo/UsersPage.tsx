@@ -1,7 +1,7 @@
 // People tab of the Rococo portfolio: everyone on every company's roster, signed in or not,
 // with company assignment, role, Rococo access, and active flag. Filter by company or search
 // by name and email. A person who has never signed in is marked, never left out.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -37,11 +37,19 @@ export default function UsersPage() {
     });
   }, [profiles, companyFilter, query]);
 
+  // Each response carries the whole profile, so a role picked straight after a company put two
+  // writes in flight that could land the wrong way round and show the older row. Writes for one
+  // person queue behind each other.
+  const saveChains = useRef(new Map<string, Promise<unknown>>());
   async function patch(person: Profile, patchValue: Parameters<typeof updateProfile>[1]) {
     setError("");
-    try {
+    const chained = (saveChains.current.get(person.id) ?? Promise.resolve()).catch(() => undefined).then(async () => {
       const next = await updateProfile(person.id, patchValue);
       state.setData((prev) => (prev ? prev.map((p) => (p.id === next.id ? next : p)) : prev));
+    });
+    saveChains.current.set(person.id, chained);
+    try {
+      await chained;
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -73,7 +81,7 @@ export default function UsersPage() {
         <SkeletonRows rows={8} />
       ) : !state.data ? null : (
         <Section eyebrow="Everyone" title={pluralize(filtered.length, "user")} padded={false}>
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
                 <tr>

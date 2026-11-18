@@ -3,6 +3,7 @@
 // by audience. It reads and writes links only: nothing here calls an outside tool.
 import type { ExternalLink, LinkAudience, LinkNavGroup, LinkProvider } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const COLUMNS = "id, company_id, nav_group, label, destination_note, url, provider, embed_url, embed_is_public, audience, sort_order, created_by, updated_by, created_at, updated_at";
 
@@ -35,6 +36,7 @@ export async function updateExternalLink(id: string, patch: ExternalLinkPatch): 
 }
 
 export async function deleteExternalLink(id: string): Promise<void> {
-  const { error } = await db().from("external_links").delete().eq("id", id);
+  const { data, error } = await db().from("external_links").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

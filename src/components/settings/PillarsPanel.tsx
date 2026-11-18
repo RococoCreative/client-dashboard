@@ -52,6 +52,8 @@ export default function PillarsPanel() {
   // a valid number: a box left at the stored weight never saves (BlurInput), so nothing else did.
   const [weightError, setWeightError] = useState<{ pillarId: string; message: string } | null>(null);
   const [newCriterion, setNewCriterion] = useState<Record<string, string>>({});
+  // An add that is still waiting on the server takes no second click, or a double click files two.
+  const [adding, setAdding] = useState(false);
 
   const state = useAsync(async () => {
     const [pillars, criteria] = await Promise.all([listPillars(companyId, true), listCriteria(companyId, true)]);
@@ -67,23 +69,28 @@ export default function PillarsPanel() {
   const setPillars = (fn: (list: GsrPillar[]) => GsrPillar[]) => state.setData((prev) => (prev ? { ...prev, pillars: fn(prev.pillars) } : prev));
   const setCriteria = (fn: (list: GsrCriterion[]) => GsrCriterion[]) => state.setData((prev) => (prev ? { ...prev, criteria: fn(prev.criteria) } : prev));
 
-  async function run(action: () => Promise<void>) {
+  // True when the action landed, false once the panel shows why not, so a field can say which.
+  async function run(action: () => Promise<void>): Promise<boolean> {
     setError("");
     try {
       await action();
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
-  async function patchPillar(pillar: GsrPillar, patch: Parameters<typeof updatePillar>[1]) {
-    await run(async () => {
+  async function patchPillar(pillar: GsrPillar, patch: Parameters<typeof updatePillar>[1]): Promise<boolean> {
+    return run(async () => {
       const next = await updatePillar(pillar.id, patch);
       setPillars((list) => list.map((p) => (p.id === next.id ? next : p)));
     });
   }
 
   async function addPillar() {
+    if (adding) return;
+    setAdding(true);
     await run(async () => {
       const created = await createPillar({
         company_id: companyId,
@@ -94,6 +101,7 @@ export default function PillarsPanel() {
       });
       setPillars((list) => [...list, created]);
     });
+    setAdding(false);
   }
 
   async function move(pillar: GsrPillar, direction: -1 | 1) {
@@ -101,17 +109,25 @@ export default function PillarsPanel() {
     const index = ordered.findIndex((p) => p.id === pillar.id);
     const other = ordered[index + direction];
     if (!other) return;
-    await run(async () => {
-      const [a, b] = await Promise.all([
-        updatePillar(pillar.id, { sort_order: index + direction + 1 }),
-        updatePillar(other.id, { sort_order: index + 1 }),
-      ]);
-      setPillars((list) => list.map((p) => (p.id === a.id ? a : p.id === b.id ? b : p)));
-    });
+    // Two writes: when one lands and the other is refused, what landed is shown and the list is
+    // read again, so the screen never keeps an order the database no longer holds.
+    const results = await Promise.allSettled([
+      updatePillar(pillar.id, { sort_order: index + direction + 1 }),
+      updatePillar(other.id, { sort_order: index + 1 }),
+    ]);
+    const landed = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    setPillars((list) => list.map((p) => landed.find((l) => l.id === p.id) ?? p));
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) {
+      setError(errorMessage(failed.reason));
+      state.reload();
+    } else {
+      setError("");
+    }
   }
 
   // Returns false to decline the draft, which puts the stored weight back in the box.
-  function saveWeight(pillar: GsrPillar, next: string): false | void {
+  function saveWeight(pillar: GsrPillar, next: string): false | Promise<boolean> {
     const text = next.trim();
     const value = Number(text);
     if (!text || !Number.isFinite(value) || value < 0 || value > 100) {
@@ -119,7 +135,7 @@ export default function PillarsPanel() {
       return false;
     }
     setWeightError(null);
-    void patchPillar(pillar, { weight: value });
+    return patchPillar(pillar, { weight: value });
   }
 
   function clearWeightError(pillar: GsrPillar) {
@@ -173,7 +189,8 @@ export default function PillarsPanel() {
 
   async function addCriterion(pillar: GsrPillar) {
     const name = (newCriterion[pillar.id] ?? "").trim();
-    if (!name) return;
+    if (!name || adding) return;
+    setAdding(true);
     await run(async () => {
       const created = await createCriterion({
         pillar_id: pillar.id,
@@ -184,10 +201,11 @@ export default function PillarsPanel() {
       setCriteria((list) => [...list, created]);
       setNewCriterion((prev) => ({ ...prev, [pillar.id]: "" }));
     });
+    setAdding(false);
   }
 
-  async function patchCriterion(criterion: GsrCriterion, patch: Parameters<typeof updateCriterion>[1]) {
-    await run(async () => {
+  async function patchCriterion(criterion: GsrCriterion, patch: Parameters<typeof updateCriterion>[1]): Promise<boolean> {
+    return run(async () => {
       const next = await updateCriterion(criterion.id, patch);
       setCriteria((list) => list.map((c) => (c.id === next.id ? next : c)));
     });
@@ -214,7 +232,7 @@ export default function PillarsPanel() {
         actions={
           <>
             <Badge tone={total === 100 ? "success" : "warning"}>Weights total {formatNumber(total)}%</Badge>
-            <Button size="sm" onClick={() => void addPillar()}><Plus size={14} aria-hidden /> Add pillar</Button>
+            <Button size="sm" disabled={adding} onClick={() => void addPillar()}><Plus size={14} aria-hidden /> Add pillar</Button>
           </>
         }
       />
@@ -245,7 +263,7 @@ export default function PillarsPanel() {
               <div className="grid gap-4 md:grid-cols-12">
                 <div className="md:col-span-5">
                   <label htmlFor={`pillar-name-${pillar.id}`} className={labelClass}>Name</label>
-                  <BlurInput id={`pillar-name-${pillar.id}`} value={pillar.name} required onSave={(next) => void patchPillar(pillar, { name: next.trim() })} />
+                  <BlurInput id={`pillar-name-${pillar.id}`} value={pillar.name} required onSave={(next) => patchPillar(pillar, { name: next.trim() })} />
                 </div>
                 <div className="md:col-span-2" onFocus={() => clearWeightError(pillar)}>
                   <label htmlFor={`pillar-weight-${pillar.id}`} className={labelClass}>Weight %</label>
@@ -283,7 +301,7 @@ export default function PillarsPanel() {
                 )}
                 <div className="md:col-span-12">
                   <label htmlFor={`pillar-description-${pillar.id}`} className={labelClass}>Description</label>
-                  <BlurInput id={`pillar-description-${pillar.id}`} value={pillar.description ?? ""} placeholder="What this pillar measures, in the company's words" onSave={(next) => void patchPillar(pillar, { description: next.trim() || null })} />
+                  <BlurInput id={`pillar-description-${pillar.id}`} value={pillar.description ?? ""} placeholder="What this pillar measures, in the company's words" onSave={(next) => patchPillar(pillar, { description: next.trim() || null })} />
                 </div>
                 <div className="md:col-span-12">
                   <label className="flex items-center gap-2 text-sm text-ink">
@@ -306,10 +324,10 @@ export default function PillarsPanel() {
                     {pillarCriteria.map((criterion) => (
                       <li key={criterion.id} className={`grid gap-2 rounded-md border border-line bg-surface-2/50 p-3 md:grid-cols-12 ${criterion.is_active ? "" : "opacity-70"}`}>
                         <div className="md:col-span-4">
-                          <BlurInput ariaLabel="Criterion name" value={criterion.name} required className={`${inputClass} mt-0`} onSave={(next) => void patchCriterion(criterion, { name: next.trim() })} />
+                          <BlurInput ariaLabel="Criterion name" value={criterion.name} required className={`${inputClass} mt-0`} onSave={(next) => patchCriterion(criterion, { name: next.trim() })} />
                         </div>
                         <div className="md:col-span-5">
-                          <BlurInput ariaLabel="Criterion description" value={criterion.description ?? ""} placeholder="Description shown to the reviewer" className={`${inputClass} mt-0`} onSave={(next) => void patchCriterion(criterion, { description: next.trim() || null })} />
+                          <BlurInput ariaLabel="Criterion description" value={criterion.description ?? ""} placeholder="Description shown to the reviewer" className={`${inputClass} mt-0`} onSave={(next) => patchCriterion(criterion, { description: next.trim() || null })} />
                         </div>
                         <div className="flex items-center md:col-span-2">
                           <label className="flex items-center gap-2 text-[13px] text-ink">
@@ -330,7 +348,7 @@ export default function PillarsPanel() {
                     className="mt-3 flex gap-2"
                   >
                     <input type="text" value={newCriterion[pillar.id] ?? ""} onChange={(e) => setNewCriterion((prev) => ({ ...prev, [pillar.id]: e.target.value }))} placeholder="New criterion" aria-label={`New criterion for ${pillar.name}`} className={`${inputClass} mt-0 max-w-sm`} />
-                    <Button type="submit" variant="secondary" size="sm" disabled={!(newCriterion[pillar.id] ?? "").trim()}><Plus size={13} aria-hidden /> Add criterion</Button>
+                    <Button type="submit" variant="secondary" size="sm" disabled={!(newCriterion[pillar.id] ?? "").trim() || adding}><Plus size={13} aria-hidden /> Add criterion</Button>
                   </form>
                 </div>
               ) : null}

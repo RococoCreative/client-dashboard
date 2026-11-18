@@ -46,30 +46,40 @@ function LinkRow({
   onError: (message: string) => void;
   onRemove: () => void;
 }) {
-  async function save(patch: ExternalLinkPatch) {
+  // True when the change landed, false once the panel shows why not.
+  async function save(patch: ExternalLinkPatch): Promise<boolean> {
     try {
       onSaved(await updateExternalLink(link.id, patch));
       onError("");
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
 
+  // A value that breaks a rule is refused with the reason, and the box goes back to what is stored.
+  function refuse(message: string): false {
+    onError(message);
+    return false;
+  }
+
   function saveUrl(next: string) {
-    if (!isHttps(next)) return onError(HTTPS_ONLY);
-    void save({ url: next.trim() });
+    if (!isHttps(next)) return refuse(HTTPS_ONLY);
+    return save({ url: next.trim() });
   }
 
   function saveEmbedUrl(next: string) {
     const value = next.trim();
-    if (!value) return void save({ embed_url: null, embed_is_public: false });
-    if (!isHttps(value)) return onError(HTTPS_ONLY);
-    void save({ embed_url: value });
+    if (!value) return save({ embed_url: null, embed_is_public: false });
+    if (!isHttps(value)) return refuse(HTTPS_ONLY);
+    return save({ embed_url: value });
   }
 
   function saveOrder(next: string) {
     const value = Number.parseInt(next, 10);
-    if (Number.isFinite(value)) void save({ sort_order: value });
+    if (!Number.isFinite(value)) return refuse("The order is a whole number.");
+    return save({ sort_order: value });
   }
 
   function toggleEmbed(on: boolean) {
@@ -83,7 +93,7 @@ function LinkRow({
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <Caption>Label</Caption>
-          <BlurInput value={link.label} required ariaLabel={`Label for ${link.label}`} onSave={(next) => void save({ label: next.trim() })} className={`${cellInput} font-medium`} />
+          <BlurInput value={link.label} required ariaLabel={`Label for ${link.label}`} onSave={(next) => save({ label: next.trim() })} className={`${cellInput} font-medium`} />
         </label>
         <label className="block">
           <Caption>Link</Caption>
@@ -91,7 +101,7 @@ function LinkRow({
         </label>
         <label className="block">
           <Caption>What it is for</Caption>
-          <BlurInput value={link.destination_note ?? ""} ariaLabel={`What ${link.label} is for`} onSave={(next) => void save({ destination_note: next.trim() || null })} className={cellInput} />
+          <BlurInput value={link.destination_note ?? ""} ariaLabel={`What ${link.label} is for`} onSave={(next) => save({ destination_note: next.trim() || null })} className={cellInput} />
         </label>
         <label className="block">
           <Caption>Embed link</Caption>

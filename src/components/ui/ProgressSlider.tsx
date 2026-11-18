@@ -1,8 +1,15 @@
 // Progress for one goal: a range slider from 0 to 100 in steps of five with the number beside
 // it, where 100 reads as complete. Keeps a draft while the thumb moves and commits when it is
 // released (pointer, key, or focus leaving), so a save never fights the drag.
-import { useRef, useState } from "react";
+//
+// onCommit may return the save's promise. When the save fails (the promise rejects or resolves
+// false, or onCommit returns false) the thumb goes back to the stored value, so the slider never
+// shows a completion the database did not take, and "Not saved" is announced. A caller that
+// returns nothing keeps the old behaviour: the slider waits for the value prop.
+import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
+
+export type CommitResult = void | boolean | Promise<void | boolean>;
 
 export default function ProgressSlider({
   value,
@@ -12,25 +19,58 @@ export default function ProgressSlider({
   className = "",
 }: {
   value: number;
-  onCommit: (next: number) => void;
+  onCommit: (next: number) => CommitResult;
   disabled?: boolean;
   label: string;
   className?: string;
 }) {
   const [draft, setDraft] = useState(value);
   const [seen, setSeen] = useState(value);
+  const [failed, setFailed] = useState(false);
   if (value !== seen) {
     setSeen(value);
     setDraft(value);
+    if (failed) setFailed(false);
   }
+  // The stored value as of now, for a rollback that lands after the prop has moved on.
+  const stored = useRef(value);
+  useEffect(() => {
+    stored.current = value;
+  }, [value]);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // Only the latest commit may roll the thumb back, so a slow first save that fails after a
+  // second drag never yanks the thumb away from where the person has since put it.
+  const attempt = useRef(0);
   // The number already sent, so that releasing the thumb and then clicking away does not write
   // it a second time before the value prop catches up. Moving the thumb again is a new
   // intention, so it clears.
   const sent = useRef<number | null>(null);
+  const rollBack = (mine: number) => {
+    if (!mounted.current || attempt.current !== mine) return;
+    sent.current = null;
+    setDraft(stored.current);
+    setFailed(true);
+  };
   const commit = () => {
     if (draft === value || draft === sent.current) return;
     sent.current = draft;
-    onCommit(draft);
+    setFailed(false);
+    const mine = ++attempt.current;
+    const result = onCommit(draft);
+    if (result === false) return rollBack(mine);
+    if (!(result instanceof Promise)) return;
+    result.then(
+      (ok) => {
+        if (ok === false) rollBack(mine);
+      },
+      () => rollBack(mine),
+    );
   };
   const complete = draft >= 100;
   return (
@@ -44,6 +84,9 @@ export default function ProgressSlider({
         disabled={disabled}
         aria-label={label}
         aria-valuetext={complete ? "Complete" : `${draft}%`}
+        aria-invalid={failed ? true : undefined}
+        title={failed ? "Not saved" : undefined}
+        data-save-state={failed ? "failed" : undefined}
         onChange={(e) => {
           sent.current = null;
           setDraft(Number(e.target.value));
@@ -61,6 +104,9 @@ export default function ProgressSlider({
         ) : (
           `${draft}%`
         )}
+      </span>
+      <span aria-live="polite" className="sr-only">
+        {failed ? "Not saved. The completion went back to what is stored." : ""}
       </span>
     </div>
   );

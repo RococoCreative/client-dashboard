@@ -17,7 +17,9 @@ import type {
   ReviewCycle,
   ReviewScore,
 } from "../../types/database.ts";
-import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
+import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { hasFullScope } from "../../lib/people.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -42,9 +44,32 @@ function patchIn<T extends { id: string }>(list: T[], id: string, patch: Partial
   return list[index];
 }
 
+// A delete that matched nothing is a refusal, the way the service reads an empty .select("id").
 function removeFrom<T extends { id: string }>(list: T[], id: string): void {
   const index = list.findIndex((x) => x.id === id);
-  if (index !== -1) list.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  list.splice(index, 1);
+}
+
+// The refusal 0039 makes on a review in a closed cycle (guard_review_cycle), word for word: no new
+// review starts in one, and a signed-off review stays signed off while it is closed.
+export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cycle first.";
+
+// The task link rule of 0039, for the tasks mock: a task may be linked only to a monthly goal of
+// its own assignee in its own company, and only while that month is open, not complete and the
+// person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
+// reaches here.
+export function goalLinkProblem(task: { company_id: string; assignee_id: string | null; goal_id: string | null }): string | null {
+  if (task.goal_id === null) return null;
+  const goal = goals.find((g) => g.id === task.goal_id);
+  if (!goal || goal.company_id !== task.company_id) return "That goal is not here any more.";
+  if (goal.scope !== "cycle" || goal.cycle_id === null) return "Only a monthly GSR goal can have tasks.";
+  if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
+  const cycle = cycles.find((c) => c.id === goal.cycle_id);
+  const review = reviews.find((r) => r.cycle_id === goal.cycle_id && r.employee_id === goal.employee_id);
+  const omitted = cycleOmissions.some((o) => o.cycle_id === goal.cycle_id && o.employee_id === goal.employee_id);
+  if (!cycle || cycle.status !== "open" || review?.status === "complete" || omitted) return "That month is closed, so its goals take no new tasks.";
+  return null;
 }
 
 export async function listPillars(companyId: string, includeInactive = false): Promise<GsrPillar[]> {
@@ -93,6 +118,9 @@ export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
   return created;
 }
 export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "company_id">>): Promise<ReviewCycle> {
+  // Only a full-scope admin changes a cycle (0038, "Full-scope admins change cycles"); anyone else's
+  // update matches no row, and the service's .single() reports it as not changed.
+  if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
   return patchIn(cycles, id, { ...patch, updated_at: now() } as Partial<ReviewCycle>);
 }
 export async function deleteCycle(id: string): Promise<void> {
@@ -116,6 +144,7 @@ export async function getReview(id: string): Promise<Review> {
 export async function ensureReview(cycleId: string, companyId: string, employeeId: string): Promise<Review> {
   const existing = reviews.find((r) => r.cycle_id === cycleId && r.employee_id === employeeId);
   if (existing) return existing;
+  if (cycles.find((c) => c.id === cycleId)?.status === "closed") throw new Error(CLOSED_CYCLE_MESSAGE);
   if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
   const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, created_at: now(), updated_at: now() };
   reviews.push(created);
@@ -124,6 +153,10 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
+  // A signed-off review stays signed off while its cycle is closed (0039).
+  if (before?.status === "complete" && patch.status !== undefined && patch.status !== "complete" && cycles.find((c) => c.id === before.cycle_id)?.status === "closed") {
+    throw new Error(CLOSED_CYCLE_MESSAGE);
+  }
   // Nobody signs off a review for someone left out of its cycle (0034).
   if (before && before.status !== "complete" && patch.status === "complete" && omitted(before.cycle_id, before.employee_id)) {
     throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
@@ -245,7 +278,8 @@ export async function addBackToCycle(cycleId: string, employeeId: string): Promi
   const cycle = cycles.find((c) => c.id === cycleId);
   if (cycle?.status === "closed") throw new Error("This review cycle is closed. Reopen it to change who is in it.");
   const index = cycleOmissions.findIndex((o) => o.cycle_id === cycleId && o.employee_id === employeeId);
-  if (index !== -1) cycleOmissions.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  cycleOmissions.splice(index, 1);
 }
 
 export async function listGoalPrivate(companyId: string, employeeId: string): Promise<GoalPrivate[]> {

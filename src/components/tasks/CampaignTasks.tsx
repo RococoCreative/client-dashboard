@@ -44,7 +44,7 @@ export default function CampaignTasks({
   async function handleSaved(task: TaskWithSteps) {
     setAdding(false);
     onCreated(task);
-    setNotice(await sendAssignmentEmail(undefined, task, viewerProfileId));
+    setNotice(await sendAssignmentEmail(undefined, task, viewerProfileId, people.find((p) => p.id === task.assignee_id) ?? null));
   }
 
   return (

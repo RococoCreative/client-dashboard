@@ -4,6 +4,7 @@
 // it is reopened.
 import type { ReviewProjectNote } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const COLUMNS = "id, company_id, review_id, project_id, note, created_at, updated_at";
 
@@ -25,6 +26,7 @@ export async function upsertReviewProjectNote(input: { company_id: string; revie
 }
 
 export async function deleteReviewProjectNote(id: string): Promise<void> {
-  const { error } = await db().from("review_project_notes").delete().eq("id", id);
+  const { data, error } = await db().from("review_project_notes").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

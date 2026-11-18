@@ -149,3 +149,29 @@ describe("repeating tasks", () => {
     expect((await reopenTask(task.id)).completed_at).toBeNull();
   });
 });
+
+describe("goal links (0039)", () => {
+  it("links a task to its assignee's open monthly goal, refuses another person's, and always unlinks", async () => {
+    const { createGoal, listCycles } = await import("./gsr.ts");
+    const { linkTaskToGoal, listTasksForGoals } = await import("./tasks.ts");
+    const open = (await listCycles(rba)).find((c) => c.cadence === "monthly" && c.status === "open");
+    expect(open).toBeDefined();
+    const goal = await createGoal({ company_id: rba, employee_id: jamie, cycle_id: open!.id, scope: "cycle", title: "Close out the punch list", kind: "role" });
+    const task = await createTask({ company_id: rba, title: "Walk the punch list", assignee_id: jamie });
+    onTestFinished(() => deleteTask(task.id).catch(() => undefined));
+
+    const linked = await linkTaskToGoal(task.id, goal.id);
+    expect(linked.goal_id).toBe(goal.id);
+    expect((await listTasksForGoals(rba, [goal.id])).map((t) => t.id)).toEqual([task.id]);
+
+    const other = await createTask({ company_id: rba, title: "Not Jamie's", assignee_id: noor });
+    onTestFinished(() => deleteTask(other.id).catch(() => undefined));
+    await expect(linkTaskToGoal(other.id, goal.id)).rejects.toThrow(/belongs to that goal's person/);
+
+    expect((await linkTaskToGoal(task.id, null)).goal_id).toBeNull();
+  });
+
+  it("refuses deleting a task that is not there", async () => {
+    await expect(deleteTask("no-such-task")).rejects.toThrow(/not yours to change/);
+  });
+});

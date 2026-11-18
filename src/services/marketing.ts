@@ -1,5 +1,6 @@
 // Data layer for the marketing campaign tracker. Admin-only by RLS.
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 import type { CampaignStatus, MarketingCampaign } from "../types/database.ts";
 
 const COLUMNS =
@@ -46,6 +47,7 @@ export async function updateCampaign(id: string, patch: Partial<Omit<CampaignInp
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
-  const { error } = await db().from("marketing_campaigns").delete().eq("id", id);
+  const { data, error } = await db().from("marketing_campaigns").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

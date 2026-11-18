@@ -7,7 +7,9 @@ import {
   PRIORITY_LABELS,
   RECURRENCE_LABELS,
   campaignProgress,
+  canDeleteTask,
   canEditTask,
+  canWorkTask,
   isDone,
   isLocked,
   isOverdue,
@@ -125,6 +127,46 @@ describe("canEditTask", () => {
 
   it("stops an employee editing an unassigned task", () => {
     expect(canEditTask({ created_by: "a", assignee_id: null }, { profileId: "a", isAdmin: false })).toBe(false);
+  });
+
+  it("lets a leader edit the tasks of the people they lead, whoever made them", () => {
+    const manager = { profileId: "m", isAdmin: false, ledIds: new Set(["r", "k"]) };
+    expect(canEditTask({ created_by: "x", assignee_id: "r" }, manager)).toBe(true);
+    expect(canEditTask({ created_by: "k", assignee_id: "k" }, manager)).toBe(true);
+    // An array of ids reads the same as a set.
+    expect(canEditTask({ created_by: "x", assignee_id: "r" }, { ...manager, ledIds: ["r"] })).toBe(true);
+  });
+
+  it("stops a leader editing a task of someone they do not lead, or one with nobody on it", () => {
+    const manager = { profileId: "m", isAdmin: false, ledIds: new Set(["r"]) };
+    expect(canEditTask({ created_by: "m", assignee_id: "z" }, manager)).toBe(false);
+    expect(canEditTask({ created_by: "m", assignee_id: null }, manager)).toBe(false);
+    expect(canEditTask({ created_by: "x", assignee_id: "r" }, { ...manager, ledIds: [] })).toBe(false);
+  });
+});
+
+describe("canWorkTask", () => {
+  it("lets the assignee, an admin and the assignee's leader tick and complete", () => {
+    expect(canWorkTask({ assignee_id: "a" }, { profileId: "a", isAdmin: false })).toBe(true);
+    expect(canWorkTask({ assignee_id: "a" }, { profileId: "b", isAdmin: true })).toBe(true);
+    expect(canWorkTask({ assignee_id: "a" }, { profileId: "m", isAdmin: false, ledIds: ["a"] })).toBe(true);
+    expect(canWorkTask({ assignee_id: "a" }, { profileId: "m", isAdmin: false, ledIds: ["b"] })).toBe(false);
+    expect(canWorkTask({ assignee_id: null }, { profileId: "m", isAdmin: false, ledIds: ["b"] })).toBe(false);
+  });
+});
+
+describe("canDeleteTask", () => {
+  it("lets an admin delete any task and anyone delete one they made for themselves", () => {
+    expect(canDeleteTask({ created_by: "x", assignee_id: "y" }, { profileId: "a", isAdmin: true })).toBe(true);
+    expect(canDeleteTask({ created_by: "a", assignee_id: "a" }, { profileId: "a", isAdmin: false })).toBe(true);
+    expect(canDeleteTask({ created_by: "x", assignee_id: "a" }, { profileId: "a", isAdmin: false })).toBe(false);
+  });
+
+  it("lets a leader delete only the tasks they created for the people they lead", () => {
+    const manager = { profileId: "m", isAdmin: false, ledIds: new Set(["r"]) };
+    expect(canDeleteTask({ created_by: "m", assignee_id: "r" }, manager)).toBe(true);
+    expect(canDeleteTask({ created_by: "x", assignee_id: "r" }, manager)).toBe(false);
+    expect(canDeleteTask({ created_by: "m", assignee_id: "z" }, manager)).toBe(false);
   });
 });
 

@@ -114,7 +114,7 @@ export default function ProductionPage() {
         />
       ) : (
         <Section eyebrow="Projects" title={pluralize(state.data.projects.length, "project")} padded={false}>
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
                 <tr>

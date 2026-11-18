@@ -5,6 +5,7 @@
 // against its metric's kind. The arithmetic is lib/scorecard.ts.
 import type { MetricEntry, MetricKind, RoleMetric } from "../types/database.ts";
 import { db } from "./supabase.ts";
+import { requireRows } from "../lib/errors.ts";
 
 const METRIC_COLUMNS =
   "id, company_id, job_role_id, name, description, kind, target, scale_max, higher_is_better, per_project, sort_order, is_active, created_at, updated_at";
@@ -61,8 +62,9 @@ export async function updateRoleMetric(id: string, patch: RoleMetricPatch): Prom
 
 // Refused once results are entered; untick Active (updateRoleMetric) to retire it instead.
 export async function deleteRoleMetric(id: string): Promise<void> {
-  const { error } = await db().from("role_metrics").delete().eq("id", id);
+  const { data, error } = await db().from("role_metrics").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }
 
 // Results -----------------------------------------------------------------------------------
@@ -106,6 +108,7 @@ export async function upsertMetricEntry(input: MetricEntryInput): Promise<Metric
 }
 
 export async function deleteMetricEntry(id: string): Promise<void> {
-  const { error } = await db().from("metric_entries").delete().eq("id", id);
+  const { data, error } = await db().from("metric_entries").delete().eq("id", id).select("id");
   if (error) throw error;
+  requireRows(data);
 }

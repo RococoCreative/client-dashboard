@@ -14,6 +14,9 @@
 select tests.create_person('kingdom_admin', tests.company('kingdom'), 'admin');
 select tests.create_person('kingdom_employee', tests.company('kingdom'));
 select tests.create_person('rococo_admin', null, 'employee', true);
+-- Since 0038 an admin who does not see every division cannot raise someone to their own rank;
+-- this one sees them all, as every admin did when 0038 was pasted.
+update public.profiles set view_all_divisions = true where id = tests.id('kingdom_admin');
 
 -- case: role_change_writes_one_event
 select set_config('audit.before', (
@@ -49,7 +52,8 @@ begin
    where table_name = 'profiles'
      and row_id = tests.id('kingdom_employee')::text
      and action = 'update'
-     and changed = '{"role": {"old": "employee", "new": "admin"}}'::jsonb
+     -- Kingdom has no divisions, so a new admin there sees every division (0038, set_division_scope).
+     and changed = '{"role": {"old": "employee", "new": "admin"}, "view_all_divisions": {"old": false, "new": true}}'::jsonb
      and actor_kind = 'user'
      and actor_profile_id = tests.id('kingdom_admin')
      and actor_user_id = tests.user_of(tests.id('kingdom_admin'))

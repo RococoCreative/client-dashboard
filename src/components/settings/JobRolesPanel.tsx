@@ -3,7 +3,7 @@
 // scorecard). The goals a role brings into every month are edited in Goals > By role; each card
 // lists them and links there. Roles and metrics are rows (rule 12): a company shapes its own set
 // and nothing here knows a company by name. Every change saves on its own.
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
@@ -63,7 +63,7 @@ function parseNumber(text: string): number | null | undefined {
 // One metric on a role's scorecard: what it is called, how it is measured (a percent, a rating
 // on a scale, or a plain number), its target and which way is better, whether it is entered per
 // project, its place in the list, and whether it is still scored. Retiring keeps its results.
-function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; onSave: (patch: RoleMetricPatch) => void; onDelete: () => void; onError: (message: string) => void }) {
+function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; onSave: (patch: RoleMetricPatch) => Promise<boolean>; onDelete: () => void; onError: (message: string) => void }) {
   return (
     <li className={`py-2.5 ${metric.is_active ? "" : "opacity-70"}`}>
       <div className="flex items-center gap-2">
@@ -75,7 +75,7 @@ function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; 
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div>
-          <select aria-label={`Kind for ${metric.name}`} value={metric.kind} onChange={(e) => onSave({ kind: e.target.value as MetricKind })} className={smallSelect}>
+          <select aria-label={`Kind for ${metric.name}`} value={metric.kind} onChange={(e) => void onSave({ kind: e.target.value as MetricKind })} className={smallSelect}>
             {keysOf(METRIC_KIND_LABELS).map((k) => (
               <option key={k} value={k}>{METRIC_KIND_LABELS[k]}</option>
             ))}
@@ -83,7 +83,7 @@ function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; 
         </div>
         {metric.kind === "rating" ? (
           <div>
-            <select aria-label={`Scale for ${metric.name}`} value={metric.scale_max} onChange={(e) => onSave({ scale_max: Number(e.target.value) })} className={smallSelect}>
+            <select aria-label={`Scale for ${metric.name}`} value={metric.scale_max} onChange={(e) => void onSave({ scale_max: Number(e.target.value) })} className={smallSelect}>
               {SCALES.map((n) => (
                 <option key={n} value={n}>1 to {n}</option>
               ))}
@@ -104,7 +104,7 @@ function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; 
                   onError("A target is a number, or blank for none.");
                   return false;
                 }
-                onSave({ target: value });
+                return onSave({ target: value });
               }}
             />
           </span>
@@ -123,21 +123,21 @@ function MetricRow({ metric, onSave, onDelete, onError }: { metric: RoleMetric; 
                   onError("The order is a whole number.");
                   return false;
                 }
-                onSave({ sort_order: value });
+                return onSave({ sort_order: value });
               }}
             />
           </span>
         </label>
         <label className={toggleLabel}>
-          <input type="checkbox" className={checkboxClass} checked={metric.higher_is_better} aria-label={`Higher is better for ${metric.name}`} onChange={(e) => onSave({ higher_is_better: e.target.checked })} />
+          <input type="checkbox" className={checkboxClass} checked={metric.higher_is_better} aria-label={`Higher is better for ${metric.name}`} onChange={(e) => void onSave({ higher_is_better: e.target.checked })} />
           <span>Higher is better</span>
         </label>
         <label className={toggleLabel}>
-          <input type="checkbox" className={checkboxClass} checked={metric.per_project} aria-label={`Per project for ${metric.name}`} onChange={(e) => onSave({ per_project: e.target.checked })} />
+          <input type="checkbox" className={checkboxClass} checked={metric.per_project} aria-label={`Per project for ${metric.name}`} onChange={(e) => void onSave({ per_project: e.target.checked })} />
           <span>Per project</span>
         </label>
         <label className={toggleLabel}>
-          <input type="checkbox" className={checkboxClass} checked={metric.is_active} aria-label={`Active for ${metric.name}`} onChange={(e) => onSave({ is_active: e.target.checked })} />
+          <input type="checkbox" className={checkboxClass} checked={metric.is_active} aria-label={`Active for ${metric.name}`} onChange={(e) => void onSave({ is_active: e.target.checked })} />
           <span>Active</span>
         </label>
       </div>
@@ -161,29 +161,37 @@ function RoleMetrics({
 }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<MetricKind>("percent");
+  // The add form waits for its round trip, or a quick double Enter files the metric twice.
+  const [adding, setAdding] = useState(false);
   const own = metrics.filter((m) => m.job_role_id === role.id).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
 
   async function add(event: FormEvent) {
     event.preventDefault();
     const text = name.trim();
-    if (!text) return;
+    if (!text || adding) return;
     onError("");
+    setAdding(true);
     try {
       const created = await createRoleMetric({ job_role_id: role.id, name: text, kind, sort_order: Math.max(0, ...own.map((m) => m.sort_order)) + 1 });
       onMetrics((list) => [...list, created]);
       setName("");
     } catch (err) {
       onError(errorMessage(err));
+    } finally {
+      setAdding(false);
     }
   }
 
-  async function save(metric: RoleMetric, patch: RoleMetricPatch) {
+  // True when the change landed, false once the panel shows why not.
+  async function save(metric: RoleMetric, patch: RoleMetricPatch): Promise<boolean> {
     onError("");
     try {
       const next = await updateRoleMetric(metric.id, patch);
       onMetrics((list) => list.map((m) => (m.id === next.id ? next : m)));
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
 
@@ -194,7 +202,7 @@ function RoleMetrics({
       {own.length > 0 ? (
         <ul className="mt-2 divide-y divide-line">
           {own.map((metric) => (
-            <MetricRow key={metric.id} metric={metric} onSave={(patch) => void save(metric, patch)} onDelete={() => onDelete(metric)} onError={onError} />
+            <MetricRow key={metric.id} metric={metric} onSave={(patch) => save(metric, patch)} onDelete={() => onDelete(metric)} onError={onError} />
           ))}
         </ul>
       ) : null}
@@ -207,7 +215,7 @@ function RoleMetrics({
             ))}
           </select>
         </div>
-        <Button type="submit" variant="secondary" disabled={!name.trim()}>
+        <Button type="submit" variant="secondary" disabled={!name.trim() || adding}>
           <Plus size={14} aria-hidden /> Add metric
         </Button>
       </form>
@@ -233,23 +241,49 @@ function RoleCard({
   onDelete: () => void;
   onError: (message: string) => void;
 }) {
-  async function save(patch: Parameters<typeof updateJobRole>[1]) {
+  // Every write to the role returns the whole row, so writes to one role queue behind each other:
+  // out of order, an older response would put an older module list or name back on screen.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // The module list as the person has ticked it while writes are still out. Each tick builds on
+  // it rather than on the stored list, so two quick ticks never lose the first one.
+  const pendingRef = useRef<DashboardModule[] | null>(null);
+  const inFlight = useRef(0);
+  const [pendingModules, setPendingModules] = useState<DashboardModule[] | null>(null);
+
+  // True when the change landed, false once the panel shows why not.
+  async function save(patch: Parameters<typeof updateJobRole>[1]): Promise<boolean> {
+    const write = queue.current.catch(() => undefined).then(async () => onRole(await updateJobRole(role.id, patch)));
+    queue.current = write;
     try {
-      onRole(await updateJobRole(role.id, patch));
+      await write;
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
-  function toggleModule(module: DashboardModule, on: boolean) {
-    const next = on ? [...new Set([...role.dashboard_modules, module])] : role.dashboard_modules.filter((m) => m !== module);
-    void save({ dashboard_modules: next });
+  async function toggleModule(module: DashboardModule, on: boolean) {
+    const base = pendingRef.current ?? role.dashboard_modules;
+    const next = on ? [...new Set([...base, module])] : base.filter((m) => m !== module);
+    pendingRef.current = next;
+    setPendingModules(next);
+    inFlight.current += 1;
+    await save({ dashboard_modules: next });
+    inFlight.current -= 1;
+    // Once the last write settles the boxes read the role as stored again: the saved list, or the
+    // one before it when the write failed and the error is on screen.
+    if (inFlight.current === 0) {
+      pendingRef.current = null;
+      setPendingModules(null);
+    }
   }
+  const shownModules = pendingModules ?? role.dashboard_modules;
   return (
     <li className={`rounded-lg border border-line bg-surface p-4 ${role.is_active ? "" : "opacity-70"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <BlurInput value={role.name} required ariaLabel={`Name for ${role.name}`} onSave={(next) => void save({ name: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
-          <BlurInput value={role.description ?? ""} placeholder="What this role owns, in a line" ariaLabel={`Description for ${role.name}`} onSave={(next) => void save({ description: next.trim() || null })} className={`${inputClass} mt-2 text-[13px]`} />
+          <BlurInput value={role.name} required ariaLabel={`Name for ${role.name}`} onSave={(next) => save({ name: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
+          <BlurInput value={role.description ?? ""} placeholder="What this role owns, in a line" ariaLabel={`Description for ${role.name}`} onSave={(next) => save({ description: next.trim() || null })} className={`${inputClass} mt-2 text-[13px]`} />
         </div>
         <div className="flex items-center gap-2">
           {role.is_active ? null : <Badge>Retired</Badge>}
@@ -271,7 +305,7 @@ function RoleCard({
           {keysOf(DASHBOARD_MODULE_LABELS).map((module) => (
             <li key={module}>
               <label className="flex items-start gap-2 text-[13px] text-ink">
-                <input type="checkbox" className={`${checkboxClass} mt-0.5`} checked={role.dashboard_modules.includes(module)} aria-label={`${DASHBOARD_MODULE_LABELS[module]} for ${role.name}`} onChange={(e) => toggleModule(module, e.target.checked)} />
+                <input type="checkbox" className={`${checkboxClass} mt-0.5`} checked={shownModules.includes(module)} aria-label={`${DASHBOARD_MODULE_LABELS[module]} for ${role.name}`} onChange={(e) => void toggleModule(module, e.target.checked)} />
                 <span>{DASHBOARD_MODULE_LABELS[module]}</span>
               </label>
             </li>

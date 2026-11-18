@@ -39,30 +39,46 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
     state.setData((prev) => (prev ? prev.map((c) => saved.find((s) => s.id === c.id) ?? c) : prev));
   }
 
-  async function save(category: DeliverableCategory, patch: CategoryPatch) {
+  // While a reorder is writing, the arrows wait: a second move planned from the order on screen
+  // would be planned from an order that is about to change.
+  const [moving, setMoving] = useState(false);
+
+  // True when the change landed, false once the panel shows why not.
+  async function save(category: DeliverableCategory, patch: CategoryPatch): Promise<boolean> {
     setError("");
     try {
       adopt([await updateDeliverableCategory(category.id, patch)]);
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
   // Positions are rewritten from the list as it is shown, so two categories that share a
-  // sort_order (both born at the same count) still swap cleanly.
+  // sort_order (both born at the same count) still swap cleanly. The writes are separate, so some
+  // can land while another is refused; then the order the database holds is read back and shown
+  // with the error, rather than leaving the screen on an order that is no longer true.
   async function move(index: number, direction: -1 | 1) {
     const other = categories[index + direction];
-    if (!other) return;
+    if (!other || moving) return;
     const reordered = [...categories];
     reordered[index + direction] = categories[index];
     reordered[index] = other;
     setError("");
-    try {
-      const changed = reordered.map((c, i) => ({ c, order: i + 1 })).filter(({ c, order }) => c.sort_order !== order);
-      adopt(await Promise.all(changed.map(({ c, order }) => updateDeliverableCategory(c.id, { sort_order: order }))));
-    } catch (err) {
-      setError(errorMessage(err));
+    setMoving(true);
+    const changed = reordered.map((c, i) => ({ c, order: i + 1 })).filter(({ c, order }) => c.sort_order !== order);
+    const results = await Promise.allSettled(changed.map(({ c, order }) => updateDeliverableCategory(c.id, { sort_order: order })));
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (!failed) {
+      adopt(results.map((r) => (r as PromiseFulfilledResult<DeliverableCategory>).value));
+    } else {
+      setError(errorMessage(failed.reason));
+      // What landed is shown straight away, then the whole list is read again for the true order.
+      adopt(results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
+      state.reload();
     }
+    setMoving(false);
   }
 
   // Modal keeps Tab inside the dialog, but focus can still be put on another Delete button under
@@ -113,16 +129,16 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
             {categories.map((category, index) => (
               <li key={category.id} className={`flex flex-wrap items-center gap-2 py-2 first:pt-0 last:pb-0 ${category.is_active ? "" : "opacity-70"}`}>
                 <div className="min-w-[180px] flex-1">
-                  <BlurInput value={category.name} required ariaLabel={`Category name ${category.name}`} onSave={(next) => void save(category, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
+                  <BlurInput value={category.name} required ariaLabel={`Category name ${category.name}`} onSave={(next) => save(category, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
                 </div>
                 {category.is_active ? null : <Badge>Retired</Badge>}
                 <Button variant="ghost" size="sm" onClick={() => void save(category, { is_active: !category.is_active })}>
                   {category.is_active ? "Retire" : "Restore"}
                 </Button>
-                <IconButton label={`Move ${category.name} up`} disabled={index === 0} onClick={() => void move(index, -1)}>
+                <IconButton label={`Move ${category.name} up`} disabled={index === 0 || moving} onClick={() => void move(index, -1)}>
                   <ArrowUp size={14} aria-hidden />
                 </IconButton>
-                <IconButton label={`Move ${category.name} down`} disabled={index === categories.length - 1} onClick={() => void move(index, 1)}>
+                <IconButton label={`Move ${category.name} down`} disabled={index === categories.length - 1 || moving} onClick={() => void move(index, 1)}>
                   <ArrowDown size={14} aria-hidden />
                 </IconButton>
                 <IconButton label={`Delete ${category.name}`} onClick={() => openDelete(category)}>

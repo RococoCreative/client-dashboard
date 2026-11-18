@@ -26,7 +26,7 @@ export default function MappedTable({ source, records }: { source: SyncSource; r
       {records.length === 0 ? (
         <p className="mt-2 text-sm text-ink-2">No rows in the last sync.</p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
+        <div className="relative mt-2 overflow-x-auto">
           <table className={tableClass}>
             <thead>
               <tr>

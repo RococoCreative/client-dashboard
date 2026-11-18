@@ -2,6 +2,7 @@
 // run against the seeded roster and never touch the network.
 import type { Profile, Role } from "../../types/database.ts";
 import { ALL_PROFILES, personaFromLocation } from "../fixtures.ts";
+import type { ProfilePatch as RealProfilePatch } from "../../services/profiles.ts";
 
 const profiles: Profile[] = ALL_PROFILES.map((p) => ({ ...p }));
 
@@ -23,7 +24,10 @@ export async function createStaffProfile(input: {
   full_name?: string | null;
   title?: string | null;
   role?: Role;
+  division_ids?: string[];
+  reports_to?: string | null;
 }): Promise<Profile> {
+  const divisionIds = [...(input.division_ids ?? [])];
   const created: Profile = {
     id: `staff-new-${profiles.length + 1}`,
     user_id: null,
@@ -37,10 +41,13 @@ export async function createStaffProfile(input: {
     hire_date: null,
     phone: null,
     department: null,
-    reports_to: null,
+    reports_to: input.reports_to ?? null,
     job_role_id: null,
-    division_id: null,
+    division_id: divisionIds.length === 1 ? divisionIds[0] : null,
+    division_ids: divisionIds,
     can_view_divisions: false,
+    view_all_divisions: false,
+    view_division_ids: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -48,9 +55,11 @@ export async function createStaffProfile(input: {
   return created;
 }
 
+// Same refusal as the service when nothing went: the person is gone already, or has signed in.
 export async function deleteStaffProfile(id: string): Promise<void> {
-  const index = profiles.findIndex((p) => p.id === id);
-  if (index !== -1) profiles.splice(index, 1);
+  const index = profiles.findIndex((p) => p.id === id && p.user_id === null);
+  if (index === -1) throw new Error("That person was not removed. They may have signed in, or they are not yours to remove.");
+  profiles.splice(index, 1);
 }
 
 export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null; phone?: string | null }): Promise<Profile> {
@@ -66,17 +75,26 @@ export async function listAllProfiles(): Promise<Profile[]> {
   return [...profiles];
 }
 
-export type ProfilePatch = Partial<Pick<Profile, "full_name" | "title" | "role" | "is_active" | "company_id" | "is_rococo_admin" | "hire_date" | "phone" | "department" | "reports_to" | "job_role_id" | "division_id" | "can_view_divisions">>;
+export type ProfilePatch = RealProfilePatch;
 
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);
   if (index === -1) throw new Error("Profile not found.");
   const next = { ...profiles[index], ...patch, updated_at: new Date().toISOString() };
-  // A move to another company leaves the division and the right to see the split behind, as
-  // guard_profile_division does (0035).
+  // division_id mirrors division_ids: the one division, or null for none or several (0038).
+  if (patch.division_ids !== undefined) {
+    next.division_ids = [...patch.division_ids];
+    next.division_id = next.division_ids.length === 1 ? next.division_ids[0] : null;
+  }
+  if (patch.view_division_ids !== undefined) next.view_division_ids = [...patch.view_division_ids];
+  // A move to another company leaves the divisions and every right to see them behind, as
+  // guard_profile_division does (0035, 0038).
   if (patch.company_id !== undefined && patch.company_id !== profiles[index].company_id) {
     next.division_id = null;
+    next.division_ids = [];
     next.can_view_divisions = false;
+    next.view_all_divisions = false;
+    next.view_division_ids = [];
   }
   profiles[index] = next;
   return profiles[index];

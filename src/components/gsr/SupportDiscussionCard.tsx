@@ -19,7 +19,8 @@ export default function SupportDiscussionCard({
   canWrite: boolean;
   isOwn: boolean;
   signedOff: boolean;
-  onSave: (next: string | null) => void;
+  // Resolves whether the write landed, so a refused one keeps the draft and says "Not saved".
+  onSave: (next: string | null) => Promise<boolean>;
 }) {
   return (
     <Section

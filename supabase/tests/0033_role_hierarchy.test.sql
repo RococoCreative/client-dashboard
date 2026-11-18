@@ -21,6 +21,9 @@ select tests.create_person('k_emp2', tests.company('kingdom'));
 select tests.create_person('l_admin', tests.company('klasik'), 'admin');
 select tests.create_person('l_emp', tests.company('klasik'));
 select tests.create_person('rococo', null, 'employee', true);
+-- Since 0038 an admin who does not see every division cannot raise someone to their own rank;
+-- this one sees them all, as every admin did when 0038 was pasted.
+update public.profiles set view_all_divisions = true where id = tests.id('k_admin');
 
 -- case: role_values_widened
 update public.profiles set role = 'manager' where id = tests.id('k_emp2');

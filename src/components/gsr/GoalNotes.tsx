@@ -1,7 +1,9 @@
 // A goal's notes: a running log of dated entries, the reflection a person and their manager keep
 // on a goal between meetings and work from in the review. Information only: nothing scores a
 // note. One line to add, a pencil on your own entries to correct one, and a delete behind a
-// confirm. Who reads which notes is the database's call (0021); this shows what it is given.
+// confirm. Who reads which notes is the database's call (0021, 0038); this shows what it is given.
+// Authors are named from the company directory, because the reader may not be able to open the
+// profile of the person who wrote a note (an employee reading their manager's note, say).
 import { useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Button from "../ui/Button.tsx";
@@ -11,8 +13,8 @@ import { inputClass } from "../ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { createGoalNote, deleteGoalNote, updateGoalNote } from "../../services/gsr.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDate } from "../../lib/format.ts";
-import type { Goal, GoalNote, Profile } from "../../types/database.ts";
+import { formatDate } from "../../lib/format.ts";
+import type { Goal, GoalNote } from "../../types/database.ts";
 
 const fieldClass = `${inputClass} mt-0 min-w-0 flex-1 py-1.5 text-[13px]`;
 
@@ -79,20 +81,24 @@ function NoteEntry({
 export default function GoalNotes({
   goal,
   notes,
-  people,
+  names,
   canWrite,
   onNotes,
   onError,
+  onSaved,
 }: {
   goal: Pick<Goal, "id" | "title" | "company_id" | "employee_id">;
   // This goal's notes, oldest first, the order they were written in.
   notes: GoalNote[];
-  // Names the authors. Left out where every note is the reader's own.
-  people?: Profile[];
+  // Full names by profile id, from the directory, to name the authors. Left out where every note
+  // is the reader's own.
+  names?: ReadonlyMap<string, string>;
   canWrite: boolean;
   // Updates the caller's list of the person's notes, which holds every goal's.
   onNotes: (update: (notes: GoalNote[]) => GoalNote[]) => void;
   onError: (message: string) => void;
+  // A note was added, corrected or removed, so the caller can clear an older failure line.
+  onSaved?: () => void;
 }) {
   const { profile } = useHub();
   const [draft, setDraft] = useState("");
@@ -105,8 +111,8 @@ export default function GoalNotes({
   // notes box, which has no author, is the person's own.
   const mine = (note: GoalNote) => note.author_id === profile.id || (note.author_id === null && note.employee_id === profile.id);
   const authorName = (note: GoalNote): string | null => {
-    const author = note.author_id ? people?.find((p) => p.id === note.author_id) : undefined;
-    return author ? displayName(author).split(" ")[0] : null;
+    const name = note.author_id ? names?.get(note.author_id)?.trim() : undefined;
+    return name ? name.split(" ")[0] : null;
   };
 
   // Adding is one click, so a double click would file the note twice without the guard.
@@ -119,6 +125,7 @@ export default function GoalNotes({
       const created = await createGoalNote({ goal_id: goal.id, company_id: goal.company_id, employee_id: goal.employee_id, author_id: profile.id, body });
       onNotes((list) => [...list, created]);
       setDraft("");
+      onSaved?.();
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -130,6 +137,7 @@ export default function GoalNotes({
     try {
       const saved = await updateGoalNote(note.id, body);
       onNotes((list) => list.map((n) => (n.id === saved.id ? saved : n)));
+      onSaved?.();
       return true;
     } catch (err) {
       onError(errorMessage(err));
@@ -146,6 +154,7 @@ export default function GoalNotes({
       const id = deleting.id;
       onNotes((list) => list.filter((n) => n.id !== id));
       setDeleting(null);
+      onSaved?.();
     } catch (err) {
       setError(errorMessage(err));
     } finally {

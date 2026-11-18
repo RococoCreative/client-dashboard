@@ -1,7 +1,8 @@
 // Pins the sidebar registry. Every company reads the same sections (Home, Sales & Finance,
 // Production, People, Resources, then My GSR and Settings at the bottom) and a module adds or hides
 // whole items, so the sidebar for each audience is written out here in full: an admin and an
-// employee of a company with no modules, of one with every module, and a Rococo admin inside each.
+// employee of a company with no modules, of one with every module, a Rococo admin inside each, and
+// a manager.
 import { describe, expect, it } from "vitest";
 import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
@@ -172,6 +173,35 @@ describe("the Tasks item", () => {
   it("sits in the Home group, right after Wins", () => {
     const home = sectionsOf(navFor(kingdom, false, false))[0];
     expect(home.items.map((i) => i.id)).toEqual(["dashboard", "wins", "tasks"]);
+  });
+});
+
+describe("navFor for a manager", () => {
+  // A manager leads people but is not an admin: People joins their own pages, and nothing an admin
+  // alone runs (Goals, Monthly GSRs, Reviews, Scorecards, Settings) appears.
+  const PLAIN_MANAGER: Sections = [
+    [null, [HOME]],
+    ["People", [PEOPLE, MY_GSR, MY_REVIEWS, MY_GOALS]],
+    ["Resources", [SOPS, FILES]],
+  ];
+
+  it("gives a Klasik manager People beside their own pages, under the People heading", () => {
+    expect(read(navFor(klasik, false, false, true))).toEqual(expected(PLAIN_MANAGER));
+  });
+
+  it("gives an RBA manager Tasks as well, and a shortcut to People", () => {
+    const layout = navFor(rba, false, false, true);
+    expect(read(layout)).toEqual(expected([[null, [HOME, TASKS]], ...PLAIN_MANAGER.slice(1)]));
+    expect(sectionShortcuts(layout)).toContainEqual({ group: "people_hr", heading: "People", to: "/people" });
+  });
+
+  it("leaves an admin's sidebar as it is whether or not lead is passed", () => {
+    expect(read(navFor(klasik, true, false, true))).toEqual(expected(PLAIN_ADMIN));
+    expect(read(navFor(kingdom, true, false, true))).toEqual(expected(FULL_ADMIN));
+  });
+
+  it("keeps People from an employee", () => {
+    expect(read(navFor(kingdom, false, false, false))).toEqual(expected(FULL_EMPLOYEE));
   });
 });
 

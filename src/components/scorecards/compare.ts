@@ -3,6 +3,8 @@
 // against target, how many people that covers, and how many of the month's reviews are complete.
 // The arithmetic is lib/scorecard.ts (results) and lib/gsr/cycles.ts (who a cycle covers); this
 // file only groups people. Divisions are the company's own rows, never names known to the code.
+// A person may work in several divisions (division_ids, 0038): they count in each of those
+// divisions' figures and once in Combined, so the divisions can add up to more than the whole.
 import { isOptimizationMetric, monthOf, monthResult, summarizeResults, type ResultSummary } from "../../lib/scorecard.ts";
 import { cycleProgress, cycleRoster } from "../../lib/gsr/cycles.ts";
 import type { CompanyDivision, CycleOmission, MetricEntry, Profile, Review, ReviewCycle, RoleMetric } from "../../types/database.ts";
@@ -23,14 +25,15 @@ export interface CompareRow {
 }
 
 // People not placed in any division: counted in Combined, and shown as their own group only when
-// there are some, so the divisions and the remainder add up to the whole.
+// there are some, so nobody drops out of the strip.
 export const NO_DIVISION = "none";
 
-// The people a switch value covers. Combined is everybody.
-export function peopleInScope<P extends Pick<Profile, "division_id">>(people: readonly P[], scope: string): P[] {
+// The people a switch value covers. Combined is everybody, once each; a division is everyone who
+// works in it, whatever else they work in.
+export function peopleInScope<P extends Pick<Profile, "division_ids">>(people: readonly P[], scope: string): P[] {
   if (scope === COMBINED) return [...people];
-  if (scope === NO_DIVISION) return people.filter((p) => p.division_id === null);
-  return people.filter((p) => p.division_id === scope);
+  if (scope === NO_DIVISION) return people.filter((p) => p.division_ids.length === 0);
+  return people.filter((p) => p.division_ids.includes(scope));
 }
 
 // The month's Goal Setting Review: the monthly cycle whose period starts in that month.
@@ -67,8 +70,11 @@ export function divisionCompareRows(input: {
   cycle: ReviewCycle | null;
   reviews: readonly Review[];
   omissions: readonly CycleOmission[];
+  // What the whole reads as. A viewer who sees only some divisions passes "In your divisions",
+  // because the people they were given are not the whole company.
+  combinedLabel?: string;
 }): CompareRow[] {
-  const { people, divisions, metrics, entries, month, cycle, reviews, omissions } = input;
+  const { people, divisions, metrics, entries, month, cycle, reviews, omissions, combinedLabel = "Combined" } = input;
   const row = (key: string, label: string): CompareRow => {
     const group = peopleInScope(people, key);
     const active = group.filter((p) => p.is_active);
@@ -81,7 +87,7 @@ export function divisionCompareRows(input: {
       reviews: cycle ? cycleProgress(cycleRoster(group, reviewList, cycle.id, [...omissions]), reviewList, cycle.id) : null,
     };
   };
-  const rows = [row(COMBINED, "Combined"), ...divisions.map((d) => row(d.id, d.name))];
-  if (people.some((p) => p.is_active && p.division_id === null)) rows.push(row(NO_DIVISION, "No division"));
+  const rows = [row(COMBINED, combinedLabel), ...divisions.map((d) => row(d.id, d.name))];
+  if (people.some((p) => p.is_active && p.division_ids.length === 0)) rows.push(row(NO_DIVISION, "No division"));
   return rows;
 }

@@ -2,6 +2,7 @@
 // run against seeded financial snapshots and never touch the network.
 import type { FinancialSnapshot, PeriodType, SnapshotSource } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const snapshots = fromAll((b) => b.snapshots).map((x) => ({ ...x }));
 let counter = 0;
@@ -25,7 +26,8 @@ export async function updateSnapshot(id: string, patch: Partial<Omit<SnapshotInp
 }
 export async function deleteSnapshot(id: string): Promise<void> {
   const index = snapshots.findIndex((s) => s.id === id);
-  if (index !== -1) snapshots.splice(index, 1);
+  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
+  snapshots.splice(index, 1);
 }
 export async function upsertSnapshots(rows: SnapshotInput[]): Promise<FinancialSnapshot[]> {
   const saved: FinancialSnapshot[] = [];

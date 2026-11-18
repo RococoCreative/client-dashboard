@@ -1,7 +1,7 @@
 // The wins a company records by hand, newest first. Members read the list; admins add a win,
 // edit each one in place (every field saves on its own) and archive it. Every win here is
 // manual: the database forces that for any write from the browser (0027).
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Archive, Plus } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import BlurInput from "../components/ui/BlurInput.tsx";
@@ -67,7 +67,7 @@ function ReadOnlyRow({ win, projects }: { win: Win; projects: Project[] }) {
   );
 }
 
-function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: Win; projects: Project[]; withProjects: boolean; onSave: (patch: WinPatch) => void; onArchive: () => void }) {
+function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: Win; projects: Project[]; withProjects: boolean; onSave: (patch: WinPatch) => Promise<boolean>; onArchive: () => void }) {
   const { id, title } = win;
   return (
     <li className="px-5 py-3">
@@ -88,7 +88,7 @@ function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: 
         {withProjects ? (
           <div>
             <label htmlFor={`${id}-project`} className={labelClass}>Project</label>
-            <ProjectSelect id={`${id}-project`} label={`Project for ${title}`} value={win.project_id ?? ""} projects={projects} onChange={(next) => onSave({ project_id: next || null })} />
+            <ProjectSelect id={`${id}-project`} label={`Project for ${title}`} value={win.project_id ?? ""} projects={projects} onChange={(next) => void onSave({ project_id: next || null })} />
           </div>
         ) : null}
       </div>
@@ -177,12 +177,20 @@ export default function WinsPage() {
 
   const replace = (next: Win) => state.setData((prev) => (prev ? { ...prev, wins: prev.wins.map((w) => (w.id === next.id ? next : w)) } : prev));
 
-  async function save(win: Win, patch: WinPatch) {
+  // Each response carries the whole win, so a title left by a click on the project pulldown put
+  // two writes in flight that could land the wrong way round and show the older one. Writes for one
+  // win queue behind each other. True when the change landed, false once the page shows why not.
+  const saveChains = useRef(new Map<string, Promise<unknown>>());
+  async function save(win: Win, patch: WinPatch): Promise<boolean> {
     setError("");
+    const chained = (saveChains.current.get(win.id) ?? Promise.resolve()).catch(() => undefined).then(async () => replace(await updateWin(win.id, patch)));
+    saveChains.current.set(win.id, chained);
     try {
-      replace(await updateWin(win.id, patch));
+      await chained;
+      return true;
     } catch (err) {
       setError(errorMessage(err));
+      return false;
     }
   }
 
@@ -228,7 +236,7 @@ export default function WinsPage() {
                   win={win}
                   projects={state.data!.projects}
                   withProjects={withProjects}
-                  onSave={(patch) => void save(win, patch)}
+                  onSave={(patch) => save(win, patch)}
                   onArchive={() => setArchiving(win)}
                 />
               ) : (

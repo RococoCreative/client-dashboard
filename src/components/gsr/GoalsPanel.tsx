@@ -161,6 +161,7 @@ function GoalCard({
   onEdit,
   onDelete,
   onError,
+  onSaved,
 }: {
   goal: Goal;
   isOwner: boolean;
@@ -176,12 +177,19 @@ function GoalCard({
   onEdit: () => void;
   onDelete: () => void;
   onError: (message: string) => void;
+  // A save that landed clears the panel's last error, so a failure from earlier never sits above
+  // a page that has since saved.
+  onSaved: () => void;
 }) {
-  async function save(patch: Parameters<typeof updateGoal>[1]) {
+  // True when the change landed, false once the panel shows why not; the slider rolls back on false.
+  async function save(patch: Parameters<typeof updateGoal>[1]): Promise<boolean> {
     try {
       onChange(await updateGoal(goal.id, patch));
+      onSaved();
+      return true;
     } catch (err) {
       onError(errorMessage(err));
+      return false;
     }
   }
   // A yearly goal settles once its year is behind us and a BHAG never does; neither needs cycles.
@@ -219,7 +227,7 @@ function GoalCard({
 
       <div className="mt-3">
         <p className={eyebrowClass}>Completion</p>
-        <ProgressSlider className="mt-1" label={`Completion for ${goal.title}`} value={goal.progress} disabled={!canEdit} onCommit={(next) => void save(progressPatch(next, goal.status))} />
+        <ProgressSlider className="mt-1" label={`Completion for ${goal.title}`} value={goal.progress} disabled={!canEdit} onCommit={(next) => save(progressPatch(next, goal.status))} />
       </div>
 
       {isOwner ? (
@@ -298,6 +306,7 @@ export default function GoalsPanel({
     try {
       const saved = await saveGoalSteps({ goal_id: goal.id, company_id: goal.company_id, employee_id: goal.employee_id, action_steps: steps });
       update((data) => ({ ...data, privateSteps: [...data.privateSteps.filter((row) => row.goal_id !== saved.goal_id), saved] }));
+      setError("");
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -312,6 +321,7 @@ export default function GoalsPanel({
       const id = deleting.id;
       update((data) => ({ ...data, goals: data.goals.filter((g) => g.id !== id) }));
       setDeleting(null);
+      setError("");
     } catch (err) {
       setDeleteError(errorMessage(err));
     } finally {
@@ -365,7 +375,9 @@ export default function GoalsPanel({
                       goal={goal}
                       isOwner={isOwner}
                       canEdit={canEdit}
-                      setForThem={goalLockedFor(goal, isAdmin)}
+                      // "Set by your manager" is said to the goal's own person only; a manager
+                      // reading a team member's goal is that manager.
+                      setForThem={isOwner && goalLockedFor(goal, isAdmin)}
                       steps={stepsFor(goal)}
                       notes={notesFor(goal)}
                       onChange={upsert}
@@ -374,6 +386,7 @@ export default function GoalsPanel({
                       onEdit={() => setDialog({ goal })}
                       onDelete={() => setDeleting(goal)}
                       onError={setError}
+                      onSaved={() => setError("")}
                     />
                   ))}
                 </ul>
@@ -393,6 +406,7 @@ export default function GoalsPanel({
           onSaved={(goal) => {
             upsert(goal);
             setDialog(null);
+            setError("");
           }}
         />
       ) : null}
