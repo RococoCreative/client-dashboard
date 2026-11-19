@@ -117,7 +117,7 @@ export default function CompensationTable({
   return (
     <div>
       {items.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
       ) : (
         <div className="relative overflow-x-auto">
           <table className={tableClass}>
@@ -165,7 +165,7 @@ export default function CompensationTable({
         </div>
       )}
       {canEdit ? (
-        <form onSubmit={add} className="flex flex-wrap gap-2 border-t border-line px-5 py-4">
+        <form onSubmit={add} className="flex flex-wrap gap-2 border-t border-line px-4 sm:px-6 py-4">
           <div className="min-w-[220px] flex-1">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add a line (base salary, vehicle stipend, match)" aria-label="Add a compensation line" className={`${inputClass} mt-0`} />
           </div>

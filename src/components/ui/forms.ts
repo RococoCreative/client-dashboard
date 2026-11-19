@@ -32,3 +32,9 @@ export const tableClass = "w-full border-collapse text-sm";
 export const thClass =
   "border-b border-line px-3 py-2 text-left text-[11px] font-medium uppercase tracking-label text-ink-3";
 export const tdClass = "border-b border-line px-3 py-2.5 align-middle text-ink";
+// For a row of a table that runs edge to edge in its card: the first and last cells take the card's
+// own padding (16px on a phone, 24px from sm) rather than the 12px every cell has, so nothing sits
+// closer than that to the card's edge. Put it on each row, the header row included.
+export const edgeCellsClass = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
+// The same for a table that is a table only from lg up and stacks into its own rows below that.
+export const edgeCellsWideClass = "lg:[&>*:first-child]:pl-6 lg:[&>*:last-child]:pr-6";

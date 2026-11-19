@@ -18,7 +18,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
-import { inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
+import { edgeCellsClass, inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
 import { metaClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
@@ -38,10 +38,6 @@ const FIGURE_COPY: Record<FigureField, { label: string; example: string }> = {
   net: { label: "net profit", example: "48000" },
   cash: { label: "cash on hand", example: "155000" },
 };
-
-// The table's first and last cells take the card's padding, 16px on a phone and 24px above, so no
-// figure sits closer than that to the card's edge.
-const EDGE_CELLS = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
 // Where a period's figures came from, for the stat under the latest period.
 const SOURCE_HINT: Record<SnapshotSource, string> = {
@@ -375,7 +371,7 @@ export default function FinancialsPage() {
             <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
-                  <tr className={EDGE_CELLS}>
+                  <tr className={edgeCellsClass}>
                     <th className={thClass}>Period</th>
                     <th className={`${thClass} text-right`}>Revenue</th>
                     <th className={`${thClass} text-right`}>Direct costs</th>
@@ -391,7 +387,7 @@ export default function FinancialsPage() {
                   {rows.map((row) => {
                     const d = deriveSnapshot(row);
                     return (
-                      <tr key={row.id} className={`${EDGE_CELLS} hover:bg-surface-2/60`}>
+                      <tr key={row.id} className={`${edgeCellsClass} hover:bg-surface-2/60`}>
                         <td className={tdClass}>
                           <span className="font-medium">{periodLabel(row.period_type, row.period_start)}</span>
                           {row.notes ? <span className={`block max-w-xs truncate ${metaClass}`} title={row.notes}>{row.notes}</span> : null}

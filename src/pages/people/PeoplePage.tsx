@@ -37,7 +37,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
@@ -375,7 +375,7 @@ export default function PeoplePage() {
   }
 
   const filters = state.data ? (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 sm:px-6 py-3">
       {hasDivisions ? (
         <div role="group" aria-label="Division" className="flex flex-wrap items-center gap-1.5">
           <CountChip active={activeDivision === ALL} count={countFor(ALL)} onClick={() => setDivision(ALL)}>All</CountChip>
@@ -441,7 +441,7 @@ export default function PeoplePage() {
         >
           {people.length > 0 ? filters : null}
           {shown.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-ink-2">
+            <div className="px-4 sm:px-6 py-6 text-sm text-ink-2">
               <p>{emptyLine()}</p>
               {hiddenInactive > 0 ? (
                 <p className="mt-1 text-[13px] text-ink-3">
@@ -453,7 +453,7 @@ export default function PeoplePage() {
             <div className="relative lg:overflow-x-auto">
               <table role="table" className={`${tableClass} max-lg:block`}>
                 <thead role="rowgroup" className="max-lg:sr-only">
-                  <tr role="row">
+                  <tr role="row" className={edgeCellsWideClass}>
                     <th role="columnheader" className={thClass}>Person</th>
                     {hasDivisions ? <th role="columnheader" className={thClass}>Division</th> : null}
                     <th role="columnheader" className={thClass}>Reports to</th>
@@ -475,7 +475,7 @@ export default function PeoplePage() {
                       <tr
                         key={person.id}
                         role="row"
-                        className={`hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
+                        className={`${edgeCellsWideClass} hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
                       >
                         <td role="cell" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-1 max-lg:min-w-0 max-lg:flex-1`}>
                           <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
@@ -553,12 +553,12 @@ export default function PeoplePage() {
             </div>
           )}
           {teamView ? (
-            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
+            <p className="border-t border-line px-4 sm:px-6 py-3 text-[12px] text-ink-3">
               Admins add people, place them in divisions and set who they report to. Someone not signed in yet still has
               their goals and tasks waiting on their profile.
             </p>
           ) : (
-            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
+            <p className="border-t border-line px-4 sm:px-6 py-3 text-[12px] text-ink-3">
               Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
               set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
               invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.

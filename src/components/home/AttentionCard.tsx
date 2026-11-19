@@ -42,15 +42,15 @@ export default function AttentionCard({ company }: { company: Company }) {
   return (
     <Section eyebrow="Attention" title="Needs attention" padded={false}>
       {state.error && !state.data ? (
-        <div className="p-5"><Notice tone="error">{state.error}</Notice></div>
+        <div className="p-4 sm:p-6"><Notice tone="error">{state.error}</Notice></div>
       ) : !state.data ? (
-        <div className="p-5"><SkeletonRows rows={3} /></div>
+        <div className="p-4 sm:p-6"><SkeletonRows rows={3} /></div>
       ) : state.data.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">Nothing needs attention right now.</p>
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">Nothing needs attention right now.</p>
       ) : (
         <ul className="divide-y divide-line">
           {state.data.map((item, i) => (
-            <li key={`${item.kind}-${i}`} className="flex items-start gap-3 px-5 py-3">
+            <li key={`${item.kind}-${i}`} className="flex items-start gap-3 px-4 sm:px-6 py-3">
               <Badge tone={item.severity} className="mt-0.5">{item.severity === "danger" ? "Fix" : "Check"}</Badge>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{item.title}</p>

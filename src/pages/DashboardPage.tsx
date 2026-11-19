@@ -908,7 +908,7 @@ function EmployeeDashboard() {
           <Section eyebrow={`Company goals ${year}`} title="What the team is chasing" className="lg:col-span-3" padded={false}>
             <ul className="divide-y divide-line">
               {companyGoals.map((goal) => (
-                <li key={goal.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                <li key={goal.id} className="flex items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink">{goal.name}</p>
                     <p className="tnum text-[12px] text-ink-3">

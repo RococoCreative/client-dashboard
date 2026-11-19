@@ -2,8 +2,6 @@
 // way everywhere, Divisions reads first, every destructive control carries a word, Goals points to
 // what left it, and the small consistency fixes. Rendered against the mocked data layer, as
 // pages.test.tsx is.
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -143,20 +141,15 @@ describe("destructive controls keep their words", () => {
 // The rule as a guard over the source: no icon button anywhere carries a destructive name, so a
 // trash or a cross can never stand alone for Remove, Delete, Unassign or Cancel again.
 describe("no icon-only destructive control is left", () => {
-  function files(dir: string): string[] {
-    return readdirSync(dir).flatMap((name) => {
-      const path = join(dir, name);
-      if (statSync(path).isDirectory()) return files(path);
-      return /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name) ? [path] : [];
-    });
-  }
+  // Every component and page source, read as text at build time.
+  const sources = import.meta.glob<string>(["../**/*.tsx", "!../**/*.test.tsx"], { query: "?raw", import: "default", eager: true });
 
   it("finds no IconButton or IconLink named for a destructive action", () => {
+    expect(Object.keys(sources).length).toBeGreaterThan(100);
     const offenders: string[] = [];
-    for (const file of files(join(process.cwd(), "src"))) {
-      const text = readFileSync(file, "utf8");
+    for (const [file, text] of Object.entries(sources)) {
       for (const match of text.matchAll(/<Icon(?:Button|Link)\b[^>]*?label=\{?["'`](Remove|Delete|Unassign|Cancel|Archive|Retire)\b/g)) offenders.push(`${file}: ${match[0].slice(0, 80)}`);
-      if (/<Trash2\b/.test(text) && /<IconButton\b[^>]*>\s*<Trash2/.test(text)) offenders.push(`${file}: IconButton with a trash icon`);
+      if (/<IconButton\b[^>]*>\s*<Trash2/.test(text)) offenders.push(`${file}: IconButton with a trash icon`);
     }
     expect(offenders).toEqual([]);
   });

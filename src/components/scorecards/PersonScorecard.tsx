@@ -75,7 +75,7 @@ function CellEditor({
   const [hint, setHint] = useState("");
   const scale = metric.kind === "percent" ? "0 to 100" : metric.kind === "rating" ? `1 to ${metric.scale_max}` : "any number";
   return (
-    <div className="border-t border-line bg-surface-2/50 px-5 py-4" aria-label={`Entering ${label}`} role="group">
+    <div className="border-t border-line bg-surface-2/50 px-4 sm:px-6 py-4" aria-label={`Entering ${label}`} role="group">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">{label}</p>
@@ -257,9 +257,9 @@ export default function PersonScorecard({
   );
 
   const body = !roleId ? (
-    <p className="p-5 text-sm text-ink-2">{canEdit ? "No job role set. Pick one in Details and its metrics show here." : "No job role set yet."}</p>
+    <p className="p-4 sm:p-6 text-sm text-ink-2">{canEdit ? "No job role set. Pick one in Details and its metrics show here." : "No job role set yet."}</p>
   ) : own.length === 0 ? (
-    <p className="p-5 text-sm text-ink-2">
+    <p className="p-4 sm:p-6 text-sm text-ink-2">
       {roleName ?? "This role"} has no scorecard metrics yet.
       {canEdit ? (
         <>
@@ -268,11 +268,11 @@ export default function PersonScorecard({
       ) : null}
     </p>
   ) : !grid ? (
-    <div className="p-5">
+    <div className="p-4 sm:p-6">
       <SkeletonRows rows={4} />
     </div>
   ) : grid.rows.length === 0 ? (
-    <p className="p-5 text-sm text-ink-2">No active metrics on {roleName ?? "this role"}.</p>
+    <p className="p-4 sm:p-6 text-sm text-ink-2">No active metrics on {roleName ?? "this role"}.</p>
   ) : (
     <>
       <div ref={scroller} className="relative overflow-x-auto">
@@ -368,12 +368,12 @@ export default function PersonScorecard({
           onClose={() => setOpen(null)}
         />
       ) : (
-        <p className="px-5 py-3 text-[12px] text-ink-3">
+        <p className="px-4 sm:px-6 py-3 text-[12px] text-ink-3">
           {canEdit ? "Pick a month to enter or correct its result. " : ""}Green hit its target, red missed it. A dot marks a note.
         </p>
       )}
       {notes.length > 0 ? (
-        <div className="border-t border-line px-5 py-3">
+        <div className="border-t border-line px-4 sm:px-6 py-3">
           <p className={labelClass}>Notes</p>
           <ul className="mt-1.5 space-y-1 text-[12.5px]">
             {notes.map((n) => (

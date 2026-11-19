@@ -152,7 +152,7 @@ export default function CompanyGoalsPanel() {
       ) : (
         <ul className="space-y-3">
           {goals.map((goal) => (
-            <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-5 py-4">
+            <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 sm:px-6 py-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{goal.name}</p>
                 <p className="tnum mt-0.5 text-[13px] text-ink-2">{goal.current_display || "-"} of {goal.target_display || "-"}</p>

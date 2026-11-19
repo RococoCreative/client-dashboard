@@ -10,7 +10,7 @@ import RatingInput from "../../ui/RatingInput.tsx";
 import ScoreRing from "../../ui/ScoreRing.tsx";
 import Section from "../../ui/Section.tsx";
 import { bandClass } from "../../ui/bandClass.ts";
-import { inputClass, tableClass, tdClass, thClass } from "../../ui/forms.ts";
+import { edgeCellsClass, inputClass, tableClass, tdClass, thClass } from "../../ui/forms.ts";
 import GsrQuarterLine from "../../gsr/GsrQuarterLine.tsx";
 import DeliverablesPanel from "../DeliverablesPanel.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
@@ -183,7 +183,7 @@ export default function PersonReviews({
               <div className="relative overflow-x-auto">
                 <table className={tableClass}>
                   <thead>
-                    <tr>
+                    <tr className={edgeCellsClass}>
                       <th className={thClass}>Cycle</th>
                       <th className={thClass}>Period</th>
                       <th className={thClass}>Status</th>
@@ -193,7 +193,7 @@ export default function PersonReviews({
                   </thead>
                   <tbody>
                     {rows.map(({ review, cycle, result }) => (
-                      <tr key={review.id} className="hover:bg-surface-2/60">
+                      <tr key={review.id} className={`${edgeCellsClass} hover:bg-surface-2/60`}>
                         <td className={tdClass}>{cycle?.name ?? "Review"}</td>
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>

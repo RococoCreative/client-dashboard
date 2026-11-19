@@ -82,7 +82,7 @@ export default function PeopleGoalsPanel() {
                   {own.map((goal) => {
                     const result = outcome(goal);
                     return (
-                      <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
+                      <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
                         <div className="min-w-0">
                           <p className="truncate text-sm text-ink">{goal.title}</p>
                           <p className="text-[12px] text-ink-3">

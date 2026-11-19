@@ -14,7 +14,7 @@ import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import useEditRowFocus from "../../components/ui/useEditRowFocus.ts";
-import { checkboxClass, checkboxHitClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, checkboxHitClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { metaClass, secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -60,7 +60,7 @@ function UserRow({
         formRef.current = el;
       }}
       onKeyDown={onKeyDown}
-      className={`hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}
+      className={`${edgeCellsClass} hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}
     >
       <td className={tdClass}>
         <p className="flex flex-wrap items-center gap-1.5 text-sm text-ink">
@@ -178,7 +178,7 @@ export default function UsersPage() {
           <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
-                <tr>
+                <tr className={edgeCellsClass}>
                   <th className={thClass}>User</th>
                   <th className={thClass}>Company</th>
                   <th className={thClass}>Role</th>
@@ -202,7 +202,7 @@ export default function UsersPage() {
                   />
                 ))}
                 {filtered.length === 0 ? (
-                  <tr>
+                  <tr className={edgeCellsClass}>
                     <td className={`${tdClass} text-ink-3`} colSpan={6}>Nobody matches.</td>
                   </tr>
                 ) : null}
