@@ -13,7 +13,7 @@
 // the companies mock keeps what they remove for the rest of the file.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
@@ -367,6 +367,20 @@ describe("deliverable categories", () => {
     await user.click(within(form).getByRole("button", { name: /Add deliverable/ }));
     expect(await screen.findByText("BD & Sales is retired. Restore it in Reviews, Setup to file under it.")).toBeInTheDocument();
     expect(screen.getByLabelText("New deliverable")).toHaveValue("Referral program");
+  });
+
+  it("shows a retired category's Retired badge once while its row is open, and once when it closes", async () => {
+    const user = userEvent.setup();
+    const made = await createDeliverableCategory({ company_id: KLASIK.company.id, name: "Badge check" });
+    onTestFinished(() => deleteDeliverableCategory(made.id));
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+    await openCategory(user, "Badge check");
+    const row = screen.getByLabelText("Category name Badge check").closest("li") as HTMLElement;
+    await user.click(within(row).getByRole("button", { name: "Retire" }));
+    await within(row).findByRole("button", { name: "Restore" });
+    expect(within(row).getAllByText("Retired")).toHaveLength(1);
+    await user.click(within(row).getByRole("button", { name: "Done" }));
+    expect(within(row).getAllByText("Retired")).toHaveLength(1);
   });
 
   it("deletes a category: its headings move to Uncategorized and keep their tasks", async () => {

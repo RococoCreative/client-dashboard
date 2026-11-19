@@ -401,6 +401,19 @@ describe("GSR", () => {
     expect(within(tabs).getByRole("link", { name: "Goals" })).toBeInTheDocument();
   });
 
+  it.each([
+    ["My GSR", <MyGsrPage key="gsr" />],
+    ["My Goals", <MyGoalsPage key="goals" />],
+  ])("keeps the tab row on %s for an admin, with exactly one h1", async (title, page) => {
+    renderWithHub(page, admin);
+    expect(await screen.findByRole("heading", { level: 1, name: title })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Reviews" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Goals" })).toBeInTheDocument();
+  });
+
   it("keeps My Goals to the year's goals", async () => {
     renderWithHub(<MyGoalsPage />, employee);
     expect(await screen.findByRole("heading", { name: "My Goals" })).toBeInTheDocument();
@@ -1611,6 +1624,10 @@ describe("wins", () => {
     expect(within(dialog).getByText("It leaves the Wins page and Home for everyone. It is kept in the record, not deleted.")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByDisplayValue("Sample win 7")).not.toBeInTheDocument());
+    // The win is gone from the list too, not only from the open editor.
+    expect(winTitles()).not.toContain("Sample win 7");
+    expect(screen.queryByRole("button", { name: /Sample win 7/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Sample win 7/)).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

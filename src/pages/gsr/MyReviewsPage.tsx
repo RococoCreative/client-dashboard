@@ -1,6 +1,6 @@
 // An employee's own scored reviews: the latest with its score and feedback, and every past one
-// in one table. Monthly GSRs are not reviews and live on the GSR tab; the year's goals on the
-// Goals tab. Admins get the same view of themselves.
+// in one table. Monthly GSRs are not reviews and live on My GSR; the year's goals on
+// My Goals. Admins get the same view of themselves.
 import { Link } from "react-router-dom";
 import Badge from "../../components/ui/Badge.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";

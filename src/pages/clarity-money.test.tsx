@@ -38,7 +38,6 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
-
 import App from "../App.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import * as syncService from "../services/sync.ts";

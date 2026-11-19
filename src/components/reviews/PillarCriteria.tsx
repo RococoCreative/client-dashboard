@@ -48,14 +48,14 @@ function AddCriterionForm({ pillar, saving, onAdd, onCancel }: { pillar: GsrPill
 export default function PillarCriteria({
   pillar,
   criteria,
-  adding: savingAdd,
+  addingCriterion,
   onAdd,
   onPatch,
   onDelete,
 }: {
   pillar: GsrPillar;
   criteria: GsrCriterion[];
-  adding: boolean;
+  addingCriterion: boolean;
   onAdd: (name: string) => Promise<boolean>;
   onPatch: (criterion: GsrCriterion, patch: CriterionPatch) => Promise<boolean>;
   onDelete: (criterion: GsrCriterion) => void;
@@ -78,7 +78,7 @@ export default function PillarCriteria({
           </Button>
         )}
       </div>
-      {adding ? <AddCriterionForm pillar={pillar} saving={savingAdd} onAdd={(name) => void add(name)} onCancel={() => setAdding(false)} /> : null}
+      {adding ? <AddCriterionForm pillar={pillar} saving={addingCriterion} onAdd={(name) => void add(name)} onCancel={() => setAdding(false)} /> : null}
       {criteria.length === 0 ? (
         <p className={`${secondaryClass} mt-3`}>Add at least one criterion or reviewers will have nothing to rate.</p>
       ) : (

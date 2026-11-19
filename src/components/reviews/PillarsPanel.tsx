@@ -204,7 +204,7 @@ function OpenPillar({
         </p>
       ) : null}
       {pillar.scoring_type === "rating" ? (
-        <PillarCriteria pillar={pillar} criteria={criteria} adding={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
+        <PillarCriteria pillar={pillar} criteria={criteria} addingCriterion={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
       ) : null}
 
       {/* The foot draws its own hairline only after text that has none (the GSR note, or the empty

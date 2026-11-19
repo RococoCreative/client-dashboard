@@ -126,3 +126,13 @@ describe("the old addresses", () => {
     expect(await screen.findByRole("navigation", { name: "People" })).toBeInTheDocument();
   });
 });
+
+describe("the Divisions gate", () => {
+  beforeEach(() => window.history.pushState({}, "", "/"));
+
+  it("turns a manager away from /people/divisions", async () => {
+    window.history.pushState({}, "", "/people/divisions?persona=manager&company=rba");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+  });
+});

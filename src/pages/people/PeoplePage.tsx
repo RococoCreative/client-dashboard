@@ -404,7 +404,7 @@ export default function PeoplePage() {
         tab="roster"
         actions={
           teamView ? (
-            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:text-accent-hover">
+            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:underline">
               Your profile and team
             </Link>
           ) : (

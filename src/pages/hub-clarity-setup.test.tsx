@@ -43,7 +43,7 @@ vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milesto
 import App from "../App.tsx";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { resetMockCapabilities, setMockCapabilities } from "../test/mocks/capabilities.ts";
-import { createPillar, listPillars } from "../services/gsr.ts";
+import { createPillar, deletePillar, listPillars } from "../services/gsr.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
@@ -360,7 +360,8 @@ describe("GSRs, Setup", () => {
   });
 
   it("treats a company whose only Monthly GSRs pillar is inactive as not scoring GSRs", async () => {
-    await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 3, sort_order: 9, is_active: false });
+    const inactive = await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 3, sort_order: 9, is_active: false });
+    onTestFinished(() => deletePillar(inactive.id));
     openGsrSetup(makeHub("admin", RBA.company));
     expect(await screen.findByText("GSRs are not scored here yet.")).toBeInTheDocument();
     expect(screen.queryByText(/goals each GSR requires/)).not.toBeInTheDocument();
