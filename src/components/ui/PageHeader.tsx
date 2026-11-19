@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { pageTitleClass } from "./type.ts";
 
 export default function PageHeader({
   eyebrow,
@@ -35,7 +36,7 @@ export default function PageHeader({
           </Link>
         ) : null}
         {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <Heading className="mt-1 font-display text-3xl tracking-display text-heading">{title}</Heading>
+        <Heading className={`mt-1 ${pageTitleClass}`}>{title}</Heading>
         {description ? <p className="mt-1.5 max-w-2xl text-sm text-ink-2">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

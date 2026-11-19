@@ -12,7 +12,7 @@ import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { inputClass } from "./forms.ts";
-import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "./type.ts";
+import { eyebrowLabelClass, itemTitleClass, itemTitleSizeClass, metaClass, secondaryClass } from "./type.ts";
 
 export interface ListDetailItem {
   id: string;
@@ -23,9 +23,9 @@ export interface ListDetailItem {
 }
 
 const CARD = "rounded-lg border border-line bg-surface p-4 sm:p-6";
-// A muted title swaps the ink for ink-3 rather than stacking both, so which one wins never depends
-// on the order the stylesheet happens to list them in.
-const MUTED_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-3");
+// A muted title is the item title's size in ink-3, composed rather than stacked on the ink, so which
+// colour wins never depends on the order the stylesheet lists them in.
+const MUTED_TITLE = `${itemTitleSizeClass} text-ink-3`;
 const GROUP_LABEL = `px-2 pb-1.5 pt-4 ${eyebrowLabelClass}`;
 
 export default function ListDetail({

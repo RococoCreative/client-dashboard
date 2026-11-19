@@ -15,7 +15,7 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import useEditRowFocus from "../../components/ui/useEditRowFocus.ts";
 import { checkboxClass, checkboxHitClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
-import { metaClass, secondaryClass } from "../../components/ui/type.ts";
+import { metaClass, secondarySizeClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
@@ -25,9 +25,9 @@ import { grantableRoles, hasAccount } from "../../lib/people.ts";
 import { ROLE_LABELS, type Company, type Profile, type Role } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
-// A company or role shown as text in a row: the secondary size with the ink in place of the
-// secondary ink, swapped rather than stacked.
-const CELL_TEXT = secondaryClass.replace(/(^|\s)text-ink-2(?=\s|$)/, "$1text-ink");
+// A company or role shown as text in a row: the secondary size in the ink, composed rather than
+// stacked on the secondary ink.
+const CELL_TEXT = `${secondarySizeClass} text-ink`;
 
 // One person's row. Their company and role read as text until the pencil opens them; focus moves
 // to the company on open and back to the pencil on Done or Escape, the same hand-off as every
