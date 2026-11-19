@@ -9,6 +9,7 @@ import Section from "../../ui/Section.tsx";
 import Stat from "../../ui/Stat.tsx";
 import { bandClass } from "../../ui/bandClass.ts";
 import { labelClass } from "../../ui/forms.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 import PersonTasks from "../../tasks/PersonTasks.tsx";
 import PersonTeam from "../PersonTeam.tsx";
 import { ThisMonthGsr } from "./PersonGsrGoals.tsx";
@@ -22,7 +23,6 @@ import { formatDate, pluralize } from "../../../lib/format.ts";
 import { divisionLabel, formatTenure, ledBy } from "../../../lib/people.ts";
 import { ROLE_LABELS, type Goal } from "../../../types/database.ts";
 import { reportsTo, type PersonTabProps } from "../../../pages/people/personTabs.ts";
-import { tapTargetClass } from "../../ui/tap.ts";
 
 // One label and its value in the details strip.
 function Detail({ label, children }: { label: string; children: ReactNode }) {

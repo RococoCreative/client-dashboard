@@ -12,6 +12,10 @@ export const secondarySizeClass = "text-[13px] leading-relaxed";
 export const secondaryClass = `${secondarySizeClass} text-ink-2`;
 export const metaSizeClass = "text-[12.5px] leading-relaxed";
 export const metaClass = `${metaSizeClass} text-ink-3`;
+// The themed eyebrow over a section title, the one a Section's header carries (the .eyebrow
+// component class in index.css: mono, uppercase, wide-tracked, bracketed on the Rococo theme), for
+// a section heading built outside a Section.
+export const sectionEyebrowClass = "eyebrow";
 // The small uppercase eyebrow over a section or a field. forms.ts has its own labelClass (a block
 // label for form controls), so this one is named apart.
 export const eyebrowLabelClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";

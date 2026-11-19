@@ -413,8 +413,9 @@ export default function GoalSettingPanel({
   notes: GoalNote[];
   // Full names by profile id, from the company directory, to name who wrote each note.
   names: ReadonlyMap<string, string>;
-  // The goals the person's job role brings into every month, set once in Settings. Offered
-  // here until each is filed for this month; the template itself is never edited from a review.
+  // The goals the person's job role brings into every month, set once on the role in People,
+  // Roles. Offered here until each is filed for this month; the template itself is never edited
+  // from a review.
   roleGoals?: JobRoleGoal[];
   // How many goals a month requires, from the company's Monthly GSRs pillar; null for a company
   // that does not score its GSRs, which then sees none of the counting.

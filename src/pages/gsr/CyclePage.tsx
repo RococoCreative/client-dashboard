@@ -27,6 +27,7 @@ import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { edgeCellsClass, inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { bandClass } from "../../components/ui/bandClass.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
@@ -66,7 +67,6 @@ import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // Below md the team table stacks into compact, even rows: the name with the status badge on its
 // line, then, for a row with at least one score, each score with its label beside it (the column's

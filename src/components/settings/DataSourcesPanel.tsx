@@ -24,7 +24,7 @@ import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import useIsWide from "../ui/useIsWide.ts";
 import { checkboxClass, checkboxHitClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
-import { itemTitleClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
+import { itemTitleClass, metaClass, secondaryClass, sectionEyebrowClass, sectionTitleClass } from "../ui/type.ts";
 import DataSourceDetail from "./DataSourceDetail.tsx";
 import SourceRuns from "./SourceRuns.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -486,7 +486,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
     return (
       <section>
         <div className="mb-4">
-          <p className="eyebrow">Integrations</p>
+          <p className={sectionEyebrowClass}>Integrations</p>
           <h2 className={`${sectionTitleClass} mt-1`}>Data sources</h2>
           <p className={`${secondaryClass} mt-1`}>{DESCRIPTION}</p>
         </div>

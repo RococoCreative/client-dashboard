@@ -15,6 +15,7 @@ import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { itemTitleClass, metaClass } from "../../components/ui/type.ts";
 import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { tapStretchClass } from "../../components/ui/tap.ts";
 import DivisionCompare from "../../components/people/DivisionCompare.tsx";
 import DivisionSwitch from "../../components/people/DivisionSwitch.tsx";
 import { COMBINED, divisionCompareRows, latestResultMonth, monthCycle, peopleInScope } from "../../components/scorecards/compare.ts";
@@ -30,7 +31,6 @@ import { formatMetricValue, monthOf, monthResult, monthsOfYear, ytd, type Metric
 import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, RoleMetric } from "../../types/database.ts";
-import { tapStretchClass } from "../../components/ui/tap.ts";
 
 function toneOf(result: MetricResult): string {
   if (result.value === null) return "text-ink-3";

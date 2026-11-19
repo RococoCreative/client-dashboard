@@ -257,7 +257,7 @@ export default function PersonScorecard({
   );
 
   const body = !roleId ? (
-    <p className="p-4 sm:p-6 text-sm text-ink-2">{canEdit ? "No job role set. Pick one in Details and its metrics show here." : "No job role set yet."}</p>
+    <p className="p-4 sm:p-6 text-sm text-ink-2">{canEdit ? "No job role set. Pick one in Setup and its metrics show here." : "No job role set yet."}</p>
   ) : own.length === 0 ? (
     <p className="p-4 sm:p-6 text-sm text-ink-2">
       {roleName ?? "This role"} has no scorecard metrics yet.

@@ -6,9 +6,9 @@
 import { Link } from "react-router-dom";
 import Section from "../ui/Section.tsx";
 import { secondaryClass } from "../ui/type.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { hasModule } from "../../lib/modules.ts";
 import type { Company } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function MovedCard({ company }: { company: Pick<Company, "modules"> }) {
   const rows = [

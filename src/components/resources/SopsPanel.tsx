@@ -13,13 +13,13 @@ import PanelHeader from "../ui/PanelHeader.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { SOP_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listSops } from "../../services/sops.ts";
 import { formatDate } from "../../lib/format.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, keysOf, type SopCategory } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function SopsPanel() {
   const { company, isAdmin } = useHub();

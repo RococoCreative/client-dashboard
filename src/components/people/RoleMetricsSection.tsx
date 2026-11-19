@@ -16,7 +16,6 @@ import { createRoleMetric, deleteRoleMetric, updateRoleMetric, type RoleMetricPa
 import { errorMessage } from "../../lib/errors.ts";
 import { METRIC_KIND_LABELS, keysOf, type JobRole, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
-
 const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 const toggleLabel = "flex items-center gap-1.5 text-[12.5px] text-ink-2 tap:min-h-11";
 

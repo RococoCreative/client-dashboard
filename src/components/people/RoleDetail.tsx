@@ -13,6 +13,7 @@ import EditRow from "../ui/EditRow.tsx";
 import Notice from "../ui/Notice.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
 import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import RoleGoalsSection from "./RoleGoalsSection.tsx";
 import RoleMetricsSection from "./RoleMetricsSection.tsx";
 import { deleteJobRole, updateJobRole } from "../../services/jobRoles.ts";
@@ -21,7 +22,6 @@ import { errorMessage } from "../../lib/errors.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import { divisionLabel } from "../../lib/people.ts";
 import { DASHBOARD_MODULE_LABELS, keysOf, type CompanyDivision, type DashboardModule, type JobRole, type JobRoleGoal, type Profile, type RoleMetric } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 function Part({ title, children }: { title: string; children: ReactNode }) {
   const id = `role-part-${title.toLowerCase().replace(/\W+/g, "-")}`;

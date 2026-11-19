@@ -2,9 +2,9 @@
 // way everywhere, Divisions reads first, every destructive control carries a word, Goals points to
 // what left it, and the small consistency fixes. Rendered against the mocked data layer, as
 // pages.test.tsx is.
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -36,12 +36,15 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
-import { KINGDOM, RBA, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import CompensationTable from "../components/people/CompensationTable.tsx";
 import FinancialsTable from "../components/people/FinancialsTable.tsx";
 import KpiList from "../components/people/KpiList.tsx";
+import { createPillar, deletePillar } from "../services/gsr.ts";
 import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
+import PersonPage from "./people/PersonPage.tsx";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
@@ -165,5 +168,59 @@ describe("Goals points to what left it", () => {
     expect(setup).toHaveAttribute("href", "/gsr/setup");
     expect(setup).toHaveClass("text-link");
     expect(roles.closest("p")).toHaveTextContent("Role goals are set under People, Roles, and focus topics under GSRs, Setup.");
+  });
+});
+
+describe("the small consistency fixes", () => {
+  const openSetup = (hub = admin) => renderWithHub(<ReviewsSetupPage />, hub, { path: "/reviews/setup", pattern: "/reviews/setup" });
+
+  it("points a pillar row at its panel only while the panel is there", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    const row = screen.getByRole("button", { name: /^\d+\s*Brand Impact/ });
+    expect(row).not.toHaveAttribute("aria-controls");
+    await user.click(row);
+    const id = row.getAttribute("aria-controls");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).toBeInTheDocument();
+  });
+
+  it("links a Monthly GSRs pillar to GSRs, Setup only while it is active", async () => {
+    const user = userEvent.setup();
+    const inactive = await createPillar({ company_id: KLASIK.company.id, name: "Old monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 3, sort_order: 9, is_active: false });
+    const active = await createPillar({ company_id: KLASIK.company.id, name: "Monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 2, sort_order: 10 });
+    onTestFinished(async () => {
+      await deletePillar(inactive.id);
+      await deletePillar(active.id);
+    });
+    openSetup();
+    await user.click(await screen.findByRole("button", { name: /^\d+\s*Old monthly GSRs/ }));
+    const off = screen.getByRole("region", { name: /^\d+\s*Old monthly GSRs/ });
+    expect(within(off).getByText("3 goals each")).toBeInTheDocument();
+    expect(within(off).queryByRole("link", { name: "Change on GSRs, Setup" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^\d+\s*Monthly GSRs/ }));
+    const on = screen.getByRole("region", { name: /^\d+\s*Monthly GSRs/ });
+    expect(within(on).getByRole("link", { name: "Change on GSRs, Setup" })).toHaveAttribute("href", "/gsr/setup");
+  });
+
+  it("opens one deliverable category at a time, like every other list", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    const [first, second] = [...KLASIK.deliverableCategories].sort((a, b) => a.sort_order - b.sort_order);
+    await user.click(await screen.findByRole("button", { name: `Edit category ${first.name}` }));
+    expect(screen.getByLabelText(`Category name ${first.name}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: `Edit category ${second.name}` }));
+    expect(screen.getByLabelText(`Category name ${second.name}`)).toBeInTheDocument();
+    expect(screen.queryByLabelText(`Category name ${first.name}`)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Done" })).toHaveLength(1);
+  });
+
+  it("says why your own hub role cannot be changed", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PersonPage />, admin, { path: `/people/${admin.profile.id}/setup`, pattern: "/people/:profileId/:tab?" });
+    await user.click(await screen.findByRole("button", { name: "Edit role" }));
+    expect(screen.getByLabelText("Role")).toBeDisabled();
+    expect(screen.getByText("No one changes their own role, so no one can raise their own access.")).toBeInTheDocument();
   });
 });

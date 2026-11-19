@@ -7,12 +7,12 @@ import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { formatDate } from "../../lib/format.ts";
 import { companyToday, homeCutoff } from "../../lib/wins.ts";
 import { listWins } from "../../services/wins.ts";
 import { WIN_SOURCE_LABELS, type Company } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function WinsCard({ company }: { company: Company }) {
   const companyId = company.id;

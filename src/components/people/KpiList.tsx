@@ -12,11 +12,11 @@ import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import { inputClass } from "../ui/forms.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { enqueueWrite } from "../../lib/writeQueue.ts";
 import type { EmployeeKpi } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function KpiList({
   companyId,

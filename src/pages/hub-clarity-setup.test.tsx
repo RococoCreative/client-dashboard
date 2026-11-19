@@ -344,9 +344,13 @@ describe("GSRs, Setup", () => {
   });
 
   it("hides the Setup tab from someone who cannot reach it", async () => {
-    renderWithHub(<CyclesPage section="gsr" />, makeHub("employee"), { path: "/gsr", pattern: "/gsr" });
-    const nav = await screen.findByRole("navigation", { name: "GSRs" });
-    expect(within(nav).queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
+    // The GSR list is an admin's page: anyone else is sent to their own GSR and never sees its tabs.
+    window.history.pushState({}, "", "/gsr?persona=employee&company=klasik");
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/my/gsr"));
+    expect(screen.queryByRole("navigation", { name: "GSRs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
+    unmount();
   });
 
   it("says GSRs are not scored here for a company with no Monthly GSRs pillar, and still shows the calendar", async () => {

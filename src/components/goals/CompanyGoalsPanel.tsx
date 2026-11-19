@@ -14,12 +14,12 @@ import Notice from "../ui/Notice.tsx";
 import PanelHeader from "../ui/PanelHeader.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCompanyGoal, deleteCompanyGoal, listCompanyGoals, updateCompanyGoal } from "../../services/gsr.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { CompanyGoal } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 function GoalDialog({ companyId, year, goal, count, onClose, onSaved }: { companyId: string; year: number; goal: CompanyGoal | null; count: number; onClose: () => void; onSaved: (g: CompanyGoal) => void }) {
   const [name, setName] = useState(goal?.name ?? "");

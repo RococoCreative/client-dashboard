@@ -8,6 +8,7 @@ import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { attentionItems } from "../../lib/attention.ts";
@@ -20,7 +21,6 @@ import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSyncSources } from "../../services/sync.ts";
 import type { Company } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function AttentionCard({ company }: { company: Company }) {
   const { profile } = useHub();

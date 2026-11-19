@@ -11,10 +11,10 @@ import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import Section from "../ui/Section.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
+import { tapStretchClass } from "../ui/tap.ts";
 import { assignProject, createProjectAndAssign, unassignProject, updateProjectAssignment } from "../../services/projectAssignments.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Project, ProjectAssignment } from "../../types/database.ts";
-import { tapStretchClass } from "../ui/tap.ts";
 
 // The pulldown value that means "a project not on the list yet".
 const NEW_PROJECT = "new";

@@ -83,7 +83,6 @@ function DivisionsRow({ companyId, person, me, editing, onEdit, onDone, onPatch 
   );
 }
 
-
 export default function PersonSetup({ companyId, data, person, update, onError, patch }: PersonTabProps & { patch: Patch }) {
   const { profile: me, isAdmin, can } = useHub();
   const canSeePay = isAdmin && can("pay");
@@ -206,6 +205,7 @@ export default function PersonSetup({ companyId, data, person, update, onError, 
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                   ))}
                 </select>
+                {self ? <p className="mt-1 text-[12px] text-ink-3">No one changes their own role, so no one can raise their own access.</p> : null}
                 {!canChangeRole && !self ? <p className="mt-1 text-[12px] text-ink-3">Only an owner or Rococo can change this person's role.</p> : null}
               </EditRow>
             )}

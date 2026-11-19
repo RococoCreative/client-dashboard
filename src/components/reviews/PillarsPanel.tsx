@@ -159,8 +159,14 @@ function OpenPillar({
       {pillar.scoring_type === "gsr_goals" ? (
         <div className="border-b border-line py-3">
           <Fact label="Goals each GSR requires">
-            <span className="tnum">{pluralize(pillar.required_goals, "goal")} each</span>{" "}
-            <Link to="/gsr/setup" className="text-link hover:underline">Change on GSRs, Setup</Link>
+            <span className="tnum">{pluralize(pillar.required_goals, "goal")} each</span>
+            {/* GSRs, Setup lists active pillars only, so an inactive one has nowhere to go. */}
+            {pillar.is_active ? (
+              <>
+                {" "}
+                <Link to="/gsr/setup" className="text-link hover:underline">Change on GSRs, Setup</Link>
+              </>
+            ) : null}
           </Fact>
         </div>
       ) : null}
@@ -234,7 +240,7 @@ function PillarRowHeader({ pillar, index, open, panelId, onToggle }: { pillar: G
         type="button"
         id={`${panelId}-title`}
         aria-expanded={open}
-        aria-controls={panelId}
+        aria-controls={open ? panelId : undefined}
         onClick={onToggle}
         className="grid min-h-11 w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-2/60 sm:min-h-9 sm:grid-cols-[1.5rem_minmax(0,1fr)_auto_auto] sm:px-6"
       >

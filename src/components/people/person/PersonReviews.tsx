@@ -11,6 +11,7 @@ import ScoreRing from "../../ui/ScoreRing.tsx";
 import Section from "../../ui/Section.tsx";
 import { bandClass } from "../../ui/bandClass.ts";
 import { edgeCellsClass, inputClass, tableClass, tdClass, thClass } from "../../ui/forms.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 import GsrQuarterLine from "../../gsr/GsrQuarterLine.tsx";
 import DeliverablesPanel from "../DeliverablesPanel.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
@@ -22,7 +23,6 @@ import { scoreGsrMonths } from "../../../lib/gsr/goals.ts";
 import { formatPeriod } from "../../../lib/format.ts";
 import { REVIEW_STATUS_LABELS } from "../../../types/database.ts";
 import type { PersonTabProps } from "../../../pages/people/personTabs.ts";
-import { tapTargetClass } from "../../ui/tap.ts";
 
 export default function PersonReviews({
   companyId,

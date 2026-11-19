@@ -9,6 +9,8 @@ import Badge from "../../ui/Badge.tsx";
 import Button from "../../ui/Button.tsx";
 import Notice from "../../ui/Notice.tsx";
 import Section from "../../ui/Section.tsx";
+import { tapTargetClass } from "../../ui/tap.ts";
+import { sectionEyebrowClass, sectionTitleClass } from "../../ui/type.ts";
 import GoalsPanel from "../../gsr/GoalsPanel.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
 import { useHub } from "../../../context/HubContext.tsx";
@@ -19,7 +21,6 @@ import { displayName } from "../../../lib/format.ts";
 import { ledBy } from "../../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, type Profile, type Review, type ReviewCycle } from "../../../types/database.ts";
 import type { PersonRecord, PersonTabProps } from "../../../pages/people/personTabs.ts";
-import { tapTargetClass } from "../../ui/tap.ts";
 
 // This month's Goal Setting Review for the person, for an admin or someone who leads them: a link
 // into it when it is open, or a way to start it. Starting is an insert that ignores a duplicate
@@ -110,8 +111,8 @@ export default function PersonGsrGoals({ companyId, data, person }: PersonTabPro
       <ThisMonthGsr companyId={companyId} data={data} person={person} />
       <section aria-labelledby="person-goals-heading">
         <div className="mb-3">
-          <p className="eyebrow">Goals</p>
-          <h2 id="person-goals-heading" className="mt-1 font-display text-lg text-heading">This year, next year and the BHAG</h2>
+          <p className={sectionEyebrowClass}>Goals</p>
+          <h2 id="person-goals-heading" className={`mt-1 ${sectionTitleClass}`}>This year, next year and the BHAG</h2>
         </div>
         <GoalsPanel companyId={companyId} employeeId={person.id} canEdit={isAdmin} ownerName={displayName(person).split(" ")[0]} />
       </section>

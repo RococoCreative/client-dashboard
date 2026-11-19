@@ -2,12 +2,13 @@
 // link with its own address, so the open item survives a reload and can be shared. At lg and up the
 // list and the detail sit side by side; below lg the list shows alone until something is chosen,
 // then the detail shows alone with a back link naming the list (backLabel), as a person page reads
-// "People" beside its arrow. Responsive classes do that work, so
-// no script measures the screen. With nothing selected the detail is not rendered at any width.
-// An empty list shows nothing of its own, so the page says what an empty list means (its footer);
-// "Nothing matches that." is only for a search that found nothing. Items carrying a group (retired
-// roles) follow the rest under that group's label; a page that wants the label to carry the count
-// of the rows shown passes groupLabel, which is given the group and how many of its rows match.
+// "People" beside its arrow. Responsive classes do that work, so this component measures nothing;
+// a page that opens an item on a wide screen when none is chosen (Roles) decides that itself with
+// useIsWide. With nothing selected the detail is not rendered at any width. An empty list shows
+// nothing of its own, so the page says what an empty list means (its footer); "Nothing matches
+// that." is only for a search that found nothing. Items carrying a group (retired roles) follow the
+// rest under that group's label; a page that wants the label to carry the count of the rows shown
+// passes groupLabel, which is given the group and how many of its rows match.
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";

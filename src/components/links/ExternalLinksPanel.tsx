@@ -39,7 +39,6 @@ function Caption({ children }: { children: string }) {
   return <span className={labelClass} aria-hidden>{children}</span>;
 }
 
-
 // A link as text: its label, what it is for, where it goes, and who sees it.
 function LinkSummary({ link }: { link: ExternalLink }) {
   return (

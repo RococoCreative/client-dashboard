@@ -51,6 +51,7 @@ import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { eyebrowLabelClass } from "../../components/ui/type.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { hasModule } from "../../lib/modules.ts";
@@ -85,7 +86,6 @@ import {
   type ReviewScore,
   type TaskWithSteps,
 } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // Who signed off a review when the company directory does not list them. Rococo only when the page
 // knows it: the viewer is that Rococo admin, or the reviewer is on the list the viewer reads and is

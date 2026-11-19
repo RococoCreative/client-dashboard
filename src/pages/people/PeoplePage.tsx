@@ -38,6 +38,7 @@ import PeopleHeader from "../../components/people/PeopleHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
@@ -59,7 +60,6 @@ import {
   viewerDivisions,
 } from "../../lib/people.ts";
 import { ROLE_LABELS, type CompanyDivision, type DirectoryEntry, type Invitation, type Profile, type Role } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // What each role opens up, shown under the Role select when adding someone.
 const ROLE_HINTS: Record<Role, string> = {
@@ -497,7 +497,7 @@ export default function PeoplePage() {
                           className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
                         >
                           {manager ? (
-                            <Link to={`/people/${manager.id}`} className="hover:text-link tap:inline-flex tap:min-h-11 tap:items-center">{displayName(manager)}</Link>
+                            <Link to={`/people/${manager.id}`} className={`hover:text-link ${tapTargetClass}`}>{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
