@@ -6,12 +6,11 @@
 // writes in order rather than two that can land the wrong way round. Each queued write starts from
 // the row the one before it returned, so two quick clicks on Hit come back where they began.
 import { useRef, useState, type FormEvent } from "react";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -159,9 +158,9 @@ export default function KpiList({
                 hitBadge(kpi)
               )}
               {canEdit && !compact ? (
-                <IconButton label={`Remove KPI ${kpi.name}`} onClick={() => setDeleting(kpi)}>
-                  <Trash2 size={14} aria-hidden />
-                </IconButton>
+                <Button variant="danger" size="sm" aria-label={`Remove KPI ${kpi.name}`} onClick={() => setDeleting(kpi)}>
+                  Remove
+                </Button>
               ) : null}
             </div>
           </li>

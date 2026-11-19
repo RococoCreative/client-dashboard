@@ -461,11 +461,11 @@ describe("deliverable categories", () => {
 });
 
 describe("deleting a company", () => {
-  it("says what the delete removes and what it leaves, and removes a domain with the shared icon button", async () => {
+  it("says what the delete removes and what it leaves, and removes a domain with a worded button", async () => {
     const user = userEvent.setup();
     renderCompanies();
     const remove = await screen.findByRole("button", { name: "Remove beklasik.com" });
-    expect(remove).toHaveAttribute("title", "Remove beklasik.com");
+    expect(remove).toHaveTextContent("Remove");
 
     await user.click(screen.getByRole("button", { name: "Delete Kingdom Custom Construction" }));
     const dialog = screen.getByRole("dialog");

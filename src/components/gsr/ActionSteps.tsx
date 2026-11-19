@@ -8,9 +8,8 @@
 // same reason each list waits for the save before it to finish, so the database receives them
 // in the order they were made.
 import { useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import Button from "../ui/Button.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { checkboxClass, checkboxHitClass, inputClass } from "../ui/forms.ts";
 import type { ActionStep } from "../../types/database.ts";
 
@@ -74,9 +73,9 @@ export default function ActionSteps({
               </label>
               <span className={`flex-1 text-[13px] ${step.done ? "text-ink-3 line-through" : "text-ink"}`}>{step.text}</span>
               {canEdit ? (
-                <IconButton label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))} className="-my-1.5 tap:my-0">
-                  <X size={13} aria-hidden />
-                </IconButton>
+                <Button variant="danger" size="sm" aria-label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))}>
+                  Remove
+                </Button>
               ) : null}
             </li>
           ))}

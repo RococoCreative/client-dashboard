@@ -2,7 +2,7 @@
 // month (revenue, closed sales, jobs delivered). They show on everyone's dashboard. Display
 // strings carry the units people say; numerics are optional.
 import { useRef, useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
@@ -162,7 +162,7 @@ export default function CompanyGoalsPanel() {
                   <Badge tone={goal.is_hit ? "success" : "neutral"}>{goal.is_hit ? "Hit" : "In progress"}</Badge>
                 </button>
                 <IconButton label="Edit goal" onClick={() => setDialog({ goal })}><Pencil size={14} aria-hidden /></IconButton>
-                <IconButton label="Delete goal" onClick={() => setDeleting(goal)}><Trash2 size={14} aria-hidden /></IconButton>
+                <Button variant="danger" size="sm" aria-label="Delete goal" onClick={() => setDeleting(goal)}>Delete</Button>
               </div>
             </li>
           ))}

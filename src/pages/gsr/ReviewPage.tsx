@@ -29,7 +29,7 @@
 // button to forget.
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, RotateCcw } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
@@ -42,7 +42,6 @@ import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import RatingInput from "../../components/ui/RatingInput.tsx";
@@ -983,9 +982,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                     </td>
                                     <td role="cell" className="w-10 py-2 text-right align-top max-sm:self-end max-sm:p-0">
                                       {canScore ? (
-                                        <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
-                                          <Trash2 size={14} aria-hidden />
-                                        </IconButton>
+                                        <Button variant="danger" size="sm" aria-label="Remove deliverable" onClick={() => setRemoving(item)}>
+                                          Remove
+                                        </Button>
                                       ) : null}
                                     </td>
                                   </tr>

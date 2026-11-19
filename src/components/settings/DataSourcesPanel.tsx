@@ -11,7 +11,7 @@
 // its outcome; on a phone the list is the page.
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { Pencil, Plus, X } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import FreshnessLine from "../sync/FreshnessLine.tsx";
 import SyncStateBadge from "../sync/SyncStateBadge.tsx";
 import Button from "../ui/Button.tsx";
@@ -300,9 +300,9 @@ function SourceEditor({
                         <label className={checkboxHitClass}><input type="checkbox" aria-label={`Required ${i + 1}`} checked={field.required} onChange={(e) => setField(field.uid, { required: e.target.checked })} className={checkboxClass} /></label>
                       </td>
                       <td className={`${tdClass} w-10`}>
-                        <IconButton label="Remove field" onClick={() => setFields((prev) => prev.filter((f) => f.uid !== field.uid))}>
-                          <X size={14} aria-hidden />
-                        </IconButton>
+                        <Button variant="danger" size="sm" aria-label="Remove field" onClick={() => setFields((prev) => prev.filter((f) => f.uid !== field.uid))}>
+                          Remove
+                        </Button>
                       </td>
                     </tr>
                   ))}

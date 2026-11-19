@@ -9,11 +9,10 @@
 // nobody chose. Saves for one figure queue behind each other, so two quick edits never land out of
 // order and put the older number back on screen.
 import { useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { createEmployeeFinancial, deleteEmployeeFinancial, updateEmployeeFinancial } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -147,9 +146,9 @@ export default function FinancialsTable({
                 )}
               </div>
               {canEdit ? (
-                <IconButton label={`Remove figure ${row.metric}`} onClick={() => setDeleting(row)}>
-                  <Trash2 size={14} aria-hidden />
-                </IconButton>
+                <Button variant="danger" size="sm" aria-label={`Remove figure ${row.metric}`} onClick={() => setDeleting(row)}>
+                  Remove
+                </Button>
               ) : null}
             </li>
           );

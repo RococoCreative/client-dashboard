@@ -25,14 +25,13 @@
 // columns.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
+import { Check, Copy, Search, Send, UserPlus } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import Chip from "../../components/ui/Chip.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Field from "../../components/ui/Field.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
@@ -533,9 +532,9 @@ export default function PeoplePage() {
                                       {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
                                     </Button>
                                   ) : null}
-                                  <IconButton label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
-                                    <Trash2 size={14} aria-hidden />
-                                  </IconButton>
+                                  <Button variant="danger" size="sm" aria-label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
+                                    Cancel invitation
+                                  </Button>
                                 </>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (

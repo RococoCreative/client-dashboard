@@ -6,10 +6,9 @@
 // keeps the rows, because the scorecard reads the same ones.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import Section from "../ui/Section.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { assignProject, createProjectAndAssign, unassignProject, updateProjectAssignment } from "../../services/projectAssignments.ts";
@@ -143,9 +142,9 @@ export default function PersonProjects({
                       onSave={(next) => saveRole(a, next)}
                       className={`${inputClass} mt-0 w-full py-1.5 text-[13px] sm:w-48`}
                     />
-                    <IconButton label={`Unassign ${name}`} onClick={() => void unassign(a)}>
-                      <X size={14} aria-hidden />
-                    </IconButton>
+                    <Button variant="danger" size="sm" aria-label={`Unassign ${name}`} onClick={() => void unassign(a)}>
+                      Unassign
+                    </Button>
                   </>
                 ) : null}
               </li>

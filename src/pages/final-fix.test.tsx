@@ -2,7 +2,9 @@
 // way everywhere, Divisions reads first, every destructive control carries a word, Goals points to
 // what left it, and the small consistency fixes. Rendered against the mocked data layer, as
 // pages.test.tsx is.
-import { screen } from "@testing-library/react";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -36,11 +38,23 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
-import { KINGDOM, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import CompensationTable from "../components/people/CompensationTable.tsx";
+import FinancialsTable from "../components/people/FinancialsTable.tsx";
+import KpiList from "../components/people/KpiList.tsx";
+import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
+import GoalsPage from "./gsr/GoalsPage.tsx";
+import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
+import ReviewPage from "./gsr/ReviewPage.tsx";
+import PeoplePage from "./people/PeoplePage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
 import UsersPage from "./rococo/UsersPage.tsx";
+import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../types/database.ts";
 
+const admin = makeHub("admin");
+const employee = makeHub("employee");
+const rbaAdmin = makeHub("admin", RBA.company);
 const kingdomAdmin = makeHub("admin", KINGDOM.company);
 const rococo = makeHub("rococo", null);
 const job101 = { path: "/production/projects/kingdom-project-1", pattern: "/production/projects/:projectId" };
@@ -70,5 +84,80 @@ describe("read-first rows hand focus over", () => {
     expect(screen.getByRole("combobox", { name: `Company for ${marcus.email}` })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.getByRole("button", { name: `Edit ${marcus.email}` })).toHaveFocus();
+  });
+});
+
+// A destructive control shows its word on screen at every width; its accessible name is the one it
+// always had and contains that word.
+async function expectWorded(name: string | RegExp, word: string) {
+  const buttons = await screen.findAllByRole("button", { name }, { timeout: 3000 });
+  for (const button of buttons) {
+    expect(button).toHaveTextContent(word);
+    expect(button.querySelector("svg")).toBeNull();
+  }
+}
+
+describe("destructive controls keep their words", () => {
+  it("cancels an invitation with words on the roster", async () => {
+    renderWithHub(<PeoplePage />, admin);
+    await expectWorded("Cancel the invitation for Avery Cole", "Cancel invitation");
+  });
+
+  it("deletes a company goal and a person's goal with words", async () => {
+    const first = renderWithHub(<GoalsPage tab="company" />, admin);
+    await expectWorded("Delete goal", "Delete");
+    first.unmount();
+    renderWithHub(<MyGoalsPage />, employee);
+    await expectWorded("Delete goal", "Delete");
+  });
+
+  it("removes a review's deliverable line item with words", async () => {
+    const review = RBA.reviews.find((r) => r.status === "in_progress")!;
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
+    await expectWorded("Remove deliverable", "Remove");
+  });
+
+  it("removes a month's focus topic with words", async () => {
+    renderWithHub(<GsrSetupPage />, admin);
+    await expectWorded("Remove the September 2026 topic", "Remove");
+  });
+
+  it("removes a person's pay line, figure and KPI with words at the row's end", async () => {
+    const stamp = { created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+    const item: CompensationItem = { id: "comp-1", company_id: "co-1", employee_id: "person-1", name: "Base salary", annual_amount: 60000, note: null, sort_order: 1, ...stamp };
+    const figure: EmployeeFinancial = { id: "fin-1", company_id: "co-1", employee_id: "person-1", year: 2026, metric: "Closed sales", target: 500000, current: 120000, source: "manual", note: null, sort_order: 1, ...stamp };
+    const kpi: EmployeeKpi = { id: "kpi-1", company_id: "co-1", employee_id: "person-1", year: 2026, name: "Jobs closed", target_display: "12", current_display: "4", target_numeric: null, current_numeric: null, is_hit: false, sort_order: 1, ...stamp };
+    render(
+      <>
+        <CompensationTable companyId="co-1" employeeId="person-1" items={[item]} canEdit onChange={vi.fn()} onError={vi.fn()} />
+        <FinancialsTable employeeId="person-1" year={2026} rows={[figure]} canEdit onChange={vi.fn()} onError={vi.fn()} />
+        <KpiList companyId="co-1" employeeId="person-1" year={2026} kpis={[kpi]} canEdit onChange={vi.fn()} onError={vi.fn()} />
+      </>,
+    );
+    await expectWorded("Remove Base salary", "Remove");
+    await expectWorded("Remove figure Closed sales", "Remove");
+    await expectWorded("Remove KPI Jobs closed", "Remove");
+  });
+});
+
+// The rule as a guard over the source: no icon button anywhere carries a destructive name, so a
+// trash or a cross can never stand alone for Remove, Delete, Unassign or Cancel again.
+describe("no icon-only destructive control is left", () => {
+  function files(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return files(path);
+      return /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name) ? [path] : [];
+    });
+  }
+
+  it("finds no IconButton or IconLink named for a destructive action", () => {
+    const offenders: string[] = [];
+    for (const file of files(join(process.cwd(), "src"))) {
+      const text = readFileSync(file, "utf8");
+      for (const match of text.matchAll(/<Icon(?:Button|Link)\b[^>]*?label=\{?["'`](Remove|Delete|Unassign|Cancel|Archive|Retire)\b/g)) offenders.push(`${file}: ${match[0].slice(0, 80)}`);
+      if (/<Trash2\b/.test(text) && /<IconButton\b[^>]*>\s*<Trash2/.test(text)) offenders.push(`${file}: IconButton with a trash icon`);
+    }
+    expect(offenders).toEqual([]);
   });
 });

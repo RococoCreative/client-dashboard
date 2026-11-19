@@ -6,11 +6,10 @@
 // stored figure, rather than being saved as a zero nobody typed. Saves for one line queue behind
 // each other, so two quick edits never land out of order and undo each other on screen.
 import { useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { inputClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { createCompensationItem, deleteCompensationItem, updateCompensationItem } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -146,9 +145,9 @@ export default function CompensationTable({
                   </td>
                   {canEdit ? (
                     <td className={`${tdClass} text-right`}>
-                      <IconButton label={`Remove ${item.name}`} onClick={() => setDeleting(item)}>
-                        <Trash2 size={14} aria-hidden />
-                      </IconButton>
+                      <Button variant="danger" size="sm" aria-label={`Remove ${item.name}`} onClick={() => setDeleting(item)}>
+                        Remove
+                      </Button>
                     </td>
                   ) : null}
                 </tr>
