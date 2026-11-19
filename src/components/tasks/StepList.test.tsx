@@ -94,3 +94,18 @@ describe("StepList rename", () => {
     expect(changes[0].steps[0].title).toBe("Walk the whole site");
   });
 });
+
+describe("StepList after a remove", () => {
+  it("lets go of the removed step, so it never comes back already open", async () => {
+    svc.removeStep.mockResolvedValue({ ...TASK, steps: [] });
+    const { rerender } = render(<StepList task={TASK} canEdit locked={false} onChange={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Walk the site" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Walk the site" }));
+    await act(async () => {});
+    rerender(<StepList task={{ ...TASK, steps: [] }} canEdit locked={false} onChange={() => undefined} />);
+    // The same step read back (a reload that finds it still there) reads closed, as text.
+    rerender(<StepList task={TASK} canEdit locked={false} onChange={() => undefined} />);
+    expect(screen.queryByLabelText("Rename Walk the site")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Walk the site" })).toBeInTheDocument();
+  });
+});

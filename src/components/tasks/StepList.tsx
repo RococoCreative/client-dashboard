@@ -109,7 +109,10 @@ export default function StepList({
     setBusy(true);
     setError("");
     try {
-      onChange(await change());
+      const next = await change();
+      onChange(next);
+      // A step that left the list (removed) is let go of, so it can never come back already open.
+      setOpenId((open) => (open !== null && next.steps.some((s) => s.id === open) ? open : null));
       return true;
     } catch (err) {
       setError(errorMessage(err, "That step did not save. Try again."));

@@ -21,7 +21,7 @@ import { PORTFOLIO_NAV, alsoActiveFor, navFor, type NavItem, type NavLayout, typ
 import { ROLE_LABELS } from "../types/database.ts";
 
 const entryClass = (active: boolean) =>
-  "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors duration-150 lg:py-1.5 " +
+  "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors duration-150 lg:py-1.5 tap:min-h-11 " +
   (active ? "bg-accent/10 font-medium text-accent" : "text-ink-2 hover:bg-surface-2 hover:text-ink");
 
 // Counts shown beside sidebar items, by item id. Only a count above zero shows.
@@ -132,8 +132,8 @@ export default function AppLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-bg lg:flex-row">
       <aside className="border-b border-line bg-chrome lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-          <NavLink to="/" className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5 sm:py-4">
+          <NavLink to="/" className="flex min-w-0 items-center gap-3 tap:min-h-11">
             {company?.logo_url ? (
               <img src={company.logo_url} alt="" className="h-7 w-auto max-w-[120px] shrink-0 object-contain" />
             ) : null}
@@ -154,7 +154,7 @@ export default function AppLayout() {
             <Link
               to="/rococo"
               onClick={() => setActiveCompanyId(null)}
-              className="flex items-center gap-1.5 text-[12px] text-ink-2 transition-colors duration-150 hover:text-ink"
+              className="flex items-center gap-1.5 text-[12px] text-ink-2 transition-colors duration-150 hover:text-ink tap:min-h-11"
             >
               <ArrowLeft size={13} aria-hidden /> Back to portfolio
             </Link>
@@ -176,7 +176,7 @@ export default function AppLayout() {
           </div>
         ) : null}
 
-        <nav ref={navRef} className="flex gap-1 overflow-x-auto px-3 py-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto" aria-label="Primary">
+        <nav ref={navRef} className="flex gap-1 overflow-x-auto px-4 py-2 sm:px-3 sm:py-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto" aria-label="Primary">
           {layout.kind === "flat"
             ? layout.items.map((item) => <NavEntry key={item.id} item={item} />)
             : layout.sections.map((section) => <NavSectionGroup key={section.group} section={section} counts={counts} />)}
@@ -197,7 +197,7 @@ export default function AppLayout() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        <div key={portfolio ? "portfolio" : company?.id ?? "none"} className="mx-auto w-full max-w-6xl px-5 py-6 sm:px-6 sm:py-8">
+        <div key={portfolio ? "portfolio" : company?.id ?? "none"} className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
           <Outlet />
         </div>
       </main>

@@ -17,6 +17,10 @@
 // admin placed with the company shows on the roster too, but their role and access are Rococo's to
 // manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
 // no invite.
+//
+// Below lg the table stacks: each person is a block with their name and title, then division,
+// reports to, role and status as labelled lines, then the row's actions. It is the same table
+// underneath, with explicit table roles so a screen reader still reads rows and columns.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
@@ -67,6 +71,12 @@ const ROLE_HINTS: Record<Role, string> = {
 const ALL = "all";
 const EVERY = "every";
 const NONE = "none";
+
+// The stacked roster's labelled lines: the column's name (data-label) beside the value, indented to
+// line up with the name above. From md to lg they sit two to a line.
+const STACKED_CELL =
+  "max-lg:flex max-lg:items-center max-lg:gap-3 max-lg:border-b-0 max-lg:py-0.5 max-lg:pr-0 max-lg:pl-9 " +
+  "max-lg:before:w-24 max-lg:before:shrink-0 max-lg:before:text-[12.5px] max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)]";
 
 function AddStaffDialog({
   companyId,
@@ -435,19 +445,19 @@ export default function PeoplePage() {
               ) : null}
             </div>
           ) : (
-            <div className="relative overflow-x-auto">
-              <table className={tableClass}>
-                <thead>
-                  <tr>
-                    <th className={thClass}>Person</th>
-                    {hasDivisions ? <th className={thClass}>Division</th> : null}
-                    <th className={thClass}>Reports to</th>
-                    <th className={thClass}>Role</th>
-                    <th className={thClass}>Status</th>
-                    {teamView ? null : <th className={thClass}><span className="sr-only">Actions</span></th>}
+            <div className="relative lg:overflow-x-auto">
+              <table role="table" className={`${tableClass} max-lg:block`}>
+                <thead role="rowgroup" className="max-lg:sr-only">
+                  <tr role="row">
+                    <th role="columnheader" className={thClass}>Person</th>
+                    {hasDivisions ? <th role="columnheader" className={thClass}>Division</th> : null}
+                    <th role="columnheader" className={thClass}>Reports to</th>
+                    <th role="columnheader" className={thClass}>Role</th>
+                    <th role="columnheader" className={thClass}>Status</th>
+                    {teamView ? null : <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup" className="max-lg:block">
                   {shown.map((person) => {
                     const self = person.id === profile.id;
                     const rococo = person.is_rococo_admin;
@@ -457,9 +467,13 @@ export default function PeoplePage() {
                     const placed = divisionLabel(person.division_ids, divisions);
                     const manager = person.reports_to ? byId.get(person.reports_to) : undefined;
                     return (
-                      <tr key={person.id} className={`hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}>
-                        <td className={`${tdClass} py-2`}>
-                          <Link to={`/people/${person.id}`} className="flex items-center gap-2.5">
+                      <tr
+                        key={person.id}
+                        role="row"
+                        className={`hover:bg-surface-2/60 max-lg:block max-lg:border-b max-lg:border-line max-lg:px-4 max-lg:py-3 max-lg:last:border-b-0 md:max-lg:grid md:max-lg:grid-cols-2 md:max-lg:gap-x-6 ${person.is_active ? "" : "opacity-60"}`}
+                      >
+                        <td role="cell" className={`${tdClass} py-2 max-lg:block max-lg:border-b-0 max-lg:p-0 md:max-lg:col-span-2`}>
+                          <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
                             <Avatar person={person} size={26} />
                             <span className="min-w-0">
                               <span className="block truncate text-sm text-ink">{displayName(person)}{self ? " (you)" : ""}</span>
@@ -468,25 +482,25 @@ export default function PeoplePage() {
                           </Link>
                         </td>
                         {hasDivisions ? (
-                          <td className={`${tdClass} py-2 text-[13px]`}>
+                          <td role="cell" data-label="Division" className={`${tdClass} py-2 text-[13px] ${STACKED_CELL}`}>
                             {placed === "No division" && !rococo ? <Badge tone="warning">No division</Badge> : <span className="text-ink-2">{rococo ? "-" : placed}</span>}
                           </td>
                         ) : null}
-                        <td className={`${tdClass} py-2 text-[13px] text-ink-2`}>
+                        <td role="cell" data-label="Reports to" className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_CELL}`}>
                           {manager ? (
-                            <Link to={`/people/${manager.id}`} className="hover:text-link">{displayName(manager)}</Link>
+                            <Link to={`/people/${manager.id}`} className="hover:text-link tap:inline-flex tap:min-h-11 tap:items-center">{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
                         </td>
-                        <td className={`${tdClass} py-2`}>
+                        <td role="cell" data-label="Role" className={`${tdClass} py-2 ${STACKED_CELL}`}>
                           {rococo ? (
                             <Badge>Rococo Creative</Badge>
                           ) : (
                             <span className="text-[13px] text-ink-2">{ROLE_LABELS[person.role]}</span>
                           )}
                         </td>
-                        <td className={`${tdClass} py-2`}>
+                        <td role="cell" data-label="Status" className={`${tdClass} py-2 ${STACKED_CELL}`}>
                           {!person.is_active ? (
                             <Badge tone="neutral">Inactive</Badge>
                           ) : account ? (
@@ -500,8 +514,8 @@ export default function PeoplePage() {
                           )}
                         </td>
                         {teamView ? null : (
-                          <td className={`${tdClass} py-2 text-right`}>
-                            <span className="flex items-center justify-end gap-1.5">
+                          <td role="cell" className={`${tdClass} py-2 text-right max-lg:block max-lg:border-b-0 max-lg:p-0 max-lg:pl-9 max-lg:text-left md:max-lg:col-span-2`}>
+                            <span className="flex items-center justify-end gap-1.5 max-lg:flex-wrap max-lg:justify-start max-lg:not-empty:mt-2">
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (

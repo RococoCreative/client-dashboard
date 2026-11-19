@@ -1,7 +1,7 @@
 // Route tabs for a page with sub-views (Goals, Settings, Resources, a person's own pages). Each tab
 // is a link to its own path, so a tab can be bookmarked and linked to, and the router marks the
 // current one with aria-current="page". On a narrow screen the strip scrolls sideways on its own
-// rather than widening the page.
+// rather than widening the page, and each tab is 44px tall under a finger or at phone width.
 import { NavLink } from "react-router-dom";
 
 export interface TabItem {
@@ -19,7 +19,7 @@ export default function Tabs({ items, label = "Sections" }: { items: TabItem[]; 
           to={item.to}
           end={item.end}
           className={({ isActive }) =>
-            "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors duration-150 " +
+            "-mb-px flex shrink-0 items-center whitespace-nowrap border-b-2 px-3 py-2 text-[13px] tap:min-h-11 transition-colors duration-150 " +
             (isActive ? "border-accent font-medium text-ink" : "border-transparent text-ink-2 hover:text-ink")
           }
         >

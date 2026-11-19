@@ -950,37 +950,37 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                         </p>
                       ) : (
                         <div className="relative overflow-x-auto">
-                          <table className="w-full text-sm max-sm:block">
-                            <thead className="max-sm:sr-only">
-                              <tr className="text-left">
-                                <th className={miniThClass}>Deliverable</th>
-                                <th className={`${miniThClass} text-right`}>Target</th>
-                                <th className={`${miniThClass} text-right`}>Actual</th>
-                                <th className={`${miniThClass} text-right`}>Achieved</th>
-                                <th className="pb-2"></th>
+                          <table role="table" className="w-full text-sm max-sm:block">
+                            <thead role="rowgroup" className="max-sm:sr-only">
+                              <tr role="row" className="text-left">
+                                <th role="columnheader" className={miniThClass}>Deliverable</th>
+                                <th role="columnheader" className={`${miniThClass} text-right`}>Target</th>
+                                <th role="columnheader" className={`${miniThClass} text-right`}>Actual</th>
+                                <th role="columnheader" className={`${miniThClass} text-right`}>Achieved</th>
+                                <th role="columnheader" className="pb-2"><span className="sr-only">Remove</span></th>
                               </tr>
                             </thead>
-                            <tbody className="max-sm:block">
+                            <tbody role="rowgroup" className="max-sm:block">
                               {lineItems.map((item) => {
                                 const achieved = lineItemPercent(item);
                                 return (
-                                  <tr key={item.id} className="border-t border-line max-sm:flex max-sm:first:border-t-0 max-sm:flex-wrap max-sm:items-start max-sm:gap-x-2 max-sm:py-3">
-                                    <td className="py-2 pr-3 max-sm:basis-full max-sm:p-0 max-sm:pb-2">
+                                  <tr key={item.id} role="row" className="border-t border-line max-sm:flex max-sm:first:border-t-0 max-sm:flex-wrap max-sm:items-start max-sm:gap-x-2 max-sm:py-3">
+                                    <td role="cell" className="py-2 pr-3 max-sm:basis-full max-sm:p-0 max-sm:pb-2">
                                       <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
                                       {canScore || item.notes ? (
                                         <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
                                       ) : null}
                                     </td>
-                                    <td data-label="Target" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
+                                    <td role="cell" data-label="Target" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
                                       <BlurInput type="text" ariaLabel={`Target for ${item.label || "this deliverable"}`} value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "target", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
-                                    <td data-label="Actual" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
+                                    <td role="cell" data-label="Actual" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
                                       <BlurInput type="text" ariaLabel={`Actual for ${item.label || "this deliverable"}`} value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "actual", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
-                                    <td data-label="Achieved" className={`tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2 max-sm:w-16 ${stackedCell}`}>
+                                    <td role="cell" data-label="Achieved" className={`tnum w-20 py-2 text-right align-top leading-[38px] tap:leading-[44px] text-ink-2 max-sm:w-16 ${stackedCell}`}>
                                       {achieved === null ? "-" : `${achieved}%`}
                                     </td>
-                                    <td className="w-10 py-2 text-right align-top max-sm:self-end max-sm:p-0">
+                                    <td role="cell" className="w-10 py-2 text-right align-top max-sm:self-end max-sm:p-0">
                                       {canScore ? (
                                         <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
                                           <Trash2 size={14} aria-hidden />

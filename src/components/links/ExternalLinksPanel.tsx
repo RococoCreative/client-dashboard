@@ -289,6 +289,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
       const id = removing.id;
       await deleteExternalLink(id);
       state.setData((prev) => (prev ? prev.filter((l) => l.id !== id) : prev));
+      setOpenId((open) => (open === id ? null : open));
       setRemoving(null);
     } catch (err) {
       setDialogError(errorMessage(err));

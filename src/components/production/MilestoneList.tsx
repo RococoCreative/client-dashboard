@@ -242,6 +242,7 @@ export default function MilestoneList({
     try {
       await archiveMilestone(archiving.id);
       onChanged(milestones.filter((m) => m.id !== archiving.id));
+      setOpenId((open) => (open === archiving.id ? null : open));
       setArchiving(null);
     } catch (err) {
       setError(errorMessage(err));

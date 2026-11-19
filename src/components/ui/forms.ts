@@ -1,15 +1,16 @@
 // Shared form control classes so every input, select, textarea, and label in the hub
-// carries the same quiet look on every tenant theme (one place to tune density and focus).
+// carries the same quiet look on every tenant theme (one place to tune density and focus). A
+// field is 44px tall under a finger or at phone width (the tap variant), so a thumb can hit it.
 export const labelClass = "block text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 export const inputClass =
   "mt-1.5 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink " +
   "placeholder:text-ink-3/70 transition-colors duration-150 hover:border-line-strong " +
-  "disabled:cursor-not-allowed disabled:opacity-60";
+  "disabled:cursor-not-allowed disabled:opacity-60 tap:min-h-11";
 
 export const selectClass =
   "mt-1.5 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-sm text-ink " +
-  "transition-colors duration-150 hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-60";
+  "transition-colors duration-150 hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-60 tap:min-h-11";
 
 export const textareaClass = `${inputClass} min-h-[88px] leading-relaxed`;
 

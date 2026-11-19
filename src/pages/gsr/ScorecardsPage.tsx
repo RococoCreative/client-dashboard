@@ -71,31 +71,32 @@ function RoleBlock({
   return (
     <div className="border-b border-line last:border-b-0">
       <div className="relative md:overflow-x-auto">
-        <table className={`${tableClass} max-md:block md:min-w-[36rem]`}>
-          <thead className="bg-surface-2 max-md:block">
-            <tr className="max-md:block">
-              <th scope="col" className={`${roleHeadClass} md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
+        <table role="table" className={`${tableClass} max-md:block md:min-w-[36rem]`}>
+          <thead role="rowgroup" className="bg-surface-2 max-md:block">
+            <tr role="row" className="max-md:block">
+              <th scope="col" role="columnheader" className={`${roleHeadClass} md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
                 <span className="sr-only">Person, </span>
                 <h2 className={`${itemTitleClass} font-display normal-case tracking-normal`}>{title}</h2>
                 <span className={`block normal-case tracking-normal ${metaClass}`}>{pluralize(people.length, "person", "people")}</span>
               </th>
               {metrics.map((m) => (
-                <th key={m.id} scope="col" className={`${thClass} text-right align-bottom md:min-w-[7.5rem] max-md:sr-only`}>
+                <th key={m.id} scope="col" role="columnheader" className={`${thClass} text-right align-bottom md:min-w-[7.5rem] max-md:sr-only`}>
                   <span className="block normal-case tracking-normal text-[12px] text-ink-2">{m.name}</span>
                   <span className="tnum block">{m.target === null ? "No target" : `Target ${formatMetricValue(m, m.target)}`}</span>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="max-md:block">
+          <tbody role="rowgroup" className="max-md:block">
             {people.map((person) => {
               const own = entries.filter((e) => e.employee_id === person.id);
               const name = displayName(person);
               const division = divisionName(person);
               return (
-                <tr key={person.id} className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0">
+                <tr key={person.id} role="row" className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0">
                   <th
                     scope="row"
+                    role="rowheader"
                     className="border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0"
                   >
                     <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link`}>
@@ -109,6 +110,7 @@ function RoleBlock({
                     return (
                       <td
                         key={m.id}
+                        role="cell"
                         data-label={m.name}
                         className={`${tdClass} py-1.5 text-right max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:px-0 max-md:py-1 max-md:text-left max-md:before:text-[12.5px] max-md:before:text-ink-2 max-md:before:content-[attr(data-label)]`}
                       >
