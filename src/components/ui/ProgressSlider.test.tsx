@@ -34,7 +34,10 @@ describe("ProgressSlider", () => {
     await act(async () => {});
     expect(slider).toHaveValue("40");
     expect(slider).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Not saved. The completion went back to what is stored.")).toBeInTheDocument();
+    const note = screen.getByText("Not saved");
+    expect(note).toBeVisible();
+    expect(note).not.toHaveClass("sr-only");
+    expect(slider).toHaveAttribute("aria-describedby", note.id);
   });
 
   it("rolls back when the save rejects", async () => {

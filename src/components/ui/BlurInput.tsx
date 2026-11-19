@@ -13,10 +13,16 @@
 //
 // A save that goes to the database returns its promise. While it runs the field reads as saving;
 // when it lands the field flashes saved; when it fails (the promise rejects or resolves false)
-// the field keeps the typed text, is marked "Not saved" in the danger colour, and the next blur
-// tries again. A failed save never looks like a saved one. The state is announced to screen
-// readers through a visually hidden live region that sits outside the layout.
-import { useEffect, useRef, useState } from "react";
+// the field keeps the typed text, is outlined in the danger colour, and says "Not saved" in words
+// under the field, so the failure does not depend on seeing a colour. The next blur tries again.
+// A failed save never looks like a saved one. The words clear on the next landed save or when the
+// stored value is back in the box. One live region carries every state: visible for a failure,
+// visually hidden for saving and saved, and the field points at it while a failure stands.
+//
+// The field sits in a block wrapper so the words can sit under it. The wrapper takes over the
+// sizing classes a caller put on the field (flex-1, min-w-0, a width) so a field in a flex row or
+// a table cell keeps the width it had, and the words add height only, never width.
+import { useEffect, useId, useRef, useState } from "react";
 import { inputClass, textareaClass } from "./forms.ts";
 
 export type SaveState = "idle" | "saving" | "saved" | "failed";
@@ -36,8 +42,16 @@ const STATE_TEXT: Record<SaveState, string> = {
   idle: "",
   saving: "Saving",
   saved: "Saved",
-  failed: "Not saved. Edit the field or leave it again to retry.",
+  failed: "Not saved",
 };
+
+// The classes that decide how wide a field is or how it behaves as a flex or grid child. Plain
+// widths, responsive widths and w-full are matched; fractions and percentages stay on the field alone,
+// where they keep resolving against the wrapper.
+const SIZING = /^(?:[a-z0-9]+:)*(?:flex-(?:1|auto|initial|none)|grow(?:-\d+)?|shrink(?:-\d+)?|basis-\S+|min-w-\S+|max-w-\S+|w-(?!\d+\/|\[\d+%\])\S+|self-\S+|col-span-\S+|ml-auto|mr-auto)$/;
+function wrapperClasses(className: string | undefined) {
+  return (className ?? "").split(/\s+/).filter((c) => SIZING.test(c)).join(" ");
+}
 
 // How long the saved mark stays before the field goes quiet again.
 const SAVED_MS = 1500;
@@ -126,42 +140,57 @@ export default function BlurInput({
     );
   };
 
+  const noteId = useId();
   const classes = (className ?? (multiline ? textareaClass : inputClass)) + STATE_RING[state];
+  const failed = state === "failed";
   const status = (
-    <span aria-live="polite" className="sr-only">
+    <span
+      id={noteId}
+      aria-live="polite"
+      className={failed ? "mt-1 block text-[12px] leading-snug text-danger" : "sr-only"}
+    >
       {STATE_TEXT[state]}
     </span>
   );
-  const invalid = state === "failed" ? true : undefined;
-  const title = state === "failed" ? "Not saved" : undefined;
+  const invalid = failed ? true : undefined;
+  const describedBy = failed ? noteId : undefined;
+  const title = failed ? "Not saved" : undefined;
+  const wrap = `block${wrapperClasses(className) ? " " + wrapperClasses(className) : ""}`;
+  // Typing the stored text back in leaves nothing pending, so a standing failure goes with it.
+  const edit = (next: string) => {
+    setDraft(next);
+    if (failed && next === value) setState("idle");
+  };
 
   if (multiline) {
     return (
-      <>
+      <span className={wrap}>
         <textarea
           id={id}
           aria-label={ariaLabel}
           aria-invalid={invalid}
+          aria-describedby={describedBy}
           title={title}
           data-save-state={state}
           value={draft}
           disabled={disabled}
           placeholder={placeholder}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => edit(e.target.value)}
           onBlur={commit}
           className={classes}
           rows={rows}
         />
         {status}
-      </>
+      </span>
     );
   }
   return (
-    <>
+    <span className={wrap}>
       <input
         id={id}
         aria-label={ariaLabel}
         aria-invalid={invalid}
+        aria-describedby={describedBy}
         title={title}
         data-save-state={state}
         type={type}
@@ -169,7 +198,7 @@ export default function BlurInput({
         value={draft}
         disabled={disabled}
         placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => edit(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
@@ -177,6 +206,6 @@ export default function BlurInput({
         className={classes}
       />
       {status}
-    </>
+    </span>
   );
 }
