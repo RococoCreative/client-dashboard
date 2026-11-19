@@ -5,6 +5,11 @@
 // now), so an owner placed in a role gets what the person page says they get. A retired role
 // carries nothing. Everything here is a summary with a link into the module that owns it.
 //
+// Each audience reads the right thing first. An admin opens on what needs attention and the open
+// cycles, then the tiles, then the rest. An employee opens on their own GSR, with the page's one
+// primary button; a manager has their direct reports right under it (TeamBlock). With no links
+// yet, the links card gives way to one line at the end of the page.
+//
 // For the people allowed to see the division split (an owner, Rococo, or someone given the view)
 // in a company that has divisions, a Combined / per-division switch narrows the people tiles and
 // the cycle cards to one division, and the compare strip sets each division next to the whole.
@@ -30,6 +35,8 @@ import FreshnessCard from "../components/home/FreshnessCard.tsx";
 import ShortcutsCard from "../components/home/ShortcutsCard.tsx";
 import WinsCard from "../components/home/WinsCard.tsx";
 import WhereWorkLivesCard from "../components/home/WhereWorkLivesCard.tsx";
+import NoLinksLine from "../components/home/NoLinksLine.tsx";
+import TeamBlock from "../components/home/TeamBlock.tsx";
 import DivisionCompare from "../components/people/DivisionCompare.tsx";
 import DivisionSwitch from "../components/people/DivisionSwitch.tsx";
 import PersonScorecard from "../components/scorecards/PersonScorecard.tsx";
@@ -54,6 +61,7 @@ import { listMetricEntries, listRoleMetrics } from "../services/scorecards.ts";
 import { monthOf } from "../lib/scorecard.ts";
 import { listSnapshots } from "../services/financials.ts";
 import { listCampaigns } from "../services/marketing.ts";
+import { listExternalLinks } from "../services/externalLinks.ts";
 import { deriveSnapshot, periodLabel } from "../lib/financials.ts";
 import { liveCampaignTotals } from "../lib/marketing.ts";
 import { averageScore, computeReviewScore, hasScoredItem, pillarsForReview, scoreProfile } from "../lib/gsr/scoring.ts";
@@ -70,7 +78,9 @@ import {
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
+  type Company,
   type EmployeeFinancial,
+  type ExternalLink,
   type FinancialSnapshot,
   type JobRole,
   type Profile,
@@ -244,11 +254,24 @@ function MyScorecard({ companyId, employeeId, jobRole }: { companyId: string; em
   );
 }
 
+// The company's links, for the Where the work lives card, loaded here so Home can tell an empty
+// list apart: a card with links stays where it always was, and an empty list is one line at the
+// end of the page. Without the module nothing is read.
+function useHomeLinks(company: Company) {
+  const withLinks = hasModule(company, "external_links");
+  return useAsync(() => (withLinks ? listExternalLinks(company.id) : Promise.resolve(null)), [company.id, withLinks]);
+}
+
+function noLinks(company: Company, links: ExternalLink[] | null): boolean {
+  return hasModule(company, "external_links") && links !== null && links.length === 0;
+}
+
 function AdminDashboard() {
   const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
   const showManualFinancials = company!.manual_financials;
   const year = new Date().getFullYear();
+  const links = useHomeLinks(company!);
 
   const state = useAsync(async () => {
     const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own, omissions] = await Promise.all([
@@ -368,6 +391,36 @@ function AdminDashboard() {
   // way the Marketing board and the Rococo portfolio read them.
   const { live: liveCampaigns, unbudgeted, budget: liveBudget, spend: liveSpend } = liveCampaignTotals(campaigns);
 
+  // Without the switchboard there is no attention card, so the open cycles lead the page.
+  const cycleCards =
+    live.length === 0 ? (
+      <Section
+        eyebrow="Goal Setting and Review"
+        title="Review cycles"
+        actions={
+          <Link to="/gsr">
+            <Button size="sm">Start a cycle</Button>
+          </Link>
+        }
+      >
+        <p className="text-sm text-ink-2">
+          No review cycle is open. Start one to create a review for every person and track the team's scores.
+        </p>
+      </Section>
+    ) : (
+      <div className={`grid grid-cols-1 gap-6 ${live.length > 1 ? "lg:grid-cols-2" : ""}`}>
+        {live.map((c) => (
+          <CycleProgress
+            key={c.id}
+            cycle={c}
+            people={rosterOf(c.id)}
+            omittedCount={cycleOmitted(people, reviews, c.id, omissions).length}
+            scored={scored}
+          />
+        ))}
+      </div>
+    );
+
   return (
     <>
       <PageHeader
@@ -378,7 +431,14 @@ function AdminDashboard() {
       />
       {split.error && !split.data ? <Notice tone="warning" className="mb-4">The division split did not load, so this is the combined picture. {split.error}</Notice> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* What needs an admin first: the attention card (under the switchboard module; without it,
+          none of its calls is made) and every open cycle, then the tiles, then the rest. */}
+      <div className="space-y-6">
+        {hasModule(company, "switchboard") ? <AttentionCard company={company!} /> : null}
+        {cycleCards}
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label={limited ? "People in your divisions" : "People"} value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
         <Stat
           label="GSRs complete"
@@ -412,54 +472,11 @@ function AdminDashboard() {
         </div>
       ) : null}
 
-      {/* The Home cards, each under its own module. With none of the modules on, none mounts and
-          none of their calls is made, so the dashboard is exactly what it always was. */}
-      {hasModule(company, "switchboard") ? (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <AttentionCard company={company!} />
-            {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin /> : null}
-          </div>
-          <div className="space-y-6">
-            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} />
-            {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
-            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} companyTimeZone={company!.time_zone} canViewProduction={can("production_view")} /> : null}
-          </div>
-        </div>
-      ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin className={hasModule(company, "wins") ? "" : "lg:col-span-2"} /> : null}
-          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
-        </div>
-      ) : null}
-
+      {/* The rest, in the order it has always read. The Home cards each sit under their own module;
+          with none of the modules on, none mounts and none of their calls is made. */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          {live.length === 0 ? (
-            <Section
-              eyebrow="Goal Setting and Review"
-              title="Review cycles"
-              actions={
-                <Link to="/gsr">
-                  <Button size="sm">Start a cycle</Button>
-                </Link>
-              }
-            >
-              <p className="text-sm text-ink-2">
-                No review cycle is open. Start one to create a review for every person and track the team's scores.
-              </p>
-            </Section>
-          ) : (
-            live.map((c) => (
-              <CycleProgress
-                key={c.id}
-                cycle={c}
-                people={rosterOf(c.id)}
-                omittedCount={cycleOmitted(people, reviews, c.id, omissions).length}
-                scored={scored}
-              />
-            ))
-          )}
+          {hasModule(company, "external_links") ? <WhereWorkLivesCard links={links.data} error={links.error} isAdmin /> : null}
 
           <Section
             eyebrow={String(year)}
@@ -494,6 +511,9 @@ function AdminDashboard() {
         </div>
 
         <div className="space-y-6">
+          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
+          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
+          {hasModule(company, "switchboard") && hasModule(company, "data_sources") ? <FreshnessCard companyId={companyId} companyTimeZone={company!.time_zone} canViewProduction={can("production_view")} /> : null}
           {showManualFinancials ? (
             <Section
               eyebrow="Financials"
@@ -589,17 +609,22 @@ function AdminDashboard() {
           </Section>
         </div>
       </div>
+
+      {noLinks(company!, links.data) ? <NoLinksLine isAdmin /> : null}
     </>
   );
 }
 
 function EmployeeDashboard() {
-  const { company, profile, isAdmin, isRococo, can } = useHub();
+  const { company, profile, isAdmin, isRococo, isLead, can } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
+  const links = useHomeLinks(company!);
+  // A manager gets their team under their own GSR. Admins never reach this dashboard.
+  const lead = isLead && !isAdmin;
 
   const state = useAsync(async () => {
-    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own, omissions] = await Promise.all([
+    const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own, omissions, people] = await Promise.all([
       listEmployeeReviews(companyId, profile.id),
       listPillars(companyId),
       listCriteria(companyId),
@@ -614,6 +639,8 @@ function EmployeeDashboard() {
       loadOwnModules(companyId, profile, year),
       // Only the person's own rows come back (0034): the cycles they are omitted from.
       listCycleOmissions(companyId),
+      // The people a manager may see, for their team block; the database has already narrowed it.
+      lead ? listCompanyProfiles(companyId) : Promise.resolve([] as Profile[]),
     ]);
     const { jobRole, financials } = own;
     // Latest by the period the review covers, the same rule My GSR and the person page use.
@@ -636,13 +663,13 @@ function EmployeeDashboard() {
     const gsrCycle = gsrCycleInPlay(cycles);
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
     const omitted = omittedCycleIdsFor(omissions, reviews, profile.id);
-    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted };
-  }, [companyId, profile.id, profile.job_role_id, year]);
+    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted, people };
+  }, [companyId, profile.id, profile.job_role_id, year, lead]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds } = state.data;
+  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds, people } = state.data;
   // An admin omitted this person from this month's GSR: nothing to start, and it says so.
   const gsrOmitted = gsrCycle ? omittedCycleIds.includes(gsrCycle.id) : false;
   const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
@@ -681,59 +708,17 @@ function EmployeeDashboard() {
     <>
       <PageHeader eyebrow={company!.name} title={`Welcome back, ${displayName(profile).split(" ")[0]}`} description="Your scores, your goals, and what changed." />
 
-      {hasModule(company, "external_links") || hasModule(company, "wins") || hasModule(company, "switchboard") ? (
-        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin={false} /> : null}
-          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
-          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
-        </div>
-      ) : null}
-
+      {/* Read in the order the person needs it: their own GSR first, with the one primary button
+          on the page, then (for a manager) their team, then their goals, scores and the rest. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {ratingPillars.length > 0 ? (
-          <Section
-            eyebrow="Impact score"
-            title={rated ? String(profileScore.overall) : "Not rated yet"}
-            description={baseline ? `Against ${baseline.cycle?.name ?? "your last review"}` : "Set by your manager and trued up before each review."}
-            className="lg:col-span-1"
-          >
-            {rated ? (
-              <div className="space-y-3">
-                <ul className="space-y-1.5 text-sm">
-                  {profileScore.pillars.map((p) => (
-                    <li key={p.pillarId} className="flex justify-between gap-3">
-                      <span className="text-ink-2">{p.name}</span>
-                      <span className="tnum text-ink">{p.score === null ? "-" : Math.round(p.score)}</span>
-                    </li>
-                  ))}
-                </ul>
-                {moves.length > 0 ? (
-                  <ul className="flex flex-wrap gap-1.5 text-[12px]">
-                    {moves.slice(0, 4).map((m) => (
-                      <li key={m.criterion.id} className={`rounded-full border px-2 py-0.5 ${(m.delta as number) > 0 ? "border-success/40 bg-success/10" : "border-danger/40 bg-danger/10"} text-ink`}>
-                        {m.criterion.name} {(m.delta as number) > 0 ? `+${m.delta}` : m.delta}
-                      </li>
-                    ))}
-                  </ul>
-                ) : baseline ? (
-                  <p className="text-[12px] text-ink-3">No change since {baseline.cycle?.name ?? "your last review"}.</p>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
-            )}
-            {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
-          </Section>
-        ) : null}
-
         <Section
           eyebrow="Goal Setting Review"
           title={gsrCycle ? gsrCycle.name : "No month open"}
-          className={ratingPillars.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}
+          className="lg:col-span-3"
           actions={
             gsrCycle && !gsrOmitted ? (
               <Link to="/my/gsr">
-                <Button variant="secondary" size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
+                <Button size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
               </Link>
             ) : undefined
           }
@@ -768,26 +753,17 @@ function EmployeeDashboard() {
           )}
         </Section>
 
-        <Section
-          eyebrow={result ? "Latest scored review" : "Latest review"}
-          title={cycle?.name ?? "No review yet"}
-          className="lg:col-span-1"
-        >
-          {featured ? (
-            <div className="flex items-center gap-5">
-              <ScoreRing score={result?.overall ?? null} size={88} label="Overall" />
-              <div className="min-w-0 text-sm">
-                <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
-                <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-link hover:underline">
-                  View review
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-2">Your first review appears here once your manager opens a cycle.</p>
-          )}
-        </Section>
+        {lead ? <TeamBlock companyId={companyId} viewer={profile} people={people} cycles={cycles} className="lg:col-span-3" /> : null}
+
+        {/* The links, wins and shortcuts cards, each under its own module, where they have always sat
+            in the order. An empty links list is one line at the end of the page instead. */}
+        {(hasModule(company, "external_links") && !noLinks(company!, links.data)) || hasModule(company, "wins") || hasModule(company, "switchboard") ? (
+          <div className="grid grid-cols-1 gap-6 lg:col-span-3 lg:grid-cols-2">
+            {hasModule(company, "external_links") ? <WhereWorkLivesCard links={links.data} error={links.error} isAdmin={false} /> : null}
+            {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
+            {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
+          </div>
+        ) : null}
 
         <Section
           eyebrow="Goals"
@@ -817,6 +793,63 @@ function EmployeeDashboard() {
             </ul>
           )}
         </Section>
+
+        <div className="space-y-6">
+          {ratingPillars.length > 0 ? (
+            <Section
+              eyebrow="Impact score"
+              title={rated ? String(profileScore.overall) : "Not rated yet"}
+              description={baseline ? `Against ${baseline.cycle?.name ?? "your last review"}` : "Set by your manager and trued up before each review."}
+            >
+              {rated ? (
+                <div className="space-y-3">
+                  <ul className="space-y-1.5 text-sm">
+                    {profileScore.pillars.map((p) => (
+                      <li key={p.pillarId} className="flex justify-between gap-3">
+                        <span className="text-ink-2">{p.name}</span>
+                        <span className="tnum text-ink">{p.score === null ? "-" : Math.round(p.score)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {moves.length > 0 ? (
+                    <ul className="flex flex-wrap gap-1.5 text-[12px]">
+                      {moves.slice(0, 4).map((m) => (
+                        <li key={m.criterion.id} className={`rounded-full border px-2 py-0.5 ${(m.delta as number) > 0 ? "border-success/40 bg-success/10" : "border-danger/40 bg-danger/10"} text-ink`}>
+                          {m.criterion.name} {(m.delta as number) > 0 ? `+${m.delta}` : m.delta}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : baseline ? (
+                    <p className="text-[12px] text-ink-3">No change since {baseline.cycle?.name ?? "your last review"}.</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
+              )}
+              {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
+            </Section>
+          ) : null}
+
+          <Section
+            eyebrow={result ? "Latest scored review" : "Latest review"}
+            title={cycle?.name ?? "No review yet"}
+          >
+            {featured ? (
+              <div className="flex items-center gap-5">
+                <ScoreRing score={result?.overall ?? null} size={88} label="Overall" />
+                <div className="min-w-0 text-sm">
+                  <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
+                  <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
+                  <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-link hover:underline">
+                    View review
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-2">Your first review appears here once your manager opens a cycle.</p>
+            )}
+          </Section>
+        </div>
 
         {showFinancials && jobRole ? <YourFigures jobRole={jobRole} financials={financials} year={year} className="lg:col-span-3" /> : null}
 
@@ -853,6 +886,8 @@ function EmployeeDashboard() {
           <RecentSops sops={recentSops} />
         </Section>
       </div>
+
+      {noLinks(company!, links.data) ? <NoLinksLine isAdmin={false} /> : null}
     </>
   );
 }

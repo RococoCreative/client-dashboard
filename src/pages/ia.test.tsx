@@ -225,25 +225,24 @@ describe("Resources hub", () => {
 });
 
 describe("Where the work lives on Home", () => {
-  it("shows the card to an admin of any company with the module, and says where links are added", async () => {
+  // With no links yet the card steps aside for one line at the end of the page (home-audience.test
+  // pins where); the line still tells an admin where links are added.
+  it("tells an admin of any company with the module where links are added", async () => {
     renderWithHub(<DashboardPage />, klasikWithLinks);
-    const heading = await screen.findByRole("heading", { name: "Where the work lives" });
-    const card = heading.closest("section") as HTMLElement;
-    expect(await within(card).findByText(/No links yet\. Add the programs the team works in/)).toBeInTheDocument();
-    expect(within(card).getByRole("link", { name: "Resources, Links" })).toHaveAttribute("href", "/resources/links");
+    const line = await screen.findByText(/No links yet\. Add the programs the team works in/);
+    expect(within(line).getByRole("link", { name: "Resources, Links" })).toHaveAttribute("href", "/resources/links");
   });
 
-  it("shows it on an employee's Home too", async () => {
+  it("tells an employee too", async () => {
     renderWithHub(<DashboardPage />, klasikEmployeeWithLinks);
-    const heading = await screen.findByRole("heading", { name: "Where the work lives" });
-    const card = heading.closest("section") as HTMLElement;
-    expect(await within(card).findByText(/Your admins add the programs the team works in/)).toBeInTheDocument();
+    expect(await screen.findByText(/Your admins add the programs the team works in/)).toBeInTheDocument();
   });
 
   it("is not there without the module", async () => {
     renderWithHub(<DashboardPage />, admin);
     expect(await screen.findByText("Closed sales")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Where the work lives" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No links yet/)).not.toBeInTheDocument();
   });
 });
 
