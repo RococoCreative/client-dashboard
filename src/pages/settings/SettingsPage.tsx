@@ -202,7 +202,9 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
     <>
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
       <Tabs items={settingsTabsFor(can)} label="Settings" />
-      {tab === "company" ? <CompanyTab key={current.id} company={current} /> : null}
+      {/* Mounted for anyone who can open the Company tab and hidden on the other tabs, so a half-typed
+          edit is still there when they come back. Someone without the capability never gets the panel. */}
+      {can("company_settings") ? <div hidden={tab !== "company"}><CompanyTab key={current.id} company={current} /></div> : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
       {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
       <div className="mt-6">

@@ -1,6 +1,6 @@
 // Settings, slimmed to the company itself: its values read as text until one Edit button opens the
 // form, a failed save stays in the form, and a card signposts where the rest of setup moved.
-import { screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -34,7 +34,9 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
-import { KINGDOM, makeHub } from "../test/fixtures.ts";
+import App from "../App.tsx";
+import { setMockCapabilities, resetMockCapabilities } from "../test/mocks/capabilities.ts";
+import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 
@@ -135,5 +137,37 @@ describe("Settings, set up elsewhere", () => {
   it("shows on every tab, so an admin without the Company tab still sees it", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin, at("connections"));
     expect(await screen.findByRole("heading", { name: "Set up elsewhere" })).toBeInTheDocument();
+  });
+});
+
+describe("Settings through the real router", () => {
+  function openApp(path: string, company: string) {
+    window.history.pushState({}, "", `${path}?persona=admin&company=${company}`);
+    render(<App />);
+  }
+
+  it("keeps a half-typed Company edit when the admin visits Connections and comes back", async () => {
+    const user = userEvent.setup();
+    openApp("/settings/company", KLASIK.company.slug);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.type(screen.getByLabelText("Name"), " Group");
+    const nav = screen.getByRole("navigation", { name: "Settings" });
+    await user.click(within(nav).getByRole("link", { name: "Connections" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/connections"));
+    expect(screen.getByLabelText("Name")).not.toBeVisible();
+    await user.click(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("link", { name: "Company" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/company"));
+    expect(screen.getByLabelText("Name")).toBeVisible();
+    expect(screen.getByLabelText("Name")).toHaveValue("Klasik Construction Group");
+  });
+
+  it("gives an admin without company_settings no Company panel in the document, hidden or not", async () => {
+    setMockCapabilities(KINGDOM.company.id, { company_settings: "owner" });
+    onTestFinished(() => resetMockCapabilities());
+    openApp("/settings/connections", KINGDOM.company.slug);
+    await screen.findByRole("heading", { name: "Connections" });
+    expect(document.getElementById("company-name")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit", hidden: true })).toBeNull();
+    expect(screen.queryByText("Hub identifier", { ignore: "none" })).toBeNull();
   });
 });
