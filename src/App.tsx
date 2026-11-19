@@ -128,11 +128,11 @@ function WithCompany({ children }: { children: ReactNode }) {
   return company ? <>{children}</> : <RedirectTo path="/rococo" />;
 }
 
-// Settings tabs follow the company's permissions and modules: a tab this person may not open sends them to the
+// Settings tabs follow the company's permissions: a tab this person may not open sends them to the
 // first one they may, and /settings itself lands there. A person with no tab at all goes Home.
 function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children: ReactNode }) {
-  const { can, company } = useHub();
-  const allowed = settingsTabsFor(can, company);
+  const { can } = useHub();
+  const allowed = settingsTabsFor(can);
   if (tab === null || !allowed.some((t) => t.key === tab)) return allowed.length > 0 ? <RedirectTo path={allowed[0].to} /> : <Navigate to="/" replace />;
   return <>{children}</>;
 }

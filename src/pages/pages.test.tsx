@@ -509,7 +509,8 @@ describe("library", () => {
 describe("admin", () => {
   it("shows company settings with the managed theme and domains", async () => {
     renderWithHub(<SettingsPage tab="company" />, admin);
-    expect(await screen.findByDisplayValue("Klasik Construction")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getAllByText("Klasik Construction").length).toBeGreaterThan(1);
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
 
@@ -521,6 +522,7 @@ describe("admin", () => {
       await updateCompany(companyId, { time_zone: "America/New_York" });
     });
     renderWithHub(<SettingsPage tab="company" />, admin);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
     const field = await screen.findByLabelText("Time zone");
     expect(field).toHaveValue("America/New_York");
     expect(screen.getByText("Used for due dates on repeating tasks.")).toBeInTheDocument();

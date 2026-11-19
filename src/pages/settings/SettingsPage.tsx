@@ -4,9 +4,10 @@
 //   Connections: the company's own connections to outside systems and, with the module, its data
 //     sources. Links to outside tools live in Resources > Links, which this tab points to.
 //   Activity: this company's own change log, for whoever the company lets read it.
-// Company and Activity show only to people the company's permissions allow.
+// Company and Activity show only to people the company's permissions allow. Below the tabs, a
+// signpost card lists where the rest of setup moved, so it shows whichever tab an admin lands on.
 // What shows is the company's data and modules (rule 12), never its name.
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
 import Field from "../../components/ui/Field.tsx";
@@ -17,6 +18,8 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import ConnectionsPanel from "../../components/settings/ConnectionsPanel.tsx";
 import DataSourcesPanel from "../../components/settings/DataSourcesPanel.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
+import { bodyClass, eyebrowLabelClass, secondaryClass } from "../../components/ui/type.ts";
+import MovedCard from "../../components/settings/MovedCard.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCompanyDomains, updateCompany } from "../../services/companies.ts";
@@ -41,8 +44,19 @@ const DESCRIPTIONS: Record<SettingsTab, string> = {
   activity: "Changes to roles, access and settings for this company.",
 };
 
+// A value as it reads before anyone edits it: its label, then the value.
+function Value({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className={eyebrowLabelClass}>{label}</dt>
+      <dd className={`mt-1 ${bodyClass} [overflow-wrap:anywhere]`}>{children}</dd>
+    </div>
+  );
+}
+
 function CompanyTab({ company }: { company: Company }) {
   const { refreshCompanies, isRococo } = useHub();
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(company.name);
   const [logoUrl, setLogoUrl] = useState(company.logo_url ?? "");
   const [timeZone, setTimeZone] = useState(company.time_zone);
@@ -52,6 +66,16 @@ function CompanyTab({ company }: { company: Company }) {
   const [error, setError] = useState("");
   const domains = useAsync(() => listCompanyDomains(company.id), [company.id]);
   const ownDomains = domains.data ?? [];
+
+  // Edit starts from what is saved. Cancel is the only way a draft is dropped, and it is a choice.
+  function startEditing() {
+    setName(company.name);
+    setLogoUrl(company.logo_url ?? "");
+    setTimeZone(company.time_zone);
+    setError("");
+    setSaved(false);
+    setEditing(true);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -66,7 +90,9 @@ function CompanyTab({ company }: { company: Company }) {
       await updateCompany(company.id, { name: name.trim(), logo_url: logoUrl.trim() || null, ...(zone !== company.time_zone ? { time_zone: zone } : {}) });
       await refreshCompanies();
       setSaved(true);
+      setEditing(false);
     } catch (err) {
+      // A failed save stays in the form with the draft intact, so it never reads as done.
       setError(errorMessage(err));
     } finally {
       setBusy(false);
@@ -77,27 +103,51 @@ function CompanyTab({ company }: { company: Company }) {
 
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-      <form onSubmit={handleSubmit} className="lg:col-span-2">
-        <Section eyebrow="Identity" title="Company" actions={<Button type="submit" size="sm" disabled={busy}>{busy ? "Saving..." : "Save"}</Button>}>
-          <div className="space-y-4">
-            <Field label="Name" htmlFor="company-name">
-              <input id="company-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Logo URL" htmlFor="company-logo" hint="A hosted PNG or SVG with a transparent background. Shown in the sidebar and on the sign-in screen.">
-              <input id="company-logo" type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://" className={inputClass} />
-            </Field>
-            {logoUrl.trim() ? <img src={logoUrl.trim()} alt="Logo preview" className="h-10 w-auto max-w-[220px] rounded bg-surface-2 p-1 object-contain" /> : null}
-            <Field label="Time zone" htmlFor="company-time-zone" hint="Used for due dates on repeating tasks.">
-              <input id="company-time-zone" type="text" list="company-time-zones" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="America/New_York" autoComplete="off" spellCheck={false} className={inputClass} />
-              <datalist id="company-time-zones">
-                {zones.map((zone) => <option key={zone} value={zone} />)}
-              </datalist>
-            </Field>
-            {error ? <Notice tone="error">{error}</Notice> : null}
-            {saved ? <Notice tone="success">Saved.</Notice> : null}
-          </div>
+      {editing ? (
+        <form onSubmit={handleSubmit} className="lg:col-span-2">
+          <Section
+            eyebrow="Identity"
+            title="Company"
+            actions={
+              <>
+                <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => { setEditing(false); setError(""); }}>Cancel</Button>
+                <Button type="submit" size="sm" disabled={busy}>{busy ? "Saving..." : "Save"}</Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <Field label="Name" htmlFor="company-name">
+                <input id="company-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Logo URL" htmlFor="company-logo" hint="A hosted PNG or SVG with a transparent background. Shown in the sidebar and on the sign-in screen.">
+                <input id="company-logo" type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://" className={inputClass} />
+              </Field>
+              {logoUrl.trim() ? <img src={logoUrl.trim()} alt="Logo preview" className="h-10 w-auto max-w-[220px] rounded bg-surface-2 p-1 object-contain" /> : null}
+              <Field label="Time zone" htmlFor="company-time-zone" hint="Used for due dates on repeating tasks.">
+                <input id="company-time-zone" type="text" list="company-time-zones" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="America/New_York" autoComplete="off" spellCheck={false} className={inputClass} />
+                <datalist id="company-time-zones">
+                  {zones.map((zone) => <option key={zone} value={zone} />)}
+                </datalist>
+              </Field>
+              {error ? <Notice tone="error">{error}</Notice> : null}
+            </div>
+          </Section>
+        </form>
+      ) : (
+        <Section eyebrow="Identity" title="Company" actions={<Button type="button" variant="secondary" size="sm" onClick={startEditing}>Edit</Button>} className="lg:col-span-2">
+          <dl className="space-y-4">
+            <Value label="Name">{company.name}</Value>
+            <Value label="Logo">
+              {company.logo_url ? <img src={company.logo_url} alt={`${company.name} logo`} className="h-10 w-auto max-w-[220px] rounded bg-surface-2 p-1 object-contain" /> : <span className="text-ink-3">No logo yet.</span>}
+            </Value>
+            <Value label="Time zone">
+              {company.time_zone}
+              <span className={`block ${secondaryClass}`}>Used for due dates on repeating tasks.</span>
+            </Value>
+          </dl>
+          {saved ? <div className="mt-4"><Notice tone="success">Saved.</Notice></div> : null}
         </Section>
-      </form>
+      )}
       <Section eyebrow="Managed by Rococo" title="Theme and sign-in">
         <dl className="space-y-3 text-sm">
           <div>
@@ -119,9 +169,6 @@ function CompanyTab({ company }: { company: Company }) {
         </dl>
         {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
       </Section>
-      <p className="text-[13px] text-ink-2 lg:col-span-3">
-        Job roles and divisions are under People: <Link to="/people/roles" className="text-link hover:underline">Roles</Link> and <Link to="/people/divisions" className="text-link hover:underline">Divisions</Link>. Review setup is under <Link to="/reviews/setup" className="text-link hover:underline">Reviews, Setup</Link>.{hasModule(company, "production") ? <> Standard milestones are under <Link to="/production/setup" className="text-link hover:underline">Projects, Setup</Link>.</> : null}
-      </p>
     </div>
   );
 }
@@ -154,10 +201,13 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
   return (
     <>
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
-      <Tabs items={settingsTabsFor(can, current)} label="Settings" />
-      {tab === "company" ? <CompanyTab company={current} /> : null}
+      <Tabs items={settingsTabsFor(can)} label="Settings" />
+      {tab === "company" ? <CompanyTab key={current.id} company={current} /> : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
       {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
+      <div className="mt-6">
+        <MovedCard company={current} />
+      </div>
     </>
   );
 }

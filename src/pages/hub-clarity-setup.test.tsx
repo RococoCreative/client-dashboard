@@ -197,7 +197,7 @@ describe("Settings without a Reviews tab", () => {
     renderWithHub(<SettingsPage tab="company" />, admin, { path: "/settings/company", pattern: "/settings/company" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
     expect(within(nav).queryByRole("link", { name: "Reviews" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Reviews, Setup" })).toHaveAttribute("href", "/reviews/setup");
+    expect(await screen.findByRole("link", { name: "Pillars, weights and deliverable categories" })).toHaveAttribute("href", "/reviews/setup");
     expect(screen.queryByRole("heading", { name: "Pillars and weights" })).not.toBeInTheDocument();
   });
 });
@@ -244,17 +244,17 @@ describe("Projects tabs", () => {
 });
 
 describe("Settings without a Production tab", () => {
-  it("lists no Production tab, and points a company with the module to Projects, Setup", async () => {
+  it("lists no Production tab, and points a company with the module to Standard milestones", async () => {
     renderWithHub(<SettingsPage tab="company" />, makeHub("admin", KINGDOM.company), { path: "/settings/company", pattern: "/settings/company" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
     expect(within(nav).queryByRole("link", { name: "Production" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Projects, Setup" })).toHaveAttribute("href", "/production/setup");
+    expect(await screen.findByRole("link", { name: "Standard milestones" })).toHaveAttribute("href", "/production/setup");
   });
 
-  it("does not point a company without the module to Projects, Setup", async () => {
+  it("does not point a company without the module to Standard milestones", async () => {
     renderWithHub(<SettingsPage tab="company" />, admin, { path: "/settings/company", pattern: "/settings/company" });
     await screen.findByRole("navigation", { name: "Settings" });
-    expect(screen.queryByRole("link", { name: "Projects, Setup" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Standard milestones" })).not.toBeInTheDocument();
   });
 });
 

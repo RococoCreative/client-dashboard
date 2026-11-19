@@ -143,7 +143,8 @@ describe("Settings hub", () => {
   it("keeps the company's name, logo, theme and sign-in domains on Company", async () => {
     renderWithHub(<SettingsPage tab="company" />, admin, { path: "/settings/company", pattern: "/settings/company" });
     expect(tabsOf("Settings").current).toEqual(["Company"]);
-    expect(await screen.findByDisplayValue("Klasik Construction")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getAllByText("Klasik Construction").length).toBeGreaterThan(1);
     expect(screen.getByRole("heading", { name: "Theme and sign-in" })).toBeInTheDocument();
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Job roles" })).not.toBeInTheDocument();

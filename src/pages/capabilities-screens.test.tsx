@@ -136,7 +136,7 @@ describe("an admin without company_settings", () => {
     const nav = await screen.findByRole("navigation", { name: "Settings" });
     expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Connections"]);
     expect(within(nav).queryByRole("link", { name: "Company" })).toBeNull();
-    expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["connections"]);
+    expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["connections"]);
   });
 
   it("lands on Connections from /settings", async () => {
@@ -155,8 +155,8 @@ describe("an admin without company_settings", () => {
 
 it("lists three tabs in all, an admin by default gets two with Company first, and Rococo stepped in gets all three", () => {
   expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "connections", "activity"]);
-  expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["company", "connections"]);
-  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can, KINGDOM.company).map((t) => t.key)).toEqual(["company", "connections", "activity"]);
+  expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["company", "connections"]);
+  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can).map((t) => t.key)).toEqual(["company", "connections", "activity"]);
 });
 
 describe("the company Activity tab", () => {
