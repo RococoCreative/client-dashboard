@@ -43,6 +43,7 @@ import { deleteCompanyGoal, updateCompanyGoal, updatePillar } from "../services/
 import { deleteJobRole } from "../services/jobRoles.ts";
 import { makeHub } from "../test/fixtures.ts";
 import GoalsPage from "./gsr/GoalsPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import RolesPage from "./people/RolesPage.tsx";
 
@@ -135,8 +136,11 @@ describe("deleting a job role", () => {
 describe("pillar weights", () => {
   it("clears the weight message once the box is back in use, holding the stored weight", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="reviews" />, admin);
-    const section = (await screen.findByDisplayValue("Deliverables")).closest("section") as HTMLElement;
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+    // The pillar opens, then its weight through its pencil: setup fields read as text first.
+    await user.click(await screen.findByRole("button", { name: /^\d+\s*Deliverables/ }));
+    const section = screen.getByRole("region", { name: /^\d+\s*Deliverables/ });
+    await user.click(within(section).getByRole("button", { name: "Edit weight" }));
     const weight = within(section).getByLabelText("Weight %");
     vi.mocked(updatePillar).mockClear();
 

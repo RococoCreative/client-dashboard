@@ -44,6 +44,7 @@ import GoalsPage from "./gsr/GoalsPage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import ResourcesPage from "./resources/ResourcesPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import { GOALS_TABS } from "./gsr/goalsTabs.ts";
 import { SETTINGS_TABS } from "./settings/settingsTabs.ts";
@@ -139,10 +140,9 @@ describe("Goals hub", () => {
 });
 
 describe("Settings hub", () => {
-  it("has a route per tab, in the order Company, Reviews, Production, Connections, Activity", () => {
+  it("has a route per tab, in the order Company, Production, Connections, Activity", () => {
     expect(SETTINGS_TABS.map((t) => [t.label, t.to])).toEqual([
       ["Company", "/settings/company"],
-      ["Reviews", "/settings/reviews"],
       ["Production", "/settings/production"],
       ["Connections", "/settings/connections"],
       ["Activity", "/settings/activity"],
@@ -169,9 +169,9 @@ describe("Settings hub", () => {
     expect(screen.queryByRole("heading", { name: "Pillars and weights" })).not.toBeInTheDocument();
   });
 
-  it("keeps pillars, the Monthly GSRs rule and deliverable categories on Reviews", async () => {
-    renderWithHub(<SettingsPage tab="reviews" />, admin, { path: "/settings/reviews", pattern: "/settings/reviews" });
-    expect(tabsOf("Settings").current).toEqual(["Reviews"]);
+  it("keeps pillars, the Monthly GSRs rule and deliverable categories on Reviews, Setup", async () => {
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+    expect(tabsOf("Reviews").current).toEqual(["Setup"]);
     expect(await screen.findByRole("heading", { name: "Pillars and weights" })).toBeInTheDocument();
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Deliverable categories" })).toBeInTheDocument();
@@ -256,16 +256,16 @@ describe("Where the work lives on Home", () => {
 });
 
 describe("header links from Monthly GSRs and Reviews", () => {
-  it("links Monthly GSRs to Goals > Monthly focus and Settings > Reviews", async () => {
+  it("links Monthly GSRs to Goals > Monthly focus and Reviews > Setup", async () => {
     renderWithHub(<CyclesPage section="gsr" />, admin);
     expect(await screen.findByRole("link", { name: /Focus topics/ })).toHaveAttribute("href", "/goals/focus");
-    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/settings/reviews");
+    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/reviews/setup");
   });
 
-  it("links Reviews to Goals > Company and Settings > Reviews", async () => {
+  it("links Reviews to Goals > Company and its own Setup tab", async () => {
     renderWithHub(<CyclesPage section="reviews" />, admin);
     expect(await screen.findByRole("link", { name: /Company goals/ })).toHaveAttribute("href", "/goals/company");
-    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/settings/reviews");
+    expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("href", "/reviews/setup");
   });
 });
 

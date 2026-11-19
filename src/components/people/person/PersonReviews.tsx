@@ -105,7 +105,7 @@ export default function PersonReviews({
                   </div>
                   {own.length === 0 ? (
                     <p className="mt-2 text-[12.5px] text-ink-3">
-                      No criteria yet. Admins add them per pillar in <Link to="/settings/reviews" className="text-link hover:underline">Settings, Reviews</Link>.
+                      No criteria yet. Admins add them per pillar in <Link to="/reviews/setup" className="text-link hover:underline">Reviews, Setup</Link>.
                     </p>
                   ) : (
                     <ul className="divide-y divide-line">

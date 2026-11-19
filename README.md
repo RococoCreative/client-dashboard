@@ -367,7 +367,7 @@ name. A starter
 becomes a real category row the first moment a heading is filed under it, so nothing is created
 speculatively and a company can still name its categories anything. Every heading carries the
 same pulldown, which is how one is refiled and the only way out of Uncategorized. An admin
-corrects the categories themselves in Settings > Reviews, Deliverable categories: rename, reorder, retire
+corrects the categories themselves in Reviews > Setup, Deliverable categories: rename, reorder, retire
 (no longer offered for new headings; the ones already filed keep it) or delete (its headings
 move to Uncategorized and keep their tasks and ratings).
 
@@ -444,14 +444,15 @@ Three pages are hubs with a route per tab, so a link can land on the right one:
   the year and their BHAG.
 - **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme, time zone and
   sign-in domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
-  divisions; `/settings/reviews` pillars and weights, criteria, the Monthly GSRs rule and
-  deliverable categories; `/settings/connections` connections and data sources.
+  divisions; `/settings/connections` connections and data sources. Review setup (pillars and
+  weights, criteria, the Monthly GSRs rule and deliverable categories) lives under Reviews, at
+  `/reviews/setup`.
   `/settings/connections/:companyId` is the OAuth return path, which lands on the Connections tab
   with the outcome.
 - **Resources** (`/resources`, lands on SOPs): `/resources/sops`, `/resources/files`,
   `/resources/links`. An SOP keeps its own address at `/sops/:id`.
 
-Old addresses redirect: `/reviews/settings` and `/gsr/settings` to `/settings/reviews`;
+Old addresses redirect: `/settings/reviews`, `/reviews/settings` and `/gsr/settings` to `/reviews/setup`;
 `/reviews/company-goals` and `/gsr/company-goals` to `/goals/company`; `/settings` to
 `/settings/company`; `/sops` and `/resources` to `/resources/sops`.
 
@@ -459,8 +460,8 @@ Monthly GSRs (`/gsr`) are the monthly Goal Setting Reviews: last month at a glan
 goals with their action steps and notes, the focus topic, and no pillar scores; where the company
 has a Monthly GSRs pillar, the month's score shows as it builds and an admin locks it in. Reviews
 (`/reviews`) are the quarterly, annual and custom cycles: the scored review with the employee
-snapshot, deliverables, yearly goals and feedback. Both page headers link to Goals and to
-Settings > Reviews. Employees see their own as My GSR, My Reviews and My Goals.
+snapshot, deliverables, yearly goals and feedback. Reviews has two tabs, Cycles and Setup; both
+page headers link to Goals, and Monthly GSRs links to review settings (Reviews > Setup). Employees see their own as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 

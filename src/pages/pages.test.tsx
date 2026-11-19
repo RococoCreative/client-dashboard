@@ -49,6 +49,7 @@ import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/
 import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
@@ -193,7 +194,7 @@ describe("GSR", () => {
     renderWithHub(<CyclesPage section="reviews" />, admin);
     expect(await screen.findByText(overlappingCycle.name)).toBeInTheDocument();
     expect(screen.queryByText(currentCycle.name)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/settings/reviews");
+    expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("href", "/reviews/setup");
     expect(screen.getByRole("link", { name: /Company goals/ })).toHaveAttribute("href", "/goals/company");
   });
 
@@ -353,11 +354,13 @@ describe("GSR", () => {
     await waitFor(() => expect(screen.getByLabelText("Category")).not.toHaveValue(`new:${starter}`));
   });
 
-  it("shows pillars, weights, and criteria in settings", async () => {
-    renderWithHub(<SettingsPage tab="reviews" />, admin);
+  it("shows pillars, weights, and criteria in review setup", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Deliverables")).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Curiosity")).toBeInTheDocument();
+    expect(await screen.findByText("Deliverables")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Character & Values/ }));
+    expect(await screen.findByText("Curiosity")).toBeInTheDocument();
   });
 
   it("lists company goals for the year", async () => {
@@ -1200,8 +1203,12 @@ describe("monthly GSRs, scored", () => {
   });
 
   it("offers the mandatory count in settings and says how the pillar scores", async () => {
-    renderWithHub(<SettingsPage tab="reviews" />, admin);
-    expect(await screen.findByLabelText("Mandatory a month")).toHaveValue("2");
+    const user = userEvent.setup();
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+    await user.click(await screen.findByRole("button", { name: /Monthly GSRs/ }));
+    expect(screen.getByText("Mandatory a month")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit mandatory GSRs a month" }));
+    expect(screen.getByLabelText("Mandatory a month")).toHaveValue("2");
     expect(screen.getByText(/Scored from the Goal Setting Reviews inside each review's period/)).toBeInTheDocument();
   });
 

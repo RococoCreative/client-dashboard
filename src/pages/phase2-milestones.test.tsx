@@ -187,7 +187,7 @@ describe("standard milestones in Settings", () => {
   it("Settings shows a Production tab only when the company has the production module", async () => {
     const view = renderWithHub(<SettingsPage tab="company" />, kingdomAdmin, { path: "/settings/company", pattern: "/settings/company" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Company", "Reviews", "Production", "Connections"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Company", "Production", "Connections"]);
     view.unmount();
 
     const klasik = renderWithHub(<SettingsPage tab="company" />, makeHub("admin", KLASIK.company), { path: "/settings/company", pattern: "/settings/company" });

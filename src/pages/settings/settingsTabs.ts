@@ -1,4 +1,4 @@
-// Settings' tabs, each its own route so a link can land on one: the company itself, how it reviews people, the standard milestones its projects start with, its
+// Settings' tabs, each its own route so a link can land on one: the company itself, the standard milestones its projects start with, its
 // connections to outside systems, and the company's own change log. Company and Activity follow
 // the company's permissions and Production its modules (settingsTabsFor); the rest are always
 // there for an admin. Kept out of the page file so it exports only its component, which Fast Refresh relies on.
@@ -6,11 +6,10 @@ import type { TabItem } from "../../components/ui/Tabs.tsx";
 import { hasModule, type ModuleKey } from "../../lib/modules.ts";
 import type { CapabilityKey, Company } from "../../types/database.ts";
 
-export type SettingsTab = "company" | "reviews" | "production" | "connections" | "activity";
+export type SettingsTab = "company" | "production" | "connections" | "activity";
 
 export const SETTINGS_TABS: Array<TabItem & { key: SettingsTab }> = [
   { key: "company", to: "/settings/company", label: "Company" },
-  { key: "reviews", to: "/settings/reviews", label: "Reviews" },
   { key: "production", to: "/settings/production", label: "Production" },
   { key: "connections", to: "/settings/connections", label: "Connections" },
   { key: "activity", to: "/settings/activity", label: "Activity" },

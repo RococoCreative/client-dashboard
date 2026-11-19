@@ -45,6 +45,7 @@ import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
+import ReviewsSetupPage from "./pages/gsr/ReviewsSetupPage.tsx";
 import SettingsPage from "./pages/settings/SettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
@@ -470,6 +471,7 @@ function SignedIn({ session }: { session: Session }) {
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
             <Route path="gsr" element={<WithCompany>{isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />}</WithCompany>} />
             <Route path="reviews" element={<WithCompany>{isAdmin ? <CyclesPage section="reviews" /> : <RedirectTo path="/my/reviews" />}</WithCompany>} />
+            <Route path="reviews/setup" element={<AdminOnly><ReviewsSetupPage /></AdminOnly>} />
             {/* Goals: one page, a route per tab, landing on Company. Employees keep My Goals. */}
             <Route path="goals" element={<WithCompany>{isAdmin ? <RedirectTo path="/goals/company" /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
             {GOALS_TABS.map((t) => (
@@ -481,8 +483,9 @@ function SignedIn({ session }: { session: Session }) {
             {/* Where these used to live. Old bookmarks and links land on the tab that holds them now. */}
             <Route path="settings/roles" element={<RedirectTo path="/people/roles" />} />
             <Route path="goals/roles" element={<RedirectTo path="/people/roles" />} />
-            <Route path="reviews/settings" element={<RedirectTo path="/settings/reviews" />} />
-            <Route path="gsr/settings" element={<RedirectTo path="/settings/reviews" />} />
+            <Route path="reviews/settings" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="gsr/settings" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="settings/reviews" element={<RedirectTo path="/reviews/setup" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />

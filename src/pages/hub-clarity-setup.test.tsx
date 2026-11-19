@@ -1,0 +1,207 @@
+// Reviews, Setup: the tab row on Reviews (Cycles, Setup), pillars as a short list with one open at a
+// time, setup fields that read as text until their pencil, criteria as read-first rows with one Add
+// form, the pillar actions at the foot of the open pillar, Settings without a Reviews tab, and the
+// three old addresses landing on Setup through the real router.
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
+vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
+vi.mock("../services/profiles.ts", () => import("../test/mocks/profiles.ts"));
+vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
+vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
+vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
+vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
+vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
+vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
+vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
+vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
+vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
+vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
+vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
+vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
+vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
+vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
+vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
+vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
+vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
+vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
+vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
+vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
+vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
+
+import App from "../App.tsx";
+import { KLASIK, makeHub } from "../test/fixtures.ts";
+import { renderWithHub } from "../test/renderWithHub.tsx";
+import CyclesPage from "./gsr/CyclesPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
+
+const admin = makeHub("admin");
+
+function openSetup() {
+  return renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+}
+
+// The row that opens a pillar, found by the pillar's name.
+const panelOf = (name: string) => screen.getByRole("region", { name: new RegExp(`^\\d+\\s*${name}`) });
+const rowOf = (name: string) => screen.getByRole("button", { name: new RegExp(`^\\d+\\s*${name}`) });
+
+describe("Reviews tabs", () => {
+  it("shows Cycles and Setup on Reviews, Cycles current", async () => {
+    renderWithHub(<CyclesPage section="reviews" />, admin, { path: "/reviews", pattern: "/reviews" });
+    const nav = await screen.findByRole("navigation", { name: "Reviews" });
+    expect(within(nav).getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
+      ["Cycles", "/reviews"],
+      ["Setup", "/reviews/setup"],
+    ]);
+    expect(within(nav).getByRole("link", { name: "Cycles" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("adds no tab row to Monthly GSRs and points its settings link at Setup", async () => {
+    renderWithHub(<CyclesPage section="gsr" />, admin, { path: "/gsr", pattern: "/gsr" });
+    expect(await screen.findByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/reviews/setup");
+    expect(screen.queryByRole("navigation", { name: "Reviews" })).not.toBeInTheDocument();
+  });
+
+  it("marks Setup current on the setup page", async () => {
+    openSetup();
+    const nav = await screen.findByRole("navigation", { name: "Reviews" });
+    expect(within(nav).getByRole("link", { name: "Setup" })).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("pillars on Setup", () => {
+  it("lists every pillar closed, with its number, name, scoring type and weight", async () => {
+    openSetup();
+    expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
+    const deliverables = rowOf("Deliverables");
+    expect(deliverables).toHaveTextContent("1");
+    expect(deliverables).toHaveTextContent("Target vs actual");
+    expect(deliverables).toHaveTextContent("50%");
+    expect(rowOf("Brand Impact")).toHaveTextContent("Rated criteria");
+    expect(rowOf("Brand Impact")).toHaveTextContent("25%");
+    expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(3);
+    // Nothing is open, so no field or criterion shows.
+    expect(screen.queryByLabelText("Weight %")).not.toBeInTheDocument();
+    expect(screen.queryByText("Curiosity")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete pillar" })).not.toBeInTheDocument();
+  });
+
+  it("opens one pillar to show its criteria, and opening another closes it", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Character & Values"));
+    expect(rowOf("Character & Values")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Curiosity")).toBeInTheDocument();
+    expect(screen.queryByText("DNA")).not.toBeInTheDocument();
+
+    await user.click(rowOf("Brand Impact"));
+    expect(screen.getByText("DNA")).toBeInTheDocument();
+    expect(screen.queryByText("Curiosity")).not.toBeInTheDocument();
+    expect(rowOf("Character & Values")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("button", { expanded: true })).toHaveLength(1);
+
+    // The open row closes again from its own header.
+    await user.click(rowOf("Brand Impact"));
+    expect(screen.queryByText("DNA")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { expanded: true })).not.toBeInTheDocument();
+  });
+
+  it("reads a weight as text until its pencil, then saves it and moves the total", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Deliverables"));
+    expect(screen.queryByLabelText("Weight %")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit weight" }));
+    const weight = screen.getByLabelText("Weight %");
+    expect(weight).toHaveValue(50);
+    await user.clear(weight);
+    await user.type(weight, "40");
+    await user.tab();
+    expect(await screen.findByText("Weights total 90%")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByLabelText("Weight %")).not.toBeInTheDocument();
+    expect(rowOf("Deliverables")).toHaveTextContent("40%");
+
+    // The mocks keep what is saved for the rest of the file, so put the weight back.
+    await user.click(screen.getByRole("button", { name: "Edit weight" }));
+    const again = screen.getByLabelText("Weight %");
+    await user.clear(again);
+    await user.type(again, "50");
+    await user.tab();
+    expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
+  });
+
+  it("keeps the Move and Delete actions at the foot of the open pillar, in words", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Deliverables"));
+    const open = panelOf("Deliverables");
+    expect(within(open).getByRole("button", { name: "Move up" })).toBeDisabled();
+    expect(within(open).getByRole("button", { name: "Move down" })).toBeEnabled();
+    expect(within(open).getByRole("button", { name: "Delete pillar" })).toHaveTextContent("Delete pillar");
+    await user.click(within(open).getByRole("button", { name: "Move down" }));
+    // The pillar moved to second place and stays open.
+    await waitFor(() => expect(rowOf("Deliverables")).toHaveTextContent(/^2/));
+    expect(rowOf("Deliverables")).toHaveAttribute("aria-expanded", "true");
+    // And back, so the order the mocks hold is the one the other tests expect.
+    await user.click(within(panelOf("Deliverables")).getByRole("button", { name: "Move up" }));
+    await waitFor(() => expect(rowOf("Deliverables")).toHaveTextContent(/^1/));
+  });
+
+  it("reads criteria as text, with one Add criterion form behind its button", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Character & Values"));
+    expect(screen.queryByLabelText("Criterion name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("New criterion for Character & Values")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add criterion" }));
+    await user.type(screen.getByLabelText("New criterion for Character & Values"), "Punctuality");
+    await user.click(screen.getByRole("button", { name: "Add criterion" }));
+    expect(await screen.findByText("Punctuality")).toBeInTheDocument();
+    expect(screen.queryByLabelText("New criterion for Character & Values")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit criterion Curiosity" }));
+    const name = screen.getByLabelText("Criterion name");
+    await user.clear(name);
+    await user.type(name, "Curiosity and drive");
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("Curiosity and drive")).toBeInTheDocument();
+  });
+
+  it("holds the deliverable categories on the same page", async () => {
+    openSetup();
+    expect(await screen.findByRole("heading", { name: "Deliverable categories" })).toBeInTheDocument();
+  });
+});
+
+describe("Settings without a Reviews tab", () => {
+  it("lists no Reviews tab, and points to Reviews, Setup", async () => {
+    renderWithHub(<SettingsPage tab="company" />, admin, { path: "/settings/company", pattern: "/settings/company" });
+    const nav = await screen.findByRole("navigation", { name: "Settings" });
+    expect(within(nav).queryByRole("link", { name: "Reviews" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Reviews, Setup" })).toHaveAttribute("href", "/reviews/setup");
+    expect(screen.queryByRole("heading", { name: "Pillars and weights" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the old addresses", () => {
+  beforeEach(() => window.history.pushState({}, "", "/"));
+
+  it.each(["/settings/reviews", "/reviews/settings", "/gsr/settings"])("sends %s to Reviews, Setup", async (address) => {
+    window.history.pushState({}, "", `${address}?persona=admin&company=${KLASIK.company.slug}`);
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/reviews/setup"));
+    expect(await screen.findByRole("heading", { name: "Pillars and weights" })).toBeInTheDocument();
+  });
+});
