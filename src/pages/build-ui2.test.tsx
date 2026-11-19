@@ -282,13 +282,37 @@ describe("Scorecards report", () => {
     expect(within(unscored).getByRole("link", { name: "Alex Morgan" })).toBeInTheDocument();
   });
 
-  it("filters by role and moves to another month", async () => {
+  it("offers only roles that have people, and shows just the chosen role's block", async () => {
     const user = userEvent.setup();
     renderWithHub(<ScorecardsPage />, rbaAdmin);
-    const roles = await screen.findByRole("group", { name: "Job role" });
-    await user.click(within(roles).getByRole("button", { name: "Site Superintendent" }));
+    const select = await screen.findByLabelText("Job role");
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options[0]).toBe("All roles");
+    expect(options).toContain("Site Superintendent");
+    // Jamie's role has no metrics, so it has no block and is not offered.
+    expect(options).not.toContain("Site Supervisor");
+    expect(screen.getByRole("heading", { name: "Site Superintendent" })).toBeInTheDocument();
+    await user.selectOptions(select, "Site Superintendent");
     expect(screen.queryByRole("link", { name: "Noor Haddad" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Avery Cole" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).filter((h) => options.includes(h.textContent))).toHaveLength(1);
+    await user.selectOptions(select, "All roles");
+    expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
+  });
+
+  it("reads People in the page label and gives each role block its own column headings", async () => {
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    expect(await screen.findByText("People", { selector: "p.eyebrow" })).toBeInTheDocument();
+    const block = screen.getByRole("heading", { name: "Site Superintendent" }).closest("table") as HTMLElement;
+    expect(within(block).getByRole("columnheader", { name: /Daily logs/ })).toBeInTheDocument();
+    const pm = screen.getByRole("heading", { name: "Project Manager" }).closest("table") as HTMLElement;
+    expect(within(pm).queryByRole("columnheader", { name: /Daily logs/ })).not.toBeInTheDocument();
+  });
+
+  it("moves to another month", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
     await user.selectOptions(screen.getByLabelText("Month"), "2026-08-01");
     expect(await screen.findByLabelText("Avery Cole, Optimization rate, August 2026: 88%, missed; year to date 90.3%, hit")).toBeInTheDocument();
   });
