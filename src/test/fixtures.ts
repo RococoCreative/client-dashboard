@@ -10,6 +10,7 @@ import { MODULE_KEYS } from "../lib/modules.ts";
 import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
 import { meets } from "../lib/capabilities.ts";
 import { mockCapabilityMap } from "./mocks/capabilities.ts";
+import { applyDenseLoad } from "./denseLoad.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -1439,6 +1440,13 @@ function build(company: Company): CompanyBundle {
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
+
+// A heavier RBA roster for visual checks (npm run demo, with ?load=dense in the address). Tests
+// never set it, and the window guard keeps this safe where there is no window.
+if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("load") === "dense") {
+  const rba = BUNDLES.find((b) => b.company.slug === "rba");
+  if (rba) applyDenseLoad(rba);
+}
 
 const ROCOCO: Profile = {
   id: "rococo-user-1",

@@ -134,7 +134,7 @@ export default function ProductionPage() {
                   return (
                     <tr key={project.id} className="hover:bg-surface-2/60">
                       <td className={tdClass}>
-                        <Link to={`/production/projects/${project.id}`} className="font-medium text-ink hover:text-accent">{project.name}</Link>
+                        <Link to={`/production/projects/${project.id}`} className="font-medium text-ink hover:text-link">{project.name}</Link>
                       </td>
                       <td className={`${tdClass} hidden text-ink-2 sm:table-cell`}>{project.reference ?? "-"}</td>
                       <td className={`${tdClass} whitespace-nowrap text-ink-2`}>{`${done} of ${total} done`}</td>

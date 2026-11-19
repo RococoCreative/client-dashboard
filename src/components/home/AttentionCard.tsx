@@ -55,7 +55,7 @@ export default function AttentionCard({ company }: { company: Company }) {
                 <p className="text-sm font-medium text-ink">{item.title}</p>
                 <p className="mt-0.5 text-[13px] leading-relaxed text-ink-2">{item.detail}</p>
               </div>
-              <Link to={item.to} aria-label={`Open: ${item.title}`} className="mt-0.5 shrink-0 text-[13px] font-medium text-accent hover:underline">
+              <Link to={item.to} aria-label={`Open: ${item.title}`} className="mt-0.5 shrink-0 text-[13px] font-medium text-link hover:underline">
                 Open
               </Link>
             </li>

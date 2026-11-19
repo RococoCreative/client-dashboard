@@ -53,7 +53,7 @@ export default function EmployeeSnapshot({
       eyebrow="Employee"
       title={employee.title ?? "Profile"}
       description={employee.email}
-      actions={canOpenProfile ? <Link to={`/people/${employee.id}`} className="text-[13px] text-accent hover:underline">Full profile</Link> : undefined}
+      actions={canOpenProfile ? <Link to={`/people/${employee.id}`} className="text-[13px] text-link hover:underline">Full profile</Link> : undefined}
     >
       <div className="grid gap-6 md:grid-cols-3">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-1">

@@ -632,7 +632,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               </span>
             ) : null}
             {isAdmin && !embedded ? (
-              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Everyone in {cycle.name}</Link>
+              <Link to={cyclePath(cycle)} className="text-link hover:underline">Everyone in {cycle.name}</Link>
             ) : null}
           </span>
         }
@@ -837,7 +837,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                       </p>
                     </div>
                     {gsr ? (
-                      <Link to={reviewPath(gsr.id, month.cadence)} className="text-[13px] text-accent hover:underline">Open month</Link>
+                      <Link to={reviewPath(gsr.id, month.cadence)} className="text-[13px] text-link hover:underline">Open month</Link>
                     ) : (
                       <span className="text-[12px] text-ink-3">Not started</span>
                     )}
@@ -888,7 +888,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                             : isAdmin && employee ? (
                               <>
                                 Current ratings from{" "}
-                                <Link to={`/people/${employee.id}`} className="text-accent hover:underline">{displayName(employee)}'s profile</Link>
+                                <Link to={`/people/${employee.id}`} className="text-link hover:underline">{displayName(employee)}'s profile</Link>
                                 , where they are set and trued up. Signing off freezes them into this review.
                               </>
                             ) : (

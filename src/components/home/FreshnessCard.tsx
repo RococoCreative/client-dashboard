@@ -38,7 +38,7 @@ export default function FreshnessCard({ companyId, companyTimeZone, canViewProdu
         <div className="p-5"><SkeletonRows rows={3} /></div>
       ) : state.data.length === 0 ? (
         <p className="px-5 py-4 text-sm text-ink-2">
-          No data sources yet. Add one in <Link to="/settings/connections" className="text-accent hover:underline">Settings</Link>.
+          No data sources yet. Add one in <Link to="/settings/connections" className="text-link hover:underline">Settings</Link>.
         </p>
       ) : (
         <ul className="divide-y divide-line">
@@ -49,7 +49,7 @@ export default function FreshnessCard({ companyId, companyTimeZone, canViewProdu
                   {source.target_module === "pm_capacity" && !canViewProduction ? (
                     <span className="text-sm font-medium text-ink">{source.name}</span>
                   ) : (
-                    <Link to={MODULE_PATHS[source.target_module]} className="text-sm font-medium text-ink hover:text-accent">{source.name}</Link>
+                    <Link to={MODULE_PATHS[source.target_module]} className="text-sm font-medium text-ink hover:text-link">{source.name}</Link>
                   )}
                   <p className="text-[12px] text-ink-3">{TARGET_MODULE_LABELS[source.target_module]}</p>
                 </div>

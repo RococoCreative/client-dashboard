@@ -313,7 +313,7 @@ function ThisMonthGsr({
           {cycle.name}
           <Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge>
         </span>
-        <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] font-medium text-accent hover:underline">Open {cycle.name} GSR</Link>
+        <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] font-medium text-link hover:underline">Open {cycle.name} GSR</Link>
       </div>
     );
   } else if (omittedCycleIds.includes(cycle.id)) {
@@ -690,7 +690,7 @@ export default function PersonPage() {
                   </select>
                   {jobRoles.length === 0 ? (
                     <p className="mt-1 text-[12px] text-ink-3">
-                      No job roles yet. Admins add them in <Link to="/settings/roles" className="text-accent hover:underline">Settings, Roles</Link>.
+                      No job roles yet. Admins add them in <Link to="/settings/roles" className="text-link hover:underline">Settings, Roles</Link>.
                     </p>
                   ) : null}
                   {roleRetired && jobRole ? (
@@ -824,7 +824,7 @@ export default function PersonPage() {
                       </div>
                       {own.length === 0 ? (
                         <p className="mt-2 text-[12.5px] text-ink-3">
-                          No criteria yet. Admins add them per pillar in <Link to="/settings/reviews" className="text-accent hover:underline">Settings, Reviews</Link>.
+                          No criteria yet. Admins add them per pillar in <Link to="/settings/reviews" className="text-link hover:underline">Settings, Reviews</Link>.
                         </p>
                       ) : (
                         <ul className="divide-y divide-line">
@@ -883,12 +883,12 @@ export default function PersonPage() {
             eyebrow="Reviews"
             title="Review history"
             padded={false}
-            actions={isAdmin ? <Link to="/reviews" className="text-[13px] text-accent hover:underline">Review cycles</Link> : undefined}
+            actions={isAdmin ? <Link to="/reviews" className="text-[13px] text-link hover:underline">Review cycles</Link> : undefined}
           >
             {rows.length === 0 ? (
               isAdmin ? (
                 <p className="p-5 text-sm text-ink-2">
-                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-accent hover:underline">Reviews</Link> or <Link to="/gsr" className="text-accent hover:underline">Monthly GSRs</Link>, and everyone on the roster gets one.
+                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-link hover:underline">Reviews</Link> or <Link to="/gsr" className="text-link hover:underline">Monthly GSRs</Link>, and everyone on the roster gets one.
                 </p>
               ) : (
                 <p className="p-5 text-sm text-ink-2">No reviews yet. They show here once an admin opens a cycle.</p>
@@ -912,7 +912,7 @@ export default function PersonPage() {
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                         <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
+                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-[13px] text-link hover:underline">Open</Link></td>
                       </tr>
                     ))}
                   </tbody>

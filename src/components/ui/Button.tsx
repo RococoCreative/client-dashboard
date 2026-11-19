@@ -32,7 +32,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: "border border-line bg-surface text-danger hover:border-danger hover:bg-danger/5",
   // The one loud destructive treatment, reserved for the final confirm step.
   "danger-solid": "bg-danger text-bg hover:bg-danger/90",
-  link: "inline-flex items-center gap-1.5 text-accent hover:underline",
+  link: "inline-flex items-center gap-1.5 text-link hover:underline",
   // Full width and left aligned, free to wrap or truncate. aria-pressed marks the one on screen.
   row: "flex w-full min-w-0 items-center gap-2 text-left text-ink hover:text-accent aria-pressed:bg-surface-2/60",
 };

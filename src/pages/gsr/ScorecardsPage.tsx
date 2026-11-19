@@ -82,7 +82,7 @@ function RoleTable({
               return (
                 <tr key={person.id} className="hover:bg-surface-2/40">
                   <th scope="row" className="sticky left-0 z-10 border-b border-line bg-surface px-3 py-2 text-left align-middle font-normal">
-                    <Link to={`/people/${person.id}`} className="block truncate text-sm text-ink hover:text-accent">
+                    <Link to={`/people/${person.id}`} className="block truncate text-sm text-ink hover:text-link">
                       {name}
                     </Link>
                     {division || person.title ? <p className="truncate text-[12px] text-ink-3">{[division, person.title].filter(Boolean).join(" · ")}</p> : null}
@@ -271,7 +271,7 @@ export default function ScorecardsPage() {
               <ul className="divide-y divide-line">
                 {unscored.map((p) => (
                   <li key={p.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-5 py-2.5">
-                    <Link to={`/people/${p.id}`} className="truncate text-sm text-ink hover:text-accent">
+                    <Link to={`/people/${p.id}`} className="truncate text-sm text-ink hover:text-link">
                       {displayName(p)}
                     </Link>
                     <span className="text-[12px] text-ink-3">{[divisionName(p), roleName(p.job_role_id) ?? "No job role"].filter(Boolean).join(" · ")}</span>

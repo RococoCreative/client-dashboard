@@ -316,7 +316,7 @@ function RoleCard({
       <div className="mt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className={eyebrowClass}>Role goals</p>
-          <Link to={roleGoalsPath(role.id)} className="text-[12.5px] text-accent hover:underline">
+          <Link to={roleGoalsPath(role.id)} className="text-[12.5px] text-link hover:underline">
             {goals.length > 0 ? "Edit in Goals, By role" : "Add in Goals, By role"}
           </Link>
         </div>

@@ -434,7 +434,7 @@ export default function CyclePage() {
           // An account is never a precondition: the roster is what a cycle covers, and people are
           // added to it with or without an invitation.
           <p className="p-5 text-sm text-ink-2">
-            Nobody on the roster yet. Add the team in <Link to="/people" className="text-accent hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
+            Nobody on the roster yet. Add the team in <Link to="/people" className="text-link hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
           <div className="relative overflow-x-auto">
@@ -502,7 +502,7 @@ export default function CyclePage() {
                     <td className={`${tdClass} text-right`}>
                       <div className="flex items-center justify-end gap-3">
                         {review ? (
-                          <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-accent hover:underline">Open</Link>
+                          <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-link hover:underline">Open</Link>
                         ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review

@@ -23,7 +23,7 @@ export default function WinsCard({ company }: { company: Company }) {
       eyebrow="Wins"
       title="Recent wins"
       padded={false}
-      actions={<Link to="/wins" className="text-[13px] font-medium text-accent hover:underline">All wins</Link>}
+      actions={<Link to="/wins" className="text-[13px] font-medium text-link hover:underline">All wins</Link>}
     >
       {state.error && !state.data ? (
         <div className="p-5"><Notice tone="error">{state.error}</Notice></div>

@@ -445,7 +445,7 @@ export default function PeoplePage() {
         }
         actions={
           teamView ? (
-            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-accent hover:text-accent-hover">
+            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:text-accent-hover">
               Your profile and team
             </Link>
           ) : (
@@ -515,7 +515,7 @@ export default function PeoplePage() {
                         ) : null}
                         <td className={`${tdClass} py-2 text-[13px] text-ink-2`}>
                           {manager ? (
-                            <Link to={`/people/${manager.id}`} className="hover:text-accent">{displayName(manager)}</Link>
+                            <Link to={`/people/${manager.id}`} className="hover:text-link">{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
