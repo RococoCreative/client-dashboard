@@ -9,7 +9,7 @@
 // Rococo admin, or an admin who sees every division) edits, closes, reopens or deletes one (0038);
 // any admin starts reviews and chooses who is in it. A closed cycle starts nothing (0039), and
 // closing one asks first, with how many reviews in it are not complete.
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Pencil, Trash2, Unlock, UserMinus, UserPlus, UsersRound } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -73,14 +73,15 @@ import { tapTargetClass } from "../../components/ui/tap.ts";
 const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
 // Below md the team table stacks into compact, even rows: the name with the status badge on its
-// line, then the scores as one even grid under column headings shown once above the rows, then the
-// row's actions. The grid has one column per score (--score-cols, set on the table). It is the same
-// table underneath, with explicit table roles and each cell's column name (data-label) so a screen
-// reader still reads rows and columns.
-const STACKED_GRID = "max-md:grid max-md:grid-cols-[repeat(var(--score-cols),minmax(0,1fr))] max-md:gap-x-3";
-const STACKED_SCORE = "max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left";
-// The headings for the columns only the stacked grid shows; the rest stay for screen readers.
-const STACKED_HEAD = "max-md:!px-0 max-md:pt-3 max-md:pb-0 max-md:border-b-0 max-md:text-left max-md:align-bottom max-md:text-[12px] max-md:normal-case max-md:tracking-normal";
+// line, then, for a row with at least one score, each score with its label beside it (the column's
+// name from data-label) two to a line, then the row's actions. A row with no scores shows no score
+// line at all. It is the same table underneath, with explicit table roles, the column headers kept
+// for screen readers and each cell's data-label, so a screen reader still reads rows and columns.
+const STACKED_SCORE =
+  "max-md:flex max-md:items-start max-md:justify-between max-md:gap-2 max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left " +
+  "max-md:before:min-w-0 max-md:before:text-[12.5px] max-md:before:text-ink-3 max-md:before:content-[attr(data-label)]";
+// A score cell on a row with no scores: the table keeps it from md, a phone leaves it out.
+const STACKED_NO_SCORE = "max-md:hidden";
 
 // A month is a calendar month, here as in the New month form: the start snaps to the first and
 // the end follows it. Other cadences keep the dates the admin types.
@@ -291,7 +292,11 @@ export default function CyclePage() {
     // with; until then its ratings live on the person and its rows are not the whole picture. A
     // month never has one: its number is the GSR score locked in on it.
     const result = review ? scoreOfRecord(review, cycle, pillars, own) : null;
-    return { person, review, result };
+    // Whether the row has any number to show; a phone leaves the score line off a row without one.
+    const scored =
+      (columns.pillarScores && result !== null && (result.overall !== null || result.pillars.some((p) => p.score !== null))) ||
+      (columns.gsrScore && review !== null && monthLocked(review));
+    return { person, review, result, scored };
   });
   // Counted over the same rows the table shows, so the fraction on top and the list below
   // never disagree about who is in this cycle.
@@ -457,30 +462,26 @@ export default function CyclePage() {
           </p>
         ) : (
           <div className="relative md:overflow-x-auto">
-            <table
-              role="table"
-              className={`${tableClass} max-md:block`}
-              style={{ "--score-cols": Math.max(1, (columns.pillarScores ? pillars.length + 1 : 0) + (columns.gsrScore ? 1 : 0)) } as CSSProperties}
-            >
-              <thead role="rowgroup" className="max-md:block max-md:border-b max-md:border-line">
-                <tr role="row" className={`${edgeCells} ${STACKED_GRID} max-md:px-4`}>
-                  <th role="columnheader" className={`${thClass} max-md:sr-only`}>Person</th>
-                  <th role="columnheader" className={`${thClass} max-md:sr-only`}>Status</th>
+            <table role="table" className={`${tableClass} max-md:block`}>
+              <thead role="rowgroup" className="max-md:sr-only">
+                <tr role="row" className={edgeCells}>
+                  <th role="columnheader" className={thClass}>Person</th>
+                  <th role="columnheader" className={thClass}>Status</th>
                   {columns.pillarScores ? (
                     <>
                       {pillars.map((p) => (
-                        <th key={p.id} role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>{p.name}</th>
+                        <th key={p.id} role="columnheader" className={`${thClass} text-right`}>{p.name}</th>
                       ))}
-                      <th role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>Overall</th>
+                      <th role="columnheader" className={`${thClass} text-right`}>Overall</th>
                     </>
                   ) : null}
-                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>GSR score</th> : null}
-                  <th role="columnheader" className={`${thClass} max-md:sr-only`}><span className="sr-only">Actions</span></th>
+                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right`}>GSR score</th> : null}
+                  <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody role="rowgroup" className="max-md:block">
-                {rows.map(({ person, review, result }) => (
-                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 ${STACKED_GRID} max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
+                {rows.map(({ person, review, result, scored }) => (
+                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
                     <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
@@ -503,18 +504,18 @@ export default function CyclePage() {
                         {pillars.map((p) => {
                           const pillar = result?.pillars.find((x) => x.pillarId === p.id);
                           return (
-                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${STACKED_SCORE}`}>
+                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                               {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
                             </td>
                           );
                         })}
-                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${STACKED_SCORE}`}>
+                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                           {result ? result.overall : "-"}
                         </td>
                       </>
                     ) : null}
                     {columns.gsrScore ? (
-                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${STACKED_SCORE}`}>
+                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                         {review && monthLocked(review) ? (
                           <span className="font-medium text-ink">{review.gsr_score}%</span>
                         ) : (

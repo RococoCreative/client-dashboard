@@ -37,7 +37,8 @@ type Status = "open" | "done" | "all";
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
 const STATUS_LABELS: Record<Status, string> = { open: "Open", done: "Done", all: "Open and done" };
 // The shared select is full width; from sm a filter sizes to its choice so the row reads as one
-// line. On a phone the filters sit in an even two-column grid, each filling its cell.
+// line. On a phone the filters sit in an even two-column grid, each filling its cell, and a lone
+// last filter (three filters, when there is no campaign filter) spans both columns.
 const filterClass = `${selectClass} mt-0 sm:!w-auto max-w-full`;
 
 function matchesStatus(task: TaskWithSteps, status: Status): boolean {
@@ -101,7 +102,12 @@ function Filters({
           ))}
         </select>
       ) : null}
-      <select value={status} onChange={(e) => onStatus(e.target.value as Status)} aria-label="Filter by status" className={filterClass}>
+      <select
+        value={status}
+        onChange={(e) => onStatus(e.target.value as Status)}
+        aria-label="Filter by status"
+        className={`${filterClass} ${campaigns.length > 0 ? "" : "col-span-2"}`}
+      >
         {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
           <option key={s} value={s}>{STATUS_LABELS[s]}</option>
         ))}

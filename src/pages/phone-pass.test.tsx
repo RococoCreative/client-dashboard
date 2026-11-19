@@ -45,6 +45,7 @@ import ReviewPage from "./gsr/ReviewPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
 import RolesPage from "./people/RolesPage.tsx";
+import TasksPage from "./tasks/TasksPage.tsx";
 
 const rbaAdmin = makeHub("admin", RBA.company);
 const rbaManager = makeHub("manager", RBA.company);
@@ -150,6 +151,55 @@ describe("a cycle's team table at phone width", () => {
     for (const td of row.querySelectorAll("td")) expect(td).toHaveAttribute("role", "cell");
     // Every column between the person and the actions names itself on the stacked row.
     expect([...row.querySelectorAll("td[data-label]")].map((td) => td.getAttribute("data-label"))).toEqual(headers.slice(1, -1));
+  });
+});
+
+describe("a cycle's stacked rows label their own scores", () => {
+  const scoreCells = (row: HTMLElement) => [...row.querySelectorAll("td[data-label]")].filter((td) => td.getAttribute("data-label") !== "Status");
+
+  it("drops the score line from a row with no scores, and labels each value on a scored row", async () => {
+    const scored = RBA.cycles[0];
+    renderWithHub(<CyclePage />, rbaAdmin, { path: `/reviews/cycles/${scored.id}`, pattern: "/reviews/cycles/:cycleId" });
+    const table = await screen.findByRole("table");
+    // Every value now carries its label, so the header row is for screen readers only on a phone.
+    expect(table.querySelector("thead")?.className).toContain("max-md:sr-only");
+
+    const unscored = within(table).getByText("Jamie Fox").closest("tr") as HTMLElement;
+    expect(scoreCells(unscored).length).toBeGreaterThan(0);
+    for (const td of scoreCells(unscored)) {
+      expect(td.className).toContain("max-md:hidden");
+      expect(td).toHaveAttribute("role", "cell");
+    }
+
+    const noor = within(table).getByText("Noor Haddad").closest("tr") as HTMLElement;
+    const cells = scoreCells(noor);
+    expect(cells.map((td) => td.getAttribute("data-label"))).toEqual([...scoreLabels(table)]);
+    for (const td of cells) {
+      expect(td.className).not.toContain("max-md:hidden");
+      // The label (data-label) is drawn beside the value on a phone.
+      expect(td.className).toContain("max-md:before:content-[attr(data-label)]");
+    }
+    expect(cells.find((td) => td.getAttribute("data-label") === "Overall")).toHaveTextContent("80");
+  });
+});
+
+// The column headers between Status and the actions, in order: what each score cell names itself.
+function scoreLabels(table: HTMLElement): string[] {
+  return within(table).getAllByRole("columnheader").map((th) => th.textContent ?? "").slice(2, -1);
+}
+
+describe("the Tasks filters on a phone", () => {
+  it("lets a lone last filter span both columns, and only then", async () => {
+    const { unmount } = renderWithHub(<TasksPage tab="everyone" />, makeHub("manager", RBA.company), { path: "/tasks/everyone", pattern: "/tasks/everyone" });
+    // A manager has no campaign filter: three filters, so status sits alone on the last line.
+    await screen.findByRole("combobox", { name: "Filter by person" });
+    expect(screen.queryByRole("combobox", { name: "Filter by campaign" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter by status" }).className).toContain("col-span-2");
+    unmount();
+
+    renderWithHub(<TasksPage tab="everyone" />, rbaAdmin, { path: "/tasks/everyone", pattern: "/tasks/everyone" });
+    await screen.findByRole("combobox", { name: "Filter by campaign" });
+    expect(screen.getByRole("combobox", { name: "Filter by status" }).className).not.toContain("col-span-2");
   });
 });
 
