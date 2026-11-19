@@ -281,7 +281,7 @@ describe("tasks: Task page", () => {
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Book the repairs" })).toBeChecked());
     expect(screen.getByText("67% complete")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark complete" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit task" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Add a step")).not.toBeInTheDocument();
     expect(screen.queryByText("Campaign")).not.toBeInTheDocument();
@@ -320,7 +320,8 @@ describe("tasks: Task page", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(screen.getByLabelText("Add a step")).toBeInTheDocument();
     expect(screen.getByText("No due date")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("button", { name: "Edit task" })).toHaveAttribute("title", "Edit task");
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByLabelText("Assignee")).not.toBeInTheDocument();
     const title = within(dialog).getByLabelText("Title");
@@ -396,7 +397,7 @@ describe("tasks: Task page", () => {
     renderTask(created.id, rbaAdmin);
     await screen.findByRole("heading", { name: "Shoot the kitchen photos" });
     expect(screen.getByText("Spring remodel showcase")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     let dialog = screen.getByRole("dialog");
     const title = within(dialog).getByLabelText("Title");
     await user.clear(title);
@@ -405,7 +406,7 @@ describe("tasks: Task page", () => {
     expect(await screen.findByRole("heading", { name: "Shoot the kitchen and bath photos" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(notify).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Assignee"), jamie.id);
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -421,7 +422,7 @@ describe("tasks: Task page", () => {
     const created = await tasksService.createTask({ company_id: RBA.company.id, title: "Pick up the permit", assignee_id: null });
     renderTask(created.id, rbaAdmin);
     await screen.findByRole("heading", { name: "Pick up the permit" });
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     const dialog = screen.getByRole("dialog");
     await user.selectOptions(within(dialog).getByLabelText("Assignee"), noor.id);
     await user.click(within(dialog).getByRole("button", { name: "Save" }));

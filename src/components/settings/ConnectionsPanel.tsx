@@ -18,6 +18,9 @@ import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type Connec
 
 // What each provider feeds, in the company's terms. Industry neutral; the figures themselves
 // are the company's own rows.
+// The meta line in the danger colour: the size and leading come from the type scale, the colour is swapped.
+const DANGER_META = metaClass.replace("text-ink-3", "text-danger");
+
 const PROVIDER_BLURBS: Record<ConnectionProvider, string> = {
   gohighlevel: "Closed sales, for the company and for each person, from won opportunities.",
   quickbooks: "Revenue, costs, profit and cash for the company; revenue per person where the books tag it.",
@@ -164,7 +167,7 @@ export default function ConnectionsPanel({ companyId, providers = DEFAULT_PROVID
                       {row?.last_synced_at ? ` · last sync ${formatDate(row.last_synced_at)}` : " · no sync yet"}
                     </p>
                   ) : null}
-                  {row?.status === "error" && row.last_error ? <p className="mt-1 text-[12px] text-danger">{row.last_error}</p> : null}
+                  {row?.status === "error" && row.last_error ? <p className={`mt-1 ${DANGER_META}`}>{row.last_error}</p> : null}
                 </div>
                 {connected ? (
                   <Button variant="ghost" size="sm" aria-label={`Disconnect ${label}`} disabled={busy !== null} onClick={() => void disconnect(provider)}>

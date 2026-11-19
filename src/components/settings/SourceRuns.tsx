@@ -5,6 +5,7 @@
 import Badge, { type BadgeTone } from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { metaClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { formatDateTime } from "../../lib/format.ts";
 import { listSyncRuns } from "../../services/sync.ts";
@@ -21,7 +22,7 @@ export default function SourceRuns({ sourceId }: { sourceId: string }) {
   const state = useAsync(() => listSyncRuns(sourceId), [sourceId]);
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={2} />;
-  if (state.data.length === 0) return <p className="text-[12.5px] text-ink-2">No runs yet.</p>;
+  if (state.data.length === 0) return <p className={secondaryClass}>No runs yet.</p>;
   return (
     <ul className="divide-y divide-line rounded-md border border-line">
       {state.data.map((run: SyncRun) => {
@@ -29,7 +30,7 @@ export default function SourceRuns({ sourceId }: { sourceId: string }) {
         const label = run.status === "succeeded" ? "Succeeded" : run.status === "failed" ? "Failed" : run.status === "running" ? "Running" : "Stopped";
         const problem = run.status === "failed" ? firstRunError(run.error_detail) : null;
         return (
-          <li key={run.id} className="px-3 py-2 text-[12.5px]">
+          <li key={run.id} className={`px-3 py-2 ${metaClass}`}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="tnum text-ink">{formatDateTime(run.started_at)}</span>
               <span className="text-ink-3">{run.trigger_kind === "schedule" ? "Scheduled" : "Manual"}</span>

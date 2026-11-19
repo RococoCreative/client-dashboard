@@ -11,7 +11,7 @@ import SyncStateBadge from "../sync/SyncStateBadge.tsx";
 import Button from "../ui/Button.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import { checkboxClass } from "../ui/forms.ts";
-import { bodyClass, eyebrowLabelClass, metaClass, sectionTitleClass } from "../ui/type.ts";
+import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
 import { draftFromSource } from "../../lib/sync/draft.ts";
 import { syncState } from "../../lib/sync/state.ts";
 import { CONNECTION_PROVIDER_LABELS, FIELD_TYPE_LABELS, TARGET_MODULE_LABELS, type CompanyConnection, type SyncSource } from "../../types/database.ts";
@@ -75,7 +75,7 @@ export default function DataSourceDetail({
         <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <label className="inline-flex min-h-9 items-center gap-2 text-[13px] text-ink-2">
+        <label className={`inline-flex min-h-9 items-center gap-2 ${secondaryClass}`}>
           <input type="checkbox" aria-label={`Enable ${source.name}`} checked={source.enabled} onChange={(e) => onToggle(e.target.checked)} className={checkboxClass} />
           Enabled
         </label>

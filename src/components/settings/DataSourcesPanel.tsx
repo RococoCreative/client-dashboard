@@ -22,6 +22,7 @@ import Modal from "../ui/Modal.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import useIsWide from "../ui/useIsWide.ts";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { itemTitleClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
 import DataSourceDetail from "./DataSourceDetail.tsx";
@@ -61,12 +62,6 @@ const BASE = "/settings/connections";
 // More sources than this and the rows become a list, each source at its own address.
 const MOST_AS_ROWS = 3;
 const DESCRIPTION = "Spreadsheet tabs and QuickBooks records this company reads into the hub. Imported values are read-only here; change them at the source.";
-
-// The list and the open source sit side by side from lg up (ListDetail); only there does the bare
-// address show a source. Without matchMedia (a test DOM) the screen counts as wide.
-function isWide(): boolean {
-  return typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches;
-}
 
 const cellInput = `${inputClass} mt-0 py-1.5 text-[13px]`;
 const cellSelect = `${selectClass} mt-0 py-1.5 text-[13px]`;
@@ -397,6 +392,8 @@ type SyncNotice = { tone: "success" | "error" | "info"; text: string };
 export default function DataSourcesPanel({ companyId, companyTimeZone }: { companyId: string; companyTimeZone: string }) {
   const { sourceId } = useParams();
   const navigate = useNavigate();
+  // The list and the open source sit side by side from lg up (ListDetail); only there does the bare address show a source.
+  const wide = useIsWide();
   const state = useAsync(async () => {
     const [sources, connections] = await Promise.all([listSyncSources(companyId), listConnections(companyId)]);
     return { sources, connections };
@@ -484,7 +481,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
       title: source.name,
       meta: `${TARGET_MODULE_LABELS[source.target_module]} · ${CONNECTION_PROVIDER_LABELS[source.provider]}`,
     }));
-    const selectedId = sourceId ?? (isWide() ? data.sources[0].id : null);
+    const selectedId = sourceId ?? (wide ? data.sources[0].id : null);
     const selected = selectedId ? (data.sources.find((s) => s.id === selectedId) ?? null) : null;
     return (
       <section>

@@ -333,7 +333,7 @@ describe("a task on a GSR goal", () => {
     expect(screen.getByRole("link", { name: "Open the GSR" })).toHaveAttribute("href", `/gsr/reviews/${review.id}`);
     expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}`);
     // Its person stays with the goal while it is linked.
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit task" }));
     expect(within(screen.getByRole("dialog")).getByLabelText(/Assignee/)).toBeDisabled();
     expect(within(screen.getByRole("dialog")).getByText("Linked to Run the Friday toolbox talk")).toBeInTheDocument();
     expect(task.goal_id).toBe(goal.id);
@@ -370,7 +370,7 @@ describe("a task on someone a manager leads", () => {
     expect(screen.getByRole("button", { name: "Mark complete" })).toBeInTheDocument();
     // Created by someone else, so the database would refuse a manager's delete.
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     const dialog = screen.getByRole("dialog");
     const title = within(dialog).getByLabelText("Title");
     await user.clear(title);
@@ -383,7 +383,7 @@ describe("a task on someone a manager leads", () => {
     const created = await tasksService.createTask({ company_id: RBA.company.id, title: "Wash the trucks", assignee_id: jamie.id });
     renderTask(created.id, makeHub("employee", RBA.company));
     expect(await screen.findByRole("heading", { name: "Wash the trucks" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit task" })).not.toBeInTheDocument();
   });
 });
 

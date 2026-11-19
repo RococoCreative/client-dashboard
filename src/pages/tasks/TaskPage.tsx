@@ -183,7 +183,7 @@ export default function TaskPage() {
         <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(() => reopenTask(task.id))}>Reopen</Button>
       ) : null}
       {canEdit ? (
-        <IconButton label="Edit" disabled={busy} onClick={() => setEditing(true)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+        <IconButton label="Edit task" disabled={busy} onClick={() => setEditing(true)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
           <Pencil size={15} aria-hidden />
         </IconButton>
       ) : null}
