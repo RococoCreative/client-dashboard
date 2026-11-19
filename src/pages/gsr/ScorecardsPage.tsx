@@ -98,9 +98,9 @@ function RoleBlock({
                   <th
                     scope="row"
                     role="rowheader"
-                    className="relative border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0"
+                    className="relative border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:flex max-md:flex-col max-md:justify-center max-md:border-b-0 max-md:px-0 max-md:py-0 tap:min-h-11"
                   >
-                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass} tap:after:-inset-y-1.5`}>
+                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
                       {name}
                     </Link>
                     {division || person.title ? <p className={`truncate ${metaClass}`}>{[division, person.title].filter(Boolean).join(" · ")}</p> : null}

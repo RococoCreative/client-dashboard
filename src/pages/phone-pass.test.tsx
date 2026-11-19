@@ -113,6 +113,16 @@ describe("tables that stack on a phone keep their roles", () => {
     for (const td of row.querySelectorAll("td")) expect(td).toHaveAttribute("role", "cell");
   });
 
+  it("keeps a scorecard name's hit area inside its own row header", async () => {
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    const link = await screen.findByRole("link", { name: "Noor Haddad" });
+    // The link covers its row header and nothing past it, so two rows' links never overlap on a
+    // touch tablet; the header itself is a real 44px box under a finger.
+    expect(link.className).toContain("tap:after:inset-0");
+    expect(link.className).not.toMatch(/after:-inset/);
+    expect(link.closest("th")?.className).toContain("tap:min-h-11");
+  });
+
   it("on a review's deliverable line items", async () => {
     const review = RBA.reviews.find((r) => r.status === "in_progress")!;
     renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
