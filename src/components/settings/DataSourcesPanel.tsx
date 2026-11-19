@@ -497,6 +497,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
           selectedId={selectedId}
           hrefFor={(id) => `${BASE}/sources/${id}`}
           backHref={BASE}
+          backLabel="Data sources"
           countLabel={pluralize(data.sources.length, "data source")}
           searchLabel="Search data sources"
           actions={addSource}

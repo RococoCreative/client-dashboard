@@ -530,7 +530,7 @@ export default function PeoplePage() {
                                 </>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (
-                                <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
+                                <Button variant="secondary" size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
                                   <Send size={13} aria-hidden /> Send invite
                                 </Button>
                               ) : null}

@@ -4,9 +4,16 @@
 // already narrowed, so it never names anyone the viewer may not open. Shown for anyone ranked
 // manager or above, and for anyone at all with reports, because an employee with reports is a
 // setup mistake worth seeing: they do not see those people until they are a manager.
+//
+// The direct reports show; a report with people below them starts closed, and their "N below" is
+// the button that opens that branch, so a large company's chain does not run the page long. Every
+// level stays reachable. Which branches are open is this screen's own state, never saved.
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import Avatar from "../ui/Avatar.tsx";
 import Badge from "../ui/Badge.tsx";
+import Button from "../ui/Button.tsx";
 import Section from "../ui/Section.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listDivisions } from "../../services/divisions.ts";
@@ -58,25 +65,41 @@ function countAll(nodes: readonly Node[]): number {
 function TeamRow({ node, divisions, depth }: { node: Node; divisions: readonly CompanyDivision[]; depth: number }) {
   const { person, reports } = node;
   const below = countAll(reports);
+  const [open, setOpen] = useState(false);
+  const branchId = useId();
+  const name = displayName(person);
   return (
     <li>
       <div className="flex items-center gap-3 border-b border-line py-2" style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}>
         <Avatar person={person} size={24} />
         <div className="min-w-0 flex-1">
           <Link to={`/people/${person.id}`} className="text-sm font-medium text-ink hover:text-link">
-            {displayName(person)}
+            {name}
           </Link>
           <p className="truncate text-[12px] text-ink-3">
             {[person.title ?? ROLE_LABELS[person.role], divisions.length > 0 ? divisionLabel(person.division_ids, divisions) : null].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {below > 0 ? <span className="text-[12px] text-ink-3 tnum">{below} below</span> : null}
+          {below > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={open}
+              aria-controls={open ? branchId : undefined}
+              aria-label={`${below} below ${name}`}
+              onClick={() => setOpen((was) => !was)}
+              className="tnum"
+            >
+              <ChevronRight size={13} aria-hidden className={`transition-transform duration-150 ${open ? "rotate-90" : ""}`} />
+              {below} below
+            </Button>
+          ) : null}
           {hasAccount(person) ? null : <Badge tone="warning">Not signed in yet</Badge>}
         </div>
       </div>
-      {reports.length > 0 ? (
-        <ul aria-label={`Reports to ${displayName(person)}`}>
+      {open && reports.length > 0 ? (
+        <ul id={branchId} aria-label={`Reports to ${name}`}>
           {reports.map((child) => (
             <TeamRow key={child.person.id} node={child} divisions={divisions} depth={depth + 1} />
           ))}

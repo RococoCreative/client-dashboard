@@ -139,6 +139,7 @@ export default function RolesPage() {
         selectedId={roleId ?? null}
         hrefFor={(id) => `${BASE}/${id}`}
         backHref={BASE}
+        backLabel="Roles"
         countLabel={pluralize(roles.length, "role")}
         searchLabel={roles.length > 0 ? "Search roles" : undefined}
         groupLabel={(_group, shown) => `Retired roles (${shown})`}

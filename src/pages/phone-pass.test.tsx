@@ -44,6 +44,7 @@ import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 
 const rbaAdmin = makeHub("admin", RBA.company);
 const rbaManager = makeHub("manager", RBA.company);
@@ -75,6 +76,26 @@ describe("the roster at phone width", () => {
     expect(labelsOf(row)).toEqual(["Division", "Reports to", "Role", "Status"]);
     expect(within(row.closest("table") as HTMLElement).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Person", "Division", "Reports to", "Role", "Status"]);
     expect(within(row).queryByRole("button")).not.toBeInTheDocument();
+  });
+});
+
+describe("the roster's row actions", () => {
+  it("draws Send invite in the secondary style, leaving Add staff the page's one primary", async () => {
+    renderWithHub(<PeoplePage />, rbaAdmin, { path: "/people", pattern: "/people" });
+    const row = await rowOf("Kai Bennett");
+    const send = within(row).getByRole("button", { name: "Send the invitation to Kai Bennett" });
+    expect(send.className).toContain("border-line");
+    expect(send.className).not.toContain("bg-accent");
+    expect(screen.getByRole("button", { name: "Add staff" }).className).toContain("bg-accent");
+  });
+});
+
+describe("a role open on a phone", () => {
+  it("names its list beside the back arrow", async () => {
+    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles/rba-role-1", pattern: "/people/roles/:roleId?" });
+    const back = await screen.findByRole("link", { name: "Back to Roles" });
+    expect(back).toHaveTextContent("Roles");
+    expect(back).toHaveAttribute("href", "/people/roles");
   });
 });
 

@@ -485,12 +485,24 @@ describe("who reports to a person", () => {
     onlySees(team);
     renderPerson(harper.id, rbaManager);
     const tree = await screen.findByRole("list", { name: "Who reports to you" });
-    // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them.
+    // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them. Direct
+    // reports show; a branch below them is closed, and its "N below" is the control that opens it.
     expect(within(tree).getByRole("link", { name: "Rowan Ellis" })).toHaveAttribute("href", `/people/${rowan.id}`);
-    const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
-    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" })).toBeInTheDocument();
     expect(screen.getByText("1 direct report, 2 in all.")).toBeInTheDocument();
+    const opener = within(tree).getByRole("button", { name: "1 below Rowan Ellis" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    expect(opener).toHaveTextContent("1 below");
+    expect(within(tree).queryByRole("list", { name: "Reports to Rowan Ellis" })).not.toBeInTheDocument();
+    expect(within(tree).queryByRole("link", { name: "Kai Bennett" })).not.toBeInTheDocument();
+    await userEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
+    expect(opener).toHaveAttribute("aria-controls", underRowan.id);
+    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" })).toBeInTheDocument();
     expect(within(underRowan).getByText("Not signed in yet")).toBeInTheDocument();
+    // And it closes again.
+    await userEvent.click(opener);
+    expect(within(tree).queryByRole("link", { name: "Kai Bennett" })).not.toBeInTheDocument();
   });
 
   it("shows an admin who reports to a manager, and says when nobody does", async () => {

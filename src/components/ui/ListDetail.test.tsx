@@ -22,6 +22,7 @@ function setup(selectedId: string | null) {
         selectedId={selectedId}
         hrefFor={(id) => `/roles/${id}`}
         backHref="/roles"
+        backLabel="Roles"
         countLabel="3 roles"
         searchLabel="Search roles"
         actions={<button type="button">Add role</button>}
@@ -42,7 +43,10 @@ describe("ListDetail", () => {
     expect(screen.getByRole("link", { name: /Site lead/ })).not.toHaveAttribute("aria-current");
     expect(screen.getByText("3 roles")).toBeInTheDocument();
     expect(screen.getByText("The open role")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to Job roles" })).toHaveAttribute("href", "/roles");
+    // The back link names the list beside its arrow, and its accessible name carries that word.
+    const back = screen.getByRole("link", { name: "Back to Roles" });
+    expect(back).toHaveAttribute("href", "/roles");
+    expect(back).toHaveTextContent("Roles");
   });
 
   it("filters on title and says when nothing matches", async () => {
@@ -59,13 +63,13 @@ describe("ListDetail", () => {
   it("does not render the detail with nothing selected", () => {
     setup(null);
     expect(screen.queryByText("The open role")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Back to Job roles" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Back to Roles" })).not.toBeInTheDocument();
   });
 
   it("shows nothing for an empty list with an empty search, leaving the empty state to the page", () => {
     render(
       <MemoryRouter>
-        <ListDetail label="Job roles" items={[]} selectedId={null} hrefFor={(id) => `/roles/${id}`} backHref="/roles" countLabel="0 roles" searchLabel="Search roles" footer={<p>No job roles yet.</p>}>
+        <ListDetail label="Job roles" items={[]} selectedId={null} hrefFor={(id) => `/roles/${id}`} backHref="/roles" backLabel="Roles" countLabel="0 roles" searchLabel="Search roles" footer={<p>No job roles yet.</p>}>
           <p>The open role</p>
         </ListDetail>
       </MemoryRouter>,
@@ -95,6 +99,7 @@ describe("ListDetail", () => {
           selectedId={null}
           hrefFor={(id) => `/roles/${id}`}
           backHref="/roles"
+          backLabel="Roles"
           countLabel="2 roles"
         >
           <p>The open role</p>
@@ -121,6 +126,7 @@ describe("ListDetail", () => {
           selectedId={null}
           hrefFor={(id) => `/roles/${id}`}
           backHref="/roles"
+          backLabel="Roles"
           countLabel="3 roles"
           searchLabel="Search roles"
           groupLabel={(_group, shown) => `Retired roles (${shown})`}
