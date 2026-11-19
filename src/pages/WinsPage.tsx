@@ -5,14 +5,14 @@
 // When the company limits how many days a win stays on Home, the page splits in two: Recent (the
 // wins still on Home) and Archive (older ones). With no setting it is one list, as it always was.
 import { useRef, useState, type FormEvent } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import BlurInput from "../components/ui/BlurInput.tsx";
 import Button from "../components/ui/Button.tsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.tsx";
+import EditRow from "../components/ui/EditRow.tsx";
 import EmptyState from "../components/ui/EmptyState.tsx";
 import Field from "../components/ui/Field.tsx";
-import IconButton from "../components/ui/IconButton.tsx";
 import Modal from "../components/ui/Modal.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
@@ -136,20 +136,17 @@ function EditableRow({
   onArchive: () => void;
 }) {
   const { id, title } = win;
-  if (!editing) {
-    return (
-      <li className={`${ROW} flex items-start gap-3`}>
-        <div className="min-w-0 flex-1">
-          <WinText win={win} projects={projects} />
-        </div>
-        <IconButton label={`Edit ${title}`} onClick={onEdit}>
-          <Pencil size={15} aria-hidden="true" />
-        </IconButton>
-      </li>
-    );
-  }
   return (
-    <li className={ROW}>
+    <EditRow
+      as="li"
+      className={ROW}
+      display={<WinText win={win} projects={projects} />}
+      editLabel={`Edit ${title}`}
+      editing={editing}
+      onEdit={onEdit}
+      onDone={onDone}
+      footer={<Button variant="danger" size="sm" aria-label={`Remove ${title}`} onClick={onArchive}>Remove</Button>}
+    >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} font-medium`} />
@@ -173,11 +170,7 @@ function EditableRow({
       <div className="mt-2">
         <BlurInput multiline rows={2} value={win.description ?? ""} ariaLabel={`Description of ${title}`} placeholder="Description" onSave={(next) => onSave({ description: next.trim() || null })} className={`${inputClass} leading-relaxed`} />
       </div>
-      <div className="mt-3 flex flex-wrap justify-between gap-2">
-        <Button variant="danger" size="sm" aria-label={`Remove ${title}`} onClick={onArchive}>Remove</Button>
-        <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
-      </div>
-    </li>
+    </EditRow>
   );
 }
 

@@ -9,7 +9,7 @@
 // different email"), and `row` is a row or a title that opens what it names (a file, a version,
 // a resource), ink until hovered. Neither carries padding, a fill or a radius, so their size
 // sets the type alone.
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-solid" | "link" | "row";
 type Size = "sm" | "md";
@@ -51,6 +51,7 @@ export default function Button({
   variant?: ButtonVariant;
   size?: Size;
   children: ReactNode;
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const shape = variant === "link" || variant === "row" ? TEXT_SIZES[variant][size] : `${BOXED} ${SIZES[size]}`;
   return (
