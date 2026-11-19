@@ -173,7 +173,7 @@ export default function PersonReviews({
             {rows.length === 0 ? (
               isAdmin ? (
                 <p className="p-4 text-sm text-ink-2 sm:p-6">
-                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-link hover:underline">Reviews</Link> or <Link to="/gsr" className="text-link hover:underline">Monthly GSRs</Link>, and everyone on the roster gets one.
+                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-link hover:underline">Reviews</Link> or <Link to="/gsr" className="text-link hover:underline">GSRs</Link>, and everyone on the roster gets one.
                 </p>
               ) : (
                 <p className="p-4 text-sm text-ink-2 sm:p-6">No reviews yet. They show here once an admin opens a cycle.</p>
