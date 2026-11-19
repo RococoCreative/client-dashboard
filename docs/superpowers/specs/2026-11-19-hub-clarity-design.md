@@ -46,7 +46,10 @@ GSR rhythm work stays on hold on its own branch.
 - No migration. Tests stay hermetic; the demo and mocks keep working.
 - Shipped in three releases to `main`, each after lint, tests, the type-checked build, and a
   screenshot pass at RBA's load.
-- After each release `main` is merged into the GSR rhythm branch so Friday's release stays clean.
+- The GSR rhythm work is the branch `claude/laughing-cannon-50onn9`, held until the owner's Friday
+  scoring review. All three phases here are built on live and ship without it. After each release
+  `main` is merged into that branch and the conflicts are settled there, so the rhythm release
+  stays a clean step on top. Its migration is renumbered then (live took 0040 to 0045).
 
 ## Approaches
 
@@ -79,7 +82,8 @@ PEOPLE
 | Focus topics (Goals, Monthly focus) | GSRs, Setup | `/goals/focus` to `/gsr/setup` |
 | Goals a GSR requires (a field on the Monthly GSRs pillar) | GSRs, Setup. The pillar card shows it read only with a link. | |
 | Standard milestones (Settings, Production) | Projects, Setup | `/settings/production` to `/production/setup` |
-| Company identity, time zone, display switches, theme and sign-in | Settings, Company | |
+| Company name, logo, time zone; theme and sign-in shown read only | Settings, Company | |
+| How long a win stays on Home, the manual Financials switch | Stay where they are: Rococo, Companies. Rococo only, unchanged. | |
 | Connections, data sources | Settings, Connections | |
 | Activity | Settings, Activity | |
 
@@ -160,6 +164,21 @@ Measured at RBA's load on a 1440 by 900 screen:
 - Every repeated item shows its name as a heading and is reachable by its own address.
 - Label, help and link text at 4.5 to 1 or better in all four themes.
 - Every old address redirects. No permission, RLS or scoring test changes meaning.
+
+## Calls made by the builder, for the owner to check
+
+- **Roster row actions.** Send invite and Copy link stay on the row, because they are what moves a
+  person along. Deactivate, Reactivate and Remove move to the person's Setup tab.
+- **Read first applies to setup, not to results.** Names, descriptions, weights, metrics and
+  profile details are read first. Ratings and their notes, KPI and financial results, deliverable
+  task ratings and scorecard cells stay live controls, because entering them is recurring work and
+  an extra click each time would slow it.
+- **The GSRs tab is labelled "Periods"** from the start, though live GSRs are monthly, so the label
+  does not change when rhythms ship.
+- **Measuring at RBA's load** uses a demo-only bundle of made-up people and roles at RBA's counts,
+  kept apart from the fixtures the page tests share. No real RBA data leaves the database.
+- **A company with no Monthly GSRs pillar** sees GSRs, Setup with focus topics and a line saying
+  GSRs are not scored there.
 
 ## Left to the builder
 
