@@ -2,7 +2,7 @@
 // time, setup fields that read as text until their pencil, criteria as read-first rows with one Add
 // form, the pillar actions at the foot of the open pillar, Settings without a Reviews tab, and the
 // three old addresses landing on Setup through the real router.
-// Projects, Setup: the tab row on Projects for an admin, the standard milestones panel on its own
+// GSRs, Setup: the tab row, the calendar and goal count, and the old address. Projects, Setup: the tab row on Projects for an admin, the standard milestones panel on its own
 // route, Settings without a Production tab, and the old address redirecting.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,8 +40,10 @@ vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milesto
 
 import App from "../App.tsx";
 import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
+import { createPillar, listPillars } from "../services/gsr.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
+import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
 import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
 import ProductionPage from "./production/ProductionPage.tsx";
 import ProductionSetupPage from "./production/ProductionSetupPage.tsx";
@@ -68,7 +70,7 @@ describe("Reviews tabs", () => {
     expect(within(nav).getByRole("link", { name: "Cycles" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("adds no tab row to Monthly GSRs and points its settings link at Setup", async () => {
+  it("keeps the Reviews tab row off GSRs and points its settings link at Setup", async () => {
     renderWithHub(<CyclesPage section="gsr" />, admin, { path: "/gsr", pattern: "/gsr" });
     expect(await screen.findByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/reviews/setup");
     expect(screen.queryByRole("navigation", { name: "Reviews" })).not.toBeInTheDocument();
@@ -278,5 +280,80 @@ describe("the standard milestones addresses", () => {
     render(<App />);
     await waitFor(() => expect(window.location.pathname).toBe("/"));
     expect(screen.queryByRole("heading", { name: "Standard milestones" })).not.toBeInTheDocument();
+  });
+});
+
+describe("GSRs, Setup", () => {
+  beforeEach(() => window.history.pushState({}, "", "/"));
+  const openGsrSetup = (hub = admin) => renderWithHub(<GsrSetupPage />, hub, { path: "/gsr/setup", pattern: "/gsr/setup" });
+
+  it("shows Periods and Setup on GSRs, Periods current", async () => {
+    renderWithHub(<CyclesPage section="gsr" />, admin, { path: "/gsr", pattern: "/gsr" });
+    const nav = await screen.findByRole("navigation", { name: "GSRs" });
+    expect(within(nav).getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
+      ["Periods", "/gsr"],
+      ["Setup", "/gsr/setup"],
+    ]);
+    expect(within(nav).getByRole("link", { name: "Periods" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("hides the Setup tab from someone who cannot reach it", async () => {
+    renderWithHub(<CyclesPage section="gsr" />, makeHub("employee"), { path: "/gsr", pattern: "/gsr" });
+    const nav = await screen.findByRole("navigation", { name: "GSRs" });
+    expect(within(nav).queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
+  });
+
+  it("says GSRs are not scored here for a company with no Monthly GSRs pillar, and still shows the calendar", async () => {
+    openGsrSetup();
+    expect(await screen.findByText("GSRs are not scored here yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Goals each GSR requires")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Focus topic calendar" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Theme for October 2026")).toHaveValue("Core value: Ownership");
+    const nav = screen.getByRole("navigation", { name: "GSRs" });
+    expect(within(nav).getByRole("link", { name: "Setup" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("reads the stored goal count as text, and saves a change through updatePillar", async () => {
+    const user = userEvent.setup();
+    const pillar = await createPillar({ company_id: KINGDOM.company.id, name: "Monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 3, sort_order: 9 });
+    openGsrSetup(makeHub("admin", KINGDOM.company));
+    expect(await screen.findByText("Goals each GSR requires")).toBeInTheDocument();
+    expect(screen.queryByText("GSRs are not scored here yet.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit Goals each GSR requires" }));
+    const field = screen.getByLabelText("Goals each GSR requires");
+    expect(field).toHaveValue("3");
+    await user.selectOptions(field, "4");
+    await waitFor(async () => expect((await listPillars(KINGDOM.company.id)).find((p) => p.id === pillar.id)?.required_goals).toBe(4));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByLabelText("Goals each GSR requires")).not.toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Theme for October 2026")).toBeInTheDocument();
+  });
+
+  it("shows one field per Monthly GSRs pillar, each named", async () => {
+    await createPillar({ company_id: KINGDOM.company.id, name: "Second GSR pillar", weight: 0, scoring_type: "gsr_goals", required_goals: 1, sort_order: 10 });
+    openGsrSetup(makeHub("admin", KINGDOM.company));
+    expect(await screen.findByText("Monthly GSRs: goals each GSR requires")).toBeInTheDocument();
+    expect(screen.getByText("Second GSR pillar: goals each GSR requires")).toBeInTheDocument();
+  });
+
+  it("sends /goals/focus to GSRs, Setup, and an employee Home", async () => {
+    window.history.pushState({}, "", "/goals/focus?persona=admin&company=klasik");
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/gsr/setup"));
+    expect(await screen.findByRole("heading", { name: "Focus topic calendar" })).toBeInTheDocument();
+    unmount();
+    window.history.pushState({}, "", "/gsr/setup?persona=employee&company=klasik");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+  });
+
+  it("names the sidebar item GSRs", async () => {
+    window.history.pushState({}, "", "/?persona=admin&company=klasik");
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByRole("link", { name: "GSRs" })).toHaveAttribute("href", "/gsr");
+    expect(within(nav).queryByRole("link", { name: "Monthly GSRs" })).not.toBeInTheDocument();
   });
 });

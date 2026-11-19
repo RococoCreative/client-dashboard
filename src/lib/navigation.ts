@@ -64,7 +64,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production", capability: "production_view" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
-  { id: "gsr", to: "/gsr", label: "Monthly GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
+  { id: "gsr", to: "/gsr", label: "GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
   { id: "reviews", to: "/reviews", label: "Reviews", icon: ClipboardCheck, audience: "admin", group: "people_hr" },
   { id: "scorecards", to: "/scorecards", label: "Scorecards", icon: Gauge, audience: "admin", group: "people_hr" },
   { id: "my-gsr-employee", to: "/my/gsr", label: "My GSR", icon: CalendarCheck, audience: "employee", group: "people_hr" },

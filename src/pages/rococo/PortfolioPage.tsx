@@ -227,7 +227,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
       <footer className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3">
         {[
           ["/people", "People"],
-          ["/gsr", "Monthly GSRs"],
+          ["/gsr", "GSRs"],
           ["/reviews", "Reviews"],
           ["/resources/sops", "Resources"],
           ...(company.manual_financials ? [["/financials", "Financials"]] : []),

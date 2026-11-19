@@ -667,7 +667,7 @@ describe("navigation and modules", () => {
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual(["Home", "Sales & Finance", "People", "Resources", "More"]);
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Financials", "Marketing", "People", "Goals", "Monthly GSRs", "Reviews", "Scorecards", "SOPs", "Files & media", "My GSR", "Settings",
+      "Home", "Financials", "Marketing", "People", "Goals", "GSRs", "Reviews", "Scorecards", "SOPs", "Files & media", "My GSR", "Settings",
     ]);
   });
 
@@ -1202,13 +1202,13 @@ describe("monthly GSRs, scored", () => {
     rbaPillarId = (await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 })).id;
   });
 
-  it("offers the mandatory count in settings and says how the pillar scores", async () => {
+  it("shows the goal count as text in the pillar and says how the pillar scores", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
     await user.click(await screen.findByRole("button", { name: /Monthly GSRs/ }));
-    expect(screen.getByText("Mandatory a month")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit mandatory GSRs a month" }));
-    expect(screen.getByLabelText("Mandatory a month")).toHaveValue("2");
+    expect(screen.getByText("2 goals each")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Change on GSRs, Setup" })).toHaveAttribute("href", "/gsr/setup");
+    expect(screen.queryByLabelText("Goals each GSR requires")).not.toBeInTheDocument();
     expect(screen.getByText(/Scored from the Goal Setting Reviews inside each review's period/)).toBeInTheDocument();
   });
 

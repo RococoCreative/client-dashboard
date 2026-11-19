@@ -1,10 +1,10 @@
 // How this company scores people, for Reviews, Setup: pillars, their weights and scoring type, the
-// criteria a rating pillar rates, and on a Monthly GSRs pillar how many mandatory GSRs a month
-// carries. The pillars are a short list, one line each (number, name, scoring type, weight); one
+// criteria a rating pillar rates, and on a Monthly GSRs pillar how many goals each GSR requires,
+// shown as text with a link to where it is set (GSRs, Setup). The pillars are a short list, one line each (number, name, scoring type, weight); one
 // opens at a time and shows its fields as text until a pencil opens them. Name, weight and the
 // rest still save on blur. Weights should total 100; the panel shows the running total and the
-// scoring engine normalizes either way. The monthly focus topics are planned in Goals > Monthly
-// focus, which is where the GSR pillar's note points.
+// scoring engine normalizes either way. The monthly focus topics are planned in GSRs, Setup, which
+// is where the GSR pillar's note points.
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus } from "lucide-react";
@@ -37,7 +37,7 @@ import { formatNumber, pluralize } from "../../lib/format.ts";
 import { SCORING_TYPE_LABELS, keysOf, type GsrCriterion, type GsrPillar, type ScoringType } from "../../types/database.ts";
 
 type PillarPatch = Parameters<typeof updatePillar>[1];
-type PillarField = "name" | "weight" | "scoring" | "scale" | "required" | "description" | "status";
+type PillarField = "name" | "weight" | "scoring" | "scale" | "description" | "status";
 
 // A small labelled value, the read side of a setup row.
 function Fact({ label, children }: { label: string; children: ReactNode }) {
@@ -143,23 +143,16 @@ function OpenPillar({
           </select>
         </>,
       )}
-      {/* The one setting each scoring type carries of its own: a rating pillar's scale, or how many
-          mandatory GSRs a month carries for a Monthly GSRs pillar. The other types carry neither. */}
-      {pillar.scoring_type === "gsr_goals"
-        ? row(
-            "required",
-            "Edit mandatory GSRs a month",
-            <Fact label="Mandatory a month">{pillar.required_goals}</Fact>,
-            <>
-              <label htmlFor={`pillar-required-${pillar.id}`} className={labelClass}>Mandatory a month</label>
-              <select id={`pillar-required-${pillar.id}`} value={pillar.required_goals} onChange={(e) => void onPatch({ required_goals: Number(e.target.value) })} className={selectClass}>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </>,
-          )
-        : null}
+      {/* The one setting each scoring type carries of its own: a rating pillar's scale below, or for a
+          Monthly GSRs pillar how many goals each GSR requires, which is set on GSRs, Setup. */}
+      {pillar.scoring_type === "gsr_goals" ? (
+        <div className="border-b border-line py-3">
+          <Fact label="Goals each GSR requires">
+            <span className="tnum">{pluralize(pillar.required_goals, "goal")} each</span>{" "}
+            <Link to="/gsr/setup" className="text-link hover:underline">Change on GSRs, Setup</Link>
+          </Fact>
+        </div>
+      ) : null}
       {pillar.scoring_type === "rating"
         ? row(
             "scale",
@@ -196,7 +189,7 @@ function OpenPillar({
       {pillar.scoring_type === "gsr_goals" ? (
         <p className={`${secondaryClass} mt-5`}>
           Scored from the Goal Setting Reviews inside each review's period. A month carries {pluralize(pillar.required_goals, "mandatory GSR")}, the focus topic's GSR first and then role and professional goals, and adds up the completion of all its goals up to {pillar.required_goals * 100}%: a stretch goal adds to the total and never lowers it. A month counts once an admin marks its GSR complete, which locks its score in. The months are written into the review as one line item when it is marked complete. Each month's focus topic is planned in{" "}
-          <Link to="/goals/focus" className="text-link hover:underline">Goals, Monthly focus</Link>.
+          <Link to="/gsr/setup" className="text-link hover:underline">GSRs, Setup</Link>.
         </p>
       ) : null}
       {pillar.scoring_type === "rating" ? (

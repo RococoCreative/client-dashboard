@@ -25,7 +25,7 @@ const MARKETING: Expected = { to: "/marketing", label: "Marketing", icon: Megaph
 const PROJECTS: Expected = { to: "/production", label: "Projects", icon: HardHat };
 const PEOPLE: Expected = { to: "/people", label: "People", icon: Users };
 const GOALS: Expected = { to: "/goals", label: "Goals", icon: Target };
-const GSRS: Expected = { to: "/gsr", label: "Monthly GSRs", icon: CalendarCheck };
+const GSRS: Expected = { to: "/gsr", label: "GSRs", icon: CalendarCheck };
 const REVIEWS: Expected = { to: "/reviews", label: "Reviews", icon: ClipboardCheck };
 const SCORECARDS: Expected = { to: "/scorecards", label: "Scorecards", icon: Gauge };
 const MY_GSR: Expected = { to: "/my/gsr", label: "My GSR", icon: CalendarCheck };
@@ -182,7 +182,7 @@ describe("the Tasks item", () => {
 
 describe("navFor for a manager", () => {
   // A manager leads people but is not an admin: People joins their own pages, and nothing an admin
-  // alone runs (Goals, Monthly GSRs, Reviews, Scorecards, Settings) appears.
+  // alone runs (Goals, GSRs, Reviews, Scorecards, Settings) appears.
   const PLAIN_MANAGER: Sections = [
     [null, [HOME]],
     ["People", [PEOPLE, MY_GSR, MY_REVIEWS, MY_GOALS]],

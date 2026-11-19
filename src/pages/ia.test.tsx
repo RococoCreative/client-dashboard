@@ -66,10 +66,9 @@ function tabsOf(name: string) {
 }
 
 describe("Goals hub", () => {
-  it("has a route per tab, in the order Company, Monthly focus, People", () => {
+  it("has a route per tab, in the order Company, People", () => {
     expect(GOALS_TABS.map((t) => [t.label, t.to])).toEqual([
       ["Company", "/goals/company"],
-      ["Monthly focus", "/goals/focus"],
       ["People", "/goals/people"],
     ]);
   });
@@ -78,9 +77,9 @@ describe("Goals hub", () => {
     renderWithHub(<GoalsPage tab="company" />, admin, { path: "/goals/company", pattern: "/goals/company" });
     expect(screen.getByRole("heading", { level: 1, name: "Goals" })).toBeInTheDocument();
     expect(tabsOf("Goals")).toEqual({
-      labels: ["Company", "Monthly focus", "People"],
+      labels: ["Company", "People"],
       current: ["Company"],
-      hrefs: ["/goals/company", "/goals/focus", "/goals/people"],
+      hrefs: ["/goals/company", "/goals/people"],
     });
     expect(await screen.findByRole("heading", { name: "Company goals 2026" })).toBeInTheDocument();
     expect(await screen.findByText("Gross margin")).toBeInTheDocument();
@@ -122,13 +121,6 @@ describe("Goals hub", () => {
     renderWithHub(<RolesPage />, empty, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
     expect(await screen.findByText(/No job roles yet\. Add one, then put people in it/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add role" })).toBeInTheDocument();
-  });
-
-  it("plans the focus topics on Monthly focus", async () => {
-    renderWithHub(<GoalsPage tab="focus" />, admin, { path: "/goals/focus", pattern: "/goals/focus" });
-    expect(tabsOf("Goals").current).toEqual(["Monthly focus"]);
-    expect(await screen.findByRole("heading", { name: "Focus topic calendar" })).toBeInTheDocument();
-    expect(await screen.findByLabelText("Theme for October 2026")).toHaveValue("Core value: Ownership");
   });
 
   it("lists each person's goals for the year on People", async () => {
@@ -174,7 +166,7 @@ describe("Settings hub", () => {
     expect(await screen.findByRole("heading", { name: "Pillars and weights" })).toBeInTheDocument();
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Deliverable categories" })).toBeInTheDocument();
-    // The focus topics moved to Goals; Reviews no longer carries the calendar.
+    // The focus topics live on GSRs, Setup; Reviews does not carry the calendar.
     expect(screen.queryByRole("heading", { name: "Focus topic calendar" })).not.toBeInTheDocument();
   });
 
@@ -254,10 +246,10 @@ describe("Where the work lives on Home", () => {
   });
 });
 
-describe("header links from Monthly GSRs and Reviews", () => {
-  it("links Monthly GSRs to Goals > Monthly focus and Reviews > Setup", async () => {
+describe("header links from GSRs and Reviews", () => {
+  it("links GSRs to its own Setup tab and Reviews > Setup", async () => {
     renderWithHub(<CyclesPage section="gsr" />, admin);
-    expect(await screen.findByRole("link", { name: /Focus topics/ })).toHaveAttribute("href", "/goals/focus");
+    expect(await screen.findByRole("link", { name: "Setup" })).toHaveAttribute("href", "/gsr/setup");
     expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/reviews/setup");
   });
 
