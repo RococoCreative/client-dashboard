@@ -488,6 +488,8 @@ describe("who reports to a person", () => {
     // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them. Direct
     // reports show; a branch below them is closed, and its "N below" is the control that opens it.
     expect(within(tree).getByRole("link", { name: "Rowan Ellis" })).toHaveAttribute("href", `/people/${rowan.id}`);
+    // Every name in the tree is a full 44px line under a finger: real layout, at every depth.
+    expect(within(tree).getByRole("link", { name: "Rowan Ellis" }).className).toContain("tap:leading-11");
     expect(screen.getByText("1 direct report, 2 in all.")).toBeInTheDocument();
     const opener = within(tree).getByRole("button", { name: "1 below Rowan Ellis" });
     expect(opener).toHaveAttribute("aria-expanded", "false");
@@ -498,7 +500,7 @@ describe("who reports to a person", () => {
     expect(opener).toHaveAttribute("aria-expanded", "true");
     const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
     expect(opener).toHaveAttribute("aria-controls", underRowan.id);
-    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" })).toBeInTheDocument();
+    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" }).className).toContain("tap:leading-11");
     expect(within(underRowan).getByText("Not signed in yet")).toBeInTheDocument();
     // And it closes again.
     await userEvent.click(opener);

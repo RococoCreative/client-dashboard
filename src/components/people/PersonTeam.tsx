@@ -73,14 +73,14 @@ function TeamRow({ node, divisions, depth }: { node: Node; divisions: readonly C
       {/* Each level indents 12px on a phone and 20px from sm, six levels at most, so a deep row
           keeps room for its name and its "N below". On a phone the row is a small grid (avatar,
           name, "N below") and the Not signed in yet badge drops under the name instead of taking
-          the name's room. */}
+          the name's room. Under a finger the name is a 44px line, so it is a full target. */}
       <div
         className="flex items-center gap-3 border-b border-line py-2 pl-[calc(var(--depth)*12px)] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 sm:pl-[calc(var(--depth)*20px)]"
         style={{ "--depth": Math.min(depth, 6) } as CSSProperties}
       >
         <Avatar person={person} size={24} />
         <div className="min-w-0 flex-1">
-          <Link to={`/people/${person.id}`} title={name} className="block truncate text-sm font-medium text-ink hover:text-link">
+          <Link to={`/people/${person.id}`} title={name} className="block truncate text-sm font-medium text-ink hover:text-link tap:leading-11">
             {name}
           </Link>
           <p className="truncate text-[12px] text-ink-3">
