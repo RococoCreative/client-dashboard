@@ -78,6 +78,7 @@ export default function ProductionPage() {
   const { company, isAdmin, can } = useHub();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
+  const [addedNote, setAddedNote] = useState("");
   const state = useAsync(async () => {
     const [projects, milestones] = await Promise.all([listProjects(companyId), listCompanyMilestones(companyId)]);
     return { projects, milestones };
@@ -104,6 +105,7 @@ export default function ProductionPage() {
     <>
       <PageHeader eyebrow={company!.name} title="Production" description="Projects with their milestones and letters, entered by hand." actions={newProject} />
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
+      {addedNote ? <Notice tone="info" className="mb-4">{addedNote}</Notice> : null}
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
@@ -180,10 +182,18 @@ export default function ProductionPage() {
         <NewProjectDialog
           companyId={companyId}
           onClose={() => setCreating(false)}
-          onCreated={() => {
-            // Re-read, so the row shows the standard milestones the database copied onto it (0044).
-            state.reload();
+          onCreated={async (project) => {
             setCreating(false);
+            // Show the project at once, then re-read so its row carries the standard milestones the
+            // database copied onto it (0044). The re-read replaces the list, so it never shows twice.
+            state.setData((prev) => (prev ? { ...prev, projects: [...prev.projects.filter((p) => p.id !== project.id), project].sort((a, b) => a.name.localeCompare(b.name)) } : prev));
+            setAddedNote("");
+            try {
+              const [projects, milestones] = await Promise.all([listProjects(companyId), listCompanyMilestones(companyId)]);
+              state.setData({ projects, milestones });
+            } catch {
+              setAddedNote("The project was added. Reload to see its milestones.");
+            }
           }}
         />
       ) : null}

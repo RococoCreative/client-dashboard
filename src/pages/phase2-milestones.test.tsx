@@ -293,4 +293,20 @@ describe("a new project's row", () => {
     const row = (await screen.findByRole("link", { name: "Sample job 900" })).closest("tr") as HTMLElement;
     await waitFor(() => expect(within(row).getByText(`0 of ${standard} done`)).toBeInTheDocument());
   });
+
+  it("when the re-read fails the project stays listed once, a plain line shows, and it was created once", async () => {
+    const create = vi.spyOn(projectsService, "createProject");
+    const reread = vi.spyOn(projectsService, "listCompanyMilestones");
+    onTestFinished(() => { create.mockRestore(); reread.mockRestore(); });
+    const user = userEvent.setup();
+    renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
+    await screen.findByRole("link", { name: "Sample job 101" });
+    reread.mockRejectedValueOnce(new Error("offline"));
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    await user.type(screen.getByLabelText("Name"), "Sample job 901");
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+    expect(await screen.findByText("The project was added. Reload to see its milestones.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Sample job 901" })).toHaveLength(1);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
 });

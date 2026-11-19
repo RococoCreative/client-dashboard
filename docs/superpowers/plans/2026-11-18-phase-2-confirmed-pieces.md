@@ -378,11 +378,13 @@ it("an admin still gets the full source panel as before", ...);
 
 ## Rollout, by hand
 
-The order matters. The new app loads the company with `wins_home_days` and `manual_financials` at sign-in, so if it is deployed before 0042 every user of all three companies sees "Could not load your company"; it also reads milestone statuses, `milestone_templates` and `sync_weekdays`. The new `connections` function names `sync_weekdays`, so it never goes in before 0045. The migrations go in first; the app and function running today never read the new columns.
+0042 to 0045 were applied on 2026-11-19 through the Supabase connection, with the schema reloaded, so steps 1 and 2 are done. The app from this branch is not live yet, and the `connections` function live is still the build from before this branch. What remains is the app merge and deploy, the function redeploy, setting each company's values, and recording it.
 
-1. Back up, then paste 0042, 0043, 0044 and 0045 in order, once each. On their own they change nothing visible for any company.
-2. Confirm the API serves the new columns and table: run `notify pgrst, 'reload schema';` in the SQL editor, or make one signed-in read of `milestone_templates`.
-3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live project fails the same way until 0042 is in. The milestone badge wording changes with this deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes "Complete {date}". The admin action on a win also changes from "Archive" to "Remove".
+The order mattered. The new app loads the company with `wins_home_days` and `manual_financials` at sign-in, so deployed before 0042 every user of all three companies would see "Could not load your company"; it also reads milestone statuses, `milestone_templates` and `sync_weekdays`. The new `connections` function names `sync_weekdays`, so it only goes in after 0045. The migrations are in; the app and function running today never read the new columns.
+
+1. Done 2026-11-19: back up, then paste 0042, 0043, 0044 and 0045 in order, once each.
+2. Done 2026-11-19: confirm the API serves the new columns and table (`notify pgrst, 'reload schema';`).
+3. Merge to `main` and let Vercel deploy the app. The milestone badge wording changes with this deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes "Complete {date}". The admin action on a win also changes from "Archive" to "Remove".
 4. Redeploy the `connections` function: `supabase functions deploy connections --no-verify-jwt`. Until then a source runs on its lowest day only.
 5. In the app, for Kingdom: set 14 days on Rococo > Companies; add the standard milestones in Settings > Production; set sync days and weekdays-only staleness on each source once sources exist.
-6. Record 0042 to 0045 as applied, and the `connections` redeploy, in the README's What is applied live.
+6. Record the app deploy and the `connections` redeploy in the README's What is applied live (0042 to 0045 are already recorded there).
