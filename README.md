@@ -29,7 +29,7 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
 | Production (`production`) | Projects with a job reference, milestones and letters (add, edit, reorder, set each one Not started, In progress or Complete, archive); cards for client score, cleanliness, job health, warranty and PM capacity that read Not configured until they are defined | Read only |
-| Wins (`wins`) | Log, edit and archive wins; the five most recent on Home, or those of the last few days when the company sets a number; older wins in an Archive view | Read; the same Home list and the Archive view |
+| Wins (`wins`) | Log, edit and remove wins; the five most recent on Home, or those of the last few days when the company sets a number; older wins in an Archive view | Read; the same Home list and the Archive view |
 | Tasks (`tasks`) | Assign tasks to anyone with a due date, a priority, ordered steps and a repeat; see every task, filter by person, priority, campaign or state; attach a task to a marketing campaign; the assignee gets an email | Own assigned tasks: tick steps, complete and reopen; create tasks for themselves |
 | Sales & Finance (`data_sources`) | Read-only reporting and controls from connected Google Sheets and QuickBooks sources, each with its sync state and last successful sync | (not visible) |
 | Home cards (`switchboard`, `data_sources`) | Attention items, section shortcuts, data freshness | Shortcuts, wins |
@@ -103,7 +103,7 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 ### What is applied live
 
 Kept current by whoever pastes a migration, so the next session knows where it stands. Live
-project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-19:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
@@ -869,27 +869,40 @@ until `0040` is pasted.
 
 ### Applying Phase 2 (0042 to 0045)
 
-Company display settings, milestone statuses and templates, and sync days. None of it is applied.
+Company display settings, milestone statuses and templates, and sync days. `0042` to `0045` went
+in on 2026-11-19 through the Supabase connection, with the schema reloaded, so steps 1 and 2 are
+done. The app from this branch is not live yet, and the `connections` function live is still the
+build from before this branch. What remains is the app merge and deploy, the function redeploy,
+setting each company's values, and recording it.
 
-The order matters. The new app loads the company with `wins_home_days` and `manual_financials`
-at sign-in, so if it is deployed before `0042` every user of all three companies sees "Could not
+The order mattered. The new app loads the company with `wins_home_days` and `manual_financials`
+at sign-in, so deployed before `0042` every user of all three companies would see "Could not
 load your company"; it also reads milestone statuses, `milestone_templates` and `sync_weekdays`.
-The new `connections` function names `sync_weekdays`, so it never goes in before `0045`. The
-migrations go in first; the app and function running today never read the new columns.
+The new `connections` function names `sync_weekdays`, so it only goes in after `0045`. The
+migrations are in; the app and function running today never read the new columns.
 
-1. Back up, then paste `0042`, `0043`, `0044` and `0045` in order, once each. Each is idempotent;
-   go forwards only. On their own they change nothing visible for any company.
-2. Confirm the API serves the new columns and table: run `notify pgrst, 'reload schema';` in the
-   SQL editor, or make one signed-in read of `milestone_templates`.
-3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live
-   project fails the same way until `0042` is in. The milestone badge wording changes with this
-   deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes
-   "Complete {date}".
+1. Done 2026-11-19: back up, then paste `0042`, `0043`, `0044` and `0045` in order, once each.
+   Each is idempotent; go forwards only. On their own they change nothing visible for any company.
+2. Done 2026-11-19: confirm the API serves the new columns and table (`notify pgrst, 'reload
+   schema';` in the SQL editor).
+3. Merge to `main` and let Vercel deploy the app. These changes reach every company by default
+   with this deploy:
+   - The milestone badge wording: "Open" becomes "Not started" or "In progress", and
+     "Done {date}" becomes "Complete {date}".
+   - The admin action on a win is "Remove" instead of "Archive": the button, the dialog title and
+     the confirm label. The body reads "It leaves the Wins page and Home for everyone. It is kept
+     in the record, not deleted."
+   - Open and Done filter chips on a project page.
+   - A Status select on each milestone for people who may edit.
+   - A Settings > Production tab for companies with the production module.
+   - Day checkboxes replace the single weekday select on a data source.
+   - The new-win date defaults to the company's own day.
 4. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
    source runs on its lowest day only.
 5. In the app, set each company's display settings on Rococo > Companies, add standard milestones
    in Settings > Production, and set sync days and weekdays-only staleness on each source.
-6. Record `0042` to `0045` as applied, and the `connections` redeploy, in What is applied live.
+6. Record the app deploy and the `connections` redeploy in What is applied live (`0042` to `0045`
+   are already recorded there).
 
 ## Deploy
 

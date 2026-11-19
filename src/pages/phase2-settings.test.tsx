@@ -115,6 +115,21 @@ describe("Rococo Companies display settings", () => {
     spy.mockRestore();
   });
 
+  it("refuses an unparsable entry such as 1e and does not save or clear the setting", async () => {
+    const user = userEvent.setup();
+    await companiesService.updateCompany("co-klasik", { wins_home_days: 14 });
+    const spy = vi.spyOn(companiesService, "updateCompany");
+    open();
+    const field = await daysField("Klasik Construction");
+    await user.clear(field);
+    await user.type(field, "1e");
+    await user.tab();
+    expect(await screen.findByText("Enter a whole number of days between 1 and 3650, or leave it blank.")).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    expect((await companiesService.getCompany("co-klasik")).wins_home_days).toBe(14);
+    spy.mockRestore();
+  });
+
   it("refuses more than 3650 days with the same plain line and does not save", async () => {
     const user = userEvent.setup();
     const spy = vi.spyOn(companiesService, "updateCompany");

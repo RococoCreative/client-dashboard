@@ -299,7 +299,7 @@ export default function CompaniesPage() {
                     <legend className="sr-only">Display settings</legend>
                     <div className="md:col-span-4">
                       <label htmlFor={`co-wins-days-${company.id}`} className={labelClass}>Days a win stays on Home</label>
-                      <BlurInput id={`co-wins-days-${company.id}`} type="number" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
+                      <BlurInput id={`co-wins-days-${company.id}`} type="text" inputMode="numeric" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
                       <p className={helpClass}>Blank means the five newest, with no age limit.</p>
                     </div>
                     <div className="flex items-start gap-2 md:col-span-8">

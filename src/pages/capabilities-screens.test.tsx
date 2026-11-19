@@ -262,7 +262,7 @@ describe("wins, milestones and Production follow their capabilities", () => {
     renderWithHub(<WinsPage />, employeeHub, winsRoute);
     expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Archive / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
     await user.click(screen.getByRole("button", { name: "New win" }));
     const dialog = screen.getByRole("dialog", { name: "New win" });
     await user.type(within(dialog).getByLabelText("Title"), "Sample win from staff");

@@ -10,6 +10,7 @@ import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDateTime, pluralize } from "../../lib/format.ts";
+import { runCutOff } from "../../lib/sync/state.ts";
 import { listSyncSources, requestSync } from "../../services/sync.ts";
 import type { SyncSource } from "../../types/database.ts";
 
@@ -17,9 +18,12 @@ type Message = { tone: "success" | "info" | "error"; text: string };
 
 // The one line a source's row can honestly support. Anything that ended without success reads as
 // not finished, and the last good time stays beside it so old figures are never read as new ones.
-function stamp(source: SyncSource): string {
-  if (source.last_status === "running") return "Syncing";
-  if (source.last_status === "failed" || source.last_status === "abandoned") {
+// A run the platform cut off stays "running" until the hourly tick closes it, so it reads as not
+// finished and the button stays usable (runCutOff).
+function stamp(source: SyncSource, now: Date): string {
+  const cutOff = runCutOff(source, now);
+  if (source.last_status === "running" && !cutOff) return "Syncing";
+  if (cutOff || source.last_status === "failed" || source.last_status === "abandoned") {
     return source.last_success_at
       ? `The last sync did not finish. Showing figures from ${formatDateTime(source.last_success_at)}.`
       : "The last sync did not finish. No figures yet.";
@@ -84,6 +88,7 @@ export default function ProductionSync({ companyId }: { companyId: string }) {
   if (state.error && !state.data) return <Notice tone="error" className="mt-6">{state.error}</Notice>;
   if (!state.data) return <div className="mt-6"><SkeletonRows rows={2} /></div>;
   if (state.data.length === 0) return null;
+  const now = new Date();
 
   return (
     <div className="mt-6 space-y-4">
@@ -97,14 +102,14 @@ export default function ProductionSync({ companyId }: { companyId: string }) {
             <Button
               size="sm"
               aria-label={`Sync ${source.name} now`}
-              disabled={syncing !== null || source.last_status === "running"}
+              disabled={syncing !== null || (source.last_status === "running" && !runCutOff(source, now))}
               onClick={() => void syncNow(source)}
             >
               {syncing === source.id ? "Syncing..." : "Sync now"}
             </Button>
           }
         >
-          <p className="text-[12.5px] text-ink-2">{stamp(source)}</p>
+          <p className="text-[12.5px] text-ink-2">{stamp(source, now)}</p>
         </Section>
       ))}
     </div>

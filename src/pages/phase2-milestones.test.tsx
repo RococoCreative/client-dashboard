@@ -278,3 +278,19 @@ describe("standard milestones in Settings", () => {
     });
   });
 });
+
+// Last in the file: it adds a project to the shared mock store.
+describe("a new project's row", () => {
+  it("shows the standard milestones the database copied onto it, not 0 of 0", async () => {
+    const standard = (await templatesService.listMilestoneTemplates(KINGDOM.company.id)).length;
+    expect(standard).toBeGreaterThan(0);
+    const user = userEvent.setup();
+    renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
+    await screen.findByRole("link", { name: "Sample job 101" });
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    await user.type(screen.getByLabelText("Name"), "Sample job 900");
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+    const row = (await screen.findByRole("link", { name: "Sample job 900" })).closest("tr") as HTMLElement;
+    await waitFor(() => expect(within(row).getByText(`0 of ${standard} done`)).toBeInTheDocument());
+  });
+});

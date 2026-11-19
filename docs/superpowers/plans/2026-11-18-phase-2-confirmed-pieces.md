@@ -31,6 +31,7 @@ This file exists to drive Phase 2 of the Kingdom intake build task by task: the 
 5. **A company's standard milestones are set by its admins in Settings**, and apply to projects created after that. Existing projects are not touched.
 6. **A sync source keeps its single weekday column filled** (the first day of the set) so the function already deployed keeps working until it is redeployed.
 7. **Weekdays-only staleness is a flag on the source.** The threshold stays in hours, so "2 days" is 48 with the flag on.
+8. **The admin action on a win reads "Remove", not "Archive", for all three companies.** With a days setting on, the page has an Archive tab for wins that aged off Home; the admin action hides a win everywhere, including that tab, so it needs a different name. Dialog body: "It leaves the Wins page and Home for everyone. It is kept in the record, not deleted."
 
 ## Review Focus
 
@@ -381,7 +382,7 @@ The order matters. The new app loads the company with `wins_home_days` and `manu
 
 1. Back up, then paste 0042, 0043, 0044 and 0045 in order, once each. On their own they change nothing visible for any company.
 2. Confirm the API serves the new columns and table: run `notify pgrst, 'reload schema';` in the SQL editor, or make one signed-in read of `milestone_templates`.
-3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live project fails the same way until 0042 is in. The milestone badge wording changes with this deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes "Complete {date}".
+3. Only then merge to `main` and let Vercel deploy the app. A preview build pointed at the live project fails the same way until 0042 is in. The milestone badge wording changes with this deploy: "Open" becomes "Not started" or "In progress", and "Done {date}" becomes "Complete {date}". The admin action on a win also changes from "Archive" to "Remove".
 4. Redeploy the `connections` function: `supabase functions deploy connections --no-verify-jwt`. Until then a source runs on its lowest day only.
 5. In the app, for Kingdom: set 14 days on Rococo > Companies; add the standard milestones in Settings > Production; set sync days and weekdays-only staleness on each source once sources exist.
 6. Record 0042 to 0045 as applied, and the `connections` redeploy, in the README's What is applied live.

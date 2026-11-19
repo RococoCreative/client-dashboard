@@ -104,6 +104,14 @@ describe("Production sync for people who may sync", () => {
     expect(screen.getByRole("button", { name: "Sync Sample capacity tab now" })).toBeDisabled();
   });
 
+  it("a run cut off by the platform reads as did not finish and the button is enabled", async () => {
+    manage([row({ last_success_at: GOOD, last_status: "running", last_attempt_at: "2026-09-14T08:00:00Z" })]);
+    renderWithHub(<ProductionPage />, manager, route);
+    expect(await screen.findByText(`The last sync did not finish. Showing figures from ${formatDateTime(GOOD)}.`)).toBeInTheDocument();
+    expect(screen.queryByText("Syncing")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync Sample capacity tab now" })).toBeEnabled();
+  });
+
   it("never reads 'Not connected' because the connection list is empty", async () => {
     const { connections } = manage([row({ last_success_at: GOOD, last_status: "succeeded" })]);
     renderWithHub(<ProductionPage />, manager, route);

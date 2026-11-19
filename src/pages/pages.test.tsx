@@ -1504,7 +1504,7 @@ describe("wins", () => {
     expect(screen.queryByText("Sample win 5")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New win" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Archive / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
   });
 
   it("gives an admin every field to edit in place", async () => {
@@ -1550,13 +1550,13 @@ describe("wins", () => {
     expect(screen.getByLabelText("Description of Sample win 2")).toHaveValue("Closed on the first walkthrough.");
   });
 
-  it("archives a win after confirming", async () => {
+  it("removes a win after confirming", async () => {
     const user = userEvent.setup();
     renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
-    await user.click(await screen.findByRole("button", { name: "Archive Sample win 7" }));
-    const dialog = screen.getByRole("dialog", { name: "Archive this win?" });
-    expect(within(dialog).getByText("It leaves this list and the Home card. It is kept, not deleted.")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Archive" }));
+    await user.click(await screen.findByRole("button", { name: "Remove Sample win 7" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove this win?" });
+    expect(within(dialog).getByText("It leaves the Wins page and Home for everyone. It is kept in the record, not deleted.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByDisplayValue("Sample win 7")).not.toBeInTheDocument());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

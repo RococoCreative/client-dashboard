@@ -180,8 +180,9 @@ export default function ProductionPage() {
         <NewProjectDialog
           companyId={companyId}
           onClose={() => setCreating(false)}
-          onCreated={(project) => {
-            state.setData((prev) => (prev ? { ...prev, projects: [...prev.projects, project].sort((a, b) => a.name.localeCompare(b.name)) } : prev));
+          onCreated={() => {
+            // Re-read, so the row shows the standard milestones the database copied onto it (0044).
+            state.reload();
             setCreating(false);
           }}
         />

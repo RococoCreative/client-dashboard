@@ -51,6 +51,7 @@ export default function BlurInput({
   placeholder,
   className,
   type = "text",
+  inputMode,
   rows = 3,
   ariaLabel,
   required = false,
@@ -63,6 +64,7 @@ export default function BlurInput({
   placeholder?: string;
   className?: string;
   type?: string;
+  inputMode?: "numeric" | "decimal" | "text";
   rows?: number;
   ariaLabel?: string;
   required?: boolean;
@@ -163,6 +165,7 @@ export default function BlurInput({
         title={title}
         data-save-state={state}
         type={type}
+        inputMode={inputMode}
         value={draft}
         disabled={disabled}
         placeholder={placeholder}

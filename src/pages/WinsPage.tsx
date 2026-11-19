@@ -4,7 +4,7 @@
 // When the company limits how many days a win stays on Home, the page splits in two: Recent (the
 // wins still on Home) and Archive (older ones). With no setting it is one list, as it always was.
 import { useRef, useState, type FormEvent } from "react";
-import { Archive, Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import BlurInput from "../components/ui/BlurInput.tsx";
 import Button from "../components/ui/Button.tsx";
@@ -109,7 +109,7 @@ function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: 
         </div>
         <div className="mt-2 flex shrink-0 items-center gap-1">
           <SourceBadge win={win} />
-          <IconButton label={`Archive ${title}`} onClick={onArchive}><Archive size={14} aria-hidden /></IconButton>
+          <IconButton label={`Remove ${title}`} onClick={onArchive}><X size={14} aria-hidden /></IconButton>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-[12rem_minmax(0,20rem)]">
@@ -311,9 +311,9 @@ export default function WinsPage() {
 
       {archiving ? (
         <ConfirmDialog
-          title="Archive this win?"
-          body="It leaves this list and the Home card. It is kept, not deleted."
-          confirmLabel="Archive"
+          title="Remove this win?"
+          body="It leaves the Wins page and Home for everyone. It is kept in the record, not deleted."
+          confirmLabel="Remove"
           tone="primary"
           busy={busy}
           error={error}
