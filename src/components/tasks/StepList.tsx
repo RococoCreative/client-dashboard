@@ -10,7 +10,7 @@ import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
-import { checkboxClass, inputClass } from "../ui/forms.ts";
+import { checkboxClass, checkboxHitClass, inputClass } from "../ui/forms.ts";
 import { metaClass } from "../ui/type.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { addStep, moveStep, removeStep, renameStep, setStepDone } from "../../services/tasks.ts";
@@ -46,14 +46,16 @@ function StepRow({
   return (
     <li className="px-4 py-2 sm:px-6">
       <div className="flex min-h-11 items-center gap-3 sm:min-h-9">
-        <input
-          type="checkbox"
-          aria-label={title}
-          className={checkboxClass}
-          checked={done}
-          disabled={!canTick || busy}
-          onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
-        />
+        <label className={checkboxHitClass}>
+          <input
+            type="checkbox"
+            aria-label={title}
+            className={checkboxClass}
+            checked={done}
+            disabled={!canTick || busy}
+            onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
+          />
+        </label>
         {open ? (
           <div className="min-w-0 flex-1">
             <BlurInput value={title} required ariaLabel={`Rename ${title}`} onSave={(next) => run(() => renameStep(id, next.trim()))} className={`${inputClass} mt-0 py-1.5`} />

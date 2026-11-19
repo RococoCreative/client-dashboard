@@ -13,7 +13,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, checkboxHitClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { metaClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -137,10 +137,10 @@ export default function UsersPage() {
                         )}
                       </td>
                       <td className={tdClass}>
-                        <input type="checkbox" checked={person.is_rococo_admin} disabled={self} aria-label={`Rococo admin: ${person.email}`} onChange={(e) => void patch(person, { is_rococo_admin: e.target.checked })} className={checkboxClass} />
+                        <label className={checkboxHitClass}><input type="checkbox" checked={person.is_rococo_admin} disabled={self} aria-label={`Rococo admin: ${person.email}`} onChange={(e) => void patch(person, { is_rococo_admin: e.target.checked })} className={checkboxClass} /></label>
                       </td>
                       <td className={tdClass}>
-                        <input type="checkbox" checked={person.is_active} disabled={self} aria-label={`Active: ${person.email}`} onChange={(e) => void patch(person, { is_active: e.target.checked })} className={checkboxClass} />
+                        <label className={checkboxHitClass}><input type="checkbox" checked={person.is_active} disabled={self} aria-label={`Active: ${person.email}`} onChange={(e) => void patch(person, { is_active: e.target.checked })} className={checkboxClass} /></label>
                       </td>
                       <td className={`${tdClass} text-right`}>
                         {editing ? (

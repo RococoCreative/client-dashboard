@@ -16,6 +16,10 @@ export const textareaClass = `${inputClass} min-h-[88px] leading-relaxed`;
 
 export const checkboxClass = "h-4 w-4 shrink-0 rounded border-line-strong accent-accent";
 
+// A label wrapped round a checkbox that has no visible label of its own (its name is an
+// aria-label), so a thumb has 44px to hit. The negative margin keeps the drawn box where it was.
+export const checkboxHitClass = "inline-flex shrink-0 cursor-pointer items-center justify-center tap:-m-3.5 tap:h-11 tap:w-11";
+
 export const helpClass = "mt-1.5 text-[12.5px] leading-relaxed text-ink-3";
 
 // Table classes: hairline rows, quiet uppercase headers, dense but readable.

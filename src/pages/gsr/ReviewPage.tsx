@@ -86,6 +86,7 @@ import {
   type ReviewScore,
   type TaskWithSteps,
 } from "../../types/database.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // Who signed off a review when the company directory does not list them. Rococo only when the page
 // knows it: the viewer is that Rococo admin, or the reviewer is on the list the viewer reads and is
@@ -638,7 +639,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               </span>
             ) : null}
             {isAdmin && !embedded ? (
-              <Link to={cyclePath(cycle)} className="text-link hover:underline">Everyone in {cycle.name}</Link>
+              <Link to={cyclePath(cycle)} className={`text-link hover:underline ${tapTargetClass}`}>Everyone in {cycle.name}</Link>
             ) : null}
           </span>
         }
@@ -843,7 +844,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                       </p>
                     </div>
                     {gsr ? (
-                      <Link to={reviewPath(gsr.id, month.cadence)} className="text-[13px] text-link hover:underline">Open month</Link>
+                      <Link to={reviewPath(gsr.id, month.cadence)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open month</Link>
                     ) : (
                       <span className="text-[12px] text-ink-3">Not started</span>
                     )}

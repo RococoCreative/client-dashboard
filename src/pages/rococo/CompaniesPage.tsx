@@ -17,7 +17,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { checkboxClass, checkboxHitClass, helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { bodyClass, eyebrowLabelClass, metaClass } from "../../components/ui/type.ts";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";
@@ -293,14 +293,16 @@ export default function CompaniesPage() {
                         const id = `co-module-${company.id}-${key}`;
                         return (
                           <div key={key} className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              id={id}
-                              className={`${checkboxClass} mt-0.5`}
-                              checked={hasModule(shown, key)}
-                              aria-describedby={`${id}-help`}
-                              onChange={(e) => void toggleModule(company, key, e.target.checked)}
-                            />
+                            <label className={`${checkboxHitClass} mt-0.5`}>
+                              <input
+                                type="checkbox"
+                                id={id}
+                                className={checkboxClass}
+                                checked={hasModule(shown, key)}
+                                aria-describedby={`${id}-help`}
+                                onChange={(e) => void toggleModule(company, key, e.target.checked)}
+                              />
+                            </label>
                             <div className="min-w-0">
                               <label htmlFor={id} className="text-[13px] text-ink">{MODULE_LABELS[key]}</label>
                               <p id={`${id}-help`} className={helpClass}>{MODULE_DESCRIPTIONS[key]}</p>
@@ -325,13 +327,15 @@ export default function CompaniesPage() {
                       </EditRow>
                     </div>
                     <div className="flex items-start gap-2 md:col-span-8 md:pt-3">
-                      <input
-                        type="checkbox"
-                        id={`co-manual-financials-${company.id}`}
-                        className={`${checkboxClass} mt-0.5`}
-                        checked={company.manual_financials}
-                        onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
-                      />
+                      <label className={`${checkboxHitClass} mt-0.5`}>
+                        <input
+                          type="checkbox"
+                          id={`co-manual-financials-${company.id}`}
+                          className={checkboxClass}
+                          checked={company.manual_financials}
+                          onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
+                        />
+                      </label>
                       <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink">Manual Financials page</label>
                     </div>
                   </fieldset>

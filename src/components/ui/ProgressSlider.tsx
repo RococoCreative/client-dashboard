@@ -101,7 +101,7 @@ export default function ProgressSlider({
           onPointerUp={commit}
           onKeyUp={commit}
           onBlur={commit}
-          className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent tap:h-11 disabled:cursor-not-allowed disabled:opacity-60"
         />
         <span className={`tnum w-20 shrink-0 text-right text-[12px] font-medium ${complete ? "text-success" : "text-ink-2"}`}>
           {complete ? (

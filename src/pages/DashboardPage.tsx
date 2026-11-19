@@ -91,6 +91,7 @@ import {
   type ReviewScore,
   type Sop,
 } from "../types/database.ts";
+import { tapTargetClass } from "../components/ui/tap.ts";
 
 function RecentSops({ sops }: { sops: Sop[] }) {
   if (sops.length === 0) {
@@ -203,7 +204,7 @@ function CycleProgress({
           )}
           {capped ? (
             <p className="mt-2 text-[13px]">
-              <Link to={cyclePath(cycle)} className="text-link hover:underline">All {people.length} people</Link>
+              <Link to={cyclePath(cycle)} className={`text-link hover:underline ${tapTargetClass}`}>All {people.length} people</Link>
             </p>
           ) : null}
           </>
@@ -888,7 +889,7 @@ function EmployeeDashboard() {
                 <div className="min-w-0 text-sm">
                   <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                   <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                  <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-link hover:underline">
+                  <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className={`mt-2 inline-block text-link hover:underline ${tapTargetClass}`}>
                     View review
                   </Link>
                 </div>

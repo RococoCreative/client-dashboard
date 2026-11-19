@@ -22,6 +22,7 @@ import { formatDate, pluralize } from "../../../lib/format.ts";
 import { divisionLabel, formatTenure, ledBy } from "../../../lib/people.ts";
 import { ROLE_LABELS, type Goal } from "../../../types/database.ts";
 import { reportsTo, type PersonTabProps } from "../../../pages/people/personTabs.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 
 // One label and its value in the details strip.
 function Detail({ label, children }: { label: string; children: ReactNode }) {
@@ -62,14 +63,14 @@ export default function PersonOverview({ companyId, data, person }: PersonTabPro
       <Section
         eyebrow="Profile"
         title="Details"
-        actions={isAdmin ? <Link to={`/people/${person.id}/setup`} className="text-link text-[13px] font-medium hover:underline">Edit in Setup</Link> : undefined}
+        actions={isAdmin ? <Link to={`/people/${person.id}/setup`} className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>Edit in Setup</Link> : undefined}
       >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Detail label="Email">{person.email}</Detail>
           <Detail label="Hired">{person.hire_date ? `${formatDate(person.hire_date)}${tenure ? ` · ${tenure}` : ""}` : "Not set"}</Detail>
           <Detail label="Job role">
             {jobRole && roleName ? (
-              isAdmin ? <Link to={`/people/roles/${jobRole.id}`} className="text-link hover:underline">{roleName}</Link> : roleName
+              isAdmin ? <Link to={`/people/roles/${jobRole.id}`} className={`text-link hover:underline ${tapTargetClass}`}>{roleName}</Link> : roleName
             ) : (
               "Not set"
             )}

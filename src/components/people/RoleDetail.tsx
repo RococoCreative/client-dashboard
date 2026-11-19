@@ -21,6 +21,7 @@ import { errorMessage } from "../../lib/errors.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import { divisionLabel } from "../../lib/people.ts";
 import { DASHBOARD_MODULE_LABELS, keysOf, type CompanyDivision, type DashboardModule, type JobRole, type JobRoleGoal, type Profile, type RoleMetric } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 function Part({ title, children }: { title: string; children: ReactNode }) {
   const id = `role-part-${title.toLowerCase().replace(/\W+/g, "-")}`;
@@ -64,7 +65,7 @@ function Holders({ role, people, divisions, onPeople, onError }: { role: JobRole
         <ul className="mt-2 border-t border-line">
           {holders.map((person) => (
             <li key={person.id} className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-line py-2.5">
-              <Link to={`/people/${person.id}`} className="text-[14px] text-link hover:underline">{displayName(person)}</Link>
+              <Link to={`/people/${person.id}`} className={`text-[14px] text-link hover:underline ${tapTargetClass}`}>{displayName(person)}</Link>
               {divisions.length > 0 ? <span className={metaClass}>{divisionLabel(person.division_ids, divisions)}</span> : null}
             </li>
           ))}

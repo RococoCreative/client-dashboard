@@ -58,6 +58,7 @@ import {
   viewerDivisions,
 } from "../../lib/people.ts";
 import { ROLE_LABELS, type CompanyDivision, type DirectoryEntry, type Invitation, type Profile, type Role } from "../../types/database.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // What each role opens up, shown under the Role select when adding someone.
 const ROLE_HINTS: Record<Role, string> = {
@@ -414,7 +415,7 @@ export default function PeoplePage() {
         tab="roster"
         actions={
           teamView ? (
-            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:underline">
+            <Link to={`/people/${profile.id}`} className={`text-sm font-medium text-link hover:underline ${tapTargetClass}`}>
               Your profile and team
             </Link>
           ) : (

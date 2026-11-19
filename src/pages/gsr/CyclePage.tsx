@@ -66,6 +66,7 @@ import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // The team table runs edge to edge in its card, so its first and last cells take the card's own
 // padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
@@ -510,7 +511,7 @@ export default function CyclePage() {
                     <td className={`${tdClass} text-right`}>
                       <div className="flex items-center justify-end gap-3 whitespace-nowrap">
                         {review ? (
-                          <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-link hover:underline">Open</Link>
+                          <Link to={reviewPath(review.id, cycle.cadence)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link>
                         ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review

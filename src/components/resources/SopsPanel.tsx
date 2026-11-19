@@ -19,6 +19,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listSops } from "../../services/sops.ts";
 import { formatDate } from "../../lib/format.ts";
 import { SOP_CATEGORY_LABELS, SOP_STATUS_LABELS, keysOf, type SopCategory } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function SopsPanel() {
   const { company, isAdmin } = useHub();
@@ -69,7 +70,7 @@ export default function SopsPanel() {
           eyebrow="SOPs"
           title={state.data && state.data.length > 0 ? "Nothing matches" : "No SOPs yet"}
           body={state.data && state.data.length > 0 ? "Try a different search or category." : isAdmin ? "Write the first procedure. Safety, process, client, admin, or field." : "Your admins have not published any procedures yet."}
-          action={isAdmin && (state.data?.length ?? 0) === 0 ? <Link to="/sops/new" className="text-link text-[13px] font-medium hover:underline">New SOP</Link> : undefined}
+          action={isAdmin && (state.data?.length ?? 0) === 0 ? <Link to="/sops/new" className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>New SOP</Link> : undefined}
         />
       ) : (
         <div className="space-y-6">

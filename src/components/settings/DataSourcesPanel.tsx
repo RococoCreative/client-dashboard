@@ -23,7 +23,7 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import useIsWide from "../ui/useIsWide.ts";
-import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
+import { checkboxClass, checkboxHitClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { itemTitleClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
 import DataSourceDetail from "./DataSourceDetail.tsx";
 import SourceRuns from "./SourceRuns.tsx";
@@ -297,7 +297,7 @@ function SourceEditor({
                         <input type="text" aria-label={`Unit ${i + 1}`} value={field.unit} onChange={(e) => setField(field.uid, { unit: e.target.value })} className={cellInput} />
                       </td>
                       <td className={`${tdClass} text-center`}>
-                        <input type="checkbox" aria-label={`Required ${i + 1}`} checked={field.required} onChange={(e) => setField(field.uid, { required: e.target.checked })} className={checkboxClass} />
+                        <label className={checkboxHitClass}><input type="checkbox" aria-label={`Required ${i + 1}`} checked={field.required} onChange={(e) => setField(field.uid, { required: e.target.checked })} className={checkboxClass} /></label>
                       </td>
                       <td className={`${tdClass} w-10`}>
                         <IconButton label="Remove field" onClick={() => setFields((prev) => prev.filter((f) => f.uid !== field.uid))}>

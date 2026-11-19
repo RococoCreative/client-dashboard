@@ -112,8 +112,10 @@ export default function AppLayout() {
   const counts: NavCounts = countCompanyId && openTasks?.companyId === countCompanyId ? { tasks: openTasks.count } : {};
 
   // The bar scrolls on its own (sideways on a phone, down on a short laptop screen), so the current
-  // page's item is brought into view within it, without moving the page itself.
+  // page's item is brought into view within it, without moving the page itself. It runs again when
+  // the Tasks count arrives, since the badge widens Tasks and can push the current item back out.
   const navRef = useRef<HTMLElement>(null);
+  const openCount = counts.tasks ?? 0;
   useEffect(() => {
     const nav = navRef.current;
     const current = nav?.querySelector<HTMLElement>('[aria-current="page"]');
@@ -122,7 +124,7 @@ export default function AppLayout() {
     const item = current.getBoundingClientRect();
     if (item.left < box.left || item.right > box.right) nav.scrollLeft += item.left - box.left - 12;
     if (item.top < box.top || item.bottom > box.bottom) nav.scrollTop += item.top - box.top - 12;
-  }, [location.pathname]);
+  }, [location.pathname, openCount]);
 
   // The shell owns the theme once signed in: Rococo on the portfolio, the company's inside.
   useEffect(() => {
