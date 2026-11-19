@@ -1,6 +1,6 @@
-// An employee's own Goal Setting Review for the current month, under their own sidebar entry
-// and tabs. The review itself is ReviewPage's monthly branch, mounted here with the id as a prop
-// rather than reached by URL, so the sidebar and the tabs stay on My GSR while they work it.
+// A person's own Goal Setting Review for the current month, titled My GSR. The review itself is
+// ReviewPage's monthly branch, mounted here with the id as a prop rather than reached by URL, so
+// the sidebar (and an admin's tabs) stay on My GSR while they work it.
 //
 // An admin opens the month (the cycle); either side can start the person's review inside it.
 // The employee starts theirs to prefill their goals before the meeting (0020 lets them, for
@@ -13,14 +13,14 @@ import { PencilLine } from "lucide-react";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
-import Tabs from "../../components/ui/Tabs.tsx";
+import PageHeader from "../../components/ui/PageHeader.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { ensureReview, listCycleOmissions, listCycles, listEmployeeReviews } from "../../services/gsr.ts";
 import { gsrCycleInPlay, omittedCycleIdsFor } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { MY_TABS } from "./myTabs.ts";
+import MyTabs from "./MyTabs.tsx";
 import ReviewPage from "./ReviewPage.tsx";
 
 export default function MyGsrPage() {
@@ -59,7 +59,8 @@ export default function MyGsrPage() {
 
   return (
     <>
-      <Tabs items={MY_TABS} />
+      <PageHeader title="My GSR" />
+      <MyTabs />
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {!state.data && !state.error ? (

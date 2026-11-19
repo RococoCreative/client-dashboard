@@ -1,4 +1,4 @@
-// The focus topic calendar (Goals > Monthly focus), the New month dialog reading it, and the
+// The focus topic calendar (GSRs > Setup), the New month dialog reading it, and the
 // company's divisions in People, Divisions, rendered against the mocked data layer the way
 // pages.test.tsx renders every page.
 // The mocks keep state for the whole file, so each test names the rows it starts from.
@@ -38,7 +38,7 @@ import { getCycle, updateCycle } from "../services/gsr.ts";
 import { listFocusTopics } from "../services/focusTopics.ts";
 import { listDivisions } from "../services/divisions.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
-import GoalsPage from "./gsr/GoalsPage.tsx";
+import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import DivisionsPage from "./people/DivisionsPage.tsx";
 
@@ -57,7 +57,7 @@ async function calendar() {
 
 describe("focus topic calendar", () => {
   it("lists this month and the next twelve, with the planned topics filled in", async () => {
-    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
+    renderWithHub(<GsrSetupPage />, klasikAdmin);
     const section = await calendar();
     expect(within(section).getByLabelText("Theme for September 2026")).toHaveValue("Core value: Integrity");
     expect(within(section).getByLabelText("Theme for October 2026")).toHaveValue("Core value: Ownership");
@@ -74,7 +74,7 @@ describe("focus topic calendar", () => {
   it("fills a month's GSR theme and description when the GSR has none", async () => {
     const user = userEvent.setup();
     expect((await getCycle(rbaSeptember.id)).theme).toBeNull();
-    renderWithHub(<GoalsPage tab="focus" />, rbaAdmin);
+    renderWithHub(<GsrSetupPage />, rbaAdmin);
     const section = await calendar();
     await user.type(within(section).getByLabelText("Theme for September 2026"), "Safety first");
     await user.tab();
@@ -91,7 +91,7 @@ describe("focus topic calendar", () => {
 
   it("never overwrites a theme typed on the GSR itself", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
+    renderWithHub(<GsrSetupPage />, klasikAdmin);
     const section = await calendar();
     const input = within(section).getByLabelText("Theme for September 2026");
     await user.clear(input);
@@ -109,7 +109,7 @@ describe("focus topic calendar", () => {
 
   it("removes a topic from the calendar only, leaving the GSR's theme", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GoalsPage tab="focus" />, rbaAdmin);
+    renderWithHub(<GsrSetupPage />, rbaAdmin);
     const section = await calendar();
     expect(within(section).getByLabelText("Theme for September 2026")).toHaveValue("Safety first");
     await user.click(within(section).getByRole("button", { name: "Remove the September 2026 topic" }));
@@ -124,7 +124,7 @@ describe("focus topic calendar", () => {
     const user = userEvent.setup();
     const northOnly = { ...rbaAdmin, profile: { ...rbaAdmin.profile, view_all_divisions: false, view_division_ids: ["rba-division-north"] } };
     const update = vi.spyOn(await import("../services/gsr.ts"), "updateCycle");
-    renderWithHub(<GoalsPage tab="focus" />, northOnly);
+    renderWithHub(<GsrSetupPage />, northOnly);
     const section = await calendar();
     await user.type(within(section).getByLabelText("Theme for September 2026"), "Clean sites");
     await user.tab();
@@ -149,7 +149,7 @@ describe("focus topic calendar", () => {
   });
 
   it("offers Remove only on a month that has a topic", async () => {
-    renderWithHub(<GoalsPage tab="focus" />, klasikAdmin);
+    renderWithHub(<GsrSetupPage />, klasikAdmin);
     const section = await calendar();
     // A month with no topic has nothing to remove.
     expect(within(section).queryByRole("button", { name: "Remove the November 2026 topic" })).not.toBeInTheDocument();
@@ -184,10 +184,10 @@ describe("new month dialog", () => {
     expect(theme).toHaveValue("Year-end push");
   });
 
-  it("links the GSR list to the calendar", async () => {
+  it("links the GSR list to the calendar on its Setup tab", async () => {
     renderWithHub(<CyclesPage section="gsr" />, klasikAdmin);
-    const link = await screen.findByRole("link", { name: /Focus topics/ });
-    expect(link).toHaveAttribute("href", "/goals/focus");
+    const link = await screen.findByRole("link", { name: "Setup" });
+    expect(link).toHaveAttribute("href", "/gsr/setup");
   });
 });
 

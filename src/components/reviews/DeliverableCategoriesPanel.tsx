@@ -1,21 +1,23 @@
-// The company's deliverable categories, for an admin in Company Settings: the groups a person's
+// The company's deliverable categories, for an admin on Reviews, Setup: the groups a person's
 // deliverable headings are filed under ("BD & Sales", "Production"). A category is born the first
 // time someone files a heading under it on a person page, so without this panel a mistyped one
-// would be offered in every pulldown for good. Here it is renamed, put in order, retired (no
-// longer offered, its headings left where they are) or deleted (its headings move to
-// Uncategorized, as the database does). Categories are company rows (rule 12): nothing here knows
-// a company by name.
+// would be offered in every pulldown for good. Each reads as a line of text until its pencil
+// opens it; there it is renamed, put in order, retired (no longer offered, its headings left
+// where they are) or deleted (its headings move to Uncategorized, as the database does).
+// Categories are company rows (rule 12): nothing here knows a company by name.
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import EditRow from "../ui/EditRow.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
+import { bodyClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { deleteDeliverableCategory, listDeliverableCategories, updateDeliverableCategory } from "../../services/deliverables.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -28,6 +30,9 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<DeliverableCategory | null>(null);
   const [busy, setBusy] = useState(false);
+  // The rows whose pencil is open. Several can be open at once; each closes with its own Done.
+  const [openIds, setOpenIds] = useState<string[]>([]);
+  const setOpen = (id: string, open: boolean) => setOpenIds((ids) => (open ? [...ids, id] : ids.filter((x) => x !== id)));
   // The delete dialog reports only its own failure, never an inline save's or an earlier
   // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
   // back, so the dialog waits for the answer rather than closing on Cancel mid-flight.
@@ -125,25 +130,39 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
         categories.length === 0 ? (
           <p className="text-sm text-ink-2">No categories yet. One is added the first time a heading is filed under it on a person's deliverables.</p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="-mt-4 sm:-mt-6">
             {categories.map((category, index) => (
-              <li key={category.id} className={`flex flex-wrap items-center gap-2 py-2 first:pt-0 last:pb-0 ${category.is_active ? "" : "opacity-70"}`}>
-                <div className="min-w-[180px] flex-1">
-                  <BlurInput value={category.name} required ariaLabel={`Category name ${category.name}`} onSave={(next) => save(category, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
-                </div>
-                {category.is_active ? null : <Badge>Retired</Badge>}
-                <Button variant="ghost" size="sm" onClick={() => void save(category, { is_active: !category.is_active })}>
-                  {category.is_active ? "Retire" : "Restore"}
-                </Button>
-                <IconButton label={`Move ${category.name} up`} disabled={index === 0 || moving} onClick={() => void move(index, -1)}>
-                  <ArrowUp size={14} aria-hidden />
-                </IconButton>
-                <IconButton label={`Move ${category.name} down`} disabled={index === categories.length - 1 || moving} onClick={() => void move(index, 1)}>
-                  <ArrowDown size={14} aria-hidden />
-                </IconButton>
-                <IconButton label={`Delete ${category.name}`} onClick={() => openDelete(category)}>
-                  <Trash2 size={14} aria-hidden />
-                </IconButton>
+              <li key={category.id} className={category.is_active ? "" : "opacity-70"}>
+                <EditRow
+                  editLabel={`Edit category ${category.name}`}
+                  editing={openIds.includes(category.id)}
+                  onEdit={() => setOpen(category.id, true)}
+                  onDone={() => setOpen(category.id, false)}
+                  display={
+                    <p className={`${bodyClass} break-words`}>
+                      {category.name} {category.is_active ? null : <Badge>Retired</Badge>}
+                    </p>
+                  }
+                >
+                  <div className="space-y-3">
+                    <BlurInput value={category.name} required ariaLabel={`Category name ${category.name}`} onSave={(next) => save(category, { name: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {category.is_active ? null : <Badge>Retired</Badge>}
+                      <Button variant="ghost" size="sm" onClick={() => void save(category, { is_active: !category.is_active })}>
+                        {category.is_active ? "Retire" : "Restore"}
+                      </Button>
+                      <IconButton label={`Move ${category.name} up`} disabled={index === 0 || moving} onClick={() => void move(index, -1)}>
+                        <ArrowUp size={14} aria-hidden />
+                      </IconButton>
+                      <IconButton label={`Move ${category.name} down`} disabled={index === categories.length - 1 || moving} onClick={() => void move(index, 1)}>
+                        <ArrowDown size={14} aria-hidden />
+                      </IconButton>
+                      <Button variant="danger" size="sm" aria-label={`Delete ${category.name}`} onClick={() => openDelete(category)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </EditRow>
               </li>
             ))}
           </ul>

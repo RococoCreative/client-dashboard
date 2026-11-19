@@ -61,7 +61,7 @@ function ThisMonthGsrCard({
 
   let body: ReactNode;
   if (!cycle) {
-    body = <p className="text-[13px] text-ink-2">No month is open for GSRs. An admin opens each month in Monthly GSRs.</p>;
+    body = <p className="text-[13px] text-ink-2">No month is open for GSRs. An admin opens each month in GSRs.</p>;
   } else if (review) {
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">

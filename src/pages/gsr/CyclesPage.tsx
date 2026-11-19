@@ -1,12 +1,13 @@
 // The cycles list behind two sidebar entries: GSRs (monthly Goal Setting Reviews) and Reviews
 // (every scored cadence), one component keyed on the section. Progress per cycle, the team score
-// where a cycle carries one, the door to settings and company goals on the Reviews side, and the
-// new-cycle form offering only the cadences that belong to the section. A new month starts
-// with that month's topic from the focus topic calendar, which the GSR side links to. The period
+// where a cycle carries one, the Cycles and Setup tabs and the door to company goals on the
+// Reviews side, the Periods and Setup tabs and the door to review settings on the GSR side, and
+// the new-cycle form offering only the cadences that belong to the section. A new month starts
+// with that month's topic from the focus topic calendar, which lives on GSRs, Setup. The period
 // math (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CalendarDays, Plus, Settings2, Target } from "lucide-react";
+import { Plus, Settings2, Target } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
@@ -14,6 +15,7 @@ import Field from "../../components/ui/Field.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
+import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, selectClass, textareaClass } from "../../components/ui/forms.ts";
 import { CYCLE_STATUS_TONE } from "../../components/status.ts";
@@ -38,6 +40,8 @@ import {
   type HubSection,
 } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import { GSR_TABS } from "./gsrTabs.ts";
+import { REVIEWS_TABS } from "./reviewsTabs.ts";
 import { formatPeriod, parseDate, todayIso } from "../../lib/format.ts";
 import type { Cadence, ReviewCycle } from "../../types/database.ts";
 
@@ -230,7 +234,7 @@ function NewCycleDialog({
 }
 
 export default function CyclesPage({ section }: { section: HubSection }) {
-  const { company } = useHub();
+  const { company, isAdmin } = useHub();
   const navigate = useNavigate();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
@@ -261,22 +265,21 @@ export default function CyclesPage({ section }: { section: HubSection }) {
         }
         actions={
           <>
-            {gsr ? (
-              <Link to="/goals/focus">
-                <Button variant="secondary" size="sm"><CalendarDays size={14} aria-hidden /> Focus topics</Button>
-              </Link>
-            ) : (
+            {gsr ? null : (
               <Link to="/goals/company">
                 <Button variant="secondary" size="sm"><Target size={14} aria-hidden /> Company goals</Button>
               </Link>
             )}
-            <Link to="/settings/reviews">
-              <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Review settings</Button>
-            </Link>
+            {gsr ? (
+              <Link to="/reviews/setup">
+                <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Review settings</Button>
+              </Link>
+            ) : null}
             <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button>
           </>
         }
       />
+      {gsr ? <Tabs items={isAdmin ? GSR_TABS : GSR_TABS.filter((t) => t.key !== "setup")} label="GSRs" /> : <Tabs items={REVIEWS_TABS} label="Reviews" />}
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {!state.data && !state.error ? (

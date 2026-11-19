@@ -7,6 +7,8 @@
 // nothing. Someone who has not signed in yet has their tasks here too: tasks attach to the person,
 // never to an account, and adding one for them says plainly that no email went. On the person's
 // Overview it shows only the next few open tasks, with a link to the rest on their Tasks tab.
+// Home shows the signed-in person their own next few the same way (self), coming back to Home, and
+// with none open it is one quiet line rather than a card.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Plus } from "lucide-react";
@@ -17,7 +19,7 @@ import SkeletonRows from "../ui/SkeletonRows.tsx";
 import TaskForm from "./TaskForm.tsx";
 import TaskRow, { type TaskBackState } from "./TaskRow.tsx";
 import { sendAssignmentEmail } from "./assignmentEmail.ts";
-import { metaClass } from "../ui/type.ts";
+import { metaClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
 import { isDone, sortTasks } from "../../lib/tasks.ts";
@@ -36,6 +38,8 @@ export default function PersonTasks({
   limit,
   moreHref,
   backTo,
+  backLabel,
+  self = false,
 }: {
   companyId: string;
   person: Profile;
@@ -50,14 +54,22 @@ export default function PersonTasks({
   moreHref?: string;
   // Where a task opened from here goes back to. Defaults to the person's Overview.
   backTo?: string;
+  // What the way back is called. Defaults to the person's name.
+  backLabel?: string;
+  // The viewer is this person (Home): the copy speaks to them, and with nothing open the block is
+  // one quiet line instead of a card.
+  self?: boolean;
 }) {
-  const state = useAsync(() => listTasks(companyId, { assigneeId: person.id, status: "all" }), [companyId, person.id]);
+  // A short summary leaves finished tasks off, so it asks for open ones only: the same read as the
+  // viewer's own list on Tasks.
+  const status = limit === undefined ? "all" : "open";
+  const state = useAsync(() => listTasks(companyId, { assigneeId: person.id, status }), [companyId, person.id, status]);
   const [adding, setAdding] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [notice, setNotice] = useState("");
   const today = todayIso();
   const name = displayName(person);
-  const back: TaskBackState = { from: { to: backTo ?? `/people/${person.id}`, label: name } };
+  const back: TaskBackState = { from: { to: backTo ?? `/people/${person.id}`, label: backLabel ?? name } };
   const all = state.data ?? [];
   const allOpen = sortTasks(all.filter((t) => !isDone(t)));
   const open = limit === undefined ? allOpen : allOpen.slice(0, limit);
@@ -97,13 +109,28 @@ export default function PersonTasks({
       </>
     ) : undefined;
 
+  if (self && state.data && allOpen.length === 0 && !adding && !notice) {
+    return (
+      <p className={secondaryClass}>
+        You have no open tasks.{" "}
+        {moreHref ? (
+          <Link to={moreHref} className="text-link hover:underline">
+            All tasks
+          </Link>
+        ) : null}
+      </p>
+    );
+  }
+
   return (
     <Section
-      title="Tasks"
+      title={self ? "Your tasks" : "Tasks"}
       description={
         limit !== undefined && state.data && allOpen.length > open.length
           ? `The next ${open.length} of ${allOpen.length} open tasks, earliest due first.`
-          : "Open tasks assigned to this person, earliest due first."
+          : self
+            ? "Your open tasks, earliest due first."
+            : "Open tasks assigned to this person, earliest due first."
       }
       padded={false}
       actions={action}
@@ -118,7 +145,7 @@ export default function PersonTasks({
           {open.length === 0 ? (
             <p className={`px-4 py-4 sm:px-6 ${metaClass}`}>No open tasks.</p>
           ) : (
-            <ul aria-label={`Open tasks for ${name}`} className="divide-y divide-line">
+            <ul aria-label={self ? "Your open tasks" : `Open tasks for ${name}`} className="divide-y divide-line">
               {open.map((task) => (
                 <TaskRow key={task.id} task={task} assigneeName={name} today={today} showAssignee={false} note={noteFor(task)} linkState={back} />
               ))}

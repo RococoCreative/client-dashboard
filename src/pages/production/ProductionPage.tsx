@@ -18,6 +18,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
+import Tabs from "../../components/ui/Tabs.tsx";
 import { inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -27,6 +28,7 @@ import { hasModule } from "../../lib/modules.ts";
 import { milestoneCounts, nextTargetDate } from "../../lib/milestones.ts";
 import { createProject, listCompanyMilestones, listProjects } from "../../services/projects.ts";
 import type { Project, ProjectMilestone } from "../../types/database.ts";
+import { PRODUCTION_TABS } from "./productionTabs.ts";
 
 function NewProjectDialog({ companyId, onClose, onCreated }: { companyId: string; onClose: () => void; onCreated: (project: Project) => void }) {
   const [name, setName] = useState("");
@@ -104,6 +106,7 @@ export default function ProductionPage() {
   return (
     <>
       <PageHeader eyebrow={company!.name} title="Production" description="Projects with their milestones and letters, entered by hand." actions={newProject} />
+      {isAdmin ? <Tabs items={PRODUCTION_TABS} label="Projects" /> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {addedNote ? <Notice tone="info" className="mb-4">{addedNote}</Notice> : null}
 

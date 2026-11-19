@@ -182,6 +182,16 @@ describe("the person page for an admin", () => {
   });
 });
 
+describe("copy that names the GSRs sidebar item", () => {
+  it("points an admin at GSRs, not Monthly GSRs, when a person has no reviews yet", async () => {
+    const withoutReviews = KLASIK.profiles.find((p) => p.is_active && !KLASIK.reviews.some((r) => r.employee_id === p.id))!;
+    renderPerson(klasikAdmin, `/people/${withoutReviews.id}/reviews`);
+    const link = await screen.findByRole("link", { name: "GSRs" });
+    expect(link).toHaveAttribute("href", "/gsr");
+    expect(screen.queryByText("Monthly GSRs")).not.toBeInTheDocument();
+  });
+});
+
 describe("the person page for a manager", () => {
   it("has no Setup tab, and an address for one lands on Overview", async () => {
     for (const path of [`/people/${rowan.id}/setup`, `/people/${rowan.id}/nope`]) {

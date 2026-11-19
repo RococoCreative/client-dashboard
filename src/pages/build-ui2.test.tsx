@@ -282,13 +282,77 @@ describe("Scorecards report", () => {
     expect(within(unscored).getByRole("link", { name: "Alex Morgan" })).toBeInTheDocument();
   });
 
-  it("filters by role and moves to another month", async () => {
+  it("offers only roles that have people, and shows just the chosen role's block", async () => {
     const user = userEvent.setup();
     renderWithHub(<ScorecardsPage />, rbaAdmin);
-    const roles = await screen.findByRole("group", { name: "Job role" });
-    await user.click(within(roles).getByRole("button", { name: "Site Superintendent" }));
+    const select = await screen.findByLabelText("Job role");
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options[0]).toBe("All roles");
+    expect(options).toContain("Site Superintendent");
+    // Jamie's role has no metrics, so it has no block and is not offered.
+    expect(options).not.toContain("Site Supervisor");
+    expect(screen.getByRole("heading", { name: "Site Superintendent" })).toBeInTheDocument();
+    await user.selectOptions(select, "Site Superintendent");
     expect(screen.queryByRole("link", { name: "Noor Haddad" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Avery Cole" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).filter((h) => options.includes(h.textContent))).toHaveLength(1);
+    // The other role's block is gone with its column headings, not only its heading.
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Job cost: gross profit/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Daily logs/ })).toBeInTheDocument();
+    await user.selectOptions(select, "All roles");
+    expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
+  });
+
+  it("hides the role select when only one role has people in view", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
+    await user.click(within(screen.getByRole("group", { name: "Division" })).getByRole("button", { name: "RBA North" }));
+    expect(screen.queryByLabelText("Job role")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+  });
+
+  it("leaves out a role that has metrics but nobody in view, and falls back to all roles when the chosen one empties", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
+    // Avery, the only Site Superintendent, works in RBA South. In RBA North nobody holds that role.
+    const division = screen.getByRole("group", { name: "Division" });
+    await user.click(within(division).getByRole("button", { name: "RBA North" }));
+    // Only one role is left in view, so there is nothing to choose between and the select steps aside.
+    expect(screen.queryByLabelText("Job role")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site Superintendent" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    // Choose Site Superintendent in the whole company, then move to a division it is not in.
+    await user.click(within(division).getByRole("button", { name: "Combined" }));
+    await user.selectOptions(screen.getByLabelText("Job role"), "Site Superintendent");
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    await user.click(within(division).getByRole("button", { name: "RBA North" }));
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
+    // Back in the whole company the choice, which was only set aside, applies again.
+    await user.click(within(division).getByRole("button", { name: "Combined" }));
+    expect((screen.getByLabelText("Job role") as HTMLSelectElement).value).toBe("rba-role-super");
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Job role"), "All roles");
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Site Superintendent" })).toBeInTheDocument();
+  });
+
+  it("reads People in the page label and gives each role block its own column headings", async () => {
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    expect(await screen.findByText("People", { selector: "p.eyebrow" })).toBeInTheDocument();
+    const block = screen.getByRole("heading", { name: "Site Superintendent" }).closest("table") as HTMLElement;
+    expect(within(block).getByRole("columnheader", { name: /Daily logs/ })).toBeInTheDocument();
+    const pm = screen.getByRole("heading", { name: "Project Manager" }).closest("table") as HTMLElement;
+    expect(within(pm).queryByRole("columnheader", { name: /Daily logs/ })).not.toBeInTheDocument();
+  });
+
+  it("moves to another month", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
     await user.selectOptions(screen.getByLabelText("Month"), "2026-08-01");
     expect(await screen.findByLabelText("Avery Cole, Optimization rate, August 2026: 88%, missed; year to date 90.3%, hit")).toBeInTheDocument();
   });
