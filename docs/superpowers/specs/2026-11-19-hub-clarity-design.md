@@ -111,9 +111,12 @@ Sidebar naming: "Monthly GSRs" becomes "GSRs". Scorecards carries the People lab
 - **Responsive.** Every page works from 390px to wide desktop with no sideways scroll. List and
   detail becomes list, then detail with a back arrow. Tabs scroll sideways. A table that does not
   fit becomes stacked rows, or scrolls inside its own box.
-- **Text never breaks a layout.** A one-line name truncates with an ellipsis and shows in full on
-  hover and on its own page. Body text wraps. Long descriptions clamp to two lines with "Show
-  more". A heading wraps rather than truncates.
+- **Text fits because the layout is right.** Text that does not fit is a sign the card or module
+  is laid out wrong, not a cue to cut the text. The order of fixes: first rework the layout (give
+  the text more room, stack it, move it to its own line); then step the size down within the type
+  scale, never under 12px; only then, for a one-line name in a tight list, truncate with the full
+  name on hover and on its own page. Clamping with "Show more" is a judgment call for long prose
+  such as a description, never a default.
 - **Room at the edges.** Page gutters are 48px on desktop, 24px on a tablet, 16px on a phone. Card
   padding is 24px, 16px on a phone. Nothing sits closer than 16px to a card or screen edge, and
   text never touches a control.
