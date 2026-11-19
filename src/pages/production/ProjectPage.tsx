@@ -1,17 +1,20 @@
 // One project: its details and its milestones and letters, in order. Members read everything
-// here; admins edit the details, add, edit, reorder and archive items, and archive the project.
+// here; admins edit the details (read first, each behind its pencil), add, edit, reorder and
+// archive items, and archive the project.
 // Loaded by the id in the URL, so it must belong to the active company (lib/tenancy.ts). Milestone
 // owners are named from the company directory, so an employee reads every owner's name.
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
+import EditRow from "../../components/ui/EditRow.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { bodyClass } from "../../components/ui/type.ts";
 import MilestoneList from "../../components/production/MilestoneList.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -42,6 +45,16 @@ function matchesFilter(m: ProjectMilestone, filter: Filter): boolean {
   return m.kind === filter;
 }
 
+// A detail as it reads before an admin opens it: its label, then its value.
+function DetailValue({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <p className={labelClass}>{label}</p>
+      <div className={`mt-1 ${bodyClass} [overflow-wrap:anywhere]`}>{children}</div>
+    </>
+  );
+}
+
 function AddMilestoneForm({ projectId, all, onAdded }: { projectId: string; all: ProjectMilestone[]; onAdded: (m: ProjectMilestone) => void }) {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<MilestoneKind>("milestone");
@@ -65,7 +78,7 @@ function AddMilestoneForm({ projectId, all, onAdded }: { projectId: string; all:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-line px-5 py-4">
+    <form onSubmit={handleSubmit} className="border-t border-line px-4 py-4 sm:px-6">
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
         <input type="text" aria-label="New milestone title" placeholder="Add a milestone or letter" value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
         <select aria-label="New milestone kind" value={kind} onChange={(e) => setKind(e.target.value as MilestoneKind)} className={selectClass}>
@@ -93,6 +106,8 @@ export default function ProjectPage() {
   const [archiving, setArchiving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The details read first; one opens at a time.
+  const [openField, setOpenField] = useState<"name" | "reference" | "notes" | null>(null);
 
   const state = useAsync(async () => {
     const [project, milestones, people, directory] = await Promise.all([getProject(projectId), listMilestones(projectId), listCompanyProfiles(companyId), listDirectory(companyId)]);
@@ -167,7 +182,7 @@ export default function ProjectPage() {
             </div>
           }
         >
-          {canMilestones && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
+          {canMilestones && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-4 py-2 sm:px-6`}>Switch to All to edit or reorder.</p> : null}
           <MilestoneList milestones={shown} people={people} directory={directory} canEdit={canMilestones && filter === "all"} onChanged={setMilestones} />
           {canMilestones && filter === "all" ? (
             <AddMilestoneForm projectId={project.id} all={milestones} onAdded={(m) => setMilestones([...milestones, m])} />
@@ -176,20 +191,40 @@ export default function ProjectPage() {
 
         <Section title="Details" className="self-start">
           {isAdmin ? (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="project-name" className={labelClass}>Name</label>
-                <BlurInput id="project-name" value={project.name} required ariaLabel="Project name" onSave={(next) => save({ name: next.trim() })} />
+            <div>
+              <div className="-mt-3">
+                <EditRow
+                  editLabel="Edit name"
+                  editing={openField === "name"}
+                  onEdit={() => setOpenField("name")}
+                  onDone={() => setOpenField(null)}
+                  display={<DetailValue label="Name">{project.name}</DetailValue>}
+                >
+                  <label htmlFor="project-name" className={labelClass}>Name</label>
+                  <BlurInput id="project-name" value={project.name} required ariaLabel="Project name" onSave={(next) => save({ name: next.trim() })} />
+                </EditRow>
+                <EditRow
+                  editLabel="Edit reference"
+                  editing={openField === "reference"}
+                  onEdit={() => setOpenField("reference")}
+                  onDone={() => setOpenField(null)}
+                  display={<DetailValue label="Reference">{project.reference ?? "-"}</DetailValue>}
+                >
+                  <label htmlFor="project-reference" className={labelClass}>Reference</label>
+                  <BlurInput id="project-reference" value={project.reference ?? ""} ariaLabel="Reference" onSave={(next) => save({ reference: next.trim() || null })} />
+                </EditRow>
+                <EditRow
+                  editLabel="Edit notes"
+                  editing={openField === "notes"}
+                  onEdit={() => setOpenField("notes")}
+                  onDone={() => setOpenField(null)}
+                  display={<DetailValue label="Notes">{project.notes ? <span className="whitespace-pre-line">{project.notes}</span> : "-"}</DetailValue>}
+                >
+                  <label htmlFor="project-notes" className={labelClass}>Notes</label>
+                  <BlurInput id="project-notes" multiline value={project.notes ?? ""} ariaLabel="Notes" onSave={(next) => save({ notes: next.trim() || null })} />
+                </EditRow>
               </div>
-              <div>
-                <label htmlFor="project-reference" className={labelClass}>Reference</label>
-                <BlurInput id="project-reference" value={project.reference ?? ""} ariaLabel="Reference" onSave={(next) => save({ reference: next.trim() || null })} />
-              </div>
-              <div>
-                <label htmlFor="project-notes" className={labelClass}>Notes</label>
-                <BlurInput id="project-notes" multiline value={project.notes ?? ""} ariaLabel="Notes" onSave={(next) => save({ notes: next.trim() || null })} />
-              </div>
-              <div className="border-t border-line pt-4">
+              <div className="pt-4">
                 <Button variant="danger" size="sm" onClick={() => setArchiving(true)}>Archive project</Button>
               </div>
             </div>

@@ -1,8 +1,10 @@
 // Financial snapshots: revenue, direct costs, overhead, margins, net, and cash by period.
 // Manual entry per period or a CSV upload that maps a spreadsheet export loosely and
-// overwrites the same periods on re-upload. Admin-only; employees never see this page.
+// overwrites the same periods on re-upload. Admin-only; employees never see this page. The figures
+// are results, entered each period, so a row's pencil opens them straight away; Delete sits in the
+// period's own dialog.
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Pencil, Plus, Upload } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
 import Chip from "../components/ui/Chip.tsx";
@@ -17,6 +19,7 @@ import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
 import { inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
+import { metaClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { createSnapshot, deleteSnapshot, listSnapshots, updateSnapshot, upsertSnapshots } from "../services/financials.ts";
@@ -36,6 +39,10 @@ const FIGURE_COPY: Record<FigureField, { label: string; example: string }> = {
   cash: { label: "cash on hand", example: "155000" },
 };
 
+// The table's first and last cells take the card's padding, 16px on a phone and 24px above, so no
+// figure sits closer than that to the card's edge.
+const EDGE_CELLS = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
+
 // Where a period's figures came from, for the stat under the latest period.
 const SOURCE_HINT: Record<SnapshotSource, string> = {
   manual: "Entered by hand",
@@ -43,7 +50,9 @@ const SOURCE_HINT: Record<SnapshotSource, string> = {
   quickbooks: "From QuickBooks",
 };
 
-function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: { companyId: string; snapshot: FinancialSnapshot | null; defaultType: PeriodType; onClose: () => void; onSaved: (s: FinancialSnapshot) => void }) {
+// The period's own view: its figures, and for a period already entered, Delete at the foot, away
+// from the table's everyday Edit.
+function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved, onDelete }: { companyId: string; snapshot: FinancialSnapshot | null; defaultType: PeriodType; onClose: () => void; onSaved: (s: FinancialSnapshot) => void; onDelete: (s: FinancialSnapshot) => void }) {
   const [type, setType] = useState<PeriodType>(snapshot?.period_type ?? defaultType);
   const [start, setStart] = useState(snapshot?.period_start ?? snapPeriodStart(defaultType, new Date()));
   const [revenue, setRevenue] = useState(snapshot ? String(snapshot.revenue) : "");
@@ -146,9 +155,12 @@ function SnapshotDialog({ companyId, snapshot, defaultType, onClose, onSaved }: 
           </Field>
         </div>
         {error ? <Notice tone="error" className="mt-4">{error}</Notice> : null}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save period"}</Button>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+          {snapshot ? <Button variant="danger" disabled={busy} onClick={() => onDelete(snapshot)}>Delete period</Button> : <span />}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save period"}</Button>
+          </div>
         </div>
       </form>
     </Modal>
@@ -269,7 +281,7 @@ function TrendBars({ rows }: { rows: FinancialSnapshot[] }) {
               <div className="w-full rounded-t-sm bg-accent/25" style={{ height: `${revenueHeight}%` }} />
               <div className={`absolute bottom-0 w-1/2 rounded-t-sm ${d.net >= 0 ? "bg-success" : "bg-danger"}`} style={{ height: `${netHeight}%` }} />
             </div>
-            <span className="text-[10px] text-ink-3">{periodLabel(row.period_type, row.period_start).replace(/ 20\d\d$/, "")}</span>
+            <span className="text-[12px] text-ink-3">{periodLabel(row.period_type, row.period_start).replace(/ 20\d\d$/, "")}</span>
           </div>
         );
       })}
@@ -341,7 +353,7 @@ export default function FinancialsPage() {
           eyebrow="Financials"
           title={`No ${PERIOD_TYPE_LABELS[type].toLowerCase()} snapshots yet`}
           body="Add the first period by hand or import a spreadsheet export. Revenue, direct costs, and overhead are enough to start."
-          action={<Button onClick={() => setDialog({ snapshot: null })}>Add period</Button>}
+          action={<Button variant="secondary" onClick={() => setDialog({ snapshot: null })}>Add period</Button>}
         />
       ) : (
         <div className="space-y-6">
@@ -363,7 +375,7 @@ export default function FinancialsPage() {
             <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
-                  <tr>
+                  <tr className={EDGE_CELLS}>
                     <th className={thClass}>Period</th>
                     <th className={`${thClass} text-right`}>Revenue</th>
                     <th className={`${thClass} text-right`}>Direct costs</th>
@@ -372,17 +384,17 @@ export default function FinancialsPage() {
                     <th className={`${thClass} text-right`}>Net profit</th>
                     <th className={`${thClass} text-right`}>Net margin</th>
                     <th className={`${thClass} text-right`}>Cash</th>
-                    <th className={thClass}></th>
+                    <th className={thClass}><span className="sr-only">Edit</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => {
                     const d = deriveSnapshot(row);
                     return (
-                      <tr key={row.id} className="hover:bg-surface-2/60">
+                      <tr key={row.id} className={`${EDGE_CELLS} hover:bg-surface-2/60`}>
                         <td className={tdClass}>
                           <span className="font-medium">{periodLabel(row.period_type, row.period_start)}</span>
-                          {row.notes ? <span className="block max-w-xs truncate text-[12px] text-ink-3">{row.notes}</span> : null}
+                          {row.notes ? <span className={`block max-w-xs truncate ${metaClass}`} title={row.notes}>{row.notes}</span> : null}
                         </td>
                         <td className={`${tdClass} tnum text-right`}>{formatMoney(row.revenue)}</td>
                         <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(row.cogs)}</td>
@@ -394,8 +406,7 @@ export default function FinancialsPage() {
                         <td className={`${tdClass} text-right`}>
                           <span className="inline-flex items-center gap-1">
                             {row.source !== "manual" ? <Badge>{row.source === "csv" ? "CSV" : "QuickBooks"}</Badge> : null}
-                            <IconButton label="Edit period" onClick={() => setDialog({ snapshot: row })}><Pencil size={13} aria-hidden /></IconButton>
-                            <IconButton label="Delete period" onClick={() => setDeleting(row)}><Trash2 size={13} aria-hidden /></IconButton>
+                            <IconButton label="Edit period" onClick={() => setDialog({ snapshot: row })} className="!h-11 !w-11 sm:!h-9 sm:!w-9"><Pencil size={15} aria-hidden /></IconButton>
                           </span>
                         </td>
                       </tr>
@@ -414,6 +425,11 @@ export default function FinancialsPage() {
           snapshot={dialog.snapshot}
           defaultType={type}
           onClose={() => setDialog(null)}
+          onDelete={(row) => {
+            setDialog(null);
+            setError("");
+            setDeleting(row);
+          }}
           onSaved={(saved) => {
             state.setData((prev) => {
               const list = prev ?? [];

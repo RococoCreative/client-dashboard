@@ -1,10 +1,11 @@
 // The wins a company records by hand, newest first. Members read the list; admins add a win,
-// edit each one in place (every field saves on its own) and remove it (stored as archived_at).
+// open one with its pencil to edit it in place (every field saves on its own) and remove it from
+// there (stored as archived_at).
 // Every win here is manual: the database forces that for any write from the browser (0027).
 // When the company limits how many days a win stays on Home, the page splits in two: Recent (the
 // wins still on Home) and Archive (older ones). With no setting it is one list, as it always was.
 import { useRef, useState, type FormEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import BlurInput from "../components/ui/BlurInput.tsx";
 import Button from "../components/ui/Button.tsx";
@@ -18,6 +19,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass, textareaClass } from "../components/ui/forms.ts";
+import { itemTitleClass, secondaryClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { errorMessage } from "../lib/errors.ts";
@@ -34,6 +36,9 @@ function newestFirst(a: Win, b: Win): number {
 }
 
 type View = "recent" | "archive";
+
+// A row inside the list card: the card's own padding at the edges, 16px on a phone and 24px above.
+const ROW = "px-4 py-3 sm:px-6";
 
 // Two views of one list, switched in place. Styled like the route tabs; no route of its own.
 function ViewTabs({ view, onChange }: { view: View; onChange: (next: View) => void }) {
@@ -77,15 +82,17 @@ function ProjectSelect({ id, label, value, projects, onChange }: { id: string; l
   );
 }
 
-function ReadOnlyRow({ win, projects }: { win: Win; projects: Project[] }) {
+// What a win says, as everyone reads it: its title, where it came from, when it was won, its
+// project and its description.
+function WinText({ win, projects }: { win: Win; projects: Project[] }) {
   const project = projects.find((p) => p.id === win.project_id);
   return (
-    <li className="px-5 py-3">
+    <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="min-w-0 text-sm font-medium text-ink">{win.title}</span>
+        <span className={`${itemTitleClass} min-w-0 [overflow-wrap:anywhere]`}>{win.title}</span>
         <SourceBadge win={win} />
       </div>
-      <p className="mt-1 text-[12.5px] text-ink-2">
+      <p className={`mt-1 ${secondaryClass}`}>
         {formatDate(win.won_on)}
         {project ? (
           <>
@@ -94,22 +101,61 @@ function ReadOnlyRow({ win, projects }: { win: Win; projects: Project[] }) {
           </>
         ) : null}
       </p>
-      {win.description ? <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{win.description}</p> : null}
+      {win.description ? <p className={`mt-1 whitespace-pre-line ${secondaryClass}`}>{win.description}</p> : null}
+    </>
+  );
+}
+
+function ReadOnlyRow({ win, projects }: { win: Win; projects: Project[] }) {
+  return (
+    <li className={ROW}>
+      <WinText win={win} projects={projects} />
     </li>
   );
 }
 
-function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: Win; projects: Project[]; withProjects: boolean; onSave: (patch: WinPatch) => Promise<boolean>; onArchive: () => void }) {
+// An admin's row reads as text first. The pencil opens the win's fields in place (each still saves
+// on its own) with Remove beside Done, in the win's own view rather than on every row.
+function EditableRow({
+  win,
+  projects,
+  withProjects,
+  editing,
+  onEdit,
+  onDone,
+  onSave,
+  onArchive,
+}: {
+  win: Win;
+  projects: Project[];
+  withProjects: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
+  onSave: (patch: WinPatch) => Promise<boolean>;
+  onArchive: () => void;
+}) {
   const { id, title } = win;
+  if (!editing) {
+    return (
+      <li className={`${ROW} flex items-start gap-3`}>
+        <div className="min-w-0 flex-1">
+          <WinText win={win} projects={projects} />
+        </div>
+        <IconButton label={`Edit ${title}`} onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+          <Pencil size={15} aria-hidden="true" />
+        </IconButton>
+      </li>
+    );
+  }
   return (
-    <li className="px-5 py-3">
+    <li className={ROW}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} font-medium`} />
         </div>
-        <div className="mt-2 flex shrink-0 items-center gap-1">
+        <div className="mt-3.5 shrink-0">
           <SourceBadge win={win} />
-          <IconButton label={`Remove ${title}`} onClick={onArchive}><X size={14} aria-hidden /></IconButton>
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-[12rem_minmax(0,20rem)]">
@@ -126,6 +172,10 @@ function EditableRow({ win, projects, withProjects, onSave, onArchive }: { win: 
       </div>
       <div className="mt-2">
         <BlurInput multiline rows={2} value={win.description ?? ""} ariaLabel={`Description of ${title}`} placeholder="Description" onSave={(next) => onSave({ description: next.trim() || null })} className={`${inputClass} leading-relaxed`} />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-between gap-2">
+        <Button variant="danger" size="sm" aria-label={`Remove ${title}`} onClick={onArchive}>Remove</Button>
+        <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
       </div>
     </li>
   );
@@ -206,6 +256,8 @@ export default function WinsPage() {
   // The cut-off is the company's own day, so it moves at the company's midnight, not the browser's.
   const cutoff = homeCutoff(company!.wins_home_days, companyToday(company!.time_zone));
   const [view, setView] = useState<View>("recent");
+  // One win open for editing at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
   const inView = (win: Win) => (cutoff === null ? true : view === "recent" ? win.won_on >= cutoff : win.won_on < cutoff);
   const state = useAsync(async () => {
     const range = cutoff === null ? undefined : view === "recent" ? { wonOnOrAfter: cutoff } : { wonBefore: cutoff };
@@ -266,7 +318,7 @@ export default function WinsPage() {
         <SkeletonRows rows={6} />
       ) : !state.data ? null : shown.length === 0 ? (
         cutoff !== null && view === "archive" ? (
-          <p className="px-1 py-4 text-sm text-ink-2">No older wins yet.</p>
+          <p className={`px-1 py-4 ${secondaryClass}`}>No older wins yet.</p>
         ) : (
           <EmptyState
             eyebrow="Wins"
@@ -284,6 +336,9 @@ export default function WinsPage() {
                   win={win}
                   projects={state.data!.projects}
                   withProjects={withProjects}
+                  editing={openId === win.id}
+                  onEdit={() => setOpenId(win.id)}
+                  onDone={() => setOpenId(null)}
                   onSave={(patch) => save(win, patch)}
                   onArchive={() => setArchiving(win)}
                 />

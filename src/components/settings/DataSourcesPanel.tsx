@@ -4,26 +4,35 @@
 // headers into the field map. Runs and records are only ever shown, never edited, and nothing here
 // shows or asks for a token: syncing and reading headers go through the connections Edge
 // Function, which alone holds one.
+// Up to three sources read as rows. Past three they become a list with each source at its own
+// address, /settings/connections/sources/:sourceId, and the chosen one open beside it
+// (DataSourceDetail). On a wide screen the bare address shows the first source without changing the
+// address, so a connection's way back from the provider still lands on /settings/connections with
+// its outcome; on a phone the list is the page.
 import { useState, type FormEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Pencil, Plus, X } from "lucide-react";
 import FreshnessLine from "../sync/FreshnessLine.tsx";
 import SyncStateBadge from "../sync/SyncStateBadge.tsx";
-import Badge, { type BadgeTone } from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
 import Field from "../ui/Field.tsx";
 import IconButton from "../ui/IconButton.tsx";
+import ListDetail, { type ListDetailItem } from "../ui/ListDetail.tsx";
 import Modal from "../ui/Modal.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
+import { itemTitleClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
+import DataSourceDetail from "./DataSourceDetail.tsx";
+import SourceRuns from "./SourceRuns.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { formatDateTime, pluralize } from "../../lib/format.ts";
+import { pluralize } from "../../lib/format.ts";
 import { draftFromSource, draftToInput, emptyDraft, fieldFromHeader, withHeaders, type FieldDraft, type SourceDraft } from "../../lib/sync/draft.ts";
 import { syncState } from "../../lib/sync/state.ts";
 import { listConnections } from "../../services/connections.ts";
-import { createSyncSource, describeSpreadsheet, listSyncRuns, listSyncSources, requestSync, setSyncSourceEnabled, updateSyncSource } from "../../services/sync.ts";
+import { createSyncSource, describeSpreadsheet, listSyncSources, requestSync, setSyncSourceEnabled, updateSyncSource } from "../../services/sync.ts";
 import { parseSpreadsheetUrl } from "../../../supabase/functions/_shared/sync/links.ts";
 import { normalizeHeader } from "../../../supabase/functions/_shared/sync/parse.ts";
 import {
@@ -33,7 +42,6 @@ import {
   type CompanyConnection,
   type FieldType,
   type SyncProvider,
-  type SyncRun,
   type SyncSource,
   type TargetModule,
 } from "../../types/database.ts";
@@ -49,6 +57,17 @@ const WEEKDAYS: Array<{ value: number; label: string }> = [
   { value: 6, label: "Sat" },
   { value: 0, label: "Sun" },
 ];
+const BASE = "/settings/connections";
+// More sources than this and the rows become a list, each source at its own address.
+const MOST_AS_ROWS = 3;
+const DESCRIPTION = "Spreadsheet tabs and QuickBooks records this company reads into the hub. Imported values are read-only here; change them at the source.";
+
+// The list and the open source sit side by side from lg up (ListDetail); only there does the bare
+// address show a source. Without matchMedia (a test DOM) the screen counts as wide.
+function isWide(): boolean {
+  return typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches;
+}
+
 const cellInput = `${inputClass} mt-0 py-1.5 text-[13px]`;
 const cellSelect = `${selectClass} mt-0 py-1.5 text-[13px]`;
 
@@ -58,40 +77,6 @@ function browserZone(): string {
 
 function timeZones(): string[] {
   return typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-}
-
-// The first message a failed run recorded: an array of { message } or one { message }.
-function firstRunError(detail: unknown): string | null {
-  const first = Array.isArray(detail) ? detail[0] : detail;
-  if (first && typeof first === "object" && typeof (first as { message?: unknown }).message === "string") return (first as { message: string }).message;
-  return null;
-}
-
-function RecentRuns({ sourceId }: { sourceId: string }) {
-  const state = useAsync(() => listSyncRuns(sourceId), [sourceId]);
-  if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
-  if (!state.data) return <SkeletonRows rows={2} />;
-  if (state.data.length === 0) return <p className="text-[12.5px] text-ink-2">No runs yet.</p>;
-  return (
-    <ul className="divide-y divide-line rounded-md border border-line">
-      {state.data.map((run: SyncRun) => {
-        const tone: BadgeTone = run.status === "succeeded" ? "success" : run.status === "failed" ? "danger" : run.status === "running" ? "info" : "warning";
-        const label = run.status === "succeeded" ? "Succeeded" : run.status === "failed" ? "Failed" : run.status === "running" ? "Running" : "Stopped";
-        const problem = run.status === "failed" ? firstRunError(run.error_detail) : null;
-        return (
-          <li key={run.id} className="px-3 py-2 text-[12.5px]">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="tnum text-ink">{formatDateTime(run.started_at)}</span>
-              <span className="text-ink-3">{run.trigger_kind === "schedule" ? "Scheduled" : "Manual"}</span>
-              <Badge tone={tone}>{label}</Badge>
-              <span className="tnum text-ink-2">{`${run.rows_read} read, ${run.rows_applied} applied, ${run.rows_blank} blank`}</span>
-            </div>
-            {problem ? <p className="mt-1 text-danger">{problem}</p> : null}
-          </li>
-        );
-      })}
-    </ul>
-  );
 }
 
 interface EditorField extends FieldDraft {
@@ -410,6 +395,8 @@ function SourceEditor({
 type SyncNotice = { tone: "success" | "error" | "info"; text: string };
 
 export default function DataSourcesPanel({ companyId, companyTimeZone }: { companyId: string; companyTimeZone: string }) {
+  const { sourceId } = useParams();
+  const navigate = useNavigate();
   const state = useAsync(async () => {
     const [sources, connections] = await Promise.all([listSyncSources(companyId), listConnections(companyId)]);
     return { sources, connections };
@@ -423,6 +410,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
   const [syncCount, setSyncCount] = useState(0);
   const data = state.data;
   const now = new Date();
+  const asList = (data?.sources.length ?? 0) > MOST_AS_ROWS;
 
   function replace(saved: SyncSource) {
     state.setData((prev) =>
@@ -461,31 +449,103 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
     }
   }
 
-  return (
-    <Section
-      eyebrow="Integrations"
-      title="Data sources"
-      description="Spreadsheet tabs and QuickBooks records this company reads into the hub. Imported values are read-only here; change them at the source."
-      actions={<Button size="sm" onClick={() => setEditing("new")} disabled={!data}>Add source</Button>}
-    >
+  // A source's address only means something once the sources are a list; with three or fewer it
+  // goes back to the rows, where every source already shows.
+  if (data && !asList && sourceId) return <Navigate to={BASE} replace />;
+
+  const connectionOf = (source: SyncSource) => data?.connections.find((c) => c.id === source.connection_id) ?? null;
+  const addSource = <Button size="sm" onClick={() => setEditing("new")} disabled={!data}>Add source</Button>;
+  const notices = (
+    <>
       {notice ? <Notice tone={notice.tone} className="mb-4">{notice.text}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
+    </>
+  );
+  const editor =
+    editing && data ? (
+      <SourceEditor
+        companyId={companyId}
+        source={editing === "new" ? null : editing}
+        connections={data.connections}
+        onClose={() => setEditing(null)}
+        onSaved={(saved) => {
+          const added = editing === "new";
+          replace(saved);
+          setEditing(null);
+          // A new source opens at its own address once the sources are a list.
+          if (added && data.sources.length + 1 > MOST_AS_ROWS) navigate(`${BASE}/sources/${saved.id}`);
+        }}
+      />
+    ) : null;
+
+  if (data && asList) {
+    const items: ListDetailItem[] = data.sources.map((source) => ({
+      id: source.id,
+      title: source.name,
+      meta: `${TARGET_MODULE_LABELS[source.target_module]} · ${CONNECTION_PROVIDER_LABELS[source.provider]}`,
+    }));
+    const selectedId = sourceId ?? (isWide() ? data.sources[0].id : null);
+    const selected = selectedId ? (data.sources.find((s) => s.id === selectedId) ?? null) : null;
+    return (
+      <section>
+        <div className="mb-4">
+          <p className="eyebrow">Integrations</p>
+          <h2 className={`${sectionTitleClass} mt-1`}>Data sources</h2>
+          <p className={`${secondaryClass} mt-1`}>{DESCRIPTION}</p>
+        </div>
+        {notices}
+        <ListDetail
+          label="Data sources"
+          items={items}
+          selectedId={selectedId}
+          hrefFor={(id) => `${BASE}/sources/${id}`}
+          backHref={BASE}
+          countLabel={pluralize(data.sources.length, "data source")}
+          searchLabel="Search data sources"
+          actions={addSource}
+        >
+          {selected ? (
+            <DataSourceDetail
+              key={selected.id}
+              source={selected}
+              connection={connectionOf(selected)}
+              now={now}
+              companyTimeZone={companyTimeZone}
+              syncing={syncing === selected.id}
+              syncBusy={syncing !== null}
+              runsKey={syncCount}
+              onToggle={(enabled) => void toggle(selected, enabled)}
+              onSync={() => void syncNow(selected)}
+              onEdit={() => setEditing(selected)}
+            />
+          ) : (
+            <p className={secondaryClass}>That data source is not in this company.</p>
+          )}
+        </ListDetail>
+        {editor}
+      </section>
+    );
+  }
+
+  return (
+    <Section eyebrow="Integrations" title="Data sources" description={DESCRIPTION} actions={addSource}>
+      {notices}
       {state.error && !data ? <Notice tone="error">{state.error}</Notice> : null}
       {!data && !state.error ? <SkeletonRows rows={3} /> : null}
-      {data && data.sources.length === 0 ? <p className="text-sm text-ink-2">No data sources yet.</p> : null}
+      {data && data.sources.length === 0 ? <p className={secondaryClass}>No data sources yet.</p> : null}
       {data && data.sources.length > 0 ? (
         <ul className="divide-y divide-line">
           {data.sources.map((source) => {
-            const connection = data.connections.find((c) => c.id === source.connection_id) ?? null;
+            const connection = connectionOf(source);
             return (
               <li key={source.id} className="py-3 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium text-ink">{source.name}</p>
+                      <p className={itemTitleClass}>{source.name}</p>
                       <SyncStateBadge state={syncState(source, connection, now, companyTimeZone)} />
                     </div>
-                    <p className="mt-0.5 text-[12px] text-ink-3">{`${TARGET_MODULE_LABELS[source.target_module]} · ${CONNECTION_PROVIDER_LABELS[source.provider]}`}</p>
+                    <p className={`mt-0.5 ${metaClass}`}>{`${TARGET_MODULE_LABELS[source.target_module]} · ${CONNECTION_PROVIDER_LABELS[source.provider]}`}</p>
                     <div className="mt-1">
                       <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
                     </div>
@@ -504,7 +564,6 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
                     >
                       {syncing === source.id ? "Syncing..." : "Sync now"}
                     </Button>
-                    <Button variant="ghost" size="sm" aria-label={`Edit ${source.name}`} onClick={() => setEditing(source)}>Edit</Button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -514,11 +573,14 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
                     >
                       Recent runs
                     </Button>
+                    <IconButton label={`Edit ${source.name}`} onClick={() => setEditing(source)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+                      <Pencil size={15} aria-hidden="true" />
+                    </IconButton>
                   </div>
                 </div>
                 {runsOpen === source.id ? (
                   <div className="mt-3">
-                    <RecentRuns key={syncCount} sourceId={source.id} />
+                    <SourceRuns key={syncCount} sourceId={source.id} />
                   </div>
                 ) : null}
               </li>
@@ -526,18 +588,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
           })}
         </ul>
       ) : null}
-      {editing && data ? (
-        <SourceEditor
-          companyId={companyId}
-          source={editing === "new" ? null : editing}
-          connections={data.connections}
-          onClose={() => setEditing(null)}
-          onSaved={(saved) => {
-            replace(saved);
-            setEditing(null);
-          }}
-        />
-      ) : null}
+      {editor}
     </Section>
   );
 }

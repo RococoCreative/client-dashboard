@@ -9,6 +9,7 @@ import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
 import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
+import { secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { hasModule } from "../../lib/modules.ts";
 import { SALES_FINANCE_TABS } from "./salesFinanceTabs.ts";
@@ -40,7 +41,7 @@ export default function SalesFinancePage() {
         <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="financial_reporting" scaffold={financialScaffold} />
       </div>
       {hasModule(company!, "external_links") ? <ExternalLinksList companyId={company!.id} navGroup="sales_finance" /> : null}
-      <p className="mt-4 text-[12.5px] text-ink-2">
+      <p className={`mt-4 ${secondaryClass}`}>
         {company!.manual_financials ? (
           <>
             The manual <Link to="/financials" className="text-link hover:underline">Financials</Link> and{" "}

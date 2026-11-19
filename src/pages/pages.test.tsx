@@ -1548,12 +1548,19 @@ describe("wins", () => {
     expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
   });
 
+  // An admin's wins read first; each one's pencil opens its fields in place.
+  const openWin = async (user: ReturnType<typeof userEvent.setup>, title: string) => user.click(await screen.findByRole("button", { name: `Edit ${title}` }));
+  const winTitles = () => screen.getAllByRole("button", { name: /^Edit / }).map((button) => button.getAttribute("aria-label")!.replace(/^Edit /, ""));
+
   it("gives an admin every field to edit in place", async () => {
+    const user = userEvent.setup();
     renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    await openWin(user, "Sample win 1");
     expect(await screen.findByDisplayValue("Sample win 1")).toBeInTheDocument();
     expect(screen.getAllByText("Manual").length).toBe(6);
-    expect(screen.getByLabelText("Project for Sample win 4")).toHaveDisplayValue("Sample job 101");
     expect(screen.getByLabelText("Won on for Sample win 1")).toHaveValue("2026-09-12");
+    await openWin(user, "Sample win 4");
+    expect(screen.getByLabelText("Project for Sample win 4")).toHaveDisplayValue("Sample job 101");
     expect(screen.getByRole("button", { name: "New win" })).toBeInTheDocument();
   });
 
@@ -1570,17 +1577,18 @@ describe("wins", () => {
     expect(within(dialog).getByText("Pick the date it was won.")).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Won on"), { target: { value: "2026-06-01" } });
     await user.click(within(dialog).getByRole("button", { name: "Add win" }));
-    const row = (await screen.findByDisplayValue("Sample win 8")).closest("li") as HTMLElement;
+    const row = (await screen.findByText("Sample win 8")).closest("li") as HTMLElement;
     expect(within(row).getByText("Manual")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Oldest, so it sits last.
-    const titles = screen.getAllByLabelText(/^Title of /).map((input) => (input as HTMLInputElement).value);
+    const titles = winTitles();
     expect(titles.at(-1)).toBe("Sample win 8");
   });
 
   it("saves a description on blur", async () => {
     const user = userEvent.setup();
     renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    await openWin(user, "Sample win 2");
     const description = await screen.findByLabelText("Description of Sample win 2");
     await user.type(description, "Closed on the first walkthrough.");
     await user.tab();
@@ -1594,6 +1602,7 @@ describe("wins", () => {
   it("removes a win after confirming", async () => {
     const user = userEvent.setup();
     renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
+    await openWin(user, "Sample win 7");
     await user.click(await screen.findByRole("button", { name: "Remove Sample win 7" }));
     const dialog = screen.getByRole("dialog", { name: "Remove this win?" });
     expect(within(dialog).getByText("It leaves the Wins page and Home for everyone. It is kept in the record, not deleted.")).toBeInTheDocument();
@@ -1818,12 +1827,17 @@ describe("data sources", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  // Kingdom holds more than three sources, so they are a list and each opens at its own address.
+  const sourceRoute = (name: string) => ({ path: `/settings/connections/sources/${source(name).id}`, pattern: "/settings/connections/sources/:sourceId" });
+  const sourceList = (panel: HTMLElement) => within(panel).getByRole("region", { name: "Data sources" });
+
   it("configures sources and syncs one now from Settings", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, sourceRoute("Sample sales tab"));
     await screen.findByRole("heading", { name: "Data sources" });
     const panel = card("Data sources");
-    for (const s of KINGDOM.syncSources) expect(await within(panel).findByText(s.name)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Sample sales tab" });
+    for (const s of KINGDOM.syncSources) expect(await within(sourceList(panel)).findByText(s.name)).toBeInTheDocument();
 
     await user.click(within(panel).getByRole("button", { name: "Sync Sample sales tab now" }));
     expect(await within(panel).findByText("Sample sales tab synced: 2 rows.")).toBeInTheDocument();
@@ -1839,7 +1853,7 @@ describe("data sources", () => {
     expect(within(dialog).getByLabelText("Key 1")).toHaveValue("job");
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(within(panel).getByText("Sample new tab")).toBeInTheDocument();
+    expect(within(sourceList(panel)).getByText("Sample new tab")).toBeInTheDocument();
   });
 
   it("shows the Google Sheets connection only to a company with data sources", async () => {
@@ -1883,10 +1897,10 @@ describe("data sources", () => {
 
   it("schedules a source on a set of days ticked Mon to Sun", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, sourceRoute("Sample sales tab"));
     await screen.findByRole("heading", { name: "Data sources" });
     const panel = card("Data sources");
-    await within(panel).findByText("Sample sales tab");
+    await within(panel).findByRole("heading", { name: "Sample sales tab" });
     await user.click(within(panel).getByRole("button", { name: "Edit Sample sales tab" }));
     const dialog = screen.getByRole("dialog", { name: "Edit data source" });
     const days = within(within(dialog).getByRole("group", { name: "Sync days" }));

@@ -9,6 +9,7 @@ import Button from "../ui/Button.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection, listConnections, startConnection } from "../../services/connections.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -150,14 +151,14 @@ export default function ConnectionsPanel({ companyId, providers = DEFAULT_PROVID
               <li key={provider} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{label}</p>
+                    <p className={itemTitleClass}>{label}</p>
                     <Badge tone={connected ? "success" : row?.status === "error" ? "danger" : "neutral"}>
                       {connected ? "Connected" : row?.status === "error" ? "Needs attention" : "Not connected"}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 text-[12.5px] text-ink-2">{PROVIDER_BLURBS[provider]}</p>
+                  <p className={`mt-0.5 ${secondaryClass}`}>{PROVIDER_BLURBS[provider]}</p>
                   {connected ? (
-                    <p className="mt-1 text-[12px] text-ink-3">
+                    <p className={`mt-1 ${metaClass}`}>
                       {row?.external_account_name ?? row?.external_account_id ?? "Account"}
                       {row?.connected_at ? ` · since ${formatDate(row.connected_at)}` : ""}
                       {row?.last_synced_at ? ` · last sync ${formatDate(row.last_synced_at)}` : " · no sync yet"}

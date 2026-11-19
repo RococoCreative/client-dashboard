@@ -30,6 +30,9 @@ import { createProject, listCompanyMilestones, listProjects } from "../../servic
 import type { Project, ProjectMilestone } from "../../types/database.ts";
 import { PRODUCTION_TABS } from "./productionTabs.ts";
 
+// The table's first and last cells take the card's padding, 16px on a phone and 24px above.
+const EDGE_CELLS = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
+
 function NewProjectDialog({ companyId, onClose, onCreated }: { companyId: string; onClose: () => void; onCreated: (project: Project) => void }) {
   const [name, setName] = useState("");
   const [reference, setReference] = useState("");
@@ -123,7 +126,7 @@ export default function ProductionPage() {
           <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
-                <tr>
+                <tr className={EDGE_CELLS}>
                   <th className={thClass}>Project</th>
                   <th className={`${thClass} hidden sm:table-cell`}>Reference</th>
                   <th className={thClass}>Milestones</th>
@@ -135,7 +138,7 @@ export default function ProductionPage() {
                   const rows = byProject.get(project.id) ?? [];
                   const { done, total } = milestoneCounts(rows);
                   return (
-                    <tr key={project.id} className="hover:bg-surface-2/60">
+                    <tr key={project.id} className={`${EDGE_CELLS} hover:bg-surface-2/60`}>
                       <td className={tdClass}>
                         <Link to={`/production/projects/${project.id}`} className="font-medium text-ink hover:text-link">{project.name}</Link>
                       </td>

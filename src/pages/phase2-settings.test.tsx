@@ -198,20 +198,21 @@ describe("wins leave Home after the company's days", () => {
   });
 
   it("the Wins page has Recent and Archive when the company has a setting, and one list when it does not", async () => {
+    // An admin's wins read first, so each shows by its title as text.
     const user = userEvent.setup();
     const view = renderWithHub(<WinsPage />, adminFor(withDays(14)), winsRoute);
     expect(await screen.findByRole("tab", { name: "Recent" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Archive" })).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Sample win 2")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Sample win 3")).not.toBeInTheDocument();
+    expect(await screen.findByText("Sample win 2")).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 3")).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Archive" }));
-    expect(await screen.findByDisplayValue("Sample win 3")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Sample win 2")).not.toBeInTheDocument();
+    expect(await screen.findByText("Sample win 3")).toBeInTheDocument();
+    expect(screen.queryByText("Sample win 2")).not.toBeInTheDocument();
     view.unmount();
 
     renderWithHub(<WinsPage />, adminFor(withDays(null)), winsRoute);
-    expect(await screen.findByDisplayValue("Sample win 1")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Sample win 7")).toBeInTheDocument();
+    expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
+    expect(screen.getByText("Sample win 7")).toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
