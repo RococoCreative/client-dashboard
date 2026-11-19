@@ -115,12 +115,12 @@ function RecentSops({ sops }: { sops: Sop[] }) {
   );
 }
 
+const CYCLE_CARD_ROWS_SHOWN = 5;
+
 // One live review cycle's progress: everyone the cycle covers, their score where the cycle is
 // scored, and where their review stands. Scoped to the cycle by cycle_id, because a person has a
 // review in every live cycle at once and matching on the person alone picks whichever came back
 // first.
-const CYCLE_CARD_ROWS_SHOWN = 5;
-
 function CycleProgress({
   cycle,
   people,
@@ -172,38 +172,41 @@ function CycleProgress({
         <p className="text-sm text-ink-2">Nobody on the roster yet. Add the team in People and their reviews appear here.</p>
       ) : (
         <>
-        {capped ? (
-          <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-2">
-            {(["complete", "in_progress", "not_started"] as const).map((status) => (
-              <span key={status} className="tnum">{REVIEW_STATUS_LABELS[status]} {counts[status]}</span>
-            ))}
-          </p>
-        ) : null}
-        <ul className="divide-y divide-line">
-          {shown.map((person) => {
-            const entry = own.find((s) => s.review.employee_id === person.id);
-            return (
-              <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-ink">{displayName(person)}</p>
-                  <p className="truncate text-[12px] text-ink-3">{person.title ?? person.email}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {showScore ? <span className="tnum text-sm text-ink">{entry?.score ?? "-"}</span> : null}
-                  <Badge tone={entry ? REVIEW_STATUS_TONE[entry.review.status] : "neutral"}>
-                    {entry ? REVIEW_STATUS_LABELS[entry.review.status] : "Not started"}
-                  </Badge>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        {capped ? (
-          <p className="mt-2 text-[13px]">
-            <Link to={cyclePath(cycle)} className="text-link hover:underline">All {people.length} people</Link>
-          </p>
-        ) : null}
-        </>
+          {capped ? (
+            <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-2">
+              {(["complete", "in_progress", "not_started"] as const).map((status) => (
+                <span key={status} className="tnum">{REVIEW_STATUS_LABELS[status]} {counts[status]}</span>
+              ))}
+            </p>
+          ) : null}
+          {shown.length === 0 ? (
+            <p className="text-sm text-ink-2">Everyone is complete.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {shown.map((person) => {
+                const entry = own.find((s) => s.review.employee_id === person.id);
+                const status = statusOf(person);
+                return (
+                  <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-ink">{displayName(person)}</p>
+                      <p className="truncate text-[12px] text-ink-3">{person.title ?? person.email}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {showScore ? <span className="tnum text-sm text-ink">{entry?.score ?? "-"}</span> : null}
+                      <Badge tone={REVIEW_STATUS_TONE[status]}>{REVIEW_STATUS_LABELS[status]}</Badge>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {capped ? (
+            <p className="mt-2 text-[13px]">
+              <Link to={cyclePath(cycle)} className="text-link hover:underline">All {people.length} people</Link>
+            </p>
+          ) : null}
+          </>
       )}
     </Section>
   );
@@ -507,7 +510,7 @@ function AdminDashboard() {
       {/* The rest, in the order it has always read. The Home cards each sit under their own module;
           with none of the modules on, none mounts and none of their calls is made. */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="max-lg:contents lg:col-span-2 lg:space-y-6">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard links={links.data} error={links.error} isAdmin /> : null}
 
           <Section
@@ -540,9 +543,40 @@ function AdminDashboard() {
           </Section>
 
           {jobRole?.dashboard_modules.includes("financials") ? <YourFigures jobRole={jobRole} financials={financials} year={year} /> : null}
+          {/* The two libraries sit side by side under Company goals so the left column ends near the
+              right one. Below lg the columns stack by contents, and this row keeps its old place at
+              the end of the stack through order-1. */}
+          <div className="grid grid-cols-1 gap-6 max-lg:order-1 lg:grid-cols-2">
+            <Section
+              eyebrow="SOP library"
+              title="Recently updated"
+              actions={
+                <Link to="/resources/sops">
+                  <Button variant="ghost" size="sm">All SOPs</Button>
+                </Link>
+              }
+            >
+              <RecentSops sops={recentSops} />
+            </Section>
+            <Section
+              eyebrow="Resources"
+              title={pluralize(resources.length, "resource")}
+              actions={
+                <Link to="/resources/files">
+                  <Button variant="ghost" size="sm">Browse</Button>
+                </Link>
+              }
+            >
+              <p className="text-sm text-ink-2">
+                {resources.length === 0
+                  ? "Links, templates, and files the team reaches for. Add the first one."
+                  : `Most recent: ${resources[0]?.title ?? ""}`}
+              </p>
+            </Section>
+          </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="max-lg:contents lg:space-y-6">
           {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
           {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
           {hasModule(company, "switchboard") && hasModule(company, "data_sources") ? <FreshnessCard companyId={companyId} companyTimeZone={company!.time_zone} canViewProduction={can("production_view")} /> : null}
@@ -612,32 +646,6 @@ function AdminDashboard() {
                 </ul>
               </>
             )}
-          </Section>
-          <Section
-            eyebrow="SOP library"
-            title="Recently updated"
-            actions={
-              <Link to="/resources/sops">
-                <Button variant="ghost" size="sm">All SOPs</Button>
-              </Link>
-            }
-          >
-            <RecentSops sops={recentSops} />
-          </Section>
-          <Section
-            eyebrow="Resources"
-            title={pluralize(resources.length, "resource")}
-            actions={
-              <Link to="/resources/files">
-                <Button variant="ghost" size="sm">Browse</Button>
-              </Link>
-            }
-          >
-            <p className="text-sm text-ink-2">
-              {resources.length === 0
-                ? "Links, templates, and files the team reaches for. Add the first one."
-                : `Most recent: ${resources[0]?.title ?? ""}`}
-            </p>
           </Section>
         </div>
       </div>

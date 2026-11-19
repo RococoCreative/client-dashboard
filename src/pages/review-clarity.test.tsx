@@ -1,6 +1,7 @@
 // The review and GSR screens after the clarity sweep: on a review the yearly goals panel is one card
 // among many, so no goals yet is one quiet line and New goal stays quiet beside Mark complete; on a
-// cycle page the name and dates read in the header and a pencil opens them.
+// cycle page the name and dates read in the header and a pencil opens them; a deliverable line item
+// names its target and actual fields; a company with no cycles has one filled button, not two.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -39,6 +40,8 @@ import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import GoalsPanel from "../components/gsr/GoalsPanel.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
+import CyclesPage from "./gsr/CyclesPage.tsx";
+import ReviewPage from "./gsr/ReviewPage.tsx";
 
 const rbaAdmin = makeHub("admin", RBA.company);
 const admin = makeHub("admin");
@@ -71,5 +74,36 @@ describe("a cycle's details", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText("Name")).toHaveValue(cycle.name);
     expect(within(dialog).getByLabelText("Starts")).toHaveValue(cycle.period_start);
+  });
+});
+
+describe("a deliverable line item", () => {
+  it("names its target and actual fields after the deliverable", async () => {
+    const review = RBA.reviews.find((r) => r.status === "in_progress")!;
+    renderWithHub(<ReviewPage />, rbaAdmin, { path: `/gsr/reviews/${review.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const label = "Jobs closed on schedule";
+    expect(await screen.findByDisplayValue(label)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: `Target for ${label}` })).toHaveValue("10");
+    expect(screen.getByRole("textbox", { name: `Actual for ${label}` })).toBeInTheDocument();
+  });
+});
+
+describe("the Cycles page with nothing yet", () => {
+  // A company with no cycles at all: its id matches no cycle in the mock store.
+  const empty = makeHub("admin", { ...RBA.company, id: "co-no-cycles" });
+
+  it.each([
+    ["gsr" as const, "New month", "Open the first month"],
+    ["reviews" as const, "New cycle", "Start the first review cycle"],
+  ])("keeps one primary button on the %s section", async (section, label, title) => {
+    renderWithHub(<CyclesPage section={section} />, empty);
+    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: new RegExp(label) })).toHaveLength(1);
+  });
+
+  it("shows the header button once there is a cycle", async () => {
+    renderWithHub(<CyclesPage section="reviews" />, rbaAdmin);
+    expect(await screen.findByText(RBA.cycles[0].name)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /New cycle/ })).toHaveLength(1);
   });
 });

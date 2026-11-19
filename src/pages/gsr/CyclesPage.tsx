@@ -276,7 +276,8 @@ export default function CyclesPage({ section }: { section: HubSection }) {
                 <Button variant="secondary" size="sm"><Settings2 size={14} aria-hidden /> Review settings</Button>
               </Link>
             ) : null}
-            <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button>
+            {/* With none yet, the empty state below carries the one primary button. */}
+            {cycles.length > 0 ? <Button size="sm" onClick={() => setCreating(true)}><Plus size={14} aria-hidden /> {gsr ? "New month" : "New cycle"}</Button> : null}
           </>
         }
       />
