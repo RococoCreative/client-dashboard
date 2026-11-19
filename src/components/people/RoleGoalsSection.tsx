@@ -119,7 +119,7 @@ export default function RoleGoalsSection({
               >
                 <div className="flex items-center gap-2">
                   <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => rename(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
-                  <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void remove(goal)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+                  <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void remove(goal)}>
                     <Trash2 size={14} aria-hidden />
                   </IconButton>
                 </div>

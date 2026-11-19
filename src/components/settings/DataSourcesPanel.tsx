@@ -570,7 +570,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
                     >
                       Recent runs
                     </Button>
-                    <IconButton label={`Edit ${source.name}`} onClick={() => setEditing(source)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+                    <IconButton label={`Edit ${source.name}`} onClick={() => setEditing(source)}>
                       <Pencil size={15} aria-hidden="true" />
                     </IconButton>
                   </div>

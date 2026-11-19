@@ -180,7 +180,7 @@ function CampaignCard({ campaign, footer, onEdit, onStatus }: { campaign: Market
             {campaign.start_date ? ` · ${formatDate(campaign.start_date)}${campaign.end_date ? ` to ${formatDate(campaign.end_date)}` : " onward"}` : ""}
           </p>
         </div>
-        <IconButton label="Edit campaign" onClick={onEdit} className="-mr-2 -mt-1 !h-11 !w-11 sm:!h-9 sm:!w-9"><Pencil size={15} aria-hidden /></IconButton>
+        <IconButton label="Edit campaign" onClick={onEdit} className="-mr-2 -mt-1"><Pencil size={15} aria-hidden /></IconButton>
       </div>
       <div className="mt-3">
         <div className="flex items-baseline justify-between text-[12px]">

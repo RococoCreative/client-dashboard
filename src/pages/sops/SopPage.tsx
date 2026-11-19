@@ -2,13 +2,14 @@
 // history (any version can be read; none can be edited). Admins publish, archive, edit
 // (which appends a version), attach files, and delete from here.
 import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Markdown from "react-markdown";
 import { Archive, Download, Eye, EyeOff, Paperclip, Pencil, Trash2, Upload } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import IconButton from "../../components/ui/IconButton.tsx";
+import IconLink from "../../components/ui/IconLink.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
@@ -171,14 +172,9 @@ export default function SopPage() {
         actions={
           isAdmin ? (
             <>
-              <Link
-                to={`/sops/${sop.id}/edit`}
-                aria-label="Edit SOP"
-                title="Edit SOP"
-                className="inline-flex !h-11 !w-11 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors duration-150 hover:bg-surface-2 hover:text-ink sm:!h-9 sm:!w-9"
-              >
+              <IconLink to={`/sops/${sop.id}/edit`} label="Edit SOP">
                 <Pencil size={15} aria-hidden />
-              </Link>
+              </IconLink>
               {sop.status === "published" ? (
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => void setStatus("draft")}><EyeOff size={14} aria-hidden /> Unpublish</Button>
               ) : (
@@ -239,7 +235,7 @@ export default function SopPage() {
                       <span className={`shrink-0 ${metaClass}`}>{formatBytes(a.size_bytes)}</span>
                     </Button>
                     <div className="flex shrink-0 items-center gap-1">
-                      <IconButton label={`Download ${a.file_name}`} onClick={() => void openAttachment(a)} className="!h-11 !w-11 sm:!h-9 sm:!w-9"><Download size={15} aria-hidden /></IconButton>
+                      <IconButton label={`Download ${a.file_name}`} onClick={() => void openAttachment(a)}><Download size={15} aria-hidden /></IconButton>
                       {isAdmin ? (
                         <Button variant="ghost" size="sm" aria-label={`Remove ${a.file_name}`} onClick={() => setRemovingAttachment(a)}>Remove</Button>
                       ) : null}

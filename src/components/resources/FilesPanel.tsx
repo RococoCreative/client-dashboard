@@ -247,7 +247,7 @@ export default function FilesPanel() {
                   <Badge>{RESOURCE_KIND_LABELS[resource.kind]}</Badge>
                 </div>
                 {isAdmin ? (
-                  <IconButton label="Edit resource" onClick={() => setDialog({ resource })} className="-mr-2 -mt-2 !h-11 !w-11 sm:!h-9 sm:!w-9">
+                  <IconButton label="Edit resource" onClick={() => setDialog({ resource })} className="-mr-2 -mt-2">
                     <Pencil size={15} aria-hidden />
                   </IconButton>
                 ) : null}

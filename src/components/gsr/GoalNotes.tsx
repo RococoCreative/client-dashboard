@@ -70,7 +70,7 @@ function NoteEntry({
         <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{note.body}</p>
       </div>
       {canEdit ? (
-        <IconButton label={`Edit note from ${stamp}`} onClick={() => { setDraft(note.body); setEditing(true); }} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+        <IconButton label={`Edit note from ${stamp}`} onClick={() => { setDraft(note.body); setEditing(true); }}>
           <Pencil size={15} aria-hidden />
         </IconButton>
       ) : null}

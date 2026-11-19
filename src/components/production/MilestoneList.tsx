@@ -26,8 +26,6 @@ import { MILESTONE_KIND_LABELS, MILESTONE_STATUS_LABELS, keysOf, type DirectoryE
 
 type Directory = ReadonlyMap<string, DirectoryEntry>;
 
-// Row icons at the size EditRow gives its pencil: 44px on a phone, 36px from sm up.
-const ROW_ICON = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 function StatusBadge({ milestone }: { milestone: ProjectMilestone }) {
   if (isComplete(milestone)) {
@@ -116,10 +114,10 @@ function EditableRow({
           )}
         </div>
         <div className="flex shrink-0 items-center">
-          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove("up")} className={ROW_ICON}><ArrowUp size={14} aria-hidden /></IconButton>
-          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove("down")} className={ROW_ICON}><ArrowDown size={14} aria-hidden /></IconButton>
+          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove("up")}><ArrowUp size={14} aria-hidden /></IconButton>
+          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove("down")}><ArrowDown size={14} aria-hidden /></IconButton>
           {editing ? null : (
-            <IconButton label={`Edit ${title}`} onClick={onEdit} className={ROW_ICON}><Pencil size={15} aria-hidden /></IconButton>
+            <IconButton label={`Edit ${title}`} onClick={onEdit}><Pencil size={15} aria-hidden /></IconButton>
           )}
         </div>
       </div>

@@ -17,7 +17,6 @@ import { createRoleMetric, deleteRoleMetric, updateRoleMetric, type RoleMetricPa
 import { errorMessage } from "../../lib/errors.ts";
 import { METRIC_KIND_LABELS, keysOf, type JobRole, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
-const ICON_SIZE = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 // The shared control classes at a compact size for the dense metric rows: the same look, without
@@ -51,7 +50,7 @@ function MetricForm({ metric, onSave, onDelete, onError }: { metric: RoleMetric;
     <div>
       <div className="flex items-center gap-2">
         <BlurInput value={metric.name} required ariaLabel={`Metric name ${metric.name}`} onSave={(next) => onSave({ name: next.trim() })} className={`${smallInput} min-w-0 flex-1 font-medium`} />
-        <IconButton label={`Delete metric ${metric.name}`} onClick={onDelete} className={ICON_SIZE}>
+        <IconButton label={`Delete metric ${metric.name}`} onClick={onDelete}>
           <Trash2 size={14} aria-hidden />
         </IconButton>
       </div>

@@ -217,7 +217,7 @@ function GoalCard({
           )}
           {canEdit && !setForThem ? (
             <>
-              <IconButton label="Edit goal" onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9"><Pencil size={15} aria-hidden /></IconButton>
+              <IconButton label="Edit goal" onClick={onEdit}><Pencil size={15} aria-hidden /></IconButton>
               <IconButton label="Delete goal" onClick={onDelete}><Trash2 size={14} aria-hidden /></IconButton>
             </>
           ) : null}

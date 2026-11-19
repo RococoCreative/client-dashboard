@@ -375,7 +375,7 @@ export default function CyclePage() {
           canRunCycle ? (
             <>
               {/* The name, dates and theme read in the header above; the pencil opens them as one form. */}
-              <IconButton label="Edit cycle" onClick={() => setEditing(true)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+              <IconButton label="Edit cycle" onClick={() => setEditing(true)}>
                 <Pencil size={15} aria-hidden />
               </IconButton>
               {open ? (

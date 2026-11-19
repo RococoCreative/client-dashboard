@@ -28,8 +28,6 @@ import {
 } from "../../services/milestoneTemplates.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type MilestoneTemplate } from "../../types/database.ts";
 
-// Row icons at the size EditRow gives its pencil: 44px on a phone, 36px from sm up.
-const ROW_ICON = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 function byOrder(a: MilestoneTemplate, b: MilestoneTemplate): number {
   return a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at);
@@ -85,14 +83,14 @@ function TemplateRow({
           )}
         </div>
         <div className="flex shrink-0 items-center">
-          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove(-1)} className={ROW_ICON}>
+          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove(-1)}>
             <ArrowUp size={14} aria-hidden />
           </IconButton>
-          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove(1)} className={ROW_ICON}>
+          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove(1)}>
             <ArrowDown size={14} aria-hidden />
           </IconButton>
           {editing ? null : (
-            <IconButton label={`Edit ${title}`} onClick={onEdit} className={ROW_ICON}>
+            <IconButton label={`Edit ${title}`} onClick={onEdit}>
               <Pencil size={15} aria-hidden="true" />
             </IconButton>
           )}

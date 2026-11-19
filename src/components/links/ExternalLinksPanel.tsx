@@ -39,8 +39,6 @@ function Caption({ children }: { children: string }) {
   return <span className={labelClass} aria-hidden>{children}</span>;
 }
 
-// Row icons at the size EditRow gives its pencil: 44px on a phone, 36px from sm up.
-const ROW_ICON = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 // A link as text: its label, what it is for, where it goes, and who sees it.
 function LinkSummary({ link, onEdit }: { link: ExternalLink; onEdit: () => void }) {
@@ -61,7 +59,7 @@ function LinkSummary({ link, onEdit }: { link: ExternalLink; onEdit: () => void 
           <span className="tnum">Order {link.sort_order}</span>
         </p>
       </div>
-      <IconButton label={`Edit ${link.label}`} onClick={onEdit} className={ROW_ICON}>
+      <IconButton label={`Edit ${link.label}`} onClick={onEdit}>
         <Pencil size={15} aria-hidden />
       </IconButton>
     </li>

@@ -10,6 +10,7 @@
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import IconLink from "./IconLink.tsx";
 import { inputClass } from "./forms.ts";
 import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "./type.ts";
 
@@ -117,14 +118,9 @@ export default function ListDetail({
       {hasSelection ? (
         <div className={`${CARD} min-w-0`}>
           <div className="mb-3 lg:hidden">
-            <Link
-              to={backHref}
-              aria-label={`Back to ${label}`}
-              title={`Back to ${label}`}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-md text-ink-2 transition-colors duration-150 hover:bg-surface-2 hover:text-ink"
-            >
+            <IconLink to={backHref} label={`Back to ${label}`}>
               <ArrowLeft size={16} aria-hidden="true" />
-            </Link>
+            </IconLink>
           </div>
           {children}
         </div>

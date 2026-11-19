@@ -12,6 +12,18 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* tap: a phone-width screen (below sm) or a coarse pointer (a finger on any screen). Anything a
+ * person taps grows to a 44px target under it, so a thumb can hit it; a mouse keeps the denser
+ * desktop sizes. */
+@custom-variant tap {
+  @media (width < 40rem) {
+    @slot;
+  }
+  @media (pointer: coarse) {
+    @slot;
+  }
+}
+
 /* Rococo's brand faces, Goldenbook (display) and Halcom (UI), are licensed through Adobe
  * Fonts and served by the web project stylesheet linked in index.html, never as files in
  * this repository. Adobe declares the families as "goldenbook" and "halcom", so the Rococo

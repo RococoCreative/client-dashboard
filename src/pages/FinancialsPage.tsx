@@ -406,7 +406,7 @@ export default function FinancialsPage() {
                         <td className={`${tdClass} text-right`}>
                           <span className="inline-flex items-center gap-1">
                             {row.source !== "manual" ? <Badge>{row.source === "csv" ? "CSV" : "QuickBooks"}</Badge> : null}
-                            <IconButton label="Edit period" onClick={() => setDialog({ snapshot: row })} className="!h-11 !w-11 sm:!h-9 sm:!w-9"><Pencil size={15} aria-hidden /></IconButton>
+                            <IconButton label="Edit period" onClick={() => setDialog({ snapshot: row })}><Pencil size={15} aria-hidden /></IconButton>
                           </span>
                         </td>
                       </tr>

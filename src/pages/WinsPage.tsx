@@ -142,7 +142,7 @@ function EditableRow({
         <div className="min-w-0 flex-1">
           <WinText win={win} projects={projects} />
         </div>
-        <IconButton label={`Edit ${title}`} onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+        <IconButton label={`Edit ${title}`} onClick={onEdit}>
           <Pencil size={15} aria-hidden="true" />
         </IconButton>
       </li>

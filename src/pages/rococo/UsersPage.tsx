@@ -146,7 +146,7 @@ export default function UsersPage() {
                         {editing ? (
                           <Button variant="secondary" size="sm" onClick={() => setOpenId(null)}>Done</Button>
                         ) : (
-                          <IconButton label={`Edit ${person.email}`} onClick={() => setOpenId(person.id)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+                          <IconButton label={`Edit ${person.email}`} onClick={() => setOpenId(person.id)}>
                             <Pencil size={15} aria-hidden />
                           </IconButton>
                         )}

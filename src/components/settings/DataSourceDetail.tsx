@@ -87,7 +87,7 @@ export default function DataSourceDetail({
       <div className="mt-6 border-t border-line pt-4">
         <div className="flex items-center justify-between gap-3">
           <p className={eyebrowLabelClass}>What it reads</p>
-          <IconButton label={`Edit ${source.name}`} onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+          <IconButton label={`Edit ${source.name}`} onClick={onEdit}>
             <Pencil size={15} aria-hidden="true" />
           </IconButton>
         </div>
