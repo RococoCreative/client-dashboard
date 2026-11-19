@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { BookOpen, Building2, CalendarCheck, ChartColumn, CircleDollarSign, ClipboardCheck, ExternalLink, FolderOpen, Gauge, HardHat, History, KeyRound, LayoutDashboard, LayoutGrid, ListChecks, Megaphone, Settings, ShieldCheck, Target, Trophy, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Company } from "../types/database.ts";
 import { KINGDOM, KLASIK, RBA } from "../test/fixtures.ts";
-import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, type CanFn, type NavItem, type NavLayout } from "./navigation.ts";
+import { NAV_GROUP_ORDER, NAV_ITEMS, PORTFOLIO_NAV, alsoActiveFor, navFor, sectionShortcuts, sidebarListsMyPages, type CanFn, type NavItem, type NavLayout } from "./navigation.ts";
 
 // Every capability held: navFor takes can() from the hub and has no default, so these pass one.
 const all: CanFn = () => true;
@@ -296,5 +296,14 @@ describe("the Financials item and the manual_financials setting", () => {
     const klasikOff = { ...klasik, manual_financials: false };
     expect(sectionShortcuts(navFor(klasik, true, false, true, all)).find((s) => s.group === "sales_finance")?.to).toBe("/financials");
     expect(sectionShortcuts(navFor(klasikOff, true, false, true, all)).find((s) => s.group === "sales_finance")?.to).toBe("/marketing");
+  });
+});
+
+describe("sidebarListsMyPages", () => {
+  it("is true for an employee and a manager, false for an admin and a flat layout", () => {
+    expect(sidebarListsMyPages(navFor(KLASIK.company, false, false, false, all))).toBe(true);
+    expect(sidebarListsMyPages(navFor(KLASIK.company, false, false, true, all))).toBe(true);
+    expect(sidebarListsMyPages(navFor(KLASIK.company, true, false, true, all))).toBe(false);
+    expect(sidebarListsMyPages({ kind: "flat", items: [] })).toBe(false);
   });
 });

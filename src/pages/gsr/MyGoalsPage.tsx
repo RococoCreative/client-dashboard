@@ -5,9 +5,8 @@
 import { Lock } from "lucide-react";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
-import Tabs from "../../components/ui/Tabs.tsx";
 import { useHub } from "../../context/HubContext.tsx";
-import { MY_TABS } from "./myTabs.ts";
+import MyTabs from "./MyTabs.tsx";
 
 export default function MyGoalsPage() {
   const { company, profile } = useHub();
@@ -15,8 +14,8 @@ export default function MyGoalsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="This year and beyond" title="My goals" description="Professional, personal, and role goals for this year and next, and your BHAG, with the action steps to get there." />
-      <Tabs items={MY_TABS} />
+      <PageHeader eyebrow="This year and beyond" title="My Goals" description="Professional, personal, and role goals for this year and next, and your BHAG, with the action steps to get there." />
+      <MyTabs />
       <p className="mb-5 flex items-start gap-2 rounded-md border border-line bg-surface px-4 py-3 text-[13px] leading-relaxed text-ink-2">
         <Lock size={14} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
         <span>

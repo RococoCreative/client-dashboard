@@ -128,6 +128,14 @@ export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, is
   return { kind: "grouped", sections };
 }
 
+// Whether a sidebar already lists a person's own reviews and goals pages. The My pages keep their
+// GSR | Reviews | Goals tab row only when it does not (an admin's sidebar has just My GSR).
+export function sidebarListsMyPages(layout: NavLayout): boolean {
+  if (layout.kind === "flat") return false;
+  const lists = (to: string) => layout.sections.some((section) => section.items.some((item) => item.to === to));
+  return lists("/my/reviews") && lists("/my/goals");
+}
+
 // Whether an item is the one to mark for a path, beyond what its own link matches.
 export function alsoActiveFor(item: NavItem, pathname: string): boolean {
   return (item.alsoActive ?? []).some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

@@ -371,7 +371,9 @@ describe("GSR", () => {
 
   it("shows an employee their review history and goals", async () => {
     renderWithHub(<MyReviewsPage />, rbaEmployee);
-    expect(await screen.findByRole("heading", { name: "My reviews" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeInTheDocument();
+    // The sidebar already lists the My pages for an employee, so no tab row repeats them.
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(await screen.findByText("All reviews")).toBeInTheDocument();
     // RBA's scored quarters are listed; a monthly GSR never is, whatever it carries.
     expect((await screen.findAllByText(RBA.cycles[0].name)).length).toBeGreaterThan(0);
@@ -380,17 +382,29 @@ describe("GSR", () => {
   it("opens the employee's own Goal Setting Review for the live month", async () => {
     renderWithHub(<MyGsrPage />, employee);
     // Sam's September GSR is in progress, so the month renders in place: last month read back,
-    // this month's goals, no back link (the tabs are the way around).
+    // this month's goals, no back link (the sidebar is the way around).
     expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "My GSR" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /My GSR/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Personal KPIs 2026")).not.toBeInTheDocument();
   });
 
+  it("keeps the GSR, Reviews, Goals tab row for an admin, whose sidebar lists only My GSR", async () => {
+    renderWithHub(<MyReviewsPage />, admin);
+    expect(await screen.findByRole("heading", { level: 1, name: "My Reviews" })).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Reviews" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Goals" })).toBeInTheDocument();
+  });
+
   it("keeps My Goals to the year's goals", async () => {
     renderWithHub(<MyGoalsPage />, employee);
-    expect(await screen.findByRole("heading", { name: "My goals" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "My Goals" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
     // A month goal is the GSR's, so it is neither listed nor editable here.
     expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
