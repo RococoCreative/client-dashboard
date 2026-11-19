@@ -690,7 +690,7 @@ export default function PersonPage() {
                   </select>
                   {jobRoles.length === 0 ? (
                     <p className="mt-1 text-[12px] text-ink-3">
-                      No job roles yet. Admins add them in <Link to="/people/roles" className="text-link hover:underline">Settings, Roles</Link>.
+                      No job roles yet. Admins add them in <Link to="/people/roles" className="text-link hover:underline">People, Roles</Link>.
                     </p>
                   ) : null}
                   {roleRetired && jobRole ? (
@@ -772,7 +772,7 @@ export default function PersonPage() {
                   : roleRetired && jobRole
                     ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} is retired. They come back once a current role that carries the module is set above.`
                     : jobRole
-                      ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on for the role in Settings, Roles.`
+                      ? `The numbers this person owns, against target. Not on their dashboard: ${jobRole.name} does not carry the module. Turn it on for the role in People, Roles.`
                       : "The numbers this person owns, against target. They reach their dashboard once a job role that carries the module is set above."
               }
             >

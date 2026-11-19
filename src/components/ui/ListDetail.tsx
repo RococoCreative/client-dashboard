@@ -3,6 +3,9 @@
 // list and the detail sit side by side; below lg the list shows alone until something is chosen,
 // then the detail shows alone with a back arrow to the list. Responsive classes do that work, so
 // no script measures the screen. With nothing selected the detail is not rendered at any width.
+// An empty list shows nothing of its own, so the page says what an empty list means (its footer);
+// "Nothing matches that." is only for a search that found nothing. Items carrying a group (retired
+// roles) follow the rest under that group's label.
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -14,9 +17,14 @@ export interface ListDetailItem {
   title: string;
   meta?: string;
   muted?: boolean;
+  group?: string;
 }
 
 const CARD = "rounded-lg border border-line bg-surface p-4 sm:p-6";
+// A muted title swaps the ink for ink-3 rather than stacking both, so which one wins never depends
+// on the order the stylesheet happens to list them in.
+const MUTED_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-3");
+const GROUP_LABEL = "px-2 pb-1.5 pt-4 text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 export default function ListDetail({
   label,
@@ -43,7 +51,10 @@ export default function ListDetail({
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
-  const shown = needle ? items.filter((item) => item.title.toLowerCase().includes(needle)) : items;
+  const matched = needle ? items.filter((item) => item.title.toLowerCase().includes(needle)) : items;
+  // Ungrouped items first, then each group in the order it first appears.
+  const groups = [...new Set(matched.map((item) => item.group ?? ""))].sort((a, b) => Number(a !== "") - Number(b !== ""));
+  const shown = groups.flatMap((group) => matched.filter((item) => (item.group ?? "") === group));
   const hasSelection = selectedId !== null;
 
   return (
@@ -71,13 +82,15 @@ export default function ListDetail({
           </div>
         ) : null}
         {shown.length === 0 ? (
-          <p className={`${secondaryClass} mt-4`}>Nothing matches that.</p>
+          needle ? <p className={`${secondaryClass} mt-4`}>Nothing matches that.</p> : null
         ) : (
           <ul className="mt-3 divide-y divide-line border-y border-line">
-            {shown.map((item) => {
+            {shown.map((item, index) => {
               const selected = item.id === selectedId;
+              const startsGroup = item.group && item.group !== shown[index - 1]?.group;
               return (
                 <li key={item.id}>
+                  {startsGroup ? <p className={GROUP_LABEL}>{item.group}</p> : null}
                   <Link
                     to={hrefFor(item.id)}
                     aria-current={selected ? "true" : undefined}
@@ -86,9 +99,7 @@ export default function ListDetail({
                       (selected ? "bg-surface-2 shadow-[inset_2px_0_0_var(--color-accent)]" : "")
                     }
                   >
-                    <span className={`${itemTitleClass} block break-words ${item.muted ? "text-ink-3" : ""}`}>
-                      {item.title}
-                    </span>
+                    <span className={`${item.muted ? MUTED_TITLE : itemTitleClass} block break-words`}>{item.title}</span>
                     {item.meta ? <span className={`${metaClass} block break-words`}>{item.meta}</span> : null}
                   </Link>
                 </li>

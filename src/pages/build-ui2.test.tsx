@@ -1,4 +1,4 @@
-// The role scorecard screens against the mocked data layer: the metrics editor on a job role, a
+// The role scorecard screens against the mocked data layer: the metrics editor on a job role (People, Roles), a
 // person's scorecard, projects and division on their page, the Scorecards report, and the
 // division split on the dashboard (shown only to the people allowed to see it). The fixtures are
 // RBA's: Noor (Project Manager, North) and Avery (Site Superintendent, South) have results.
@@ -39,9 +39,9 @@ import * as divisionsService from "../services/divisions.ts";
 import * as scorecardsService from "../services/scorecards.ts";
 import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import type { HubValue } from "../context/HubContext.tsx";
-import JobRolesPanel from "../components/settings/JobRolesPanel.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 
 const rbaAdmin = makeHub("admin", RBA.company);
@@ -59,19 +59,42 @@ function personPage(hub: HubValue, id = noor.id) {
 describe("role metrics editor", () => {
   it("lists a role's metrics, adds one, retires one, and explains a refused delete", async () => {
     const user = userEvent.setup();
-    renderWithHub(<JobRolesPanel companyId={RBA.company.id} />, rbaAdmin);
+    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles/rba-role-pm", pattern: "/people/roles/:roleId?" });
+    const roles = await screen.findByRole("region", { name: "Job roles" });
+    await user.click(await screen.findByRole("button", { name: "Edit metric Job cost: gross profit" }));
     expect(await screen.findByDisplayValue("Job cost: gross profit")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Per project for Job cost: gross profit" })).toBeChecked();
     expect(screen.getByRole("textbox", { name: "Target for Job cost: gross profit" })).toHaveValue("30");
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
+    // A metric with results cannot be deleted; the dialog says why and what to do instead.
+    // Both scored roles have an Optimization rate; this is the Project Manager's.
+    await user.click(screen.getByRole("button", { name: "Edit metric Optimization rate" }));
+    await user.click(screen.getByRole("button", { name: "Delete metric Optimization rate" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete metric" }));
+    expect(await within(dialog).findByText(/has results entered, so it cannot be deleted\. Untick Active to retire it instead/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getAllByDisplayValue("Optimization rate").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
     // The retired metric shows as retired, with Active unticked.
+    await user.click(within(roles).getByRole("link", { name: /Site Superintendent/ }));
+    const superMetrics = (await screen.findByRole("heading", { name: "Scorecard metrics" })).closest("section") as HTMLElement;
+    expect(within(superMetrics).getByText("Retired", { selector: "span" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit metric Toolbox talks" }));
     expect(screen.getByRole("checkbox", { name: "Active for Toolbox talks" })).not.toBeChecked();
 
     // Add a rating metric to the Site Supervisor role, which had none.
+    await user.click(within(roles).getByRole("link", { name: /Site Supervisor/ }));
+    await screen.findByRole("heading", { level: 2, name: "Site Supervisor" });
+    const supervisorMetrics = screen.getByRole("heading", { name: "Scorecard metrics" }).closest("section") as HTMLElement;
+    await user.click(within(supervisorMetrics).getByRole("button", { name: /Add metric/ }));
     await user.type(screen.getByRole("textbox", { name: "Add a metric for Site Supervisor" }), "Client walk");
     await user.selectOptions(screen.getByRole("combobox", { name: "Kind of new metric for Site Supervisor" }), "rating");
-    const supervisorCard = screen.getByRole("textbox", { name: "Add a metric for Site Supervisor" }).closest("li") as HTMLElement;
-    await user.click(within(supervisorCard).getByRole("button", { name: /Add metric/ }));
-    expect(await screen.findByDisplayValue("Client walk")).toBeInTheDocument();
+    await user.click(within(supervisorMetrics).getByRole("button", { name: /Add metric/ }));
+    expect(await within(supervisorMetrics).findByText("Client walk")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit metric Client walk" }));
     expect(screen.getByRole("combobox", { name: "Scale for Client walk" })).toHaveValue("5");
 
     // Set a target, then retire it.
@@ -81,21 +104,15 @@ describe("role metrics editor", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Target for Client walk" })).toHaveValue("4"));
     await user.click(screen.getByRole("checkbox", { name: "Active for Client walk" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Active for Client walk" })).not.toBeChecked());
-    expect(within(supervisorCard).getByText("Retired", { selector: "span" })).toBeInTheDocument();
-
-    // A metric with results cannot be deleted; the dialog says why and what to do instead.
-    // Both scored roles have an Optimization rate; the first is the Project Manager's.
-    await user.click(screen.getAllByRole("button", { name: "Delete metric Optimization rate" })[0]);
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: "Delete metric" }));
-    expect(await within(dialog).findByText(/has results entered, so it cannot be deleted\. Untick Active to retire it instead/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.getAllByDisplayValue("Optimization rate").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(within(supervisorMetrics).getByText("Retired", { selector: "span" })).toBeInTheDocument();
+    expect(within(supervisorMetrics).getByText(/Target 4/)).toBeInTheDocument();
 
     // One without results goes.
+    await user.click(screen.getByRole("button", { name: "Edit metric Client walk" }));
     await user.click(screen.getByRole("button", { name: "Delete metric Client walk" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete metric" }));
-    await waitFor(() => expect(screen.queryByDisplayValue("Client walk")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Client walk")).not.toBeInTheDocument());
   });
 });
 

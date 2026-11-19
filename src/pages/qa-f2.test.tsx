@@ -1,6 +1,6 @@
 // Follow-up QA round, group F2: dialogs, settings and connections. Each test pins a defect a
 // reviewer reproduced on the merged QA branch: a job role delete whose failure showed up in another
-// role's dialog, a pillar weight message that stayed under a valid number, a company goals notice
+// dialog, a pillar weight message that stayed under a valid number, a company goals notice
 // that outlived the action it was about, and a "connected" line shown over a row that says it is not.
 //
 // The mocks are the usual in-memory data layer, with the calls these defects get wrong watched so a
@@ -59,22 +59,27 @@ function pending() {
 
 const dropped = "The connection dropped. Check your signal and try again.";
 
-// People > Roles with a second job role beside the seeded Production Manager. The mock keeps
-// what a test adds for the rest of the file, so each test names its own.
+// People, Roles with a second job role beside the seeded Production Manager, opened on the
+// Production Manager. The mock keeps what a test adds for the rest of the file, so each test names
+// its own.
 async function renderRolesWith(user: ReturnType<typeof userEvent.setup>, name: string) {
-  renderWithHub(<RolesPage />, admin);
-  await screen.findByLabelText("Name for Production Manager");
-  await user.type(screen.getByLabelText("Add a job role"), name);
+  renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+  await screen.findByRole("heading", { level: 2, name: "Production Manager" });
   await user.click(screen.getByRole("button", { name: "Add role" }));
-  await screen.findByLabelText(`Name for ${name}`);
+  const dialog = screen.getByRole("dialog");
+  await user.type(within(dialog).getByLabelText("Add a job role"), name);
+  await user.click(within(dialog).getByRole("button", { name: "Add role" }));
+  await screen.findByRole("heading", { level: 2, name });
+  await user.click(within(screen.getByRole("region", { name: "Job roles" })).getByRole("link", { name: /Production Manager/ }));
+  await screen.findByRole("heading", { level: 2, name: "Production Manager" });
 }
 
 describe("deleting a job role", () => {
-  it("waits for a delete already sent, opens no other role's dialog meanwhile, and keeps its failure in its own dialog", async () => {
+  it("waits for a delete already sent, opens no other dialog meanwhile, and keeps its failure in its own dialog", async () => {
     const user = userEvent.setup();
     await renderRolesWith(user, "Estimator");
 
-    await user.click(screen.getByRole("button", { name: "Delete Production Manager" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent('Delete "Production Manager"?');
     const call = pending();
@@ -89,8 +94,8 @@ describe("deleting a job role", () => {
     fireEvent.mouseDown(dialog);
     expect(screen.getByRole("dialog")).toBe(dialog);
 
-    // Focus put on another role's Delete under the scrim opens nothing while the delete runs.
-    screen.getByRole("button", { name: "Delete Estimator" }).focus();
+    // Focus put on the role's Delete under the scrim opens nothing while the delete runs.
+    screen.getByRole("button", { name: "Delete" }).focus();
     await user.keyboard("{Enter}");
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Production Manager"?');
@@ -102,25 +107,27 @@ describe("deleting a job role", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Delete Estimator" }));
+    await user.click(within(screen.getByRole("region", { name: "Job roles" })).getByRole("link", { name: /Estimator/ }));
+    await screen.findByRole("heading", { level: 2, name: "Estimator" });
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Estimator"?');
     expect(screen.queryByText(dropped)).not.toBeInTheDocument();
   });
 
-  it("opens another role's dialog without the last one's failure", async () => {
+  it("opens the dialog again without the last one's failure", async () => {
     const user = userEvent.setup();
     await renderRolesWith(user, "Site Lead");
 
-    await user.click(screen.getByRole("button", { name: "Delete Production Manager" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     vi.mocked(deleteJobRole).mockRejectedValueOnce(new Error("Failed to fetch"));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete role" }));
     expect(await within(screen.getByRole("dialog")).findByText(dropped)).toBeInTheDocument();
 
-    // The failed dialog is still up; a Delete reached under it shows that role's dialog clean.
-    screen.getByRole("button", { name: "Delete Site Lead" }).focus();
-    await user.keyboard("{Enter}");
+    // Cancelled and opened again, the dialog starts clean.
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Site Lead"?');
+    expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Production Manager"?');
     expect(screen.queryByText(dropped)).not.toBeInTheDocument();
   });
 });

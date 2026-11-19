@@ -1,5 +1,5 @@
 // The focus topic calendar (Goals > Monthly focus), the New month dialog reading it, and the
-// company's divisions in Settings > Roles, rendered against the mocked data layer the way
+// company's divisions in People, Divisions, rendered against the mocked data layer the way
 // pages.test.tsx renders every page.
 // The mocks keep state for the whole file, so each test names the rows it starts from.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -191,7 +191,7 @@ describe("new month dialog", () => {
   });
 });
 
-describe("divisions in Settings > Roles", () => {
+describe("divisions in People, Divisions", () => {
   async function panel() {
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;

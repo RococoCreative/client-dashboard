@@ -1039,21 +1039,27 @@ describe("sign-off", () => {
 });
 
 describe("job roles", () => {
-  it("manages job roles and their modules in settings, and lists the goals each one brings", async () => {
-    renderWithHub(<RolesPage />, admin);
-    expect(await screen.findByRole("heading", { name: "Job roles" })).toBeInTheDocument();
-    // Klasik's one role so far, with the module it carries and the goal it brings, which is edited
-    // on People > Roles and linked from the card.
-    expect(await screen.findByLabelText("Name for Production Manager")).toHaveValue("Production Manager");
+  it("manages job roles and their modules on People, Roles, and lists the goals each one brings", async () => {
+    renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    expect(await screen.findByRole("region", { name: "Job roles" })).toBeInTheDocument();
+    // Klasik's one role so far opens on its own, with the module it carries and the goal it brings,
+    // which reads as text until its pencil.
+    expect(await screen.findByRole("heading", { level: 2, name: "Production Manager" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Rename role" }));
+    expect(screen.getByLabelText("Name for Production Manager")).toHaveValue("Production Manager");
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit dashboard modules" }));
     expect(screen.getByLabelText(/^Financial figures .* for Production Manager$/)).toBeChecked();
-    const card = screen.getByLabelText("Name for Production Manager").closest("li") as HTMLElement;
-    expect(within(card).getByText("Walk every active site once a week")).toBeInTheDocument();
-    expect(within(card).queryByLabelText("Role goal Walk every active site once a week")).not.toBeInTheDocument();
-    expect(within(card).getByRole("link", { name: "Edit in Goals, By role" })).toHaveAttribute("href", `/people/roles#role-goals-${KLASIK.jobRoles[0].id}`);
-    await userEvent.type(screen.getByLabelText("Add a job role"), "Estimator");
+    const goals = screen.getByRole("heading", { name: "Role goals" }).closest("section") as HTMLElement;
+    expect(within(goals).getByText("Walk every active site once a week")).toBeInTheDocument();
+    expect(within(goals).queryByLabelText("Role goal Walk every active site once a week")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Add role" }));
-    expect(await screen.findByLabelText("Name for Estimator")).toHaveValue("Estimator");
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText("Add a job role"), "Estimator");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add role" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Estimator" })).toBeInTheDocument();
     // A new role carries nothing until an admin says so.
+    await userEvent.click(screen.getByRole("button", { name: "Edit dashboard modules" }));
     expect(screen.getByLabelText(/^Financial figures .* for Estimator$/)).not.toBeChecked();
   });
 

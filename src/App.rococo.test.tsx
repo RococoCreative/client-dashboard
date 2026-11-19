@@ -119,7 +119,8 @@ describe("routes land the same with modules on", () => {
       .replace(":cycle", bundle.cycles[0].id)
       .replace(":review", bundle.reviews[0].id)
       .replace(":person", bundle.profiles[1].id)
-      .replace(":sop", bundle.sops[0].id);
+      .replace(":sop", bundle.sops[0].id)
+      .replace(":firstRole", bundle.jobRoles[0].id);
   }
 
   const companies: Array<[string, CompanyBundle]> = [["klasik", KLASIK], ["kingdom", KINGDOM]];
@@ -127,7 +128,7 @@ describe("routes land the same with modules on", () => {
   const adminSelf = [
     "/", "/gsr", "/reviews", "/goals/company", "/goals/focus", "/goals/people", "/scorecards",
     "/gsr/cycles/:cycle", "/reviews/cycles/:cycle2", "/gsr/reviews/:review", "/reviews/:review",
-    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/roles", "/people/divisions", "/people/:person", "/sops/new",
+    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/roles/:firstRole", "/people/divisions", "/people/:person", "/sops/new",
     "/sops/:sop", "/sops/:sop/edit", "/resources/sops", "/resources/files", "/financials", "/marketing",
     "/settings/company", "/settings/reviews", "/settings/connections",
   ];
@@ -135,8 +136,10 @@ describe("routes land the same with modules on", () => {
   const adminCases: Array<[string, string | null]> = [
     ...adminSelf.map((t): [string, null] => [t, null]),
     ["/goals", "/goals/company"],
-    ["/settings/roles", "/people/roles"],
-    ["/goals/roles", "/people/roles"],
+    // The bare Roles address opens the first role on a wide screen (a test DOM counts as wide).
+    ["/people/roles", "/people/roles/:firstRole"],
+    ["/settings/roles", "/people/roles/:firstRole"],
+    ["/goals/roles", "/people/roles/:firstRole"],
     ["/reviews/settings", "/settings/reviews"],
     ["/gsr/settings", "/settings/reviews"],
     ["/reviews/company-goals", "/goals/company"],
@@ -168,7 +171,7 @@ describe("routes land the same with modules on", () => {
     it.each(adminCases)(`admin at ${slug}: %s lands where it always has`, async (template, expected) => {
       const path = fill(template, bundle);
       const landed = await landing(path, "admin", slug);
-      expect(landed.pathname).toBe(expected ?? path);
+      expect(landed.pathname).toBe(expected ? fill(expected, bundle) : path);
     });
 
     // The provider sends the browser to the company's own return path (App.tsx ConnectionReturn).

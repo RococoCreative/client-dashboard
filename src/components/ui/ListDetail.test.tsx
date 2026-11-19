@@ -1,5 +1,6 @@
 // Pins the list and detail primitive: items are links, the open one is marked, search filters on
-// title, and the detail is not rendered until something is selected.
+// title, the detail is not rendered until something is selected, an empty list leaves its empty
+// state to the page, a muted item reads in ink-3 alone, and grouped items sit under their label.
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -59,5 +60,51 @@ describe("ListDetail", () => {
     setup(null);
     expect(screen.queryByText("The open role")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Back to Job roles" })).not.toBeInTheDocument();
+  });
+
+  it("shows nothing for an empty list with an empty search, leaving the empty state to the page", () => {
+    render(
+      <MemoryRouter>
+        <ListDetail label="Job roles" items={[]} selectedId={null} hrefFor={(id) => `/roles/${id}`} backHref="/roles" countLabel="0 roles" searchLabel="Search roles" footer={<p>No job roles yet.</p>}>
+          <p>The open role</p>
+        </ListDetail>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText("Nothing matches that.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(screen.getByText("No job roles yet.")).toBeInTheDocument();
+  });
+
+  it("gives a muted item ink-3 without the ink it would otherwise carry", () => {
+    setup(null);
+    const muted = screen.getByText("Site safety officer");
+    expect(muted).toHaveClass("text-ink-3");
+    expect(muted).not.toHaveClass("text-ink");
+    expect(screen.getByText("Estimator")).toHaveClass("text-ink");
+  });
+
+  it("puts grouped items under their group's label, after the ungrouped ones", () => {
+    render(
+      <MemoryRouter>
+        <ListDetail
+          label="Job roles"
+          items={[
+            { id: "a", title: "Site lead" },
+            { id: "c", title: "Site safety officer", muted: true, group: "Retired roles (1)" },
+          ]}
+          selectedId={null}
+          hrefFor={(id) => `/roles/${id}`}
+          backHref="/roles"
+          countLabel="2 roles"
+        >
+          <p>The open role</p>
+        </ListDetail>
+      </MemoryRouter>,
+    );
+    const label = screen.getByText("Retired roles (1)");
+    const lead = screen.getByRole("link", { name: /Site lead/ });
+    const officer = screen.getByRole("link", { name: /Site safety officer/ });
+    expect(lead.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(label.compareDocumentPosition(officer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

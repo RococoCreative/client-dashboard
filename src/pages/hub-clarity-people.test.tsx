@@ -92,10 +92,11 @@ describe("Divisions and Roles", () => {
   });
 
   it("keeps job roles and role goals editable on Roles", async () => {
-    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles", pattern: "/people/roles" });
+    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles/rba-role-pm", pattern: "/people/roles/:roleId?" });
     const nav = await screen.findByRole("navigation", { name: "People" });
     expect(within(nav).getByRole("link", { name: "Roles" })).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByLabelText("Name for Project Manager")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Project Manager" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rename role" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Role goals" })).toBeInTheDocument();
   });
 });
@@ -106,7 +107,7 @@ describe("the old addresses", () => {
   async function openAs(address: string) {
     window.history.pushState({}, "", `${address}?persona=admin&company=rba`);
     render(<App />);
-    await waitFor(() => expect(window.location.pathname).toBe("/people/roles"));
+    await waitFor(() => expect(window.location.pathname).toMatch(/^\/people\/roles(\/|$)/));
     expect(await screen.findByRole("navigation", { name: "People" })).toBeInTheDocument();
   }
 
@@ -121,7 +122,7 @@ describe("the old addresses", () => {
   it("drops a hash on the old address and still lands on People, Roles", async () => {
     window.history.pushState({}, "", "/goals/roles?persona=admin&company=rba#role-goals-x");
     render(<App />);
-    await waitFor(() => expect(window.location.pathname).toBe("/people/roles"));
+    await waitFor(() => expect(window.location.pathname).toMatch(/^\/people\/roles(\/|$)/));
     expect(await screen.findByRole("navigation", { name: "People" })).toBeInTheDocument();
   });
 });
