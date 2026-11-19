@@ -40,9 +40,9 @@ export default function TaskRow({
   const who = task.assignee_id === null ? "Unassigned" : assigneeName;
   return (
     <li>
-      <Link to={`/tasks/${task.id}`} state={linkState} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 transition-colors duration-150 hover:bg-surface-2/60">
+      <Link to={`/tasks/${task.id}`} state={linkState} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors duration-150 hover:bg-surface-2/60 sm:px-6">
         <div className="min-w-0 flex-1 basis-40">
-          <p className={`line-clamp-2 break-words text-sm sm:line-clamp-1 sm:truncate font-medium ${done ? "text-ink-2 line-through" : "text-ink"}`}>{task.title}</p>
+          <p className={`line-clamp-2 break-words text-[15px] leading-snug sm:line-clamp-1 sm:truncate font-medium ${done ? "text-ink-2 line-through" : "text-ink"}`}>{task.title}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-ink-2">
             {showAssignee && who ? (
               <>

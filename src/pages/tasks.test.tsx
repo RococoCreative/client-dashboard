@@ -379,10 +379,12 @@ describe("tasks: Task page", () => {
     expect(await screen.findByRole("checkbox", { name: "Load the van" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Move Print the plans up" }));
     await waitFor(() => expect(stepTitles()).toEqual(["Print the plans", "Call the client", "Load the van"]));
+    await user.click(screen.getByRole("button", { name: "Edit Call the client" }));
     const rename = screen.getByLabelText("Rename Call the client");
     await user.clear(rename);
     await user.type(rename, "Call the homeowner{Enter}");
     expect(await screen.findByRole("checkbox", { name: "Call the homeowner" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit Load the van" }));
     await user.click(screen.getByRole("button", { name: "Remove Load the van" }));
     await waitFor(() => expect(stepTitles()).toEqual(["Print the plans", "Call the homeowner"]));
   });

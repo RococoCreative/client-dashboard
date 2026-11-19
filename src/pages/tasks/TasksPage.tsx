@@ -20,6 +20,7 @@ import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import { checkboxClass, selectClass } from "../../components/ui/forms.ts";
+import { secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
@@ -35,7 +36,8 @@ type Status = "open" | "done" | "all";
 
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
 const STATUS_LABELS: Record<Status, string> = { open: "Open", done: "Done", all: "Open and done" };
-const filterClass = `${selectClass} mt-0 w-auto`;
+// The shared select is full width; a filter sizes to its choice so the row reads as one line.
+const filterClass = `${selectClass} mt-0 !w-auto max-w-full`;
 
 function matchesStatus(task: TaskWithSteps, status: Status): boolean {
   return status === "all" || (status === "done") === isDone(task);
@@ -195,7 +197,7 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
       {roster.error ? <Notice tone="error" className="mb-4">{roster.error}</Notice> : null}
 
       {view === "mine" ? (
-        <label className="mb-4 inline-flex items-center gap-2 text-[13px] text-ink-2">
+        <label className={`mb-4 inline-flex min-h-11 items-center gap-2 sm:min-h-0 ${secondaryClass}`}>
           <input type="checkbox" className={checkboxClass} checked={showCompleted} onChange={(e) => setShowCompleted(e.target.checked)} />
           Show completed
         </label>
