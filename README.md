@@ -378,13 +378,12 @@ nothing until sign-off.
 
 ## Job roles, role goals, and a person's own figures
 
-A job role is a row a company adds in Settings > Roles (Site Supervisor, Project Manager, Salesperson),
+A job role is a row a company adds in People > Roles (Site Supervisor, Project Manager, Salesperson),
 and a person is placed in one from their profile. The role carries two things. First, the
 dashboard modules its people get: today that is one module, their own financial figures, and a
 new module is a new entry in the list every company sees, never a branch on who the company is.
 Second, the goals the role brings into every month's Goal Setting Review: an admin writes them
-once for the role in Goals > By role (the role's card in Settings lists them and links there), and
-the review offers them to file for the month in one click, as goals of
+once on the role's own page in People > Roles (`/people/roles/:roleId`), and the review offers them to file for the month in one click, as goals of
 kind Role that the meeting then owns like any other. The template is never edited from a review.
 
 A person's financial figures live on their profile: what they own for the year (closed sales,
@@ -432,37 +431,58 @@ The sidebar is the same for every company, in sections named for the job being d
 | (top) | Home, Wins (`wins`), Tasks (`tasks`) | Home, Wins (`wins`), Tasks (`tasks`) |
 | Sales & Finance | Reporting and Controls (`data_sources`), Financials, Marketing | (not visible) |
 | Production | Projects (`production`) | Projects (`production`) |
-| People | People, Goals, Monthly GSRs, Reviews, Scorecards | My development: My GSR, My Reviews, My Goals |
+| People | People, Goals, GSRs, Reviews, Scorecards | My development: My GSR, My Reviews, My Goals |
 | Resources | SOPs, Files & media, Links (`external_links`) | the same |
 | (bottom) | My GSR, Settings | |
 
-Three pages are hubs with a route per tab, so a link can land on the right one:
+Managers see People as well, as the roster alone with no tabs, beside their own My GSR, My Reviews
+and My Goals.
 
+Each section page with more than one part is a set of route tabs, so a link can land on the right
+one. Setup sits on a Setup tab beside what it shapes, never in Settings:
+
+- **Tasks** (`/tasks`): Mine, and `/tasks/everyone` for leads (named Team for a manager). A task
+  has its own address at `/tasks/:id`.
+- **Sales & Finance**: Reporting (`/sales-finance`) and Controls (`/sales-finance/controls`).
+- **Projects** (`/production`): Projects, and `/production/setup` for admins, the standard
+  milestones and letters every new project starts with. A project has its own address at
+  `/production/projects/:id`.
+- **People** (`/people`): the Roster; for admins, `/people/roles` the job roles as a list with one
+  role open beside it (its dashboard modules, who holds it, its role goals and its scorecard
+  metrics), each role at `/people/roles/:roleId`, and `/people/divisions` the company's divisions.
+- **A person** (`/people/:id`): Overview at the person's own address, then `/gsr` GSR and goals,
+  `/scorecard`, `/tasks` (with the `tasks` module), `/reviews`, and `/setup` for admins (their
+  details and job role, hub role, divisions, compensation, and Deactivate or Remove), each one
+  segment below it.
 - **Goals** (`/goals`, lands on Company): `/goals/company` the year's company goals leadership
-  reviews monthly; `/goals/roles` the goals each job role brings into every month; `/goals/focus`
-  the focus topic calendar, the #1 GSR's topic each month; `/goals/people` each person's goals for
-  the year and their BHAG.
-- **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme, time zone and
-  sign-in domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
-  divisions; `/settings/connections` connections and data sources. Review setup (pillars and
-  weights, criteria, the Monthly GSRs rule and deliverable categories) lives under Reviews, at
-  `/reviews/setup`.
-  `/settings/connections/:companyId` is the OAuth return path, which lands on the Connections tab
-  with the outcome.
+  reviews monthly; `/goals/people` each person's goals for the year and their BHAG. A line at its
+  foot says where role goals (People > Roles) and focus topics (GSRs > Setup) live.
+- **GSRs** (`/gsr`): Periods, and `/gsr/setup` the focus topic calendar and, for a company that
+  scores its GSRs, how many goals each GSR requires.
+- **Reviews** (`/reviews`): Cycles, and `/reviews/setup` pillars and weights, criteria, the Monthly
+  GSRs rule and deliverable categories. A cycle opens at `/gsr/cycles/:id` or `/reviews/cycles/:id`
+  and a review at `/gsr/reviews/:id` or `/reviews/:id`, under the section that owns its cadence.
 - **Resources** (`/resources`, lands on SOPs): `/resources/sops`, `/resources/files`,
   `/resources/links`. An SOP keeps its own address at `/sops/:id`.
+- **Settings** (`/settings`, lands on the first tab the person may open): `/settings/company` name,
+  logo, theme, time zone and sign-in domains, with a card at its foot linking to the setup that
+  moved out; `/settings/connections` connections and data sources, each source past three at
+  `/settings/connections/sources/:id`; `/settings/activity`. `/settings/connections/:companyId` is
+  the OAuth return path, which lands on the Connections tab with the outcome.
 
-Old addresses redirect: `/settings/reviews`, `/reviews/settings` and `/gsr/settings` to `/reviews/setup`;
-`/reviews/company-goals` and `/gsr/company-goals` to `/goals/company`; `/settings` to
-`/settings/company`; `/sops` and `/resources` to `/resources/sops`.
+Old addresses redirect: `/settings/roles` and `/goals/roles` to `/people/roles`; `/goals/focus` to
+`/gsr/setup`; `/settings/reviews`, `/reviews/settings` and `/gsr/settings` to `/reviews/setup`;
+`/settings/production` to `/production/setup`; `/reviews/company-goals` and `/gsr/company-goals` to
+`/goals/company`; `/goals` to `/goals/company` for admins and `/my/goals` for everyone else; `/gsr`
+and `/reviews` to `/my/gsr` and `/my/reviews` for anyone who is not an admin; `/my` to `/my/gsr`;
+`/settings` to its first tab; `/sops` and `/resources` to `/resources/sops`.
 
-Monthly GSRs (`/gsr`) are the monthly Goal Setting Reviews: last month at a glance, this month's
+GSRs (`/gsr`) are the monthly Goal Setting Reviews: last month at a glance, this month's
 goals with their action steps and notes, the focus topic, and no pillar scores; where the company
 has a Monthly GSRs pillar, the month's score shows as it builds and an admin locks it in. Reviews
 (`/reviews`) are the quarterly, annual and custom cycles: the scored review with the employee
-snapshot, deliverables, yearly goals and feedback. Reviews has two tabs, Cycles and Setup; both
-page headers link to Goals, and Monthly GSRs links to review settings (Reviews > Setup).
-Employees see their own as My GSR, My Reviews and My Goals.
+snapshot, deliverables, yearly goals and feedback. Both page headers link to Goals, and GSRs links
+to review settings (Reviews > Setup). Employees see their own as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 
@@ -612,9 +632,10 @@ and the RBA theme picks them up without a code change.
 
 - `src/App.tsx`: auth gate and router.
 - `src/components/`: login, onboarding, app shell, and the `ui/` primitives.
-- `src/pages/`: one folder per module; the hubs are `gsr/GoalsPage.tsx`, `settings/SettingsPage.tsx`
-  and `resources/ResourcesPage.tsx`, each with a `*Tabs.ts` beside it naming its routes, and their
-  tab panels live in `src/components/goals/`, `settings/`, `resources/` and `links/`.
+- `src/pages/`: one folder per module; a page with route tabs has a `*Tabs.ts` beside it naming its
+  routes (`gsr/goalsTabs.ts`, `gsr/gsrTabs.ts`, `gsr/reviewsTabs.ts`, `people/peopleTabs.ts`,
+  `people/personTabs.ts`, `production/productionTabs.ts`, `settings/settingsTabs.ts` and the rest),
+  and the panels those tabs hold live under `src/components/`, one folder per area.
 - `src/services/`: the data layer, one module per table group; plain async functions.
 - `src/lib/`: pure logic (scoring, cycle periods, CSV, formatting, theme registry).
 - `src/test/`: fixtures and the mocked services the page tests render against.
@@ -896,7 +917,8 @@ migrations are in; the app and function running today never read the new columns
      in the record, not deleted."
    - Open and Done filter chips on a project page.
    - A Status select on each milestone for people who may edit.
-   - A Settings > Production tab for companies with the production module.
+   - A Settings > Production tab for companies with the production module (Projects > Setup, at
+     `/production/setup`, since the hub clarity work).
    - Day checkboxes replace the single weekday select on a data source.
    - The new-win date defaults to the company's own day.
 4. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a

@@ -139,7 +139,7 @@ describe("Settings, set up elsewhere", () => {
     expect(linksIn()).toEqual([
       ["Job roles and divisions", "/people/roles"],
       ["Pillars, weights and deliverable categories", "/reviews/setup"],
-      ["Focus topics and the goals a GSR requires", "/gsr/setup"],
+      ["The goals a GSR requires", "/gsr/setup"],
     ]);
   });
 

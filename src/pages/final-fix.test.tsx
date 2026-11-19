@@ -161,3 +161,16 @@ describe("no icon-only destructive control is left", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("Goals points to what left it", () => {
+  it("names where role goals and focus topics live now, each a link", async () => {
+    renderWithHub(<GoalsPage tab="company" />, admin);
+    const roles = await screen.findByRole("link", { name: "People, Roles" });
+    expect(roles).toHaveAttribute("href", "/people/roles");
+    expect(roles).toHaveClass("text-link");
+    const setup = screen.getByRole("link", { name: "GSRs, Setup" });
+    expect(setup).toHaveAttribute("href", "/gsr/setup");
+    expect(setup).toHaveClass("text-link");
+    expect(roles.closest("p")).toHaveTextContent("Role goals are set under People, Roles, and focus topics under GSRs, Setup.");
+  });
+});
