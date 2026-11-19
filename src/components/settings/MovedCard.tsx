@@ -17,7 +17,7 @@ export default function MovedCard({ company }: { company: Pick<Company, "modules
   ];
   return (
     <Section title="Set up elsewhere" description="These settings now live with the part of the hub they shape.">
-      <ul className="divide-y divide-line border-y border-line">
+      <ul className="-mt-4 divide-y divide-line border-b border-line sm:-mt-6">
         {rows.map((row) => (
           <li key={row.to} className="py-3">
             <Link to={row.to} className={`text-link hover:underline [overflow-wrap:anywhere] ${secondaryClass}`}>{row.label}</Link>

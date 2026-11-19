@@ -24,7 +24,6 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
-import EmptyState from "../components/ui/EmptyState.tsx";
 import Notice from "../components/ui/Notice.tsx";
 import PageHeader from "../components/ui/PageHeader.tsx";
 import ScoreBar from "../components/ui/ScoreBar.tsx";
@@ -79,6 +78,7 @@ import {
   GOAL_KIND_LABELS,
   GOAL_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
+  type ReviewStatus,
   SOP_CATEGORY_LABELS,
   type Company,
   type EmployeeFinancial,
@@ -119,11 +119,14 @@ function RecentSops({ sops }: { sops: Sop[] }) {
 // scored, and where their review stands. Scoped to the cycle by cycle_id, because a person has a
 // review in every live cycle at once and matching on the person alone picks whichever came back
 // first.
+const CYCLE_CARD_ROWS_SHOWN = 5;
+
 function CycleProgress({
   cycle,
   people,
   omittedCount,
   scored,
+  capRows = false,
 }: {
   cycle: ReviewCycle;
   // The cycle's roster (cycleRoster): everybody active, plus anyone deactivated since whose review
@@ -131,6 +134,10 @@ function CycleProgress({
   people: Profile[];
   omittedCount: number;
   scored: Array<{ review: Review; score: number | null }>;
+  // Home passes true: a cycle with more than CYCLE_CARD_ROWS_SHOWN + 1 people shows the status
+  // counts and only the people still owing something, not the whole roster. The cycle page shows
+  // everyone; presentation only, the roster and the statuses are the same either way.
+  capRows?: boolean;
 }) {
   const own = scored.filter((s) => s.review.cycle_id === cycle.id);
   // Counted over the roster the cycle covers, so a person with no review row yet reads as a
@@ -140,6 +147,14 @@ function CycleProgress({
   const showScore = cycle.cadence !== "monthly";
   // Still open after its period: the reviews in it are being finished, and it says so.
   const ended = cycleSettled(cycle);
+  const statusOf = (person: Profile): ReviewStatus => own.find((s) => s.review.employee_id === person.id)?.review.status ?? "not_started";
+  const capped = capRows && people.length > CYCLE_CARD_ROWS_SHOWN + 1;
+  const counts = { complete: 0, in_progress: 0, not_started: 0 };
+  for (const person of people) counts[statusOf(person)] += 1;
+  // In progress first, then not started, each in the roster's own order; the completed are counted, not listed.
+  const shown = capped
+    ? [...people.filter((p) => statusOf(p) === "in_progress"), ...people.filter((p) => statusOf(p) === "not_started")].slice(0, CYCLE_CARD_ROWS_SHOWN)
+    : people;
   return (
     <Section
       eyebrow={showScore ? CADENCE_LABELS[cycle.cadence] : `${CADENCE_LABELS[cycle.cadence]} · Goal Setting Review`}
@@ -156,8 +171,16 @@ function CycleProgress({
       ) : people.length === 0 ? (
         <p className="text-sm text-ink-2">Nobody on the roster yet. Add the team in People and their reviews appear here.</p>
       ) : (
+        <>
+        {capped ? (
+          <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-2">
+            {(["complete", "in_progress", "not_started"] as const).map((status) => (
+              <span key={status} className="tnum">{REVIEW_STATUS_LABELS[status]} {counts[status]}</span>
+            ))}
+          </p>
+        ) : null}
         <ul className="divide-y divide-line">
-          {people.map((person) => {
+          {shown.map((person) => {
             const entry = own.find((s) => s.review.employee_id === person.id);
             return (
               <li key={person.id} className="flex items-center justify-between gap-3 py-2.5">
@@ -175,6 +198,12 @@ function CycleProgress({
             );
           })}
         </ul>
+        {capped ? (
+          <p className="mt-2 text-[13px]">
+            <Link to={cyclePath(cycle)} className="text-link hover:underline">All {people.length} people</Link>
+          </p>
+        ) : null}
+        </>
       )}
     </Section>
   );
@@ -418,6 +447,7 @@ function AdminDashboard() {
             people={rosterOf(c.id)}
             omittedCount={cycleOmitted(people, reviews, c.id, omissions).length}
             scored={scored}
+            capRows
           />
         ))}
       </div>
@@ -786,7 +816,7 @@ function EmployeeDashboard() {
           }
         >
           {openGoals.length === 0 ? (
-            <EmptyState eyebrow="Goals" title="Set your first goal" body="Goals for this year or next, or a BHAG three to five years out, with the action steps to get there." />
+            <p className="text-sm text-ink-2">No goals yet. Add one for this year or next, or a BHAG.</p>
           ) : (
             <ul className="divide-y divide-line">
               {/* A yearly goal's steps sit in its private half, so the line reads the period and

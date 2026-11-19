@@ -268,3 +268,58 @@ describe("the team block with no GSR month in play", () => {
     expect(within(row).queryByText(/^(Not started|In progress|Complete)$/)).not.toBeInTheDocument();
   });
 });
+
+describe("an admin's Home cycle card on a large roster", () => {
+  const q3 = RBA.cycles.find((c) => c.cadence === "quarterly" && c.status === "open")!;
+  const admin = makeHub("admin", RBA.company);
+
+  it("counts everyone, lists at most five (in progress first) and links to every person", async () => {
+    const active = RBA.profiles.filter((p) => p.is_active);
+    expect(active.length).toBeGreaterThan(6);
+    // The last person on the roster is mid-review, so they come ahead of everyone not started.
+    const last = active[active.length - 1];
+    const review = await ensureReview(q3.id, RBA.company.id, last.id);
+    onTestFinished(async () => {
+      await updateReview(review.id, { status: "not_started", completed_at: null });
+    });
+    await updateReview(review.id, { status: "in_progress" });
+
+    renderWithHub(<DashboardPage />, admin);
+    const card = sectionOf(await screen.findByRole("heading", { name: q3.name }));
+    const counts = within(card).getByText(/Complete \d+/).parentElement!;
+    const [complete, inProgress, notStarted] = ["Complete", "In progress", "Not started"].map((label) => Number(new RegExp(`${label} (\\d+)`).exec(counts.textContent ?? "")![1]));
+    expect(complete + inProgress + notStarted).toBe(active.length);
+    expect(inProgress).toBeGreaterThanOrEqual(1);
+    const rows = within(card).getAllByRole("listitem");
+    expect(rows.length).toBeLessThanOrEqual(5);
+    expect(within(card).getByText(last.full_name!)).toBeInTheDocument();
+    expect(within(rows[0]).getByText("In progress")).toBeInTheDocument();
+    expect(within(card).queryByText("Complete", { selector: "span.rounded-full" })).not.toBeInTheDocument();
+    const all = within(card).getByRole("link", { name: `All ${active.length} people` });
+    expect(all).toHaveAttribute("href", within(card).getByRole("link", { name: "Open cycle" }).getAttribute("href"));
+  });
+
+  it("shows every row and no link when the roster is six or fewer", async () => {
+    renderWithHub(<DashboardPage />, makeHub("admin", KLASIK.company));
+    const card = sectionOf(await screen.findByRole("heading", { name: KLASIK.cycles[0].name }));
+    const active = KLASIK.profiles.filter((p) => p.is_active);
+    expect(active.length).toBeLessThanOrEqual(6);
+    expect(within(card).getAllByRole("listitem")).toHaveLength(active.length);
+    expect(within(card).queryByRole("link", { name: /^All \d+ people$/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Home Goals card with no goals", () => {
+  it("is one quiet line under the heading, beside the Manage goals button", async () => {
+    // A person with no goals of their own.
+    const quiet = RBA.profiles.find((p) => p.role === "employee" && !RBA.goals.some((g) => g.employee_id === p.id))!;
+    const hub = { ...makeHub("employee", RBA.company), profile: quiet };
+    const { container } = renderWithHub(<DashboardPage />, hub);
+    const card = sectionOf(await screen.findByRole("heading", { name: "0 open goals" }));
+    expect(within(card).getByText("No goals yet. Add one for this year or next, or a BHAG.")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Manage goals" })).toBeInTheDocument();
+    expect(within(card).queryByText("Set your first goal")).not.toBeInTheDocument();
+    expect(card.querySelector(".border-dashed")).toBeNull();
+    expect(container).toBeTruthy();
+  });
+});

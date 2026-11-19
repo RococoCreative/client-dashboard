@@ -130,7 +130,7 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
         categories.length === 0 ? (
           <p className="text-sm text-ink-2">No categories yet. One is added the first time a heading is filed under it on a person's deliverables.</p>
         ) : (
-          <ul className="border-t border-line">
+          <ul className="-mt-4 sm:-mt-6">
             {categories.map((category, index) => (
               <li key={category.id} className={category.is_active ? "" : "opacity-70"}>
                 <EditRow

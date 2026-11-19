@@ -118,6 +118,8 @@ function OpenPillar({
     return onPatch({ weight: value });
   }
 
+  const footNeedsRule = pillar.scoring_type === "gsr_goals" || (pillar.scoring_type === "rating" && criteria.length === 0);
+
   return (
     <div className="border-t border-line px-4 pb-5 pt-1 sm:px-6">
       {row(
@@ -205,7 +207,9 @@ function OpenPillar({
         <PillarCriteria pillar={pillar} criteria={criteria} adding={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
       ) : null}
 
-      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+      {/* The foot draws its own hairline only after text that has none (the GSR note, or the empty
+          criteria line). After a field row or the criteria list the row's own bottom border is the line. */}
+      <div className={`flex flex-wrap items-center gap-2 ${footNeedsRule ? "mt-6 border-t border-line pt-4" : "pt-4"}`}>
         <Button variant="secondary" size="sm" disabled={index === 0} onClick={() => onMove(-1)}>
           <ArrowUp size={14} aria-hidden /> Move up
         </Button>
