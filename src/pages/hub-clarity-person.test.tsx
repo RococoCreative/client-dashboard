@@ -1,7 +1,7 @@
 // The person page as six short tabs: Overview, GSR and goals, Scorecard, Tasks, Reviews and Setup.
-// Pins who gets which tab (a manager has no Setup, a Rococo admin's row only Overview and GSR and
-// goals), that an address for a tab the viewer does not have lands on Overview, that switching
-// tabs never loads the person again, what each tab holds, and the account actions that moved here
+// Pins who gets which tab (a manager has no Setup, a Rococo admin's row no Tasks), that an address
+// for a tab the viewer does not have lands on Overview, that switching tabs never loads the person
+// again, what each tab holds, and the account actions that moved here
 // from the roster: Deactivate, Reactivate and Remove, with the roster's rules and confirm copy.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -92,10 +92,11 @@ describe("personTabsFor", () => {
     ]);
   });
 
-  it("leaves Setup to admins, Tasks to a company with the module, and a Rococo admin's row two tabs", () => {
+  it("leaves Setup to admins, Tasks to a company with the module, and no Tasks on a Rococo admin's row", () => {
     expect(personTabsFor({ ...base, isAdmin: false }).map((t) => t.key)).toEqual(["overview", "gsr", "scorecard", "tasks", "reviews"]);
     expect(personTabsFor({ ...base, tasksOn: false }).map((t) => t.key)).toEqual(["overview", "gsr", "scorecard", "reviews", "setup"]);
-    expect(personTabsFor({ ...base, rococoPerson: true }).map((t) => t.key)).toEqual(["overview", "gsr"]);
+    expect(personTabsFor({ ...base, rococoPerson: true }).map((t) => t.key)).toEqual(["overview", "gsr", "scorecard", "reviews", "setup"]);
+    expect(personTabsFor({ ...base, rococoPerson: true, isAdmin: false }).map((t) => t.key)).toEqual(["overview", "gsr", "scorecard", "reviews"]);
   });
 });
 
@@ -196,15 +197,32 @@ describe("the person page for a manager", () => {
 });
 
 describe("a Rococo admin's row", () => {
-  it("gets Overview and GSR and goals only, and its role reads Rococo Creative", async () => {
-    const riley = KLASIK.profiles[2];
-    await profilesService.updateProfile(riley.id, { is_rococo_admin: true });
-    onTestFinished(() => profilesService.updateProfile(riley.id, { is_rococo_admin: false }).then(() => undefined));
-    renderPerson(klasikAdmin, `/people/${riley.id}`);
-    expect(await screen.findByRole("heading", { name: "Riley Park" })).toBeInTheDocument();
-    expect(await tabNames()).toEqual(["Overview", "GSR and goals"]);
+  it("keeps every tab but Tasks, with no role scorecard and no account actions", async () => {
+    // Noor is placed on RBA's roster as a Rococo admin; RBA has the tasks module.
+    const user = userEvent.setup();
+    await profilesService.updateProfile(noor.id, { is_rococo_admin: true });
+    onTestFinished(() => profilesService.updateProfile(noor.id, { is_rococo_admin: false }).then(() => undefined));
+    renderPerson(rbaAdmin, `/people/${noor.id}`);
+    expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
+    expect(await tabNames()).toEqual(["Overview", "GSR and goals", "Scorecard", "Reviews", "Setup"]);
     expect(screen.getByText("Rococo Creative")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Edit in Setup" })).not.toBeInTheDocument();
+    expect(await screen.findByText("RBA North")).toBeInTheDocument();
+
+    await user.click(within(await tabRow()).getByRole("link", { name: "Reviews" }));
+    expect(await screen.findByRole("heading", { name: "Review history" })).toBeInTheDocument();
+
+    await user.click(within(await tabRow()).getByRole("link", { name: "Scorecard" }));
+    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Scorecard year" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^On \d+ projects?$/)).not.toBeInTheDocument();
+
+    await user.click(within(await tabRow()).getByRole("link", { name: "Setup" }));
+    await user.click(await screen.findByRole("button", { name: "Edit name" }));
+    expect(screen.getByLabelText("Name")).toBeEnabled();
+    expect(screen.getByText("Rococo Creative")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit divisions and view access" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Deactivate|Reactivate|Remove/ })).not.toBeInTheDocument();
   });
 });
 

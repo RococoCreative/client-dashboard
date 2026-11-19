@@ -1,7 +1,8 @@
 // A person's Scorecard tab: their role scorecard (the month-by-month results an admin enters against
 // the role's targets), the projects they are on, this year's personal KPIs, and, for an admin, their
 // financial figures. A manager reads all of it except the financial figures, which are an admin's
-// alone, so the page never asks for them on a manager's behalf.
+// alone, so the page never asks for them on a manager's behalf. A Rococo admin's row has no role
+// scorecard or projects, as their page never had.
 import { useState } from "react";
 import Notice from "../../ui/Notice.tsx";
 import Section from "../../ui/Section.tsx";
@@ -97,14 +98,16 @@ export default function PersonScorecardTab({ companyId, data, person, update, on
   const figuresOnDashboard = !roleRetired && (jobRole?.dashboard_modules.includes("financials") ?? false);
   return (
     <div className="space-y-6">
-      <ScorecardAndProjects
-        companyId={companyId}
-        person={person}
-        roleName={jobRole?.name ?? null}
-        canEdit={isAdmin}
-        linkProjects={hasModule(company, "production") && can("production_view")}
-        onError={onError}
-      />
+      {person.is_rococo_admin ? null : (
+        <ScorecardAndProjects
+          companyId={companyId}
+          person={person}
+          roleName={jobRole?.name ?? null}
+          canEdit={isAdmin}
+          linkProjects={hasModule(company, "production") && can("production_view")}
+          onError={onError}
+        />
+      )}
       <div className={`grid grid-cols-1 gap-6 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
         <Section eyebrow={String(year)} title="Personal KPIs" description="The numbers this person owns for the year. They show at the top of every review.">
           <KpiList companyId={companyId} employeeId={person.id} year={year} kpis={data.kpis} canEdit={isAdmin} onChange={(change) => update((prev) => ({ ...prev, kpis: change(prev.kpis) }))} onError={onError} />

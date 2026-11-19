@@ -35,12 +35,10 @@ const LABELS: Record<PersonTab, string> = {
 const ORDER: PersonTab[] = ["overview", "gsr", "scorecard", "tasks", "reviews", "setup"];
 
 // The tabs this viewer gets on this person: Tasks only when the company has the module, Setup only
-// for an admin. A Rococo admin placed on a company roster keeps their record with Rococo, so their
-// row reads as Overview and their goals only.
+// for an admin. A Rococo admin placed on a company roster has no Tasks tab, as their page never
+// listed tasks; every other tab is the viewer's as usual.
 export function personTabsFor(v: { personId: string; isAdmin: boolean; tasksOn: boolean; rococoPerson: boolean }): Array<TabItem & { key: PersonTab }> {
-  const keys = v.rococoPerson
-    ? (["overview", "gsr"] as PersonTab[])
-    : ORDER.filter((key) => (key === "tasks" ? v.tasksOn : key === "setup" ? v.isAdmin : true));
+  const keys = ORDER.filter((key) => (key === "tasks" ? v.tasksOn && !v.rococoPerson : key === "setup" ? v.isAdmin : true));
   return keys.map((key) => ({
     key,
     label: LABELS[key],

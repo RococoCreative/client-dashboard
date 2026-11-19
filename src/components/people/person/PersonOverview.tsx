@@ -1,8 +1,8 @@
 // A person's Overview tab, the one their page opens on: who they are at a glance (a read-only strip
 // of their details, with a way into Setup for an admin), this month's GSR, their next open tasks,
 // who reports to them, and their latest score and average. Everything here is read; changing a
-// detail is a deliberate step on Setup. A Rococo admin's row keeps its record with Rococo, so it
-// shows the strip and the scores only.
+// detail is a deliberate step on Setup. A Rococo admin's row has no GSR, tasks or team block, as
+// their page never had.
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Section from "../../ui/Section.tsx";
@@ -62,7 +62,7 @@ export default function PersonOverview({ companyId, data, person }: PersonTabPro
       <Section
         eyebrow="Profile"
         title="Details"
-        actions={isAdmin && !rococo ? <Link to={`/people/${person.id}/setup`} className="text-link text-[13px] font-medium hover:underline">Edit in Setup</Link> : undefined}
+        actions={isAdmin ? <Link to={`/people/${person.id}/setup`} className="text-link text-[13px] font-medium hover:underline">Edit in Setup</Link> : undefined}
       >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Detail label="Email">{person.email}</Detail>
@@ -74,7 +74,7 @@ export default function PersonOverview({ companyId, data, person }: PersonTabPro
               "Not set"
             )}
           </Detail>
-          {placed !== null && !rococo ? <Detail label="Division">{placed}</Detail> : null}
+          {placed !== null ? <Detail label="Division">{placed}</Detail> : null}
           <Detail label="Reports to">{manager.name ? `${manager.name}${manager.inactive ? " (inactive)" : ""}` : "Nobody"}</Detail>
           <Detail label="Hub access">{rococo ? "Rococo Creative" : ROLE_LABELS[person.role]}</Detail>
           <Detail label="Department">{person.department || "Not set"}</Detail>

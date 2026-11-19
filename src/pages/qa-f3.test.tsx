@@ -114,10 +114,14 @@ describe("a Rococo admin's person page", () => {
     const riley = KLASIK.profiles[2];
     await updateProfile(riley.id, { is_rococo_admin: true });
     try {
-      const rococoRow = renderWithHub(<PersonPage />, admin, personAt(riley.id));
+      // On Setup, where the hub role is changed for everyone else: it reads Rococo Creative, with
+      // no Role select and no account actions.
+      const rococoRow = renderWithHub(<PersonPage />, admin, personAt(riley.id, "setup"));
       expect(await screen.findByRole("heading", { name: "Riley Park" })).toBeInTheDocument();
+      expect(await screen.findByText("Rococo Creative")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit role" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Role")).not.toBeInTheDocument();
-      expect(screen.getByText("Rococo Creative")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Deactivate|Reactivate|Remove/ })).not.toBeInTheDocument();
       rococoRow.unmount();
     } finally {
       await updateProfile(riley.id, { is_rococo_admin: false });

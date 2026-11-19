@@ -10,9 +10,12 @@
 // an invitation, so switching the row off is what keeps a person out, and it keeps everything set
 // up for them on record. Remove deletes the profile and all of it, so it is offered only for
 // someone who has never signed in and has no pending invitation. Anything to do with someone ranked
-// above the viewer is refused by the database (0033), so none of it is offered.
+// above the viewer is refused by the database (0033), so none of it is offered. A Rococo admin placed
+// on the roster keeps their role, divisions and access with Rococo (0029): their details are the
+// company's to edit, but the role and divisions read only and there are no account actions.
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import Badge from "../../ui/Badge.tsx";
 import BlurInput from "../../ui/BlurInput.tsx";
 import Button from "../../ui/Button.tsx";
 import ConfirmDialog from "../../ui/ConfirmDialog.tsx";
@@ -231,6 +234,13 @@ function DivisionsRow({ companyId, person, me, editing, onEdit, onDone, onPatch 
   if (!state.data) return null;
   const divisions = state.data;
   if (divisions.length === 0 && person.division_ids.length === 0) return null;
+  if (person.is_rococo_admin) {
+    return (
+      <div className="border-b border-line py-3">
+        <Value label="Divisions">{divisionLabel(person.division_ids, divisions)}</Value>
+      </div>
+    );
+  }
   const leadsPeople = person.role === "admin" || person.role === "manager";
   const access = person.view_all_divisions ? "All divisions" : person.view_division_ids.length > 0 ? divisionLabel(person.view_division_ids, divisions) : "No divisions beyond their own team";
   return (
@@ -455,19 +465,27 @@ export default function PersonSetup({ companyId, data, person, update, onError, 
       <div className="min-w-0 space-y-6">
         <Section eyebrow="Hub access" title="Role and divisions">
           <div className="-my-3">
-            <EditRow editLabel="Edit role" {...row("role")} display={<Value label="Role">{ROLE_LABELS[person.role]}</Value>}>
-              <label htmlFor="person-role" className={labelClass}>Role</label>
-              <select id="person-role" value={person.role} disabled={self || !canChangeRole} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
-                {(canChangeRole ? grantableRoles(me) : [person.role]).map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                ))}
-              </select>
-              {!canChangeRole && !self ? <p className="mt-1 text-[12px] text-ink-3">Only an owner or Rococo can change this person's role.</p> : null}
-            </EditRow>
+            {person.is_rococo_admin ? (
+              <div className="border-b border-line py-3">
+                <Value label="Role">
+                  <Badge>Rococo Creative</Badge>
+                </Value>
+              </div>
+            ) : (
+              <EditRow editLabel="Edit role" {...row("role")} display={<Value label="Role">{ROLE_LABELS[person.role]}</Value>}>
+                <label htmlFor="person-role" className={labelClass}>Role</label>
+                <select id="person-role" value={person.role} disabled={self || !canChangeRole} onChange={(e) => void patch({ role: e.target.value as Role })} className={selectClass}>
+                  {(canChangeRole ? grantableRoles(me) : [person.role]).map((r) => (
+                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  ))}
+                </select>
+                {!canChangeRole && !self ? <p className="mt-1 text-[12px] text-ink-3">Only an owner or Rococo can change this person's role.</p> : null}
+              </EditRow>
+            )}
             <DivisionsRow companyId={companyId} person={person} me={me} {...row("divisions")} onPatch={patch} />
           </div>
         </Section>
-        <AccountActions companyId={companyId} person={person} onPatch={patch} />
+        {person.is_rococo_admin ? null : <AccountActions companyId={companyId} person={person} onPatch={patch} />}
       </div>
 
       {canSeePay ? (
