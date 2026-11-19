@@ -15,12 +15,12 @@ export function companyOf(profileId: string): string | null {
   return profiles.find((p) => p.id === profileId)?.company_id ?? null;
 }
 
-// A person's GSR rhythm as the store holds it now, for the GSR mock's insert rule (0040).
+// A person's GSR rhythm as the store holds it now, for the GSR mock's insert rule (0046).
 export function rhythmOfProfile(profileId: string): GsrCadence {
   return profiles.find((p) => p.id === profileId)?.gsr_cadence ?? "monthly";
 }
 
-// Who is writing, as the guards of 0040 see them, for the mocks that play those guards. The persona
+// Who is writing, as the guards of 0046 see them, for the mocks that play those guards. The persona
 // the URL names (the Klasik admin when it names none), judged only inside its own company: a write
 // to another company's rows, or by Rococo, is not judged, the way the SQL editor is not, so a test
 // that seeds data as the default persona is unaffected. Null means not judged.
@@ -106,7 +106,7 @@ export type ProfilePatch = RealProfilePatch;
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);
   if (index === -1) throw new Error("Profile not found.");
-  // guard_profile_fields (0040): a manager changes only the GSR rhythm of the people they lead, and
+  // guard_profile_fields (0046): a manager changes only the GSR rhythm of the people they lead, and
   // nobody sets their own rhythm. Anyone else's row no update policy reaches, so it is not
   // changed, as the service reports a write RLS filtered out. An admin goes through as before.
   const actor = actorIn(profiles[index].company_id);

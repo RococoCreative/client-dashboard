@@ -1,4 +1,4 @@
-// Pins the milestone rules the Production pages lean on: complete means a completed-on date, the
+// Pins the milestone rules the Production pages lean on: complete means a status of complete, the
 // order a project's items are read in, the next sort order, the done-of-total count, the next
 // target date, and the id order a move up or down produces.
 import { describe, expect, it } from "vitest";
@@ -6,9 +6,11 @@ import type { ProjectMilestone } from "../types/database.ts";
 import { isComplete, milestoneCounts, moveMilestone, nextSortOrder, nextTargetDate, sortMilestones } from "./milestones.ts";
 
 let seq = 0;
+// The status follows the completed-on date unless a case names one, as the database keeps them (0043).
 function ms(overrides: Partial<ProjectMilestone> = {}): ProjectMilestone {
   seq += 1;
   return {
+    status: overrides.completed_on ? "complete" : "not_started",
     id: `m-${seq}`,
     company_id: "co",
     project_id: "p",
@@ -29,9 +31,10 @@ function ms(overrides: Partial<ProjectMilestone> = {}): ProjectMilestone {
 }
 
 describe("isComplete", () => {
-  it("is true only with a completed-on date", () => {
-    expect(isComplete({ completed_on: null })).toBe(false);
-    expect(isComplete({ completed_on: "2026-09-01" })).toBe(true);
+  it("is true only with a status of complete", () => {
+    expect(isComplete({ status: "not_started" })).toBe(false);
+    expect(isComplete({ status: "in_progress" })).toBe(false);
+    expect(isComplete({ status: "complete" })).toBe(true);
   });
 });
 
@@ -74,6 +77,20 @@ describe("milestoneCounts", () => {
       ms({ completed_on: "2026-08-10", archived_at: "2026-08-11T00:00:00Z" }),
     ];
     expect(milestoneCounts(rows)).toEqual({ done: 2, total: 3 });
+  });
+
+  it("counts a milestone as complete from its status", () => {
+    const rows = [
+      ms({ status: "complete", completed_on: "2026-09-01" }),
+      ms({ status: "in_progress" }),
+      ms({ status: "not_started" }),
+      // Reopened: the date is gone and the status follows, so it is no longer done.
+      ms({ status: "in_progress", completed_on: null }),
+    ];
+    expect(milestoneCounts(rows)).toEqual({ done: 1, total: 4 });
+    expect(milestoneCounts([ms({ status: "complete", completed_on: "2026-09-01" })])).toEqual({ done: 1, total: 1 });
+    // An open status is what counts, whatever a stale date says.
+    expect(milestoneCounts([ms({ status: "in_progress", completed_on: "2026-09-01" })])).toEqual({ done: 0, total: 1 });
   });
 });
 

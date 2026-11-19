@@ -105,6 +105,7 @@ function source(config: unknown = { entity: "Invoice" }): SyncSourceSpec {
     record_key: ["doc_number"],
     enabled: true,
     sync_weekday: null,
+    sync_weekdays: null,
     sync_time: null,
     sync_timezone: null,
     current_run_id: null,

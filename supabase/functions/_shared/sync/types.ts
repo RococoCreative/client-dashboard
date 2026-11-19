@@ -12,7 +12,7 @@ export type SourceConfig = SheetsSourceConfig | QuickBooksSourceConfig;
 export interface SyncSourceSpec {
   id: string; company_id: string; connection_id: string; provider: SyncProvider; config: SourceConfig;
   field_map: FieldMapEntry[]; record_key: string[]; enabled: boolean;
-  sync_weekday: number | null; sync_time: string | null; sync_timezone: string | null;
+  sync_weekday: number | null; sync_weekdays: number[] | null; sync_time: string | null; sync_timezone: string | null; // sync_weekday is the lowest day of sync_weekdays
   current_run_id: string | null; last_attempt_at: string | null; last_success_at: string | null;
 }
 export type CellValue = string | number | boolean | null;

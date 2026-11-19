@@ -424,7 +424,7 @@ describe("GSR rhythms", () => {
   });
 
   it("names a week and two weeks the way people say them", () => {
-    // The same words the database gives a period a member opens (private.gsr_period_name, 0040).
+    // The same words the database gives a period a member opens (private.gsr_period_name, 0046).
     expect(defaultCycleName("weekly", "2026-09-14")).toBe("Sep 14 to Sep 20, 2026");
     expect(defaultCycleName("weekly", "2026-12-28")).toBe("Dec 28, 2026 to Jan 3, 2027");
     expect(defaultCycleName("biweekly", "2026-09-07")).toBe("Sep 7 to Sep 20, 2026");
@@ -445,7 +445,7 @@ describe("GSR rhythms", () => {
     expect(isCanonicalPeriod("custom", "2026-07-01", "2026-09-30")).toBe(false);
   });
 
-  // The same periods, refusals and names 0040's SQL test asserts for private.gsr_period_ok and
+  // The same periods, refusals and names 0046's SQL test asserts for private.gsr_period_ok and
   // private.gsr_period_name (case periods_match_the_app), so the two sides cannot drift apart.
   it("agrees with the database on the periods around a year end, the anchor, a leap February and a fourth quarter", () => {
     const canonical: Array<[GsrCadence, string, string, string]> = [

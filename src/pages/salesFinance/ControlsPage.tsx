@@ -28,7 +28,7 @@ export default function ControlsPage() {
     <>
       <PageHeader eyebrow={company!.name} title="Controls" description="Invoice, payment and balance checks from QuickBooks, read-only." />
       <Tabs items={SALES_FINANCE_TABS} />
-      <SourcePanel companyId={company!.id} targetModule="controls" scaffold={controlsScaffold} />
+      <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="controls" scaffold={controlsScaffold} />
     </>
   );
 }

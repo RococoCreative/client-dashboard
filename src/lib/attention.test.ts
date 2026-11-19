@@ -119,9 +119,11 @@ function source(overrides: Partial<SyncSource> = {}): SyncSource {
     field_map: [],
     record_key: [],
     sync_weekday: null,
+    sync_weekdays: null,
     sync_time: null,
     sync_timezone: null,
     stale_after_hours: null,
+    stale_business_days: false,
     enabled: true,
     current_run_id: null,
     last_attempt_at: null,
@@ -138,7 +140,7 @@ function source(overrides: Partial<SyncSource> = {}): SyncSource {
 }
 
 function input(overrides: Partial<AttentionInput> = {}): AttentionInput {
-  return { people: [], cycles: [], campaigns: [], connections: [], today: "2026-09-15", ...overrides };
+  return { people: [], cycles: [], campaigns: [], connections: [], today: "2026-09-15", companyTimeZone: "America/New_York", ...overrides };
 }
 
 describe("attentionItems", () => {
@@ -292,6 +294,15 @@ describe("attentionItems", () => {
       expect(attentionItems(input({ connections: [sheets], sources: [stale], now }))).toEqual([
         { kind: "sync_stale", title: "Stale tab: stale data", detail: `Last synced ${formatDateTime(lastSuccess)}.`, to: "/settings/connections", severity: "warning" },
       ]);
+    });
+
+    it("leaves a weekdays-only source alone over a weekend, and flags it with the flag off", () => {
+      // Monday 07:00 New York after a Friday 17:00 sync: 62 hours elapsed, 14 on weekdays.
+      const monday = new Date("2026-11-09T12:00:00Z");
+      const lastSuccess = "2026-11-06T22:00:00Z";
+      const base = { name: "Weekday tab", last_status: "succeeded" as const, last_success_at: lastSuccess, stale_after_hours: 48 };
+      expect(attentionItems(input({ connections: [sheets], sources: [source({ ...base, stale_business_days: true })], now: monday }))).toEqual([]);
+      expect(attentionItems(input({ connections: [sheets], sources: [source(base)], now: monday })).map((i) => i.kind)).toEqual(["sync_stale"]);
     });
 
     it("says nothing about a disabled source", () => {

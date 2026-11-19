@@ -1,7 +1,7 @@
 // The GSR screens after the team and division sprint: the hardening fixes (a review in a closed
 // cycle stays signed off, a retried sign-off writes one line item, Start all carries on past one
 // failure, a complete month freezes without a score) and the manager on a team member's month,
-// who works its goals and notes and locks it in (0040) but never rates it, and the tasks linked to a goal
+// who works its goals and notes and locks it in (0046) but never rates it, and the tasks linked to a goal
 // from inside the GSR. Each test reads the in-memory data layer the way the page does; the calls a
 // test needs to fail are wrapped so it can fail them once.
 import { screen, waitFor, within } from "@testing-library/react";
@@ -22,6 +22,7 @@ vi.mock("../services/tasks.ts", async () => {
   const mock = await import("../test/mocks/tasks.ts");
   return { ...mock, notifyAssignment: vi.fn(mock.notifyAssignment) };
 });
+vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 vi.mock("../services/employees.ts", () => import("../test/mocks/employees.ts"));
 vi.mock("../services/deliverables.ts", () => import("../test/mocks/deliverables.ts"));
 vi.mock("../services/jobRoles.ts", () => import("../test/mocks/jobRoles.ts"));
@@ -121,7 +122,7 @@ describe("a manager on a team member's month", () => {
     expect(await screen.findByLabelText("Title for Run the Monday toolbox talk")).toBeInTheDocument();
     expect(screen.getByLabelText("New note for Walk every site with the crew")).toBeInTheDocument();
 
-    // A manager locks a GSR in and reopens it as an admin does (0040); ratings and the sign-off of
+    // A manager locks a GSR in and reopens it as an admin does (0046); ratings and the sign-off of
     // a scored review stay with an admin.
     expect(screen.getByRole("button", { name: /Mark complete/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Reopen/ })).not.toBeInTheDocument();

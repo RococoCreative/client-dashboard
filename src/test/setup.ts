@@ -8,10 +8,16 @@
 // the tests run at the moment the fixtures describe. Only Date is faked; timers stay real, or
 // Testing Library's waits would never resolve.
 import "@testing-library/jest-dom";
-import { afterAll, beforeAll, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { resetMockCapabilities } from "./mocks/capabilities.ts";
 
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-15T12:00:00.000Z") });
+});
+
+// Capability overrides a test set do not leak into the next test.
+afterEach(() => {
+  resetMockCapabilities();
 });
 
 afterAll(() => {

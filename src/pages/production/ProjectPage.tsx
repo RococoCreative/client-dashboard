@@ -17,7 +17,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
-import { nextSortOrder } from "../../lib/milestones.ts";
+import { isComplete, nextSortOrder } from "../../lib/milestones.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
 import { directoryById } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
@@ -25,12 +25,22 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { archiveProject, createMilestone, getProject, listMilestones, updateProject, type ProjectPatch } from "../../services/projects.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type ProjectMilestone } from "../../types/database.ts";
 
-type Filter = "all" | MilestoneKind;
+// By kind, or by whether an item is done: Open is Not started and In progress, Done is Complete.
+type Filter = "all" | MilestoneKind | "open" | "done";
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "all", label: "All" },
   { key: "milestone", label: "Milestones" },
   { key: "letter", label: "Letters" },
+  { key: "open", label: "Open" },
+  { key: "done", label: "Done" },
 ];
+
+function matchesFilter(m: ProjectMilestone, filter: Filter): boolean {
+  if (filter === "all") return true;
+  if (filter === "open") return !isComplete(m);
+  if (filter === "done") return isComplete(m);
+  return m.kind === filter;
+}
 
 function AddMilestoneForm({ projectId, all, onAdded }: { projectId: string; all: ProjectMilestone[]; onAdded: (m: ProjectMilestone) => void }) {
   const [title, setTitle] = useState("");
@@ -74,7 +84,9 @@ function AddMilestoneForm({ projectId, all, onAdded }: { projectId: string; all:
 
 export default function ProjectPage() {
   const { projectId = "" } = useParams<{ projectId: string }>();
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, can } = useHub();
+  // Milestones follow the milestones_edit capability; renaming and archiving the project stay with admins.
+  const canMilestones = can("milestones_edit");
   const navigate = useNavigate();
   const companyId = company!.id;
   const [filter, setFilter] = useState<Filter>("all");
@@ -94,7 +106,7 @@ export default function ProjectPage() {
   if (!state.data) return <SkeletonRows rows={8} />;
 
   const { project, milestones, people, directory } = state.data;
-  const shown = filter === "all" ? milestones : milestones.filter((m) => m.kind === filter);
+  const shown = milestones.filter((m) => matchesFilter(m, filter));
 
   // Returns whether it saved, so a details field keeps its draft and says "Not saved" when not.
   async function save(patch: ProjectPatch): Promise<boolean> {
@@ -140,7 +152,7 @@ export default function ProjectPage() {
           title={pluralize(shown.length, "item")}
           padded={false}
           actions={
-            <div role="group" aria-label="Show" className="flex gap-1.5">
+            <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
                 <button
                   key={f.key}
@@ -155,9 +167,9 @@ export default function ProjectPage() {
             </div>
           }
         >
-          {isAdmin && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
-          <MilestoneList milestones={shown} people={people} directory={directory} canEdit={isAdmin && filter === "all"} onChanged={setMilestones} />
-          {isAdmin && filter === "all" ? (
+          {canMilestones && filter !== "all" ? <p className={`${helpClass} mt-0 border-b border-line px-5 py-2`}>Switch to All to edit or reorder.</p> : null}
+          <MilestoneList milestones={shown} people={people} directory={directory} canEdit={canMilestones && filter === "all"} onChanged={setMilestones} />
+          {canMilestones && filter === "all" ? (
             <AddMilestoneForm projectId={project.id} all={milestones} onAdded={(m) => setMilestones([...milestones, m])} />
           ) : null}
         </Section>

@@ -1,4 +1,4 @@
-// Pins that the GSR and profile mocks refuse what 0040 refuses, in its words: a GSR cycle on dates
+// Pins that the GSR and profile mocks refuse what 0046 refuses, in its words: a GSR cycle on dates
 // that are not a canonical period of its rhythm, a GSR opened for someone on another rhythm, a
 // manager changing anything but the lock on a GSR of someone they lead, or anything but the rhythm
 // on their profile, and nobody setting their own rhythm. And that a GSR period opens itself once:

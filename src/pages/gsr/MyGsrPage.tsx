@@ -1,10 +1,10 @@
 // An employee's own Goal Setting Review for their current period, under their own sidebar entry
-// and tabs. The period follows their rhythm (0040): a week, two weeks, a month or a quarter. The
+// and tabs. The period follows their rhythm (0046): a week, two weeks, a month or a quarter. The
 // review itself is ReviewPage's GSR branch, mounted here with the id as a prop rather than reached
 // by URL, so the sidebar and the tabs stay on My GSR while they work it.
 //
 // A GSR period opens itself: when nobody has opened the person's current period yet, "Start my
-// GSR" opens it (ensureGsrCycle, an insert any member may make, 0040) and then their review in it.
+// GSR" opens it (ensureGsrCycle, an insert any member may make, 0046) and then their review in it.
 // Both are inserts that ignore a duplicate, so starting at the same moment as a colleague or an
 // admin running Start all lands on the same rows instead of failing. The person starts theirs to
 // prefill their goals before the meeting, so the meeting opens on their draft. A period they still

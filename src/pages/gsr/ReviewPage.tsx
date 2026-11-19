@@ -1,6 +1,6 @@
 // One person's review for one cycle, in one of two shapes.
 //
-// A GSR cycle (kind 'gsr', 0040) is a Goal Setting Review and only that, at the person's rhythm:
+// A GSR cycle (kind 'gsr', 0046) is a Goal Setting Review and only that, at the person's rhythm:
 // a week, two weeks, a month or a quarter. Goals set live with an agreed completion, action steps
 // and a dated notes log, the focus topic at the top (the month's, or the topic of the month the
 // period starts in), and the last period read back as hit or miss. No pillar scoring and no
@@ -16,7 +16,7 @@
 // month"), entered here by an admin.
 //
 // A manager opens the GSR of someone they lead and works its goals and notes the way an admin does
-// while the period is open (0038), and locks it in and reopens it as an admin does (0040).
+// while the period is open (0038), and locks it in and reopens it as an admin does (0046).
 // Everything else here stays with an admin: ratings, line items, feedback, and signing off and
 // reopening a scored review. Nothing this page loads is
 // admin-only, so a manager's reads come back narrowed by RLS rather than refused. Names of people
@@ -305,7 +305,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // GSR cycles are Goal Setting Reviews: goals lead, scores follow.
   const gsrPeriod = cycle.kind === "gsr";
   const lastMonth = gsrPeriod ? previousCycle(cycles, cycle) : null;
-  // A GSR is locked in and reopened by an admin or by a manager over the person (0040). A scored
+  // A GSR is locked in and reopened by an admin or by a manager over the person (0046). A scored
   // review stays an admin's to sign off and reopen.
   const canLock = isAdmin || (gsrPeriod && isLeader);
   // The person's rhythm, and how their GSR periods read on a scored review: "The weeks in this
@@ -653,7 +653,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               </span>
             ) : null}
             {isAdmin && !embedded ? (
-              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Everyone in {cycle.name}</Link>
+              <Link to={cyclePath(cycle)} className="text-link hover:underline">Everyone in {cycle.name}</Link>
             ) : null}
           </span>
         }
@@ -858,7 +858,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                       </p>
                     </div>
                     {gsr ? (
-                      <Link to={reviewPath(gsr.id, month)} className="text-[13px] text-accent hover:underline">Open {gsrPeriodCopy(month.cadence).noun}</Link>
+                      <Link to={reviewPath(gsr.id, month)} className="text-[13px] text-link hover:underline">Open {gsrPeriodCopy(month.cadence).noun}</Link>
                     ) : (
                       <span className="text-[12px] text-ink-3">Not started</span>
                     )}
@@ -909,7 +909,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                             : isAdmin && employee ? (
                               <>
                                 Current ratings from{" "}
-                                <Link to={`/people/${employee.id}`} className="text-accent hover:underline">{displayName(employee)}'s profile</Link>
+                                <Link to={`/people/${employee.id}`} className="text-link hover:underline">{displayName(employee)}'s profile</Link>
                                 , where they are set and trued up. Signing off freezes them into this review.
                               </>
                             ) : (

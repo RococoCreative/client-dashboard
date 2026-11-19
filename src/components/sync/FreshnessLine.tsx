@@ -11,8 +11,8 @@ function lastGood(source: SyncSource): string {
   return source.last_success_at ? ` Showing data from ${formatDateTime(source.last_success_at)}.` : "";
 }
 
-export default function FreshnessLine({ source, connection, now = new Date() }: { source: SyncSource; connection: CompanyConnection | null; now?: Date }) {
-  const state = syncState(source, connection, now);
+export default function FreshnessLine({ source, connection, now = new Date(), companyTimeZone }: { source: SyncSource; connection: CompanyConnection | null; now?: Date; companyTimeZone: string }) {
+  const state = syncState(source, connection, now, companyTimeZone);
   const age = formatAge(ageHours(source.last_success_at, now) ?? 0);
   const when = formatDateTime(source.last_success_at);
   return (
@@ -20,7 +20,7 @@ export default function FreshnessLine({ source, connection, now = new Date() }: 
       {state === "not_connected" ? (
         <>
           Not connected. Connect {CONNECTION_PROVIDER_LABELS[source.provider]} in{" "}
-          <Link to="/settings/connections" className="text-accent hover:underline">Settings</Link>.
+          <Link to="/settings/connections" className="text-link hover:underline">Settings</Link>.
         </>
       ) : state === "awaiting_first_sync" ? (
         "Connected. No data yet."

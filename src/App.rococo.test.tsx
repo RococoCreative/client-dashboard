@@ -35,6 +35,7 @@ vi.mock("./services/directory.ts", () => import("./test/mocks/directory.ts"));
 vi.mock("./services/projectAssignments.ts", () => import("./test/mocks/projectAssignments.ts"));
 vi.mock("./services/reviewProjectNotes.ts", () => import("./test/mocks/reviewProjectNotes.ts"));
 vi.mock("./services/tasks.ts", () => import("./test/mocks/tasks.ts"));
+vi.mock("./services/capabilities.ts", () => import("./test/mocks/capabilities.ts"));
 
 import App, { ModuleOnly } from "./App.tsx";
 import { renderWithHub } from "./test/renderWithHub.tsx";
@@ -118,22 +119,27 @@ describe("routes land the same with modules on", () => {
       .replace(":cycle", bundle.cycles[0].id)
       .replace(":review", bundle.reviews[0].id)
       .replace(":person", bundle.profiles[1].id)
-      .replace(":sop", bundle.sops[0].id);
+      .replace(":sop", bundle.sops[0].id)
+      .replace(":firstRole", bundle.jobRoles[0].id);
   }
 
   const companies: Array<[string, CompanyBundle]> = [["klasik", KLASIK], ["kingdom", KINGDOM]];
 
   const adminSelf = [
-    "/", "/gsr", "/reviews", "/goals/company", "/goals/roles", "/goals/focus", "/goals/people", "/scorecards",
+    "/", "/gsr", "/reviews", "/goals/company", "/goals/focus", "/goals/people", "/scorecards",
     "/gsr/cycles/:cycle", "/reviews/cycles/:cycle2", "/gsr/reviews/:review", "/reviews/:review",
-    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/:person", "/sops/new",
+    "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/roles/:firstRole", "/people/divisions", "/people/:person", "/sops/new",
     "/sops/:sop", "/sops/:sop/edit", "/resources/sops", "/resources/files", "/financials", "/marketing",
-    "/settings/company", "/settings/roles", "/settings/reviews", "/settings/connections",
+    "/settings/company", "/settings/reviews", "/settings/connections",
   ];
   // Every address that moved in the reorganization lands on the tab that holds it now.
   const adminCases: Array<[string, string | null]> = [
     ...adminSelf.map((t): [string, null] => [t, null]),
     ["/goals", "/goals/company"],
+    // The bare Roles address opens the first role on a wide screen (a test DOM counts as wide).
+    ["/people/roles", "/people/roles/:firstRole"],
+    ["/settings/roles", "/people/roles/:firstRole"],
+    ["/goals/roles", "/people/roles/:firstRole"],
     ["/reviews/settings", "/settings/reviews"],
     ["/gsr/settings", "/settings/reviews"],
     ["/reviews/company-goals", "/goals/company"],
@@ -165,7 +171,7 @@ describe("routes land the same with modules on", () => {
     it.each(adminCases)(`admin at ${slug}: %s lands where it always has`, async (template, expected) => {
       const path = fill(template, bundle);
       const landed = await landing(path, "admin", slug);
-      expect(landed.pathname).toBe(expected ?? path);
+      expect(landed.pathname).toBe(expected ? fill(expected, bundle) : path);
     });
 
     // The provider sends the browser to the company's own return path (App.tsx ConnectionReturn).

@@ -12,6 +12,7 @@ import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "./services/supabase.ts";
 import { getMyProfile } from "./services/profiles.ts";
 import { getCompany, listCompanies } from "./services/companies.ts";
+import { loadCapabilities } from "./services/capabilities.ts";
 import { signOut } from "./services/auth.ts";
 import { useSession } from "./hooks/useSession.ts";
 import { HubContext, useHub, type HubValue } from "./context/HubContext.tsx";
@@ -19,6 +20,7 @@ import { applyTheme } from "./lib/theme.ts";
 import { readLoginHint } from "./lib/loginHint.ts";
 import { hasModule, type ModuleKey } from "./lib/modules.ts";
 import { isCompanyAdminRole, isLeadRole } from "./lib/people.ts";
+import { meets, type CapabilityMap } from "./lib/capabilities.ts";
 import Login from "./components/Login.tsx";
 import Onboarding from "./components/Onboarding.tsx";
 import AppLayout from "./components/AppLayout.tsx";
@@ -36,6 +38,8 @@ import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
 import PeoplePage from "./pages/people/PeoplePage.tsx";
 import PersonPage from "./pages/people/PersonPage.tsx";
+import DivisionsPage from "./pages/people/DivisionsPage.tsx";
+import RolesPage from "./pages/people/RolesPage.tsx";
 import SopPage from "./pages/sops/SopPage.tsx";
 import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
@@ -51,11 +55,12 @@ import PortfolioPage from "./pages/rococo/PortfolioPage.tsx";
 import CompaniesPage from "./pages/rococo/CompaniesPage.tsx";
 import UsersPage from "./pages/rococo/UsersPage.tsx";
 import ActivityPage from "./pages/rococo/ActivityPage.tsx";
+import PermissionsPage from "./pages/rococo/PermissionsPage.tsx";
 import TasksPage from "./pages/tasks/TasksPage.tsx";
 import TaskPage from "./pages/tasks/TaskPage.tsx";
 import { GOALS_TABS } from "./pages/gsr/goalsTabs.ts";
-import { SETTINGS_TABS } from "./pages/settings/settingsTabs.ts";
-import type { Company, Profile } from "./types/database.ts";
+import { SETTINGS_TABS, settingsTabsFor, type SettingsTab } from "./pages/settings/settingsTabs.ts";
+import type { CapabilityKey, Company, Profile } from "./types/database.ts";
 
 function SetupNotice() {
   return (
@@ -79,6 +84,19 @@ function FullScreenLoading({ label }: { label: string }) {
   );
 }
 
+function CompanyLoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <CenteredCard>
+      <p className="eyebrow">Connection</p>
+      <h1 className="mt-3 font-display text-3xl tracking-display text-heading">Could not load your company</h1>
+      <p className="mt-3 text-sm leading-relaxed text-ink-2">Check your signal and try again.</p>
+      <Button className="mt-6" onClick={onRetry}>
+        Try again
+      </Button>
+    </CenteredCard>
+  );
+}
+
 function HoldingScreen({ eyebrow, title, body }: { eyebrow: string; title: string; body: ReactNode }) {
   return (
     <CenteredCard>
@@ -92,6 +110,9 @@ function HoldingScreen({ eyebrow, title, body }: { eyebrow: string; title: strin
   );
 }
 
+// How often a company's capabilities are read again when the tab returns to the front.
+const CAPABILITY_REFRESH_MS = 30_000;
+
 // Redirect that keeps the query string (the demo harness carries its persona there).
 function RedirectTo({ path }: { path: string }) {
   const location = useLocation();
@@ -102,6 +123,15 @@ function RedirectTo({ path }: { path: string }) {
 function WithCompany({ children }: { children: ReactNode }) {
   const { company } = useHub();
   return company ? <>{children}</> : <RedirectTo path="/rococo" />;
+}
+
+// Settings tabs follow the company's permissions and modules: a tab this person may not open sends them to the
+// first one they may, and /settings itself lands there. A person with no tab at all goes Home.
+function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children: ReactNode }) {
+  const { can, company } = useHub();
+  const allowed = settingsTabsFor(can, company);
+  if (tab === null || !allowed.some((t) => t.key === tab)) return allowed.length > 0 ? <RedirectTo path={allowed[0].to} /> : <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -143,6 +173,22 @@ export function ModuleOnly({ module, children }: { module: ModuleKey; children: 
   const { company } = useHub();
   if (!company) return <RedirectTo path="/rococo" />;
   return hasModule(company, module) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// A page that exists only while a company setting is on (the manual Financials page). Off, a typed
+// URL lands on Home, the same answer the sidebar gives by hiding the item.
+export function SettingOnly({ setting, children }: { setting: "manual_financials"; children: ReactNode }) {
+  const { company } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return company[setting] ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// A page that needs a capability the company has set for the person's role. Anyone without it
+// lands on Home, the way AdminOnly does, so a typed URL gets the same answer the sidebar gives.
+export function CapabilityOnly({ capability, children }: { capability: CapabilityKey; children: ReactNode }) {
+  const { company, can } = useHub();
+  if (!company) return <RedirectTo path="/rococo" />;
+  return can(capability) ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 // One task's page, keyed on the task id, so moving from one task to another starts the page and
@@ -221,6 +267,65 @@ function SignedIn({ session }: { session: Session }) {
     if (profileIsRococo) return companies.find((c) => c.id === activeCompanyId) ?? null;
     return companies[0] ?? null;
   }, [companies, activeCompanyId, profileIsRococo]);
+
+  // A company's capabilities, loaded once per active company and tagged with the company they
+  // belong to. A map for another company is never read (see the gate below), and a failure is
+  // remembered by company and attempt, so neither can carry across a switch for even one render. The
+  // portfolio has no company and loads nothing.
+  const companyId = company?.id ?? null;
+  const [capabilities, setCapabilities] = useState<{ companyId: string; map: CapabilityMap } | null>(null);
+  // A failure belongs to one company and one attempt, so a retry or a switch clears it by itself.
+  const [capabilitiesFailed, setCapabilitiesFailed] = useState<{ companyId: string; attempt: number } | null>(null);
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    loadCapabilities(companyId)
+      .then((map) => {
+        if (!active) return;
+        setCapabilities({ companyId, map });
+        setCapabilitiesFailed(null);
+      })
+      .catch(() => {
+        if (active) setCapabilitiesFailed({ companyId, attempt: retryTick });
+      });
+    return () => {
+      active = false;
+    };
+  }, [companyId, retryTick]);
+
+  // A change a Rococo admin makes on the Permissions page is stored at once, but a person who has the
+  // hub open only holds the map they loaded. When the tab comes back (visible again, or the window
+  // focused) the active company's map is read again, at most once every 30 seconds. The current map
+  // stays on screen while it runs, a failure changes nothing, and the company tag plus the cleanup
+  // flag keep a late answer from landing on another company.
+  useEffect(() => {
+    if (!companyId) return;
+    const id = companyId;
+    let active = true;
+    let inFlight = false;
+    let lastAttempt = Date.now();
+    function refresh() {
+      if (document.visibilityState !== "visible" || inFlight) return;
+      if (Date.now() - lastAttempt < CAPABILITY_REFRESH_MS) return;
+      lastAttempt = Date.now();
+      inFlight = true;
+      loadCapabilities(id)
+        .then((map) => {
+          if (active) setCapabilities({ companyId: id, map });
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+        });
+    }
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [companyId]);
 
   // Theme before the shell mounts: onboarding wears the company's theme when there is one.
   // Once AppLayout mounts it owns the theme, because the portfolio is Rococo-branded
@@ -306,16 +411,7 @@ function SignedIn({ session }: { session: Session }) {
 
   if (!companies) {
     if (companiesError) {
-      return (
-        <CenteredCard>
-          <p className="eyebrow">Connection</p>
-          <h1 className="mt-3 font-display text-3xl tracking-display text-heading">Could not load your company</h1>
-          <p className="mt-3 text-sm leading-relaxed text-ink-2">Check your signal and try again.</p>
-          <Button className="mt-6" onClick={() => setRetryTick((t) => t + 1)}>
-            Try again
-          </Button>
-        </CenteredCard>
-      );
+      return <CompanyLoadError onRetry={() => setRetryTick((t) => t + 1)} />;
     }
     return <FullScreenLoading label="Loading your company" />;
   }
@@ -324,10 +420,23 @@ function SignedIn({ session }: { session: Session }) {
     return <Onboarding profile={profile} companyName={company?.name ?? null} onDone={refreshProfile} />;
   }
 
+  // The app does not render in a company until that company's capabilities are in: a power that
+  // has not loaded is never granted, and nothing is shown on the strength of another company's map.
+  if (companyId && capabilitiesFailed?.companyId === companyId && capabilitiesFailed.attempt === retryTick) {
+    return <CompanyLoadError onRetry={() => setRetryTick((t) => t + 1)} />;
+  }
+  if (companyId && capabilities?.companyId !== companyId) return <FullScreenLoading label="Loading your company" />;
+  const capabilityMap = companyId ? capabilities?.map : undefined;
+
   const isRococo = profile.is_rococo_admin;
   const inCompany = profile.company_id !== null && profile.company_id === company?.id;
   const isAdmin = isRococo || (isCompanyAdminRole(profile.role) && inCompany);
   const isLead = isRococo || (isLeadRole(profile.role) && inCompany);
+
+  // A company member qualifies only inside their own company, the same test isAdmin uses. On the
+  // portfolio there is no company, so only a Rococo admin passes.
+  const can = (capability: CapabilityKey) =>
+    isRococo ? !companyId || meets(profile.role, true, capabilityMap?.[capability]) : inCompany && meets(profile.role, false, capabilityMap?.[capability]);
 
   const value: HubValue = {
     session,
@@ -337,6 +446,7 @@ function SignedIn({ session }: { session: Session }) {
     isRococo,
     isAdmin,
     isLead,
+    can,
     setActiveCompanyId,
     refreshProfile,
     refreshCompanies,
@@ -369,6 +479,8 @@ function SignedIn({ session }: { session: Session }) {
                 marks one item for it, not Reviews as well. */}
             <Route path="scorecards" element={<AdminOnly><ScorecardsPage /></AdminOnly>} />
             {/* Where these used to live. Old bookmarks and links land on the tab that holds them now. */}
+            <Route path="settings/roles" element={<RedirectTo path="/people/roles" />} />
+            <Route path="goals/roles" element={<RedirectTo path="/people/roles" />} />
             <Route path="reviews/settings" element={<RedirectTo path="/settings/reviews" />} />
             <Route path="gsr/settings" element={<RedirectTo path="/settings/reviews" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
@@ -382,9 +494,14 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/reviews" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyReviewsPage /></WithCompany>} />
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<LeadOnly><PeoplePage /></LeadOnly>} />
-            <Route path="people/:profileId" element={<LeadOnly><PersonPage /></LeadOnly>} />
-            <Route path="production" element={<ModuleOnly module="production"><ProductionPage /></ModuleOnly>} />
-            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><ProjectPage /></ModuleOnly>} />
+            <Route path="people/roles" element={<AdminOnly><RolesPage /></AdminOnly>} />
+            <Route path="people/roles/:roleId" element={<AdminOnly><RolesPage /></AdminOnly>} />
+            <Route path="people/divisions" element={<AdminOnly><DivisionsPage /></AdminOnly>} />
+            {/* A person: Overview at their own address, each other tab one segment below it. One
+                route with an optional segment, so moving between tabs keeps the page and its load. */}
+            <Route path="people/:profileId/:tab?" element={<LeadOnly><PersonPage /></LeadOnly>} />
+            <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
+            <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
                 keeps its own address under /sops. */}
             <Route path="resources" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
@@ -395,20 +512,21 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="financials" element={<AdminOnly><FinancialsPage /></AdminOnly>} />
+            <Route path="financials" element={<AdminOnly><SettingOnly setting="manual_financials"><FinancialsPage /></SettingOnly></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />
             <Route path="sales-finance/controls" element={<AdminOnly><ModuleOnly module="data_sources"><ControlsPage /></ModuleOnly></AdminOnly>} />
-            {/* Settings: one page, a route per tab, landing on Company. The connection return path
+            {/* Settings: one page, a route per tab, landing on the first tab the person may open. The connection return path
                 has one more segment, so it never reads as the Connections tab. */}
-            <Route path="settings" element={<AdminOnly><RedirectTo path="/settings/company" /></AdminOnly>} />
+            <Route path="settings" element={<AdminOnly><SettingsTabOnly tab={null}>{null}</SettingsTabOnly></AdminOnly>} />
             {SETTINGS_TABS.map((t) => (
-              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsPage tab={t.key} /></AdminOnly>} />
+              <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsTabOnly tab={t.key}><SettingsPage tab={t.key} /></SettingsTabOnly></AdminOnly>} />
             ))}
             <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />
             <Route path="rococo/people" element={<RococoOnly><UsersPage /></RococoOnly>} />
+            <Route path="rococo/permissions" element={<RococoOnly><PermissionsPage /></RococoOnly>} />
             <Route path="rococo/activity" element={<RococoOnly><ActivityPage /></RococoOnly>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

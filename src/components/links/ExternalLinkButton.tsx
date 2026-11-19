@@ -23,7 +23,7 @@ export default function ExternalLinkButton({ link }: { link: ExternalLink }) {
     >
       <span className="min-w-0">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-ink transition-colors duration-150 group-hover:text-accent">{link.label}</span>
+          <span className="text-sm text-ink transition-colors duration-150 group-hover:text-link">{link.label}</span>
           <Badge tone="neutral">{LINK_PROVIDER_LABELS[link.provider]}</Badge>
         </span>
         <span className="mt-0.5 flex flex-wrap gap-x-2 text-[12px] text-ink-3">

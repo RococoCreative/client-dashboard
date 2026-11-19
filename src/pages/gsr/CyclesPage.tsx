@@ -1,6 +1,6 @@
 // The cycles list behind two sidebar entries: GSRs (Goal Setting Review periods of every rhythm,
 // kind 'gsr') and Reviews (scored cycles, kind 'review'), one component keyed on the section
-// (0040). Progress per cycle, the team score where a cycle carries one, the door to settings and
+// (0046). Progress per cycle, the team score where a cycle carries one, the door to settings and
 // company goals on the Reviews side, and the new-cycle form offering only the rhythms that belong
 // to the section. A GSR period's dates are canonical, so the form computes them from the rhythm and
 // any day picked inside the period; a review's quarterly and annual dates follow their start, and

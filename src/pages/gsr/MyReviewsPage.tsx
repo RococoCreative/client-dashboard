@@ -64,7 +64,7 @@ export default function MyReviewsPage() {
       ) : (
         <div className="space-y-6">
           {featured ? (
-            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : `/gsr/reviews/${featured.review.id}`} className="text-[13px] text-accent hover:underline">Open full review</Link>}>
+            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : `/gsr/reviews/${featured.review.id}`} className="text-[13px] text-link hover:underline">Open full review</Link>}>
               <div className="grid gap-6 md:grid-cols-3">
                 <div className="flex items-center gap-4">
                   <ScoreRing score={featured.result?.overall ?? null} size={96} label="Overall" />
@@ -109,7 +109,7 @@ export default function MyReviewsPage() {
                       <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                       <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                       <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className="text-[13px] text-accent hover:underline">Open</Link></td>
+                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className="text-[13px] text-link hover:underline">Open</Link></td>
                     </tr>
                   ))}
                 </tbody>

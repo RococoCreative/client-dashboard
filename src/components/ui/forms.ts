@@ -15,7 +15,7 @@ export const textareaClass = `${inputClass} min-h-[88px] leading-relaxed`;
 
 export const checkboxClass = "h-4 w-4 shrink-0 rounded border-line-strong accent-accent";
 
-export const helpClass = "mt-1.5 text-[12px] leading-relaxed text-ink-3";
+export const helpClass = "mt-1.5 text-[12.5px] leading-relaxed text-ink-3";
 
 // Table classes: hairline rows, quiet uppercase headers, dense but readable.
 export const tableClass = "w-full border-collapse text-sm";

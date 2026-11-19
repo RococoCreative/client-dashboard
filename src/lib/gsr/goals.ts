@@ -167,7 +167,7 @@ export function lockedMonthsIn(target: number): number {
 
 export interface GsrMonthsFigure<C> {
   // Every GSR period of the person's inside the scored period, a week, two weeks, a month or a
-  // quarter (0040). `locked` is the score its GSR was locked in at, or null while the period is
+  // quarter (0046). `locked` is the score its GSR was locked in at, or null while the period is
   // still open to change; `live` is where it stands now, for reading, never for scoring. `omitted`
   // is a period an admin left the person out of (0034): shown, never counted.
   months: Array<{ cycle: C; locked: number | null; live: number; omitted: boolean }>;

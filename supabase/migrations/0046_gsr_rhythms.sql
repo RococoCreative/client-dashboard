@@ -1,4 +1,4 @@
--- 0040_gsr_rhythms.sql
+-- 0046_gsr_rhythms.sql
 -- A Goal Setting Review runs at each person's own rhythm: every week, every two weeks, every
 -- month or every quarter. Until now "monthly" meant two things, the rhythm and what made a cycle
 -- a GSR, so a weekly GSR could not exist and a quarterly cycle always read as a scored review. This
@@ -42,9 +42,11 @@
 -- from 0039) with only the lines this migration names added. The two review insert policies keep
 -- their names. The error messages people already see stay word for word.
 --
--- Paste after 0039. The app that reads kind and gsr_cadence deploys after it; the app live today
--- keeps working against it, since every person stays monthly until someone changes a rhythm.
--- Idempotent.
+-- Paste after 0045. It was written as 0040 and renumbered when 0040 to 0045 went live first;
+-- none of those touches a table column, function, trigger or policy this migration rebuilds, so
+-- the latest bodies named above are still the latest. The app that reads kind and gsr_cadence
+-- deploys after it; the app live today keeps working against it, since every person stays monthly
+-- until someone changes a rhythm. Idempotent.
 
 -- ---------------------------------------------------------------------------------------
 -- 1. review_cycles.kind, and the one-shot backfill
@@ -961,7 +963,7 @@ begin
     return new;
   end if;
 
-  -- 0040: a leader who is not an admin of this person changes only their GSR rhythm.
+  -- 0046: a leader who is not an admin of this person changes only their GSR rhythm.
   if old.user_id is distinct from (select auth.uid())
      and exists (select 1 from private.led_person_ids() as l (id) where l.id = old.id) then
     v_probe.gsr_cadence := old.gsr_cadence;

@@ -51,7 +51,7 @@ export default function MappedTable({ source, records }: { source: SyncSource; r
                     <td className={`${tdClass} whitespace-nowrap`}>
                       {link ? (
                         <>
-                          <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{link.label}</a>
+                          <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">{link.label}</a>
                           {link.note !== null ? <span className="ml-1 text-ink-3">{link.note}</span> : null}
                         </>
                       ) : (

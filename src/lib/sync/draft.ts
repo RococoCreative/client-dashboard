@@ -18,10 +18,11 @@ export interface SourceDraft {
   entity: "Invoice" | "Payment"; // QuickBooks
   fields: FieldDraft[];
   record_key: string[];
-  weekday: string; // "" = not scheduled, else "0".."6"
+  weekdays: number[]; // the sync days, 0 = Sunday .. 6 = Saturday; empty = not scheduled
   time: string;
   timezone: string;
   stale_after_hours: string;
+  stale_business_days: boolean;
   enabled: boolean;
 }
 
@@ -65,10 +66,11 @@ export function emptyDraft(provider: SyncProvider, timezone: string): SourceDraf
     entity: "Invoice",
     fields: [fieldFromHeader("")],
     record_key: [],
-    weekday: "",
+    weekdays: [],
     time: "",
     timezone,
     stale_after_hours: "",
+    stale_business_days: false,
     enabled: false,
   };
 }
@@ -86,12 +88,18 @@ export function draftFromSource(source: SyncSource): SourceDraft {
     entity: "entity" in config ? config.entity : "Invoice",
     fields: source.field_map.map((entry) => ({ header: entry.header, key: entry.key, label: entry.label, type: entry.type, unit: entry.unit ?? "", required: entry.required })),
     record_key: [...source.record_key],
-    weekday: source.sync_weekday === null ? "" : String(source.sync_weekday),
+    weekdays: sortedDays(source.sync_weekdays ?? (source.sync_weekday === null ? [] : [source.sync_weekday])),
     time: source.sync_time ? source.sync_time.slice(0, 5) : "",
     timezone: source.sync_timezone ?? "",
     stale_after_hours: source.stale_after_hours === null ? "" : String(source.stale_after_hours),
+    stale_business_days: source.stale_business_days,
     enabled: source.enabled,
   };
+}
+
+// One of each day, Sunday (0) first.
+function sortedDays(days: number[]): number[] {
+  return [...new Set(days)].sort((a, b) => a - b);
 }
 
 function wholeNumber(text: string): number | null {
@@ -145,12 +153,14 @@ export function draftToInput(draft: SourceDraft): DraftResult {
   const ticked = new Set(draft.record_key.map((key) => key.trim().toLowerCase()));
   const recordKey = fieldMap.map((entry) => entry.key).filter((key) => ticked.has(key));
 
-  let schedule: Pick<SyncSourceInput, "sync_weekday" | "sync_time" | "sync_timezone"> = { sync_weekday: null, sync_time: null, sync_timezone: null };
-  if (draft.weekday !== "") {
-    if (!TIME.test(draft.time)) return fail("Pick a time for the weekly sync.");
+  // The single day is sent as the set's lowest day, which is what the database keeps it as.
+  let schedule: Pick<SyncSourceInput, "sync_weekday" | "sync_weekdays" | "sync_time" | "sync_timezone"> = { sync_weekday: null, sync_weekdays: null, sync_time: null, sync_timezone: null };
+  const days = sortedDays(draft.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6));
+  if (days.length > 0) {
+    if (!TIME.test(draft.time)) return fail("Pick a time for the sync days.");
     const zone = draft.timezone.trim();
     if (!knownZone(zone)) return fail("That time zone is not recognized.");
-    schedule = { sync_weekday: Number(draft.weekday), sync_time: `${draft.time}:00`, sync_timezone: zone };
+    schedule = { sync_weekday: days[0], sync_weekdays: days, sync_time: `${draft.time}:00`, sync_timezone: zone };
   }
 
   let staleAfter: number | null = null;
@@ -170,6 +180,7 @@ export function draftToInput(draft: SourceDraft): DraftResult {
       record_key: recordKey,
       ...schedule,
       stale_after_hours: staleAfter,
+      stale_business_days: draft.stale_business_days,
       enabled: draft.enabled,
     },
   };

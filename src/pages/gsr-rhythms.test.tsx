@@ -1,4 +1,4 @@
-// GSR rhythms (0040) on the screens: a person on a weekly or two-week rhythm works their own period
+// GSR rhythms (0046) on the screens: a person on a weekly or two-week rhythm works their own period
 // from My GSR, opening it when nobody has; a manager sets the rhythm of someone they lead and locks
 // their weekly GSR in; the New GSR period form computes a week's dates; and a quarterly review's
 // GSR line averages the weeks locked inside it. Each test reads the in-memory data layer the way
@@ -80,13 +80,14 @@ function ReviewStub() {
   return <div>review {reviewId}</div>;
 }
 
-// The person page with the GSR review route beside it, so starting a GSR can land somewhere.
-function renderPerson(id: string, hub: HubValue) {
+// The person page with the GSR review route beside it, so starting a GSR can land somewhere. It
+// opens on Overview; `tab` lands on another of the page's tabs, such as an admin's Setup.
+function renderPerson(id: string, hub: HubValue, tab?: string) {
   return render(
     <HubContext value={hub}>
-      <MemoryRouter initialEntries={[`/people/${id}`]}>
+      <MemoryRouter initialEntries={[tab ? `/people/${id}/${tab}` : `/people/${id}`]}>
         <Routes>
-          <Route path="/people/:profileId" element={<PersonPage />} />
+          <Route path="/people/:profileId/:tab?" element={<PersonPage />} />
           <Route path="/gsr/reviews/:reviewId" element={<ReviewStub />} />
           <Route path="*" element={<div>elsewhere</div>} />
         </Routes>
@@ -175,10 +176,18 @@ describe("a manager and a led person's rhythm", () => {
   });
 
   it("gives an admin the rhythm of the people they manage", async () => {
-    renderPerson(morgan.id, rbaAdmin);
-    const rhythm = await screen.findByRole("combobox", { name: "GSR rhythm" });
+    // Overview reads the rhythm and the current GSR at it; an admin changes it on Setup.
+    const user = userEvent.setup();
+    const overview = renderPerson(morgan.id, rbaAdmin);
+    expect(await screen.findByRole("heading", { name: "This week's GSR" })).toBeInTheDocument();
+    expect(screen.getByText("GSR rhythm")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "GSR rhythm" })).not.toBeInTheDocument();
+    overview.unmount();
+
+    renderPerson(morgan.id, rbaAdmin, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit GSR rhythm" }));
+    const rhythm = screen.getByRole("combobox", { name: "GSR rhythm" });
     expect(rhythm).toHaveValue("weekly");
-    expect(screen.getByRole("heading", { name: "This week's GSR" })).toBeInTheDocument();
   });
 });
 

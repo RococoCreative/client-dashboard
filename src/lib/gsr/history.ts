@@ -19,7 +19,7 @@ export interface ReviewHistoryRow {
 }
 
 // A review's score of record, or null when it has none: it is open, its rows carry nothing to
-// score, or it belongs to a GSR cycle (kind 'gsr', 0040). A GSR period is a Goal Setting Review
+// score, or it belongs to a GSR cycle (kind 'gsr', 0046). A GSR period is a Goal Setting Review
 // whose number is the GSR score locked in on it (reviews.gsr_score), never a pillar score. Locking
 // a period in still flips it to complete, and the database freezes the person's ratings into it
 // like any review (0017), so without the kind check a period read as a review scored on its ratings alone,

@@ -35,6 +35,7 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
+vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import * as profilesService from "../services/profiles.ts";
@@ -43,9 +44,11 @@ import { KINGDOM, RBA, makeHub } from "../test/fixtures.ts";
 import type { HubValue } from "../context/HubContext.tsx";
 import { LeadOnly } from "../App.tsx";
 import AttentionCard from "../components/home/AttentionCard.tsx";
-import DivisionsPanel from "../components/settings/DivisionsPanel.tsx";
+import { ROLE_LABELS } from "../types/database.ts";
+import DivisionsPanel from "../components/people/DivisionsPanel.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
+import PersonPage from "./people/PersonPage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 import TaskPage from "./tasks/TaskPage.tsx";
@@ -101,7 +104,8 @@ describe("People tab for an admin", () => {
     expect(within(rowOf("Kai Bennett")).getByText("RBA North")).toBeInTheDocument();
     expect(within(rowOf("Kai Bennett")).getByText("Not invited")).toBeInTheDocument();
     expect(within(rowOf("Alex Morgan (you)")).getByText("Nobody")).toBeInTheDocument();
-    expect(within(rowOf("Kai Bennett")).getByRole("combobox", { name: "Role for Kai Bennett" })).toBeInTheDocument();
+    expect(within(rowOf("Kai Bennett")).getByText(ROLE_LABELS[kai.role])).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^Role for / })).not.toBeInTheDocument();
   });
 
   it("narrows to one division, to Both, and to No division", async () => {
@@ -172,10 +176,11 @@ describe("People tab for an admin", () => {
     onTestFinished(async () => {
       await profilesService.updateProfile(kai.id, { is_active: true });
     });
-    renderWithHub(<PeoplePage />, rbaAdmin);
+    // Deactivate is on their Setup tab, which stays on them with Reactivate at hand.
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${kai.id}/setup`, pattern: "/people/:profileId/:tab?" });
     await user.click(await screen.findByRole("button", { name: "Deactivate Kai Bennett" }));
     expect(await screen.findByRole("button", { name: "Reactivate Kai Bennett" })).toBeInTheDocument();
-    expect(within(rowOf("Kai Bennett")).getByText("Inactive")).toBeInTheDocument();
+    expect((await profilesService.listCompanyProfiles(RBA.company.id)).find((p) => p.id === kai.id)?.is_active).toBe(false);
   });
 
   it("adds someone already placed in a division and under a manager, and flags someone with none", async () => {
@@ -212,13 +217,13 @@ describe("People tab for an admin", () => {
     const user = userEvent.setup();
     const spy = vi.spyOn(profilesService, "deleteStaffProfile").mockRejectedValueOnce(new Error("That person was not removed. They may have signed in, or they are not yours to remove."));
     onTestFinished(() => spy.mockRestore());
-    renderWithHub(<PeoplePage />, rbaAdmin);
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${kai.id}/setup`, pattern: "/people/:profileId/:tab?" });
     await user.click(await screen.findByRole("button", { name: "Remove Kai Bennett" }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     expect(await within(dialog).findByText(/That person was not removed/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.getByText("Kai Bennett", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kai Bennett" })).toBeInTheDocument();
   });
 });
 

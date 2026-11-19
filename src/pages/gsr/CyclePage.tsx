@@ -1,7 +1,7 @@
 // One review cycle: the team table. Everyone in the cycle and their review status; on a scored
 // cycle their pillar scores and overall, with the team average on top; on a GSR period (a Goal
 // Setting Review, kind 'gsr', at any rhythm) the GSR score locked in, where the company scores its
-// GSRs. A GSR period covers only the people on its rhythm (0040). Which
+// GSRs. A GSR period covers only the people on its rhythm (0046). Which
 // columns a cycle carries, and who the cycle covers, are decided in lib/gsr/cycles.ts. Reviews
 // are created on demand (or all at once) so an admin can start anyone with one click. An admin
 // also chooses who is in the cycle: a person omitted from it leaves its progress, its team score
@@ -68,7 +68,7 @@ import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type Cadence, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
 
-// A GSR period is canonical (0040), here as in the New GSR period form: the start snaps to the
+// A GSR period is canonical (0046), here as in the New GSR period form: the start snaps to the
 // first day of the period of its rhythm that holds the picked day, and the end follows it. A
 // review keeps the dates the admin types.
 function periodOf(cadence: Cadence, date: string): { start: string; end: string } {
@@ -437,7 +437,7 @@ export default function CyclePage() {
           // An account is never a precondition: the roster is what a cycle covers, and people are
           // added to it with or without an invitation.
           <p className="p-5 text-sm text-ink-2">
-            Nobody on the roster yet. Add the team in <Link to="/people" className="text-accent hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
+            Nobody on the roster yet. Add the team in <Link to="/people" className="text-link hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
           <div className="relative overflow-x-auto">
@@ -505,7 +505,7 @@ export default function CyclePage() {
                     <td className={`${tdClass} text-right`}>
                       <div className="flex items-center justify-end gap-3">
                         {review ? (
-                          <Link to={reviewPath(review.id, cycle)} className="text-[13px] text-accent hover:underline">Open</Link>
+                          <Link to={reviewPath(review.id, cycle)} className="text-[13px] text-link hover:underline">Open</Link>
                         ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review

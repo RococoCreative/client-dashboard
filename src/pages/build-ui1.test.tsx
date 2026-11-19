@@ -1,5 +1,5 @@
 // The focus topic calendar (Goals > Monthly focus), the New month dialog reading it, and the
-// company's divisions in Settings > Roles, rendered against the mocked data layer the way
+// company's divisions in People, Divisions, rendered against the mocked data layer the way
 // pages.test.tsx renders every page.
 // The mocks keep state for the whole file, so each test names the rows it starts from.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -40,7 +40,7 @@ import { listDivisions } from "../services/divisions.ts";
 import { listCompanyProfiles } from "../services/profiles.ts";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
-import SettingsPage from "./settings/SettingsPage.tsx";
+import DivisionsPage from "./people/DivisionsPage.tsx";
 
 const klasikAdmin = makeHub("admin");
 const rbaAdmin = makeHub("admin", RBA.company);
@@ -191,7 +191,7 @@ describe("new month dialog", () => {
   });
 });
 
-describe("divisions in Settings > Roles", () => {
+describe("divisions in People, Divisions", () => {
   async function panel() {
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
@@ -201,7 +201,7 @@ describe("divisions in Settings > Roles", () => {
 
   it("lists, adds, renames and removes a company's divisions", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
+    renderWithHub(<DivisionsPage />, rbaAdmin);
     const section = await panel();
     expect(within(section).getByLabelText("Division name RBA North")).toBeInTheDocument();
     // Rowan Ellis works in both, so counts in each. Morgan Reyes, on a weekly GSR, is in South.
@@ -243,7 +243,7 @@ describe("divisions in Settings > Roles", () => {
 
   it("says why a duplicate name will not save", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, rbaAdmin);
+    renderWithHub(<DivisionsPage />, rbaAdmin);
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
     await within(section).findByLabelText("Division name West office");
@@ -253,7 +253,7 @@ describe("divisions in Settings > Roles", () => {
   });
 
   it("starts empty for a company with no divisions", async () => {
-    renderWithHub(<SettingsPage tab="roles" />, klasikAdmin);
+    renderWithHub(<DivisionsPage />, klasikAdmin);
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
     expect(await within(section).findByText(/No divisions/)).toBeInTheDocument();

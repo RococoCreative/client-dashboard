@@ -59,13 +59,13 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 // review starts in one, and a signed-off review stays signed off while it is closed.
 export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cycle first.";
 
-// The refusal 0040 makes on a GSR opened in a period that is not the person's rhythm
+// The refusal 0046 makes on a GSR opened in a period that is not the person's rhythm
 // (guard_review_rhythm), word for word.
 export function rhythmMessage(personRhythm: GsrCadence, cycleCadence: Cadence): string {
   return `This person's GSRs run ${gsrPeriodCopy(personRhythm).every}, so this ${gsrPeriodCopy(cycleCadence).adjective} GSR is not theirs. Change their GSR rhythm first.`;
 }
 
-// guard_review_cycle_period (0040): a GSR runs at a GSR rhythm on a canonical period of it, and a
+// guard_review_cycle_period (0046): a GSR runs at a GSR rhythm on a canonical period of it, and a
 // review at a review rhythm. Returns the refusal word for word, or null when the cycle is fine.
 export function cyclePeriodProblem(cycle: Pick<ReviewCycle, "kind" | "cadence" | "period_start" | "period_end">): string | null {
   if (cycle.kind === "gsr" && !isGsrCadence(cycle.cadence)) return "A GSR runs weekly, every two weeks, monthly or quarterly.";
@@ -81,12 +81,12 @@ export function cyclePeriodProblem(cycle: Pick<ReviewCycle, "kind" | "cadence" |
   return null;
 }
 
-// What a manager may change on a GSR of someone they lead (0040): lock it in and reopen it.
+// What a manager may change on a GSR of someone they lead (0046): lock it in and reopen it.
 const LOCK_FIELDS: ReadonlyArray<keyof ReviewPatch> = ["status", "completed_at", "gsr_score", "reviewer_id"];
 // What a person may change on their own review (0035).
 const OWN_FIELDS: ReadonlyArray<keyof ReviewPatch> = ["employee_reflection", "support_discussion"];
 
-// The task link rule of 0039 and 0040, for the tasks mock: a task may be linked only to a goal in a
+// The task link rule of 0039 and 0046, for the tasks mock: a task may be linked only to a goal in a
 // GSR cycle (kind 'gsr', any rhythm) of its own assignee in its own company, and only while that month is open, not complete and the
 // person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
 // reaches here.
@@ -143,7 +143,7 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   return found;
 }
 export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "kind" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
-// Plays 0040 as well: the period rules for every writer, and a member who is not an admin opens
+// Plays 0046 as well: the period rules for every writer, and a member who is not an admin opens
 // only an open GSR period of their own company with no theme, named by the database and filed
 // under them ("Members open a GSR period", guard_review_cycle_period).
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
@@ -162,7 +162,7 @@ export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
   return created;
 }
 // The canonical period of the rhythm covering today, opened once: a second call finds the first
-// (0040, the insert that ignores a duplicate).
+// (0046, the insert that ignores a duplicate).
 export async function ensureGsrCycle(companyId: string, cadence: GsrCadence, today = new Date()): Promise<ReviewCycle> {
   const period = gsrPeriodFor(cadence, today);
   const existing = cycles.find(
@@ -177,7 +177,7 @@ export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "c
   if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
   const before = cycles.find((c) => c.id === id);
   if (before) {
-    // A cycle's kind is set when it is made, and its period is judged when it moves (0040).
+    // A cycle's kind is set when it is made, and its period is judged when it moves (0046).
     if (patch.kind !== undefined && patch.kind !== before.kind) throw new Error("A cycle's kind is set when it is made. Start a new cycle instead.");
     const moved = { ...before, ...patch };
     if (moved.cadence !== before.cadence || moved.period_start !== before.period_start || moved.period_end !== before.period_end) {
@@ -210,7 +210,7 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
   if (existing) return existing;
   if (cycles.find((c) => c.id === cycleId)?.status === "closed") throw new Error(CLOSED_CYCLE_MESSAGE);
   if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
-  // A GSR is opened only in a period of the person's own rhythm (0040).
+  // A GSR is opened only in a period of the person's own rhythm (0046).
   const cycle = cycles.find((c) => c.id === cycleId);
   if (cycle?.kind === "gsr" && cycle.cadence !== rhythmOfProfile(employeeId)) throw new Error(rhythmMessage(rhythmOfProfile(employeeId), cycle.cadence));
   const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, created_at: now(), updated_at: now() };
@@ -220,7 +220,7 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
-  // guard_review_employee_fields (0040): someone who is not an admin of the company changes, on a
+  // guard_review_employee_fields (0046): someone who is not an admin of the company changes, on a
   // GSR of a person they lead, only what locks and reopens it; on their own review, only their
   // reflection and the opening discussion. Any other review (a scored one of someone they lead,
   // or anyone else's) no update policy reaches, so the row is not changed, as the service reports

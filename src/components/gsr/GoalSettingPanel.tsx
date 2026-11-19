@@ -1,12 +1,12 @@
 // The Goal Setting Review for one GSR period: a week, two weeks, a month or a quarter, at the
-// person's rhythm (0040). The manager and the person set the period's goals together, live: each
+// person's rhythm (0046). The manager and the person set the period's goals together, live: each
 // with an agreed completion where 100 is complete, action steps as checkpoints along the way, and a
 // dated notes log to discuss in the meeting. Only the completion says how a goal landed; steps and
 // notes are there to get it there. Copy reads in the period's own words ("Goals for this week").
 // The person works their own period the same way the manager does, so they can fill it in
 // before the meeting and the meeting starts from their draft. A manager works the period of
 // someone they lead the same way, goals and notes, while it is open (0038), and locks and reopens
-// it as an admin does (0040); ratings and sign-off of scored reviews stay with an admin. Where the
+// it as an admin does (0046); ratings and sign-off of scored reviews stay with an admin. Where the
 // company runs tasks, each goal lists the tasks behind it (GoalTasks), which never move its
 // completion.
 // The focus topic sits at the top with its explanation, for reference: the month's topic, or for
@@ -592,7 +592,7 @@ export default function GoalSettingPanel({
 
   // Said to whoever is reading: an admin reopens the review themselves; anyone else is told an
   // admin can, never "your manager", because the reader may be the manager.
-  // A leader locks and reopens a GSR as an admin does (0040), so they are told the same.
+  // A leader locks and reopens a GSR as an admin does (0046), so they are told the same.
   const reopenLine = isAdmin || isLeader ? "reopen the review to change them." : "an admin can reopen the review to change them.";
   // The period's words, from its rhythm: "this week", "last month", "these two weeks".
   const copy = gsrPeriodCopy(cycle.cadence);
@@ -658,8 +658,8 @@ export default function GoalSettingPanel({
           ) : canEdit && isAdmin ? (
             <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
               No focus topic for {cycle.name} yet.{" "}
-              <Link to={cyclePath(cycle)} className="text-accent hover:underline">Set one on the {copy.noun}</Link>, or plan the year in{" "}
-              <Link to="/goals/focus" className="text-accent hover:underline">Goals, Monthly focus</Link>.
+              <Link to={cyclePath(cycle)} className="text-link hover:underline">Set one on the {copy.noun}</Link>, or plan the year in{" "}
+              <Link to="/goals/focus" className="text-link hover:underline">Goals, Monthly focus</Link>.
             </p>
           ) : null}
           {canEdit && pendingRoleGoals.length > 0 ? (

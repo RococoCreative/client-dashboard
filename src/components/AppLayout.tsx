@@ -80,7 +80,7 @@ function NavSectionGroup({ section, counts }: { section: NavSection; counts: Nav
 }
 
 export default function AppLayout() {
-  const { profile, company, companies, isRococo, isAdmin, isLead, setActiveCompanyId } = useHub();
+  const { profile, company, companies, isRococo, isAdmin, isLead, can, setActiveCompanyId } = useHub();
   const location = useLocation();
   // The portfolio is a place, not a state: a Rococo admin is on it whenever the URL says so
   // or no company is active. That keeps entering a company (state change plus navigation,
@@ -89,7 +89,7 @@ export default function AppLayout() {
   // The registry decides what this person sees here, flat or in sections (lib/navigation.ts).
   const layout: NavLayout = portfolio
     ? { kind: "flat", items: [...PORTFOLIO_NAV] }
-    : company ? navFor(company, isAdmin, isRococo, isLead) : { kind: "flat", items: [] };
+    : company ? navFor(company, isAdmin, isRococo, isLead, can) : { kind: "flat", items: [] };
 
   // The open count beside Tasks is the signed-in person's own, so it is asked for only by someone
   // whose profile is in this company, never a Rococo admin stepped in. A failed count shows nothing.

@@ -369,8 +369,8 @@ select tests.assert_raises(
          tests.id('r_peer')),
   '%row-level security%'
 );
--- Changed on purpose by 0040: a leader now locks and reopens a led person's GSR (proved in the
--- 0040 tests). Feedback on it stays an admin's.
+-- Changed on purpose by 0046: a leader now locks and reopens a led person's GSR (proved in the
+-- 0046 tests). Feedback on it stays an admin's.
 select tests.assert_raises(
   format($q$update public.reviews set manager_feedback = 'Mine to say' where employee_id = %L$q$,
          tests.id('r_e1')),

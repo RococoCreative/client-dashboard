@@ -21,9 +21,11 @@ export interface SyncSourceInput {
   field_map: FieldMapEntry[];
   record_key: string[];
   sync_weekday: number | null;
+  sync_weekdays: number[] | null;
   sync_time: string | null;
   sync_timezone: string | null;
   stale_after_hours: number | null;
+  stale_business_days?: boolean;
   enabled: boolean;
 }
 export type SyncSourcePatch = Partial<Omit<SyncSourceInput, "company_id" | "provider">>;
@@ -51,6 +53,7 @@ export async function createSyncSource(input: SyncSourceInput): Promise<SyncSour
   const created: SyncSource = {
     id: `sync-source-${++counter}`,
     ...input,
+    stale_business_days: input.stale_business_days ?? false,
     current_run_id: null,
     last_attempt_at: null,
     last_success_at: null,

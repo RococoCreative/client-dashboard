@@ -3,11 +3,14 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
 import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
+import { meets } from "../lib/capabilities.ts";
+import { mockCapabilityMap } from "./mocks/capabilities.ts";
+import { applyDenseLoad } from "./denseLoad.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -16,10 +19,10 @@ const EARLIER = "2026-08-04T15:30:00.000Z";
 const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
   // RBA has the task tracker on and nothing else.
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -40,7 +43,7 @@ interface CompanySpec {
   sops: SopSpec[];
   resources: ResourceSpec[];
   companyGoals: Array<{ name: string; target: string; current: string; hit: boolean }>;
-  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; responsible?: number }> }>;
+  projects?: Array<{ name: string; reference: string; notes: string | null; milestones: Array<{ title: string; kind: MilestoneKind; target_date: string | null; completed_on: string | null; status?: MilestoneStatus; responsible?: number }> }>;
   wins?: Array<{ title: string; won_on: string; project?: number; archived?: boolean }>;
   // Seeds the sample tasks (RBA and Kingdom).
   tasks?: boolean;
@@ -137,7 +140,7 @@ const SPECS: Record<string, CompanySpec> = {
         milestones: [
           { title: "Contract signed", kind: "milestone", target_date: "2026-08-01", completed_on: "2026-07-30", responsible: 0 },
           { title: "Welcome letter sent", kind: "letter", target_date: "2026-08-05", completed_on: "2026-08-04" },
-          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, responsible: 1 },
+          { title: "Framing complete", kind: "milestone", target_date: "2026-10-02", completed_on: null, status: "in_progress", responsible: 1 },
           { title: "Final walkthrough", kind: "milestone", target_date: "2026-11-20", completed_on: null },
         ],
       },
@@ -639,6 +642,8 @@ function build(company: Company): CompanyBundle {
         kind: m.kind,
         sort_order: j + 1,
         target_date: m.target_date,
+        // As the database keeps them (0043): a date means complete, otherwise the spec's open status.
+        status: m.completed_on ? "complete" : (m.status ?? "not_started"),
         responsible_profile_id: m.responsible === undefined ? null : profiles[m.responsible].id,
         completed_on: m.completed_on,
         archived_at: null,
@@ -1278,9 +1283,11 @@ function build(company: Company): CompanyBundle {
       field_map: ss.field_map,
       record_key: ss.record_key,
       sync_weekday: sheets ? 1 : null,
+      sync_weekdays: sheets ? [1] : null,
       sync_time: sheets ? "07:00:00" : null,
       sync_timezone: sheets ? "America/Chicago" : null,
       stale_after_hours: ss.stale_after_hours,
+      stale_business_days: false,
       enabled: true,
       current_run_id: currentRunId,
       last_attempt_at: !synced ? null : ss.outcome === "succeeded" ? EARLIER : ss.outcome === "running" ? RUN_STARTED : NOW,
@@ -1375,7 +1382,7 @@ function build(company: Company): CompanyBundle {
       member("manager", "Harper Quinn", "Operations Manager", "manager", alex.id, [p("division-south")], true),
       member("crew-lead", "Rowan Ellis", "Crew Lead", "employee", p("manager"), [p("division-south"), p("division-north")], true),
       member("crew", "Kai Bennett", "Carpenter", "employee", p("crew-lead"), [p("division-north")], false),
-      // Morgan Reyes runs a weekly GSR (0040) and reports to Alex in RBA South, so Harper's chain
+      // Morgan Reyes runs a weekly GSR (0046) and reports to Alex in RBA South, so Harper's chain
       // is unchanged. This week's GSR is open and nobody has started Morgan's in it yet.
       { ...member("weekly", "Morgan Reyes", "Estimator", "employee", alex.id, [p("division-south")], true), gsr_cadence: "weekly" },
     );
@@ -1458,6 +1465,13 @@ function build(company: Company): CompanyBundle {
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
+
+// A heavier RBA roster for visual checks (npm run demo, with ?load=dense in the address). Tests
+// never set it, and the window guard keeps this safe where there is no window.
+if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("load") === "dense") {
+  const rba = BUNDLES.find((b) => b.company.slug === "rba");
+  if (rba) applyDenseLoad(rba);
+}
 
 const ROCOCO: Profile = {
   id: "rococo-user-1",
@@ -1587,6 +1601,13 @@ export function makeHub(persona: Persona, company: Company | null = KLASIK.compa
     isRococo,
     isAdmin: isRococo || isCompanyAdminRole(profile.role),
     isLead: isRococo || isLeadRole(profile.role),
+    // The same rule the app applies, over the mock's map, so a test can change what a role may
+    // do with setMockCapabilities. Read live, so a change takes effect on the next call.
+    can: (capability) => {
+      if (!company) return isRococo;
+      const level = mockCapabilityMap(company.id)[capability];
+      return isRococo ? meets(profile.role, true, level) : company.id === profile.company_id && meets(profile.role, false, level);
+    },
     setActiveCompanyId: () => undefined,
     refreshProfile: async () => undefined,
     refreshCompanies: async () => undefined,

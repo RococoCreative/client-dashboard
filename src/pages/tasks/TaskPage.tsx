@@ -229,7 +229,7 @@ export default function TaskPage() {
                     {linked.data.review && linked.data.cycle ? (
                       <>
                         {" "}
-                        <Link to={reviewPath(linked.data.review.id, linked.data.cycle)} className="text-accent hover:underline">Open the GSR</Link>
+                        <Link to={reviewPath(linked.data.review.id, linked.data.cycle)} className="text-link hover:underline">Open the GSR</Link>
                       </>
                     ) : null}
                   </span>

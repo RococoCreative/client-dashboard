@@ -1,5 +1,5 @@
--- 0040_gsr_rhythms.test.sql
--- Proves 0040: a cycle's kind is backfilled once and otherwise follows its cadence, a GSR period
+-- 0046_gsr_rhythms.test.sql
+-- Proves 0046: a cycle's kind is backfilled once and otherwise follows its cadence, a GSR period
 -- is canonical for each rhythm (weekly, every two weeks, monthly, quarterly) and a quarterly GSR
 -- and a quarterly review share dates, a member opens a period of their own company and their own
 -- review in it only at their rhythm (a second open is nothing), a manager sets only the rhythm of
@@ -48,7 +48,7 @@ insert into tests.cycles_copy (cadence) values ('monthly'), ('quarterly'), ('ann
 do $$
 declare
   v_file  text := regexp_replace(current_setting('data_directory'), '/data$', '')
-                  || '/migrations/0040_gsr_rhythms.sql';
+                  || '/migrations/0046_gsr_rhythms.sql';
   v_block text;
 begin
   v_block := substring(pg_read_file(v_file) from '-- backfill:start\s*(do \$\$.*end \$\$);\s*-- backfill:end');
@@ -212,7 +212,7 @@ select tests.assert_raises(
 );
 
 -- case: a_live_cycle_is_judged_only_when_its_dates_change
--- A GSR cycle written before 0040 with dates that are not a whole period keeps working: it closes
+-- A GSR cycle written before 0046 with dates that are not a whole period keeps working: it closes
 -- and renames, and only a change to its dates is judged.
 alter table public.review_cycles disable trigger review_cycles_guard_period;
 insert into public.review_cycles (company_id, name, kind, cadence, period_start, period_end)

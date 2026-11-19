@@ -21,6 +21,7 @@ function spec(patch: Partial<SyncSourceSpec> = {}): SyncSourceSpec {
     record_key: [],
     enabled: true,
     sync_weekday: 1,
+    sync_weekdays: [1],
     sync_time: "07:00:00",
     sync_timezone: "America/Chicago",
     current_run_id: null,
@@ -96,6 +97,18 @@ describe("planTick", () => {
     const plan = planTick({ sources: [bad, good], connections, modules, now, onSkip: (id) => skipped.push(id) });
     expect(plan.due.map((s) => s.id)).toEqual(["good"]);
     expect(skipped).toEqual(["bad"]);
+  });
+
+  it("starts a source on any day of its set, judged in its own zone, and reads a null set as its single day", () => {
+    // Tuesday 10 November 2026, 14:00 UTC is 08:00 on Tuesday in Chicago.
+    const tuesday = new Date("2026-11-10T14:00:00Z");
+    const monday = "2026-11-09T13:30:00Z";
+    const weekdays = spec({ id: "weekdays", sync_weekdays: [1, 2, 3, 4, 5], last_attempt_at: monday });
+    const mondaysOnly = spec({ id: "mondays", last_attempt_at: monday });
+    const notMigrated = spec({ id: "not-migrated", sync_weekdays: null, sync_weekday: 2, last_attempt_at: monday });
+    const noDays = spec({ id: "no-days", sync_weekdays: [], last_attempt_at: null });
+    const plan = planTick({ sources: [weekdays, mondaysOnly, notMigrated, noDays], connections, modules, now: tuesday });
+    expect(plan.due.map((s) => s.id)).toEqual(["weekdays", "not-migrated"]);
   });
 
   it("sweeps every connection it read, whether or not anything on it is due", () => {

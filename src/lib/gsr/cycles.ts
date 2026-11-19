@@ -1,6 +1,6 @@
 // Review cycle period math: given a cadence and a date, the canonical period it falls in, its end
 // and a default name. Date-only strings in, date-only strings out, all in local time so a
-// September cycle never begins on August 31 in Chicago. A GSR period is canonical (0040): a week
+// September cycle never begins on August 31 in Chicago. A GSR period is canonical (0046): a week
 // runs Monday to Sunday, two weeks are blocks of Mondays counted from Monday 2024-01-01, a month is
 // the calendar month and a quarter the calendar quarter, so each period has exactly one row.
 import { formatPeriod, parseDate, toDateOnly } from "../format.ts";
@@ -28,7 +28,7 @@ export function isGsrCadence(cadence: string): cadence is GsrCadence {
   return (GSR_CADENCES as readonly string[]).includes(cadence);
 }
 
-// A person's rhythm, monthly when the row predates 0040 or a caller built it without one.
+// A person's rhythm, monthly when the row predates 0046 or a caller built it without one.
 export function rhythmOf(person: { gsr_cadence?: GsrCadence | null }): GsrCadence {
   return person.gsr_cadence ?? "monthly";
 }
@@ -36,7 +36,7 @@ export function rhythmOf(person: { gsr_cadence?: GsrCadence | null }): GsrCadenc
 // How a GSR period reads to people, from its rhythm: "Goals for this week", "Last month at a
 // glance", "This quarter's GSR". `noun` names one period ("open that week instead"), `plural`
 // several ("The weeks in this period"), `adjective` the rhythm ("their weekly GSR") and `every`
-// how often it runs ("runs every two weeks", the words 0040's refusal uses).
+// how often it runs ("runs every two weeks", the words 0046's refusal uses).
 export interface GsrPeriodCopy {
   noun: string;
   plural: string;
@@ -132,7 +132,7 @@ export function periodEnd(cadence: Cadence, start: string): string | null {
 }
 
 // Whether these dates are exactly one canonical period of the cadence. The database refuses a GSR
-// cycle that is not (0040); the cycle forms compute the dates so they always are.
+// cycle that is not (0046); the cycle forms compute the dates so they always are.
 export function isCanonicalPeriod(cadence: Cadence, start: string, end: string): boolean {
   const date = parseDate(start);
   if (!date || cadence === "custom") return false;
@@ -143,7 +143,7 @@ export function isCanonicalPeriod(cadence: Cadence, start: string, end: string):
 // "Q3 2026", "2026", or "Sep 1 to Oct 15, 2026" for custom. A period that crosses a year end names
 // both years ("Dec 28, 2026 to Jan 3, 2027"), the way formatPeriod does, so it never reads as a
 // December a year later. Weeks and two weeks read exactly as the database names a period a member
-// opens (private.gsr_period_name, 0040), so a period reads the same whoever opened it.
+// opens (private.gsr_period_name, 0046), so a period reads the same whoever opened it.
 export function defaultCycleName(cadence: Cadence, start: string, end?: string | null): string {
   const date = parseDate(start);
   if (!date) return "";
@@ -332,7 +332,7 @@ export function currentCycle<T extends { id: string; period_start: string; perio
 // Where a cycle lives in the hub. A GSR cycle (kind 'gsr', whatever its rhythm) is a Goal Setting
 // Review and sits in the GSRs section; a scored review (kind 'review') sits in Reviews. The split
 // is keyed on kind, a column, so it is data and never a company branch; cadence is only the
-// rhythm (0040). Every link to a cycle or a review goes through these, because a sidebar entry
+// rhythm (0046). Every link to a cycle or a review goes through these, because a sidebar entry
 // highlights by path prefix and a review reached under /gsr would light up the wrong section.
 export type HubSection = "gsr" | "reviews";
 export function sectionOf(cycle: { kind: CycleKind }): HubSection {
@@ -392,7 +392,7 @@ export function overlapMessage(existing: { name: string; kind: string; cadence: 
 
 // Who a cycle covers: everyone active on the roster, signed in or not, plus anyone deactivated
 // since whose review in it was signed off, less anyone an admin has left out of it (0034). A GSR
-// period covers only the people whose rhythm is its cadence (0040): a weekly week is not owed by
+// period covers only the people whose rhythm is its cadence (0046): a weekly week is not owed by
 // someone on a monthly rhythm. A signed-off review is the record, so deactivating a person or
 // changing their rhythm later never changes a closed cycle's counts or team score; a review they
 // still owed simply drops out with them. An omission never reaches a signed-off review (the

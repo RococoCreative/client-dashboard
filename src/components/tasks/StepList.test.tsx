@@ -13,6 +13,7 @@ const svc = vi.hoisted(() => ({
   setStepDone: vi.fn(),
 }));
 vi.mock("../../services/tasks.ts", () => svc);
+vi.mock("../../services/capabilities.ts", () => import("../../test/mocks/capabilities.ts"));
 
 import StepList from "./StepList.tsx";
 

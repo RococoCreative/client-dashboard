@@ -71,6 +71,7 @@ import {
   REVIEW_STATUS_LABELS,
   SOP_CATEGORY_LABELS,
   type EmployeeFinancial,
+  type FinancialSnapshot,
   type JobRole,
   type Profile,
   type Review,
@@ -88,7 +89,7 @@ function RecentSops({ sops }: { sops: Sop[] }) {
       {sops.map((sop) => (
         <li key={sop.id} className="flex items-center justify-between gap-3 py-2.5">
           <div className="min-w-0">
-            <Link to={`/sops/${sop.id}`} className="block truncate text-sm text-ink hover:text-accent">
+            <Link to={`/sops/${sop.id}`} className="block truncate text-sm text-ink hover:text-link">
               {sop.title}
             </Link>
             <p className="text-[12px] text-ink-3">
@@ -244,8 +245,9 @@ function MyScorecard({ companyId, employeeId, jobRole }: { companyId: string; em
 }
 
 function AdminDashboard() {
-  const { company, profile, isAdmin, isRococo } = useHub();
+  const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
+  const showManualFinancials = company!.manual_financials;
   const year = new Date().getFullYear();
 
   const state = useAsync(async () => {
@@ -257,7 +259,7 @@ function AdminDashboard() {
       listRecentSops(companyId, 5),
       listSops(companyId),
       listResources(companyId),
-      listSnapshots(companyId),
+      showManualFinancials ? listSnapshots(companyId) : Promise.resolve([] as FinancialSnapshot[]),
       listCampaigns(companyId),
       loadOwnModules(companyId, profile, year),
       listCycleOmissions(companyId),
@@ -274,7 +276,7 @@ function AdminDashboard() {
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
     return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
-  }, [companyId, profile.id, profile.job_role_id, year]);
+  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year]);
 
   // The division split, read only for someone allowed to see it, and only past the divisions
   // themselves when the company has some. Null means the combined picture alone.
@@ -419,15 +421,15 @@ function AdminDashboard() {
             {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin /> : null}
           </div>
           <div className="space-y-6">
-            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} />
-            {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
-            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} /> : null}
+            <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} />
+            {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
+            {hasModule(company!, "data_sources") ? <FreshnessCard companyId={companyId} companyTimeZone={company!.time_zone} canViewProduction={can("production_view")} /> : null}
           </div>
         </div>
       ) : hasModule(company, "wins") || hasModule(company, "external_links") ? (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin className={hasModule(company, "wins") ? "" : "lg:col-span-2"} /> : null}
-          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
+          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
         </div>
       ) : null}
 
@@ -492,38 +494,40 @@ function AdminDashboard() {
         </div>
 
         <div className="space-y-6">
-          <Section
-            eyebrow="Financials"
-            title={latestMonth ? periodLabel(latestMonth.period_type, latestMonth.period_start) : "No snapshots yet"}
-            actions={
-              <Link to="/financials">
-                <Button variant="ghost" size="sm">Open</Button>
-              </Link>
-            }
-          >
-            {latestMonth && latestDerived ? (
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Revenue</dt>
-                  <dd className="tnum mt-0.5 text-lg font-medium text-heading">{formatMoney(latestMonth.revenue)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net profit</dt>
-                  <dd className={`tnum mt-0.5 text-lg font-medium ${latestDerived.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(latestDerived.net)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Gross margin</dt>
-                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.grossMargin, 1)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-label text-ink-3">Net margin</dt>
-                  <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.netMargin, 1)}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="text-sm text-ink-2">Enter a period or import a CSV to see revenue, margins, and net here.</p>
-            )}
-          </Section>
+          {showManualFinancials ? (
+            <Section
+              eyebrow="Financials"
+              title={latestMonth ? periodLabel(latestMonth.period_type, latestMonth.period_start) : "No snapshots yet"}
+              actions={
+                <Link to="/financials">
+                  <Button variant="ghost" size="sm">Open</Button>
+                </Link>
+              }
+            >
+              {latestMonth && latestDerived ? (
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Revenue</dt>
+                    <dd className="tnum mt-0.5 text-lg font-medium text-heading">{formatMoney(latestMonth.revenue)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Net profit</dt>
+                    <dd className={`tnum mt-0.5 text-lg font-medium ${latestDerived.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(latestDerived.net)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Gross margin</dt>
+                    <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.grossMargin, 1)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-label text-ink-3">Net margin</dt>
+                    <dd className="tnum mt-0.5 text-ink">{formatPercent(latestDerived.netMargin, 1)}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-sm text-ink-2">Enter a period or import a CSV to see revenue, margins, and net here.</p>
+              )}
+            </Section>
+          ) : null}
           <Section
             eyebrow="Marketing"
             title={pluralize(liveCampaigns.length, "live campaign")}
@@ -590,7 +594,7 @@ function AdminDashboard() {
 }
 
 function EmployeeDashboard() {
-  const { company, profile, isAdmin, isRococo } = useHub();
+  const { company, profile, isAdmin, isRococo, can } = useHub();
   const companyId = company!.id;
   const year = new Date().getFullYear();
 
@@ -685,8 +689,8 @@ function EmployeeDashboard() {
       {hasModule(company, "external_links") || hasModule(company, "wins") || hasModule(company, "switchboard") ? (
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {hasModule(company, "external_links") ? <WhereWorkLivesCard companyId={companyId} isAdmin={false} /> : null}
-          {hasModule(company, "wins") ? <WinsCard companyId={companyId} /> : null}
-          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} /> : null}
+          {hasModule(company, "wins") ? <WinsCard company={company!} /> : null}
+          {hasModule(company, "switchboard") ? <ShortcutsCard company={company!} isAdmin={isAdmin} isRococo={isRococo} can={can} /> : null}
         </div>
       ) : null}
 
@@ -780,7 +784,7 @@ function EmployeeDashboard() {
               <div className="min-w-0 text-sm">
                 <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                 <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : "/my/reviews"} className="mt-2 inline-block text-accent hover:underline">
+                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : "/my/reviews"} className="mt-2 inline-block text-link hover:underline">
                   View review
                 </Link>
               </div>

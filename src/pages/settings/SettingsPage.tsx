@@ -1,10 +1,14 @@
 // Settings, for a company admin: one page, one tab per area, each tab its own route.
 //   Company: name, logo and time zone, plus the theme and sign-in domains, which Rococo manages
 //     (they decide who can sign in), so they read only here.
-//   Roles: the company's job roles (dashboard modules and scorecard metrics) and its divisions.
 //   Reviews: pillars, weights and criteria, the Monthly GSRs rule, and deliverable categories.
+//   Production: the standard milestones every new project starts with, for a company with the
+//     production module.
 //   Connections: the company's own connections to outside systems and, with the module, its data
 //     sources. Links to outside tools live in Resources > Links, which this tab points to.
+//   Activity: this company's own change log, for whoever the company lets read it.
+// Company and Activity show only to people the company's permissions allow, Production only to a
+// company with the module.
 // What shows is the company's data and modules (rule 12), never its name.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -17,8 +21,7 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import ConnectionsPanel from "../../components/settings/ConnectionsPanel.tsx";
 import DataSourcesPanel from "../../components/settings/DataSourcesPanel.tsx";
 import DeliverableCategoriesPanel from "../../components/settings/DeliverableCategoriesPanel.tsx";
-import DivisionsPanel from "../../components/settings/DivisionsPanel.tsx";
-import JobRolesPanel from "../../components/settings/JobRolesPanel.tsx";
+import MilestoneTemplatePanel from "../../components/settings/MilestoneTemplatePanel.tsx";
 import PillarsPanel from "../../components/settings/PillarsPanel.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
 import { useHub } from "../../context/HubContext.tsx";
@@ -28,7 +31,8 @@ import { THEMES } from "../../lib/theme.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Company, ConnectionProvider } from "../../types/database.ts";
-import { SETTINGS_TABS, type SettingsTab } from "./settingsTabs.ts";
+import ActivityList from "../../components/audit/ActivityList.tsx";
+import { settingsTabsFor, type SettingsTab } from "./settingsTabs.ts";
 
 // A company with data sources also connects its own Google account for them.
 const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
@@ -40,9 +44,10 @@ function timeZones(): string[] {
 
 const DESCRIPTIONS: Record<SettingsTab, string> = {
   company: "How the company appears in the hub and who can sign in.",
-  roles: "The jobs people do here, what each role sees and is scored on, and the divisions the company reports by.",
   reviews: "How people are reviewed: the pillars and their weights, the criteria rated, the Monthly GSRs rule, and the categories deliverables are filed under.",
+  production: "The milestones and letters every new project starts with.",
   connections: "The company's own accounts in outside systems, and the sources the hub reads from them.",
+  activity: "Changes to roles, access and settings for this company.",
 };
 
 function CompanyTab({ company }: { company: Company }) {
@@ -123,6 +128,9 @@ function CompanyTab({ company }: { company: Company }) {
         </dl>
         {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
       </Section>
+      <p className="text-[13px] text-ink-2 lg:col-span-3">
+        Job roles and divisions are under People: <Link to="/people/roles" className="text-link hover:underline">Roles</Link> and <Link to="/people/divisions" className="text-link hover:underline">Divisions</Link>.
+      </p>
     </div>
   );
 }
@@ -133,7 +141,7 @@ function ConnectionsTab({ company }: { company: Company }) {
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         <ConnectionsPanel companyId={company.id} providers={dataSources ? GOOGLE_ROW_PROVIDERS : undefined} />
-        {dataSources ? <DataSourcesPanel companyId={company.id} /> : null}
+        {dataSources ? <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} /> : null}
       </div>
       {hasModule(company, "external_links") ? (
         <Section eyebrow="Where the work lives" title="Links to outside tools">
@@ -150,26 +158,22 @@ function ConnectionsTab({ company }: { company: Company }) {
 }
 
 export default function SettingsPage({ tab }: { tab: SettingsTab }) {
-  const { company } = useHub();
+  const { company, can } = useHub();
   const current = company!;
   return (
     <>
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
-      <Tabs items={SETTINGS_TABS} label="Settings" />
+      <Tabs items={settingsTabsFor(can, current)} label="Settings" />
       {tab === "company" ? <CompanyTab company={current} /> : null}
-      {tab === "roles" ? (
-        <div className="space-y-6">
-          <JobRolesPanel companyId={current.id} />
-          <DivisionsPanel companyId={current.id} />
-        </div>
-      ) : null}
       {tab === "reviews" ? (
         <div className="space-y-6">
           <PillarsPanel />
           <DeliverableCategoriesPanel companyId={current.id} />
         </div>
       ) : null}
+      {tab === "production" ? <MilestoneTemplatePanel key={current.id} companyId={current.id} /> : null}
       {tab === "connections" ? <ConnectionsTab company={current} /> : null}
+      {tab === "activity" ? <ActivityList key={current.id} companyId={current.id} view="company" /> : null}
     </>
   );
 }

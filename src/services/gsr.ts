@@ -106,7 +106,7 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   return data as ReviewCycle;
 }
 
-// A cycle is a GSR period or a scored review (kind, 0040). A GSR's dates must be a canonical
+// A cycle is a GSR period or a scored review (kind, 0046). A GSR's dates must be a canonical
 // period of its cadence; the database refuses anything else.
 export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "kind" | "cadence" | "period_start" | "period_end"> &
   Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
@@ -118,7 +118,7 @@ export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
 }
 
 // Opens the GSR period of a rhythm that covers `today`, or finds it when it is open already. Any
-// member of the company may insert it, open and with its default name (0040); the insert ignores
+// member of the company may insert it, open and with its default name (0046); the insert ignores
 // a duplicate and the row is read back, so two people opening the same week at once land on the
 // same cycle rather than one of them failing.
 export async function ensureGsrCycle(companyId: string, cadence: GsrCadence, today = new Date()): Promise<ReviewCycle> {

@@ -10,6 +10,32 @@ export type { FieldType, FieldMapEntry, SourceConfig, SheetsSourceConfig, QuickB
 export type ThemeKey = "rococo" | "klasik" | "kingdom" | "rba";
 export type Role = "owner" | "admin" | "manager" | "employee";
 
+// Company capabilities (0040). The catalog names each power and the lowest role that holds it by
+// default; a company's override row replaces that level for that company. "rococo" is a level no
+// company role meets.
+export type CapabilityKey =
+  | "pay"
+  | "company_settings"
+  | "audit_log"
+  | "milestones_edit"
+  | "wins_post"
+  | "sync_run"
+  | "production_view";
+export type CapabilityLevel = Role | "rococo";
+
+export interface Capability {
+  key: CapabilityKey;
+  default_min_role: CapabilityLevel;
+  sort_order: number;
+}
+
+export interface CompanyCapability {
+  id: string;
+  company_id: string;
+  capability: CapabilityKey;
+  min_role: CapabilityLevel;
+}
+
 export interface Company {
   id: string;
   slug: string;
@@ -20,6 +46,10 @@ export interface Company {
   modules: string[];
   // The company's own named time zone (0037), America/New_York unless an admin sets another. A repeating task's next due date counts from the day here.
   time_zone: string;
+  // Days a win stays on Home (0042); null keeps the five newest with no age limit. Rococo-only.
+  wins_home_days: number | null;
+  // Whether the company keeps the manual Financials page (0042); true is today's behaviour. Rococo-only.
+  manual_financials: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -89,7 +119,7 @@ export interface Profile {
   // owner or Rococo sets these; owners always see everyone.
   view_all_divisions: boolean;
   view_division_ids: string[];
-  // How often their Goal Setting Review runs (0040): weekly, every two weeks, monthly or
+  // How often their Goal Setting Review runs (0046): weekly, every two weeks, monthly or
   // quarterly. Monthly unless an admin who manages them or a manager who leads them sets another.
   gsr_cadence: GsrCadence;
   created_at: string;
@@ -308,11 +338,11 @@ export interface GsrCriterion {
 }
 
 // A cycle's rhythm. Weekly, every two weeks and monthly are GSR rhythms only; annual and custom
-// are review rhythms only; quarterly can be either (0040, review_cycles_kind_cadence_check).
+// are review rhythms only; quarterly can be either (0046, review_cycles_kind_cadence_check).
 export type Cadence = "weekly" | "biweekly" | "monthly" | "quarterly" | "annual" | "custom";
-// The rhythms a person's Goal Setting Review can run at (profiles.gsr_cadence, 0040).
+// The rhythms a person's Goal Setting Review can run at (profiles.gsr_cadence, 0046).
 export type GsrCadence = "weekly" | "biweekly" | "monthly" | "quarterly";
-// What a cycle is (0040): a Goal Setting Review period, or a scored review. Kind decides the hub
+// What a cycle is (0046): a Goal Setting Review period, or a scored review. Kind decides the hub
 // section a cycle lives in; cadence is only its rhythm.
 export type CycleKind = "gsr" | "review";
 export type CycleStatus = "open" | "closed";
@@ -848,10 +878,12 @@ export interface SyncSource {
   config: SourceConfig;
   field_map: FieldMapEntry[];
   record_key: string[];
-  sync_weekday: number | null;
+  sync_weekday: number | null; // the lowest day of sync_weekdays, kept in step by the database (0045)
+  sync_weekdays: number[] | null; // 0 = Sunday .. 6 = Saturday, sorted
   sync_time: string | null;
   sync_timezone: string | null;
   stale_after_hours: number | null;
+  stale_business_days: boolean;
   enabled: boolean;
   current_run_id: string | null;
   last_attempt_at: string | null;
@@ -914,7 +946,8 @@ export interface AuditEvent {
 // Production
 // Projects a company enters by hand (0026), each with an ordered list of milestones and letters.
 // Members read them and admins write them; a milestone takes its company from its project by
-// trigger. There is no status: a milestone is complete when completed_on is set. Nothing is
+// trigger. A milestone is not started, in progress or complete (0043); the database keeps the
+// status and completed_on in step, so complete always has a completed-on date. Nothing is
 // deleted; both are archived.
 export type ProjectSource = "manual";
 export interface Project {
@@ -924,11 +957,20 @@ export interface Project {
 }
 export type MilestoneKind = "milestone" | "letter";
 export const MILESTONE_KIND_LABELS: Record<MilestoneKind, string> = { milestone: "Milestone", letter: "Letter" };
+export type MilestoneStatus = "not_started" | "in_progress" | "complete";
+export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = { not_started: "Not started", in_progress: "In progress", complete: "Complete" };
 export interface ProjectMilestone {
   id: string; company_id: string; project_id: string; title: string; description: string | null;
-  kind: MilestoneKind; sort_order: number; target_date: string | null;
+  kind: MilestoneKind; sort_order: number; target_date: string | null; status: MilestoneStatus;
   responsible_profile_id: string | null; completed_on: string | null; archived_at: string | null;
   created_by: string | null; updated_by: string | null; created_at: string; updated_at: string;
+}
+// A company's standard milestones (0044): the items every new project starts with. A database
+// trigger copies the live rows, in order, onto a project when it is created; editing the list
+// later never reaches back into a project. Members read, admins write, nothing is deleted.
+export interface MilestoneTemplate {
+  id: string; company_id: string; title: string; kind: MilestoneKind; sort_order: number;
+  archived_at: string | null; created_at: string; updated_at: string;
 }
 
 // Wins
