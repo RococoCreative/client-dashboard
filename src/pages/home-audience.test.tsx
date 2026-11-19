@@ -2,7 +2,8 @@
 // button on the page; a manager has their team right under it, one row per direct report with the
 // month's GSR status and, where the company runs tasks, their open and overdue tasks; an admin
 // opens on what needs attention and the open cycles before the tiles. An empty links panel is a
-// single line at the very end. Each test reads the in-memory data layer the way the page does.
+// single line at the very end; an employee or manager sees their own open tasks right after the GSR
+// (and the team). Each test reads the in-memory data layer the way the page does.
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -36,9 +37,9 @@ vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { ensureReview, updateReview } from "../services/gsr.ts";
+import { addBackToCycle, ensureReview, omitFromCycle, updateReview } from "../services/gsr.ts";
 import { updateProfile } from "../services/profiles.ts";
-import { createTask, deleteTask } from "../services/tasks.ts";
+import { createTask, deleteTask, listTasks } from "../services/tasks.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import TeamBlock from "../components/home/TeamBlock.tsx";
@@ -73,6 +74,10 @@ describe("a manager's Home", () => {
 
   it("reads In progress and Complete from the review in the GSR cycle in play", async () => {
     const review = await ensureReview(september.id, RBA.company.id, rowan.id);
+    // The mock has no delete for a review row, so it goes back to the state ensureReview made it in.
+    onTestFinished(async () => {
+      await updateReview(review.id, { status: "not_started", completed_at: null });
+    });
     await updateReview(review.id, { status: "in_progress" });
     const first = renderWithHub(<DashboardPage />, harper);
     const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
@@ -80,12 +85,32 @@ describe("a manager's Home", () => {
     first.unmount();
 
     await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString() });
-    onTestFinished(async () => {
-      await updateReview(review.id, { status: "in_progress", completed_at: null });
-    });
     renderWithHub(<DashboardPage />, harper);
     const again = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
     expect(await within(again).findByText("Complete")).toBeInTheDocument();
+  });
+
+  it("reads Not in this cycle for a report the GSR month leaves out, never Not started", async () => {
+    await omitFromCycle({ cycle_id: september.id, employee_id: rowan.id, company_id: RBA.company.id, reason: null });
+    onTestFinished(async () => {
+      await addBackToCycle(september.id, rowan.id);
+    });
+    renderWithHub(<DashboardPage />, harper);
+    const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
+    const row = (await within(team).findByRole("link", { name: "Rowan Ellis" })).closest("li") as HTMLElement;
+    expect(await within(row).findByText("Not in this cycle")).toBeInTheDocument();
+    expect(within(row).queryByText("Not started")).not.toBeInTheDocument();
+  });
+
+  it("lists their own open tasks after their team, as one quiet line when they have none", async () => {
+    const { container } = renderWithHub(<DashboardPage />, harper);
+    const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
+    const line = await screen.findByText(/You have no open tasks\./);
+    expect(line.closest("section")).toBeNull();
+    expect(within(line).getByRole("link", { name: "All tasks" })).toHaveAttribute("href", "/tasks");
+    expect(before(team, line)).toBe(true);
+    expect(before(line, sectionOf(screen.getByRole("heading", { name: /open goal/ })))).toBe(true);
+    expect(container.querySelectorAll("button.bg-accent")).toHaveLength(1);
   });
 
   it("counts each report's open and overdue tasks when the company runs tasks", async () => {
@@ -157,6 +182,38 @@ describe("an employee's Home", () => {
   });
 });
 
+describe("an employee's own tasks on Home", () => {
+  const jamie = RBA.profiles[1];
+
+  it("come right after the GSR card and before goals, with no add control", async () => {
+    const { container } = renderWithHub(<DashboardPage />, makeHub("employee", RBA.company));
+    const gsr = sectionOf(await screen.findByRole("heading", { name: september.name }));
+    const tasks = sectionOf(await screen.findByRole("heading", { name: "Your tasks" }));
+    expect(await within(tasks).findByText("Close out the September punch list")).toBeInTheDocument();
+    expect(sections(container)[0]).toBe(gsr);
+    expect(sections(container)[1]).toBe(tasks);
+    expect(before(tasks, sectionOf(screen.getByRole("heading", { name: /open goal/ })))).toBe(true);
+    expect(within(tasks).getByRole("link", { name: "All tasks" })).toHaveAttribute("href", "/tasks");
+    expect(within(tasks).queryByRole("button", { name: /Add task/ })).not.toBeInTheDocument();
+    // Only their own open tasks, the next five at most: the same read Tasks makes for "mine".
+    const own = await listTasks(RBA.company.id, { assigneeId: jamie.id, status: "open" });
+    const everyone = await listTasks(RBA.company.id, { status: "open" });
+    expect(everyone.length).toBeGreaterThan(own.length);
+    const list = within(tasks).getByRole("list", { name: "Your open tasks" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(Math.min(own.length, 5));
+    // The GSR button is still the page's one primary action.
+    expect(container.querySelectorAll("button.bg-accent")).toHaveLength(1);
+  });
+
+  it("are not there without the tasks module", async () => {
+    renderWithHub(<DashboardPage />, { ...makeHub("employee", RBA.company), company: { ...RBA.company, modules: [] } });
+    await screen.findByRole("heading", { name: september.name });
+    await screen.findByRole("heading", { name: /open goal/ });
+    expect(screen.queryByRole("heading", { name: "Your tasks" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/You have no open tasks/)).not.toBeInTheDocument();
+  });
+});
+
 describe("an admin's Home", () => {
   it("opens on what needs attention, then the open cycles, then the tiles", async () => {
     const { container } = renderWithHub(<DashboardPage />, makeHub("admin", KINGDOM.company));
@@ -203,7 +260,7 @@ describe("an empty links panel", () => {
 describe("the team block with no GSR month in play", () => {
   it("says so once and shows a dash on each row", async () => {
     const people = RBA.profiles.filter((p) => p.company_id === RBA.company.id);
-    renderWithHub(<TeamBlock companyId={RBA.company.id} viewer={harper.profile} people={people} cycles={[]} />, harper);
+    renderWithHub(<TeamBlock companyId={RBA.company.id} viewer={harper.profile} people={people} cycles={[]} omissions={[]} />, harper);
     const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
     expect(within(team).getByText(/No GSR month open, so no status yet/)).toBeInTheDocument();
     const row = (await within(team).findByRole("link", { name: "Rowan Ellis" })).closest("li") as HTMLElement;

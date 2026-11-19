@@ -3,7 +3,9 @@
 // are overdue. Built from the people the page already holds, which the database has narrowed to what
 // the viewer may see, so it never names anyone the viewer may not open. A person who has not signed
 // in yet is listed like anyone else, marked as such: everything attaches to the person, not an
-// account. Status comes from the review rows alone; nothing here computes a score.
+// account. Status comes from the review rows alone; nothing here computes a score. Who the month
+// covers is cycleRoster's call, the roster every count of a cycle reads, so a report an admin left
+// out of it reads "Not in this cycle" and never "Not started".
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar.tsx";
 import Badge from "../ui/Badge.tsx";
@@ -14,16 +16,20 @@ import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { REVIEW_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { gsrCycleInPlay } from "../../lib/gsr/cycles.ts";
+import { cycleRoster, gsrCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { hasAccount, ledBy } from "../../lib/people.ts";
 import { isOverdue } from "../../lib/tasks.ts";
 import { listCycleReviews } from "../../services/gsr.ts";
 import { listTasks } from "../../services/tasks.ts";
-import { REVIEW_STATUS_LABELS, ROLE_LABELS, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
+import { REVIEW_STATUS_LABELS, ROLE_LABELS, type CycleOmission, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
 
-function TeamRow({ person, review, tasks, withStatus, withTasks }: { person: Profile; review: Review | null; tasks: TaskWithSteps[]; withStatus: boolean; withTasks: boolean }) {
+// The status cell: none when no month is open, "Not in this cycle" for someone the month leaves out,
+// else where their review stands (no row yet is Not started).
+type Standing = { kind: "no_cycle" } | { kind: "omitted" } | { kind: "review"; review: Review | null };
+
+function TeamRow({ person, standing, tasks, withTasks }: { person: Profile; standing: Standing; tasks: TaskWithSteps[]; withTasks: boolean }) {
   const today = todayIso();
   const overdue = tasks.filter((t) => isOverdue(t, today)).length;
   return (
@@ -45,10 +51,12 @@ function TeamRow({ person, review, tasks, withStatus, withTasks }: { person: Pro
             <span className="text-danger">{overdue} overdue</span>
           </span>
         ) : null}
-        {withStatus ? (
-          <Badge tone={review ? REVIEW_STATUS_TONE[review.status] : "neutral"}>{review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}</Badge>
+        {standing.kind === "review" ? (
+          <Badge tone={standing.review ? REVIEW_STATUS_TONE[standing.review.status] : "neutral"}>
+            {standing.review ? REVIEW_STATUS_LABELS[standing.review.status] : "Not started"}
+          </Badge>
         ) : (
-          <span className={metaClass}>-</span>
+          <span className={metaClass}>{standing.kind === "omitted" ? "Not in this cycle" : "-"}</span>
         )}
       </div>
     </li>
@@ -60,12 +68,15 @@ export default function TeamBlock({
   viewer,
   people,
   cycles,
+  omissions,
   className = "",
 }: {
   companyId: string;
   viewer: Profile;
   people: readonly Profile[];
   cycles: readonly ReviewCycle[];
+  // The cycle omissions the viewer can read (listCycleOmissions): their own and their people's.
+  omissions: readonly CycleOmission[];
   className?: string;
 }) {
   const { company } = useHub();
@@ -88,6 +99,13 @@ export default function TeamBlock({
 
   if (!any) return <p className={`${secondaryClass} ${className}`}>No one reports to you yet.</p>;
 
+  const reviews = state.data?.reviews ?? [];
+  const roster = cycle ? new Set(cycleRoster(reports, reviews, cycle.id, [...omissions]).map((p) => p.id)) : null;
+  const standingOf = (person: Profile): Standing => {
+    if (!cycle || !roster) return { kind: "no_cycle" };
+    if (!roster.has(person.id)) return { kind: "omitted" };
+    return { kind: "review", review: reviews.find((r) => r.employee_id === person.id && r.cycle_id === cycle.id) ?? null };
+  };
   const description = `${reports.length} direct ${reports.length === 1 ? "report" : "reports"}${cycle ? ` · GSR status for ${cycle.name}` : " · No GSR month open, so no status yet"}`;
   return (
     <Section eyebrow="Team" title="Your team" description={description} className={className}>
@@ -99,9 +117,8 @@ export default function TeamBlock({
             <TeamRow
               key={person.id}
               person={person}
-              review={state.data!.reviews.find((r) => r.employee_id === person.id && r.cycle_id === cycle?.id) ?? null}
+              standing={standingOf(person)}
               tasks={state.data!.tasks.filter((t) => t.assignee_id === person.id)}
-              withStatus={cycle !== null}
               withTasks={withTasks}
             />
           ))}

@@ -7,8 +7,9 @@
 //
 // Each audience reads the right thing first. An admin opens on what needs attention and the open
 // cycles, then the tiles, then the rest. An employee opens on their own GSR, with the page's one
-// primary button; a manager has their direct reports right under it (TeamBlock). With no links
-// yet, the links card gives way to one line at the end of the page.
+// primary button, then their own open tasks; a manager has their direct reports (TeamBlock) between
+// the GSR and their tasks. With no links yet, the links card gives way to one line at the end of
+// the page.
 //
 // For the people allowed to see the division split (an owner, Rococo, or someone given the view)
 // in a company that has divisions, a Combined / per-division switch narrows the people tiles and
@@ -37,6 +38,7 @@ import WinsCard from "../components/home/WinsCard.tsx";
 import WhereWorkLivesCard from "../components/home/WhereWorkLivesCard.tsx";
 import NoLinksLine from "../components/home/NoLinksLine.tsx";
 import TeamBlock from "../components/home/TeamBlock.tsx";
+import PersonTasks from "../components/tasks/PersonTasks.tsx";
 import DivisionCompare from "../components/people/DivisionCompare.tsx";
 import DivisionSwitch from "../components/people/DivisionSwitch.tsx";
 import PersonScorecard from "../components/scorecards/PersonScorecard.tsx";
@@ -663,13 +665,13 @@ function EmployeeDashboard() {
     const gsrCycle = gsrCycleInPlay(cycles);
     const gsrReview = gsrCycle ? (reviews.find((r) => r.cycle_id === gsrCycle.id) ?? null) : null;
     const omitted = omittedCycleIdsFor(omissions, reviews, profile.id);
-    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted, people };
+    return { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds: omitted, omissions, people };
   }, [companyId, profile.id, profile.job_role_id, year, lead]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={6} />;
 
-  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds, people } = state.data;
+  const { reviews, featured, pillars, criteria, impact, baseline, baselineScores, gsrCycle, gsrReview, goals, recentSops, cycles, companyGoals, jobRole, financials, omittedCycleIds, omissions, people } = state.data;
   // An admin omitted this person from this month's GSR: nothing to start, and it says so.
   const gsrOmitted = gsrCycle ? omittedCycleIds.includes(gsrCycle.id) : false;
   const showFinancials = jobRole?.dashboard_modules.includes("financials") ?? false;
@@ -753,7 +755,15 @@ function EmployeeDashboard() {
           )}
         </Section>
 
-        {lead ? <TeamBlock companyId={companyId} viewer={profile} people={people} cycles={cycles} className="lg:col-span-3" /> : null}
+        {lead ? <TeamBlock companyId={companyId} viewer={profile} people={people} cycles={cycles} omissions={omissions} className="lg:col-span-3" /> : null}
+
+        {/* Their own next few open tasks, the ones Tasks lists as theirs, when the company runs tasks.
+            No add control here: the GSR button stays the page's one primary action. */}
+        {hasModule(company, "tasks") ? (
+          <div className="lg:col-span-3">
+            <PersonTasks companyId={companyId} person={profile} self limit={5} moreHref="/tasks" backTo="/" backLabel="Home" />
+          </div>
+        ) : null}
 
         {/* The links, wins and shortcuts cards, each under its own module, where they have always sat
             in the order. An empty links list is one line at the end of the page instead. */}
