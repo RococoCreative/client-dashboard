@@ -482,7 +482,7 @@ export default function CyclePage() {
               <tbody role="rowgroup" className="max-md:block">
                 {rows.map(({ person, review, result, scored }) => (
                   <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
-                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:pr-28`}>
+                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:!pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">

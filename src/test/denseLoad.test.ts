@@ -14,6 +14,13 @@ describe("applyDenseLoad", () => {
     expect(bundle.jobRoleGoals.filter((g) => g.is_active)).toHaveLength(35);
   });
 
+  it("has a person with a long name, no title and no account, the case a new roster starts in", () => {
+    const bundle = structuredClone(RBA);
+    applyDenseLoad(bundle);
+    const bare = bundle.profiles.filter((p) => p.is_active && p.title === null && p.user_id === null && (p.full_name ?? "").length >= 30);
+    expect(bare).toHaveLength(1);
+  });
+
   it("puts one rated pillar on the longest scale, 10 points", () => {
     const bundle = structuredClone(RBA);
     applyDenseLoad(bundle);
