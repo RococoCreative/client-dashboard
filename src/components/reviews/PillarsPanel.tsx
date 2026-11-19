@@ -2,9 +2,9 @@
 // criteria a rating pillar rates, and on a Monthly GSRs pillar how many goals each GSR requires,
 // shown as text with a link to where it is set (GSRs, Setup). The pillars are a short list, one
 // line each (number, name, scoring type, weight); one opens at a time and shows its fields as
-// text until a pencil opens them. Name, weight and the rest still save on blur. Weights should total 100; the panel shows the running total and the
-// scoring engine normalizes either way. The monthly focus topics are planned in GSRs, Setup, which
-// is where the GSR pillar's note points.
+// text until a pencil opens them. Name, weight and the rest still save on blur. Weights should
+// total 100; the panel shows the running total and the scoring engine normalizes either way. The
+// monthly focus topics are planned in GSRs, Setup, which is where the GSR pillar's note points.
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus } from "lucide-react";
@@ -77,9 +77,10 @@ function OpenPillar({
   onDeleteCriterion: (criterion: GsrCriterion) => void;
 }) {
   const [editing, setEditing] = useState<PillarField | null>(null);
-  // The scale row only exists on a rating pillar. When Scoring moves away from Rating while the
-  // scale was open, it closes, so switching back shows the scale as text rather than mid-edit.
-  // Adjusted while rendering, on the change itself, rather than in an effect.
+  // A defensive guard for a state the current UI does not reach: opening the Scoring row already
+  // replaces an open scale row. If the scoring type ever changes while the scale is open, the
+  // scale closes, so switching back to Rating shows it as text rather than mid-edit. Adjusted
+  // while rendering, on the change itself, rather than in an effect.
   const [seenScoring, setSeenScoring] = useState(pillar.scoring_type);
   if (seenScoring !== pillar.scoring_type) {
     setSeenScoring(pillar.scoring_type);
