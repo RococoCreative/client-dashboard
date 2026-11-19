@@ -293,7 +293,7 @@ export default function CompaniesPage() {
                         const id = `co-module-${company.id}-${key}`;
                         return (
                           <div key={key} className="flex items-start gap-2">
-                            <label className={`${checkboxHitClass} mt-0.5`}>
+                            <label className={`${checkboxHitClass} mt-0.5 tap:mt-0`}>
                               <input
                                 type="checkbox"
                                 id={id}
@@ -303,7 +303,7 @@ export default function CompaniesPage() {
                                 onChange={(e) => void toggleModule(company, key, e.target.checked)}
                               />
                             </label>
-                            <div className="min-w-0">
+                            <div className="min-w-0 tap:pt-3">
                               <label htmlFor={id} className="text-[13px] text-ink">{MODULE_LABELS[key]}</label>
                               <p id={`${id}-help`} className={helpClass}>{MODULE_DESCRIPTIONS[key]}</p>
                             </div>
@@ -327,7 +327,7 @@ export default function CompaniesPage() {
                       </EditRow>
                     </div>
                     <div className="flex items-start gap-2 md:col-span-8 md:pt-3">
-                      <label className={`${checkboxHitClass} mt-0.5`}>
+                      <label className={`${checkboxHitClass} mt-0.5 tap:mt-0`}>
                         <input
                           type="checkbox"
                           id={`co-manual-financials-${company.id}`}
@@ -336,14 +336,14 @@ export default function CompaniesPage() {
                           onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
                         />
                       </label>
-                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink">Manual Financials page</label>
+                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink tap:mt-3">Manual Financials page</label>
                     </div>
                   </fieldset>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       {ownDomains.map((d) => (
-                        <Badge key={d.domain} tone="accent" className="pr-1">
+                        <Badge key={d.domain} tone="accent" className="pr-1 tap:py-0">
                           {d.domain}
                           <IconButton size="sm" label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)}><X size={11} aria-hidden /></IconButton>
                         </Badge>

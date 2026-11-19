@@ -18,10 +18,12 @@ describe("IconButton", () => {
     expect(classes(button)).not.toContain("h-8");
   });
 
-  it("keeps the small pill drawn at 24px and gives it a 44px hit area under a finger", () => {
+  it("keeps the small size at 24px with a mouse and makes it a real 44px box under a finger", () => {
     render(<IconButton size="sm" label="Remove example.com">x</IconButton>);
     const button = screen.getByRole("button", { name: "Remove example.com" });
-    expect(classes(button)).toEqual(expect.arrayContaining(["relative", "h-6", "w-6", "tap:after:absolute", "tap:after:-inset-2.5"]));
+    expect(classes(button)).toEqual(expect.arrayContaining(["h-6", "w-6", "tap:h-11", "tap:w-11"]));
+    // No invisible box reaching past the button into its neighbours.
+    expect(button.className).not.toMatch(/after:/);
   });
 });
 

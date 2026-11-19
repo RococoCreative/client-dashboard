@@ -79,7 +79,8 @@ describe("milestone status", () => {
     expect(badge(rowOf("Welcome letter sent"), "Complete Aug 4, 2026")).toBeInTheDocument();
     expect(badge(rowOf("Framing complete"), "In progress")).toBeInTheDocument();
     expect(badge(rowOf("Final walkthrough"), "Not started")).toBeInTheDocument();
-    expect(screen.queryByText("Open", { selector: "span" })).toBeNull();
+    // No status badge reads "Open" (the Open filter chip draws its label in a span inside its button).
+    expect(screen.queryAllByText("Open", { selector: "span" }).filter((el) => !el.closest("button"))).toEqual([]);
   });
 
   it("someone who may not edit sees the status as text and no select", async () => {

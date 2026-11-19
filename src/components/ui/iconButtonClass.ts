@@ -1,11 +1,11 @@
 // The icon button's look and size in one place, shared by IconButton (an action) and IconLink (a
 // place to go), so a pencil that is a link and a pencil that is a button can never drift apart.
 // 36px with a mouse, 44px on a phone or under a finger (the tap variant in index.css). The small
-// size draws a 24px pill for a control inside a badge and stretches only its hit area to 44px
-// under a finger, so the badge keeps its height.
+// size is a 24px disc for a control inside a badge with a mouse; under a finger it is a real 44px
+// box, never an invisible area reaching past it into a neighbour.
 export const ICON_BUTTON_SIZES = {
   md: "h-9 w-9 rounded-md tap:h-11 tap:w-11",
-  sm: "relative h-6 w-6 rounded-full tap:after:absolute tap:after:-inset-2.5",
+  sm: "h-6 w-6 rounded-full tap:h-11 tap:w-11",
 } as const;
 
 export type IconButtonSize = keyof typeof ICON_BUTTON_SIZES;

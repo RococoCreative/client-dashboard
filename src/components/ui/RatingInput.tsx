@@ -1,6 +1,7 @@
 // A 1..N rating as a row of buttons (stars in the original tool; here plain discs so it
 // reads the same on every tenant). Read-only when onChange is omitted. Under a finger or at phone
-// width each disc sits in a 44px button, so the disc keeps its size and a thumb can still hit it.
+// width each disc sits in a 44px button, so the disc keeps its size and a thumb can still hit it,
+// and the row wraps (the "Not rated" line too) so a long scale never runs off a phone screen.
 export default function RatingInput({
   value,
   max = 5,
@@ -14,7 +15,7 @@ export default function RatingInput({
 }) {
   const steps = Array.from({ length: max }, (_, i) => i + 1);
   return (
-    <div className="flex items-center gap-1 tap:gap-0" role={onChange ? "radiogroup" : undefined} aria-label={label}>
+    <div className="flex items-center gap-1 tap:flex-wrap tap:gap-0" role={onChange ? "radiogroup" : undefined} aria-label={label}>
       {steps.map((step) => {
         const filled = value !== null && step <= value;
         const base = "h-6 w-6 rounded-full border text-[11px] tnum transition-colors duration-150";

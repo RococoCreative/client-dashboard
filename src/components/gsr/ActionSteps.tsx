@@ -58,8 +58,8 @@ export default function ActionSteps({
       ) : (
         <ul className="mt-1.5 space-y-1.5">
           {shown.map((step, index) => (
-            <li key={index} className="flex items-start gap-2">
-              <label className={`${checkboxHitClass} mt-1`}>
+            <li key={index} className="flex items-start gap-2 tap:items-center">
+              <label className={`${checkboxHitClass} mt-1 tap:mt-0`}>
                 <input
                   type="checkbox"
                   checked={step.done}
@@ -74,7 +74,7 @@ export default function ActionSteps({
               </label>
               <span className={`flex-1 text-[13px] ${step.done ? "text-ink-3 line-through" : "text-ink"}`}>{step.text}</span>
               {canEdit ? (
-                <IconButton label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))} className="-my-1.5">
+                <IconButton label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))} className="-my-1.5 tap:my-0">
                   <X size={13} aria-hidden />
                 </IconButton>
               ) : null}

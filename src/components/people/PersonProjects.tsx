@@ -124,9 +124,9 @@ export default function PersonProjects({
             const name = project?.name ?? "A project no longer listed";
             return (
               <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-2.5">
-                <div className="relative min-w-0 flex-1 basis-48">
+                <div className="relative min-w-0 flex-1 basis-48 tap:min-h-9">
                   {linkProjects && project ? (
-                    <Link to={`/production/projects/${project.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass} tap:after:-inset-y-1.5`}>
+                    <Link to={`/production/projects/${project.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass} tap:after:-inset-y-1`}>
                       {name}
                     </Link>
                   ) : (

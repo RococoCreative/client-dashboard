@@ -13,4 +13,10 @@ describe("applyDenseLoad", () => {
     expect(bundle.roleMetrics.filter((m) => m.is_active)).toHaveLength(54);
     expect(bundle.jobRoleGoals.filter((g) => g.is_active)).toHaveLength(35);
   });
+
+  it("puts one rated pillar on the longest scale, 10 points", () => {
+    const bundle = structuredClone(RBA);
+    applyDenseLoad(bundle);
+    expect(bundle.pillars.filter((p) => p.is_active && p.scoring_type === "rating").map((p) => p.rating_scale_max)).toContain(10);
+  });
 });
