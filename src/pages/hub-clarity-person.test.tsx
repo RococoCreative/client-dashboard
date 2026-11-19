@@ -42,6 +42,7 @@ import App from "../App.tsx";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { setMockCapabilities } from "../test/mocks/capabilities.ts";
 import * as employeesService from "../services/employees.ts";
+import * as invitationsService from "../services/invitations.ts";
 import * as profilesService from "../services/profiles.ts";
 import * as tasksService from "../services/tasks.ts";
 import PersonPage from "./people/PersonPage.tsx";
@@ -274,6 +275,19 @@ describe("account actions on Setup", () => {
     renderPerson(klasikAdmin, `/people/${avery.id}/setup`);
     expect(await screen.findByText(/Cancel their invitation on the roster first/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove Avery Cole" })).not.toBeInTheDocument();
+  });
+
+  it("reads invitations only when Remove could be offered", async () => {
+    const spy = vi.spyOn(invitationsService, "listInvitations");
+    onTestFinished(() => spy.mockRestore());
+    const withAccount = renderPerson(klasikAdmin, `/people/${sam.id}/setup`);
+    expect(await screen.findByRole("button", { name: "Deactivate Sam Ortega" })).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    withAccount.unmount();
+
+    renderPerson(klasikAdmin, `/people/${taylor.id}/setup`);
+    expect(await screen.findByRole("button", { name: "Remove Taylor Reed" })).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("removes a never-signed-in person with no invitation and returns to the roster", async () => {

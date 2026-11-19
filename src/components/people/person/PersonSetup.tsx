@@ -13,27 +13,25 @@
 // above the viewer is refused by the database (0033), so none of it is offered. A Rococo admin placed
 // on the roster keeps their role, divisions and access with Rococo (0029): their details are the
 // company's to edit, but the role and divisions read only and there are no account actions.
-import { useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import Badge from "../../ui/Badge.tsx";
 import BlurInput from "../../ui/BlurInput.tsx";
-import Button from "../../ui/Button.tsx";
-import ConfirmDialog from "../../ui/ConfirmDialog.tsx";
 import EditRow from "../../ui/EditRow.tsx";
 import Section from "../../ui/Section.tsx";
 import Stat from "../../ui/Stat.tsx";
-import { checkboxClass, helpClass, labelClass, selectClass } from "../../ui/forms.ts";
+import { labelClass, selectClass } from "../../ui/forms.ts";
 import { secondaryClass } from "../../ui/type.ts";
 import CompensationTable from "../CompensationTable.tsx";
+import AccountActions from "./PersonAccountActions.tsx";
+import DivisionFields from "./PersonDivisionFields.tsx";
 import { useHub } from "../../../context/HubContext.tsx";
 import { useAsync } from "../../../hooks/useAsync.ts";
 import { listDivisions } from "../../../services/divisions.ts";
-import { listInvitations } from "../../../services/invitations.ts";
-import { deleteStaffProfile, type ProfilePatch } from "../../../services/profiles.ts";
-import { errorMessage } from "../../../lib/errors.ts";
+import type { ProfilePatch } from "../../../services/profiles.ts";
 import { displayName, formatDate, formatMoney } from "../../../lib/format.ts";
-import { canGrantRole, canSetDivisionAccess, canViewDivision, divisionLabel, formatTenure, grantableRoles, hasAccount, totalAnnual } from "../../../lib/people.ts";
-import { ROLE_LABELS, type CompanyDivision, type Profile, type Role } from "../../../types/database.ts";
+import { canGrantRole, divisionLabel, formatTenure, grantableRoles, totalAnnual } from "../../../lib/people.ts";
+import { ROLE_LABELS, type Profile, type Role } from "../../../types/database.ts";
 import { reportsTo, type PersonTabProps } from "../../../pages/people/personTabs.ts";
 
 type Patch = (patch: ProfilePatch) => Promise<boolean>;
@@ -45,183 +43,6 @@ function Value({ label, children }: { label: string; children: ReactNode }) {
       <p className={labelClass}>{label}</p>
       <div className="mt-1 text-sm text-ink [overflow-wrap:anywhere]">{children}</div>
     </>
-  );
-}
-
-// Ids in the company's division order, with anything not one of its divisions kept at the end, so a
-// write never drops an id the viewer was not shown.
-function inDivisionOrder(ids: readonly string[], divisions: readonly CompanyDivision[]): string[] {
-  const known = divisions.map((d) => d.id).filter((id) => ids.includes(id));
-  return [...known, ...ids.filter((id) => !known.includes(id))];
-}
-
-// Toggles one id in a list kept in the company's division order.
-function toggled(ids: readonly string[], id: string, on: boolean, divisions: readonly CompanyDivision[]): string[] {
-  return inDivisionOrder(on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id), divisions);
-}
-
-// A list being saved: what the boxes show while writes are in flight, so two quick ticks build on
-// each other, and the stored value again once every write has settled.
-function usePendingList(stored: readonly string[]) {
-  const [pending, setPending] = useState<string[] | null>(null);
-  const inflight = useRef(0);
-  async function save(next: string[], write: () => Promise<boolean>) {
-    setPending(next);
-    inflight.current += 1;
-    try {
-      await write();
-    } finally {
-      inflight.current -= 1;
-      if (inflight.current === 0) setPending(null);
-    }
-  }
-  return { value: pending ?? [...stored], save };
-}
-
-// What a manager or an admin may see beyond where they work, set by an owner or Rococo only: every
-// division, chosen divisions, or none. Kept apart from membership on purpose, and from the
-// dashboard split toggle below it, which only changes the figures they see.
-function ViewAccessFields({ person, divisions, onPatch }: { person: Profile; divisions: CompanyDivision[]; onPatch: Patch }) {
-  const [choosing, setChoosing] = useState(false);
-  const [pendingAll, setPendingAll] = useState<boolean | null>(null);
-  const ids = usePendingList(person.view_division_ids);
-  const all = pendingAll ?? person.view_all_divisions;
-  const mode = all ? "all" : ids.value.length > 0 || choosing ? "chosen" : "none";
-  const first = displayName(person).split(" ")[0];
-  const group = `view-access-${person.id}`;
-
-  async function setAll(next: boolean, extra: ProfilePatch = {}) {
-    setPendingAll(next);
-    try {
-      await onPatch({ view_all_divisions: next, ...extra });
-    } finally {
-      setPendingAll(null);
-    }
-  }
-
-  function pick(next: "all" | "chosen" | "none") {
-    if (next === mode) return;
-    setChoosing(next === "chosen");
-    if (next === "all") void setAll(true);
-    else if (next === "chosen") {
-      if (all) void setAll(false);
-    }
-    else void ids.save([], () => setAll(false, { view_division_ids: [] }).then(() => true));
-  }
-
-  return (
-    <fieldset className="space-y-1.5">
-      <legend className={labelClass}>Can view</legend>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {(
-          [
-            ["all", "All divisions"],
-            ["chosen", "Chosen divisions"],
-            ["none", "None"],
-          ] as const
-        ).map(([value, label]) => (
-          <label key={value} className="inline-flex items-center gap-1.5 text-[13px] text-ink">
-            <input type="radio" name={group} value={value} checked={mode === value} onChange={() => pick(value)} />
-            {label}
-          </label>
-        ))}
-      </div>
-      {mode === "chosen" ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {divisions.map((d) => (
-            <label key={d.id} className="inline-flex items-center gap-1.5 text-[13px] text-ink">
-              <input
-                type="checkbox"
-                className={checkboxClass}
-                aria-label={`Can view ${d.name}`}
-                checked={ids.value.includes(d.id)}
-                onChange={(e) => {
-                  const next = toggled(ids.value, d.id, e.target.checked, divisions);
-                  void ids.save(next, () => onPatch({ view_division_ids: next }));
-                }}
-              />
-              {d.name}
-            </label>
-          ))}
-        </div>
-      ) : null}
-      <p className={helpClass}>
-        Whose records {first} may open, apart from where they work. They always see the people who report to them and the people below those.{" "}
-        {person.role === "admin" ? "As an admin they also see everyone not placed in a division." : "As a manager they see only employees in these divisions."}{" "}
-        A role change made by anyone but an owner or Rococo clears this.
-      </p>
-    </fieldset>
-  );
-}
-
-// The divisions a person works in, then, for an owner or Rococo, what an admin or a manager may see
-// and whether they see the division split. An admin places people only in divisions they can view;
-// any other division a person is in shows, ticked and locked.
-function DivisionFields({ person, me, divisions, onPatch }: { person: Profile; me: Profile; divisions: CompanyDivision[]; onPatch: Patch }) {
-  const membership = usePendingList(person.division_ids);
-  const current = membership.value;
-  const owner = person.role === "owner";
-  const leadsPeople = person.role === "admin" || person.role === "manager";
-  const setsAccess = canSetDivisionAccess(me);
-  const locked = divisions.filter((d) => !canViewDivision(me, d.id));
-  return (
-    <div className="space-y-3">
-      <fieldset>
-        <legend className={labelClass}>Divisions</legend>
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-          {divisions.map((d) => {
-            const canPlace = canViewDivision(me, d.id);
-            return (
-              <label key={d.id} className={`inline-flex items-center gap-1.5 text-[13px] ${canPlace ? "text-ink" : "text-ink-3"}`}>
-                <input
-                  type="checkbox"
-                  className={checkboxClass}
-                  checked={current.includes(d.id)}
-                  disabled={!canPlace}
-                  onChange={(e) => {
-                    const next = toggled(current, d.id, e.target.checked, divisions);
-                    void membership.save(next, () => onPatch({ division_ids: next }));
-                  }}
-                />
-                {d.name}
-              </label>
-            );
-          })}
-        </div>
-        <p className={helpClass}>
-          Works in: {divisionLabel(current, divisions)}.{divisions.length === 2 ? " Tick both for Both." : ""}
-          {locked.length > 0 ? ` ${locked.map((d) => d.name).join(", ")} is outside the divisions you can view, so it stays as it is.` : ""}
-        </p>
-      </fieldset>
-      {leadsPeople && setsAccess ? (
-        <ViewAccessFields person={person} divisions={divisions} onPatch={onPatch} />
-      ) : leadsPeople ? (
-        <p className={helpClass}>
-          Can view {person.view_all_divisions ? "all divisions" : person.view_division_ids.length > 0 ? divisionLabel(person.view_division_ids, divisions) : "no divisions beyond their own team"}. Only an owner or Rococo can change that.
-        </p>
-      ) : null}
-      {setsAccess ? (
-        <div>
-          <label className="flex items-start gap-2 text-[13px] text-ink">
-            <input
-              type="checkbox"
-              className={`${checkboxClass} mt-0.5`}
-              checked={owner || person.can_view_divisions}
-              disabled={owner}
-              onChange={(e) => void onPatch({ can_view_divisions: e.target.checked })}
-            />
-            <span>Can view divisions</span>
-          </label>
-          <p className={helpClass}>
-            {owner
-              ? "Owners always see the split."
-              : "The division split on the dashboard and the Scorecards report: each division next to the combined company. It changes the figures they see, not whose records they can open."}
-          </p>
-        </div>
-      ) : person.can_view_divisions ? (
-        <p className={helpClass}>Sees the division split on the dashboard. Only an owner or Rococo can change that.</p>
-      ) : null}
-    </div>
   );
 }
 
@@ -262,100 +83,6 @@ function DivisionsRow({ companyId, person, me, editing, onEdit, onDone, onPatch 
   );
 }
 
-// Deactivate or Reactivate, and Remove, with the roster's rules and its confirm copy. Whether they
-// have a pending invitation is read here, for an admin, only when Setup is open.
-function AccountActions({ companyId, person, onPatch }: { companyId: string; person: Profile; onPatch: Patch }) {
-  const { profile: me, can } = useHub();
-  const navigate = useNavigate();
-  const invitations = useAsync(() => listInvitations(companyId), [companyId]);
-  const [switching, setSwitching] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [dialogError, setDialogError] = useState("");
-  const name = displayName(person);
-  const first = name.split(" ")[0];
-  const self = person.id === me.id;
-  const canChange = canGrantRole(me, person.role);
-  const account = hasAccount(person);
-  const invitation = invitations.data?.find((i) => !i.accepted_at && (i.profile_id === person.id || i.email === person.email)) ?? null;
-
-  async function switchActive() {
-    setSwitching(true);
-    try {
-      await onPatch({ is_active: !person.is_active });
-    } finally {
-      setSwitching(false);
-    }
-  }
-
-  // deleteStaffProfile throws when nothing went (they signed in meanwhile, or the database refused),
-  // so the dialog stays open on the reason instead of closing as if they were gone.
-  async function remove() {
-    setBusy(true);
-    setDialogError("");
-    try {
-      await deleteStaffProfile(person.id);
-      navigate("/people");
-    } catch (err) {
-      setDialogError(errorMessage(err, "They were not removed. Try again."));
-      setBusy(false);
-    }
-  }
-
-  let removeLine: ReactNode = null;
-  if (!account && canChange && !self) {
-    if (invitations.error && !invitations.data) removeLine = <p className={secondaryClass}>Invitations did not load, so Remove is not offered. {invitations.error}</p>;
-    else if (!invitations.data) removeLine = null;
-    else if (invitation) removeLine = <p className={secondaryClass}>{first} has a pending invitation. Cancel their invitation on the roster first, then remove them here.</p>;
-    else {
-      removeLine = (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className={secondaryClass}>Remove deletes their profile and everything set up for them.</p>
-          <Button variant="danger" size="sm" aria-label={`Remove ${name}`} onClick={() => setRemoving(true)}>
-            Remove
-          </Button>
-        </div>
-      );
-    }
-  } else if (account && canChange && !self) {
-    removeLine = <p className={secondaryClass}>{first} has signed in, so their record stays. Deactivate keeps them out.</p>;
-  }
-
-  return (
-    <Section eyebrow="Hub access" title="Account">
-      {self ? (
-        <p className={secondaryClass}>This is you. Another admin deactivates your account if it comes to that.</p>
-      ) : !canChange ? (
-        <p className={secondaryClass}>Only an owner or Rococo can deactivate or remove this person.</p>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className={secondaryClass}>
-              {person.is_active
-                ? "Deactivating keeps them out of the hub and keeps everything set up for them on record."
-                : "Inactive: they cannot sign in, and their record is kept. Reactivate to let them back in."}
-            </p>
-            <Button variant="secondary" size="sm" disabled={switching} aria-label={`${person.is_active ? "Deactivate" : "Reactivate"} ${name}`} onClick={() => void switchActive()}>
-              {person.is_active ? "Deactivate" : "Reactivate"}
-            </Button>
-          </div>
-          {removeLine ? <div className="border-t border-line pt-4">{removeLine}</div> : null}
-        </div>
-      )}
-      {removing ? (
-        <ConfirmDialog
-          title={`Remove ${name} from the team?`}
-          body={`This deletes their profile and everything set up for them, including reviews, ${can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead.`}
-          confirmLabel="Remove"
-          busy={busy}
-          error={dialogError}
-          onConfirm={() => void remove()}
-          onCancel={() => { setRemoving(false); setDialogError(""); }}
-        />
-      ) : null}
-    </Section>
-  );
-}
 
 export default function PersonSetup({ companyId, data, person, update, onError, patch }: PersonTabProps & { patch: Patch }) {
   const { profile: me, isAdmin, can } = useHub();

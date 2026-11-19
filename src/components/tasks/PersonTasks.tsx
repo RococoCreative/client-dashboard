@@ -17,6 +17,7 @@ import SkeletonRows from "../ui/SkeletonRows.tsx";
 import TaskForm from "./TaskForm.tsx";
 import TaskRow, { type TaskBackState } from "./TaskRow.tsx";
 import { sendAssignmentEmail } from "./assignmentEmail.ts";
+import { metaClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
 import { isDone, sortTasks } from "../../lib/tasks.ts";
@@ -34,6 +35,7 @@ export default function PersonTasks({
   goalLabel,
   limit,
   moreHref,
+  backTo,
 }: {
   companyId: string;
   person: Profile;
@@ -46,6 +48,8 @@ export default function PersonTasks({
   limit?: number;
   // Where all of them are, offered as "All tasks".
   moreHref?: string;
+  // Where a task opened from here goes back to. Defaults to the person's Overview.
+  backTo?: string;
 }) {
   const state = useAsync(() => listTasks(companyId, { assigneeId: person.id, status: "all" }), [companyId, person.id]);
   const [adding, setAdding] = useState(false);
@@ -53,7 +57,7 @@ export default function PersonTasks({
   const [notice, setNotice] = useState("");
   const today = todayIso();
   const name = displayName(person);
-  const back: TaskBackState = { from: { to: `/people/${person.id}`, label: name } };
+  const back: TaskBackState = { from: { to: backTo ?? `/people/${person.id}`, label: name } };
   const all = state.data ?? [];
   const allOpen = sortTasks(all.filter((t) => !isDone(t)));
   const open = limit === undefined ? allOpen : allOpen.slice(0, limit);
@@ -112,7 +116,7 @@ export default function PersonTasks({
       ) : (
         <>
           {open.length === 0 ? (
-            <p className="px-4 py-4 text-[13px] sm:px-6 text-ink-3">No open tasks.</p>
+            <p className={`px-4 py-4 sm:px-6 ${metaClass}`}>No open tasks.</p>
           ) : (
             <ul aria-label={`Open tasks for ${name}`} className="divide-y divide-line">
               {open.map((task) => (
@@ -136,7 +140,7 @@ export default function PersonTasks({
                 ))}
               </ul>
               {done.length > recentDone.length ? (
-                <p className="border-t border-line px-4 py-2.5 sm:px-6 text-[12.5px] text-ink-3">
+                <p className={`border-t border-line px-4 py-2.5 sm:px-6 ${metaClass}`}>
                   The {RECENT_DONE} most recent. The rest are on Tasks.
                 </p>
               ) : null}

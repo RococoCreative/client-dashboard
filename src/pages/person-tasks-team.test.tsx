@@ -277,6 +277,38 @@ describe("Reports to on the person page", () => {
   });
 });
 
+describe("going back from a task on the person page", () => {
+  function renderFrom(path: string) {
+    return render(
+      <HubContext value={rbaManager}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/people/:profileId/:tab?" element={<PersonPage />} />
+            <Route path="/tasks/:taskId" element={<TaskPage />} />
+          </Routes>
+        </MemoryRouter>
+      </HubContext>,
+    );
+  }
+
+  it("returns to the Tasks tab from a task opened there, and to Overview from the short list", async () => {
+    await tasksService.createTask({ company_id: RBA.company.id, title: "Walk the site before the pour", assignee_id: rowan.id });
+    onlySees(team);
+    const fromTab = renderFrom(`/people/${rowan.id}/tasks`);
+    const tabList = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
+    fireEvent.click(within(tabList).getByRole("link", { name: /Walk the site before the pour/ }));
+    expect(await screen.findByRole("heading", { name: "Walk the site before the pour" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}/tasks`);
+    fromTab.unmount();
+
+    renderFrom(`/people/${rowan.id}`);
+    const overviewList = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
+    fireEvent.click(within(overviewList).getByRole("link", { name: /Walk the site before the pour/ }));
+    expect(await screen.findByRole("heading", { name: "Walk the site before the pour" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}`);
+  });
+});
+
 describe("a task on a GSR goal", () => {
   it("says whose goal and which month on the task, links to the GSR, and goes back to the person", async () => {
     const review = await ensureReview(september.id, RBA.company.id, rowan.id);

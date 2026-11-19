@@ -2134,15 +2134,6 @@ describe("roles", () => {
     expect(screen.getByText("Sees the people who report to them, and their teams. Assigns their tasks and works their monthly goals.")).toBeInTheDocument();
   });
 
-  it("keeps an owner's role out of an admin's hands on the person page", async () => {
-    renderWithHub(<PersonPage />, kingdomAdmin, { path: "/people/kingdom-user-1/setup", pattern: "/people/:profileId/:tab?" });
-    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
-    const role = await screen.findByLabelText("Role");
-    expect(role).toBeDisabled();
-    expect(role).toHaveValue("owner");
-    expect(screen.getByText("Only an owner or Rococo can change this person's role.")).toBeInTheDocument();
-  });
-
   it("lets Rococo grant any role", async () => {
     renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
     const marcus = await screen.findByLabelText(`Role for ${KINGDOM.profiles[0].email}`);

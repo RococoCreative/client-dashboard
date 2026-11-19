@@ -190,7 +190,7 @@ export default function PersonPage() {
       const cycle = goal?.cycle_id ? data.cycles.find((c) => c.id === goal.cycle_id) : undefined;
       return cycle ? `${cycle.name} GSR` : null;
     };
-    return <PersonTasks companyId={companyId} person={person!} canAdd={isLeader} viewerProfileId={me.id} goalLabel={goalLabel} />;
+    return <PersonTasks companyId={companyId} person={person!} canAdd={isLeader} viewerProfileId={me.id} goalLabel={goalLabel} backTo={`/people/${person!.id}/tasks`} />;
   }
 
   return (
