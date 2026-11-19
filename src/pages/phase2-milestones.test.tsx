@@ -57,7 +57,8 @@ const job102 = { path: "/production/projects/kingdom-project-2", pattern: "/prod
 const TODAY = "2026-09-15";
 
 const rowOf = (title: string) => screen.getByText(title).closest("li") as HTMLElement;
-const editRowOf = (title: string) => screen.getByLabelText(`Title of ${title}`).closest("li") as HTMLElement;
+// An editable item, found by its live status select (its title reads as text until opened).
+const editRowOf = (title: string) => screen.getByRole("combobox", { name: `Status of ${title}` }).closest("li") as HTMLElement;
 const badge = (row: HTMLElement, text: string) => within(row).queryByText(text, { selector: "span" });
 
 // The done-of-total count the project list shows (milestoneCounts), read and then put away.
@@ -78,7 +79,8 @@ describe("milestone status", () => {
     expect(badge(rowOf("Welcome letter sent"), "Complete Aug 4, 2026")).toBeInTheDocument();
     expect(badge(rowOf("Framing complete"), "In progress")).toBeInTheDocument();
     expect(badge(rowOf("Final walkthrough"), "Not started")).toBeInTheDocument();
-    expect(screen.queryByText("Open", { selector: "span" })).toBeNull();
+    // No status badge reads "Open" (the Open filter chip draws its label in a span inside its button).
+    expect(screen.queryAllByText("Open", { selector: "span" }).filter((el) => !el.closest("button"))).toEqual([]);
   });
 
   it("someone who may not edit sees the status as text and no select", async () => {
@@ -182,7 +184,9 @@ describe("milestone status", () => {
 describe("standard milestones in Projects, Setup", () => {
   const kingdom = KINGDOM.company.id;
   const production = { path: "/production/setup", pattern: "/production/setup" };
-  const titles = () => screen.getAllByLabelText(/^Title of /).map((el) => (el as HTMLInputElement).value);
+  // Rows read first, so the order is read off each row's down arrow, which shows whether or not the row is open.
+  const titles = () => screen.getAllByRole("button", { name: /^Move .* down$/ }).map((el) => el.getAttribute("aria-label")!.replace(/^Move (.*) down$/, "$1"));
+  const open = async (user: ReturnType<typeof userEvent.setup>, title: string) => user.click(await screen.findByRole("button", { name: `Edit ${title}` }));
 
   it("Projects shows a Setup tab only to an admin, and /production/setup is closed to a company without the module", async () => {
     const view = renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
@@ -220,13 +224,13 @@ describe("standard milestones in Projects, Setup", () => {
       onTestFinished(() => create.mockRestore());
       const user = userEvent.setup();
       renderWithHub(<ProductionSetupPage />, kingdomAdmin, production);
-      await screen.findByLabelText("Title of Sample step A");
+      await screen.findByRole("button", { name: "Edit Sample step A" });
       expect(titles()).toEqual(["Sample step A", "Sample step B", "Sample step C"]);
 
       await user.type(screen.getByLabelText("New standard milestone title"), "Sample step D");
       await user.click(screen.getByRole("button", { name: "Add" }));
       expect(create).toHaveBeenCalledWith(kingdom, { title: "Sample step D", kind: "milestone", sort_order: 4 });
-      await screen.findByLabelText("Title of Sample step D");
+      await screen.findByRole("button", { name: "Edit Sample step D" });
       expect(titles()).toEqual(["Sample step A", "Sample step B", "Sample step C", "Sample step D"]);
       expect((screen.getByLabelText("New standard milestone title") as HTMLInputElement).value).toBe("");
     });
@@ -236,6 +240,7 @@ describe("standard milestones in Projects, Setup", () => {
       onTestFinished(() => update.mockRestore());
       const user = userEvent.setup();
       renderWithHub(<ProductionSetupPage />, kingdomAdmin, production);
+      await open(user, "Sample step B");
       const kind = (await screen.findByRole("combobox", { name: "Kind of Sample step B" })) as HTMLSelectElement;
       expect(kind.value).toBe("milestone");
       await user.selectOptions(kind, "Letter");
@@ -247,6 +252,7 @@ describe("standard milestones in Projects, Setup", () => {
     it("renames on blur, reorders with the arrows, and removes after a confirm", async () => {
       const user = userEvent.setup();
       renderWithHub(<ProductionSetupPage />, kingdomAdmin, production);
+      await open(user, "Sample step C");
       const title = await screen.findByLabelText("Title of Sample step C");
       fireEvent.change(title, { target: { value: "Sample step C, renamed" } });
       fireEvent.blur(title);
@@ -259,6 +265,7 @@ describe("standard milestones in Projects, Setup", () => {
       await waitFor(() => expect(titles()).toEqual(["Sample step C, renamed", "Sample step A", "Sample step B", "Sample step D"]));
       expect((await templatesService.listMilestoneTemplates(kingdom)).map((t) => t.title)).toEqual(["Sample step C, renamed", "Sample step A", "Sample step B", "Sample step D"]);
 
+      await open(user, "Sample step B");
       await user.click(screen.getByRole("button", { name: "Remove Sample step B" }));
       const dialog = await screen.findByRole("dialog");
       expect(within(dialog).getByText(/Projects that already have it keep it/)).toBeInTheDocument();

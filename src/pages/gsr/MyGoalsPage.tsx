@@ -1,5 +1,5 @@
 // An employee's own goals beyond the month, editable: personal, professional and role goals for
-// this year and next, and their BHAG. The month's goals live on the GSR tab. Admins see the same
+// this year and next, and their BHAG. The month's goals live on My GSR. Admins see the same
 // page for themselves. The page says plainly what their manager sees and what stays theirs, which
 // is the line the database draws (0021).
 import { Lock } from "lucide-react";

@@ -1,7 +1,8 @@
 // A list beside one open item, the shape of the Roles page and review setup. Each list entry is a
 // link with its own address, so the open item survives a reload and can be shared. At lg and up the
 // list and the detail sit side by side; below lg the list shows alone until something is chosen,
-// then the detail shows alone with a back arrow to the list. Responsive classes do that work, so
+// then the detail shows alone with a back link naming the list (backLabel), as a person page reads
+// "People" beside its arrow. Responsive classes do that work, so
 // no script measures the screen. With nothing selected the detail is not rendered at any width.
 // An empty list shows nothing of its own, so the page says what an empty list means (its footer);
 // "Nothing matches that." is only for a search that found nothing. Items carrying a group (retired
@@ -33,6 +34,7 @@ export default function ListDetail({
   selectedId,
   hrefFor,
   backHref,
+  backLabel,
   countLabel,
   searchLabel,
   groupLabel,
@@ -45,6 +47,7 @@ export default function ListDetail({
   selectedId: string | null;
   hrefFor: (id: string) => string;
   backHref: string;
+  backLabel: string;
   countLabel: string;
   searchLabel?: string;
   groupLabel?: (group: string, shownCount: number) => string;
@@ -116,14 +119,13 @@ export default function ListDetail({
 
       {hasSelection ? (
         <div className={`${CARD} min-w-0`}>
-          <div className="mb-3 lg:hidden">
+          <div className="-mt-2 mb-1 lg:hidden">
             <Link
               to={backHref}
-              aria-label={`Back to ${label}`}
-              title={`Back to ${label}`}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-md text-ink-2 transition-colors duration-150 hover:bg-surface-2 hover:text-ink"
+              aria-label={`Back to ${backLabel}`}
+              className="inline-flex min-h-11 items-center gap-1 text-[12px] text-ink-2 transition-colors duration-150 hover:text-ink"
             >
-              <ArrowLeft size={16} aria-hidden="true" />
+              <ArrowLeft size={13} aria-hidden="true" /> {backLabel}
             </Link>
           </div>
           {children}

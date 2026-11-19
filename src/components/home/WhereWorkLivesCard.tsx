@@ -10,6 +10,7 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import type { ExternalLink } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function WhereWorkLivesCard({
   links,
@@ -30,7 +31,7 @@ export default function WhereWorkLivesCard({
       title="Where the work lives"
       className={className}
       actions={
-        <Link to="/resources/links" className="text-[13px] font-medium text-link hover:underline">
+        <Link to="/resources/links" className={`text-[13px] font-medium text-link hover:underline ${tapTargetClass}`}>
           {isAdmin ? "Manage links" : "All links"}
         </Link>
       }

@@ -53,7 +53,7 @@ function NoteEntry({
       <li className="py-2">
         <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
           <input type="text" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} aria-label={`Edit note from ${stamp}`} className={fieldClass} />
-          <Button type="submit" size="sm" disabled={!draft.trim() || busy}>Save</Button>
+          <Button type="submit" variant="secondary" size="sm" disabled={!draft.trim() || busy}>Save</Button>
           <Button variant="ghost" size="sm" onClick={() => { setDraft(note.body); setEditing(false); }}>Cancel</Button>
           <IconButton label={`Delete note from ${stamp}`} onClick={onDelete}>
             <Trash2 size={13} aria-hidden />
@@ -66,12 +66,12 @@ function NoteEntry({
   return (
     <li className="flex items-start gap-2 py-2">
       <div className="min-w-0 flex-1">
-        <p className="tnum text-[11.5px] text-ink-3">{[stamp, author, note.updated_at !== note.created_at ? "edited" : null].filter(Boolean).join(" · ")}</p>
+        <p className="tnum text-[12px] text-ink-3">{[stamp, author, note.updated_at !== note.created_at ? "edited" : null].filter(Boolean).join(" · ")}</p>
         <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{note.body}</p>
       </div>
       {canEdit ? (
-        <IconButton label={`Edit note from ${stamp}`} onClick={() => { setDraft(note.body); setEditing(true); }} className="h-7 w-7">
-          <Pencil size={13} aria-hidden />
+        <IconButton label={`Edit note from ${stamp}`} onClick={() => { setDraft(note.body); setEditing(true); }}>
+          <Pencil size={15} aria-hidden />
         </IconButton>
       ) : null}
     </li>

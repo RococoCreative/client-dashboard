@@ -19,8 +19,7 @@ import { hasAccount } from "../../lib/people.ts";
 import { isDone } from "../../lib/tasks.ts";
 import { linkTaskToGoal, listTasks } from "../../services/tasks.ts";
 import type { Goal, Profile, TaskWithSteps } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
 type TasksUpdate = (update: (tasks: TaskWithSteps[]) => TaskWithSteps[]) => void;
 
@@ -37,7 +36,7 @@ function TaskRow({ task, canUnlink, busy, onUnlink }: { task: TaskWithSteps; can
         {task.due_date ? ` · Due ${formatDate(task.due_date)}` : ""}
       </span>
       {canUnlink ? (
-        <IconButton label={`Unlink ${task.title}`} onClick={onUnlink} disabled={busy} className="h-7 w-7">
+        <IconButton label={`Unlink ${task.title}`} onClick={onUnlink} disabled={busy}>
           <Unlink size={13} aria-hidden />
         </IconButton>
       ) : null}

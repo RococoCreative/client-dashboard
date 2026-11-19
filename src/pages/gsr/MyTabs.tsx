@@ -4,7 +4,7 @@
 import Tabs from "../../components/ui/Tabs.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { navFor, sidebarListsMyPages } from "../../lib/navigation.ts";
-import { MY_TABS } from "./myTabs.ts";
+import { MY_TABS } from "./myTabItems.ts";
 
 export default function MyTabs() {
   const { company, isAdmin, isRococo, isLead, can } = useHub();

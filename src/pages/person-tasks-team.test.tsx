@@ -333,7 +333,7 @@ describe("a task on a GSR goal", () => {
     expect(screen.getByRole("link", { name: "Open the GSR" })).toHaveAttribute("href", `/gsr/reviews/${review.id}`);
     expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}`);
     // Its person stays with the goal while it is linked.
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit task" }));
     expect(within(screen.getByRole("dialog")).getByLabelText(/Assignee/)).toBeDisabled();
     expect(within(screen.getByRole("dialog")).getByText("Linked to Run the Friday toolbox talk")).toBeInTheDocument();
     expect(task.goal_id).toBe(goal.id);
@@ -370,7 +370,7 @@ describe("a task on someone a manager leads", () => {
     expect(screen.getByRole("button", { name: "Mark complete" })).toBeInTheDocument();
     // Created by someone else, so the database would refuse a manager's delete.
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
     const dialog = screen.getByRole("dialog");
     const title = within(dialog).getByLabelText("Title");
     await user.clear(title);
@@ -383,7 +383,7 @@ describe("a task on someone a manager leads", () => {
     const created = await tasksService.createTask({ company_id: RBA.company.id, title: "Wash the trucks", assignee_id: jamie.id });
     renderTask(created.id, makeHub("employee", RBA.company));
     expect(await screen.findByRole("heading", { name: "Wash the trucks" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit task" })).not.toBeInTheDocument();
   });
 });
 
@@ -485,12 +485,26 @@ describe("who reports to a person", () => {
     onlySees(team);
     renderPerson(harper.id, rbaManager);
     const tree = await screen.findByRole("list", { name: "Who reports to you" });
-    // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them.
+    // Rowan reports to Harper, and Kai to Rowan: Kai sits under Rowan, not beside them. Direct
+    // reports show; a branch below them is closed, and its "N below" is the control that opens it.
     expect(within(tree).getByRole("link", { name: "Rowan Ellis" })).toHaveAttribute("href", `/people/${rowan.id}`);
-    const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
-    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" })).toBeInTheDocument();
+    // Every name in the tree is a full 44px line under a finger: real layout, at every depth.
+    expect(within(tree).getByRole("link", { name: "Rowan Ellis" }).className).toContain("tap:leading-11");
     expect(screen.getByText("1 direct report, 2 in all.")).toBeInTheDocument();
+    const opener = within(tree).getByRole("button", { name: "1 below Rowan Ellis" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    expect(opener).toHaveTextContent("1 below");
+    expect(within(tree).queryByRole("list", { name: "Reports to Rowan Ellis" })).not.toBeInTheDocument();
+    expect(within(tree).queryByRole("link", { name: "Kai Bennett" })).not.toBeInTheDocument();
+    await userEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    const underRowan = within(tree).getByRole("list", { name: "Reports to Rowan Ellis" });
+    expect(opener).toHaveAttribute("aria-controls", underRowan.id);
+    expect(within(underRowan).getByRole("link", { name: "Kai Bennett" }).className).toContain("tap:leading-11");
     expect(within(underRowan).getByText("Not signed in yet")).toBeInTheDocument();
+    // And it closes again.
+    await userEvent.click(opener);
+    expect(within(tree).queryByRole("link", { name: "Kai Bennett" })).not.toBeInTheDocument();
   });
 
   it("shows an admin who reports to a manager, and says when nobody does", async () => {

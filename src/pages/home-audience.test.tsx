@@ -294,9 +294,29 @@ describe("an admin's Home cycle card on a large roster", () => {
     expect(rows.length).toBeLessThanOrEqual(5);
     expect(within(card).getByText(last.full_name!)).toBeInTheDocument();
     expect(within(rows[0]).getByText("In progress")).toBeInTheDocument();
-    expect(within(card).queryByText("Complete", { selector: "span.rounded-full" })).not.toBeInTheDocument();
+    // The completed are counted above, never listed as a row.
+    for (const row of rows) expect(within(row).queryByText("Complete")).not.toBeInTheDocument();
     const all = within(card).getByRole("link", { name: `All ${active.length} people` });
     expect(all).toHaveAttribute("href", within(card).getByRole("link", { name: "Open cycle" }).getAttribute("href"));
+  });
+
+  it("says everyone is complete, in place of an empty list, when nobody still owes a review", async () => {
+    const active = RBA.profiles.filter((p) => p.is_active);
+    for (const person of active) {
+      const review = await ensureReview(q3.id, RBA.company.id, person.id);
+      const before = { status: review.status, completed_at: review.completed_at };
+      onTestFinished(async () => {
+        await updateReview(review.id, before);
+      });
+      await updateReview(review.id, { status: "complete", completed_at: "2026-10-01T00:00:00Z" });
+    }
+
+    renderWithHub(<DashboardPage />, admin);
+    const card = sectionOf(await screen.findByRole("heading", { name: q3.name }));
+    expect(within(card).getByText(`Complete ${active.length}`)).toBeInTheDocument();
+    expect(within(card).getByText("Everyone is complete.")).toBeInTheDocument();
+    expect(within(card).queryAllByRole("listitem")).toHaveLength(0);
+    expect(within(card).getByRole("link", { name: `All ${active.length} people` })).toBeInTheDocument();
   });
 
   it("shows every row and no link when the roster is six or fewer", async () => {
@@ -314,12 +334,11 @@ describe("Home Goals card with no goals", () => {
     // A person with no goals of their own.
     const quiet = RBA.profiles.find((p) => p.role === "employee" && !RBA.goals.some((g) => g.employee_id === p.id))!;
     const hub = { ...makeHub("employee", RBA.company), profile: quiet };
-    const { container } = renderWithHub(<DashboardPage />, hub);
+    renderWithHub(<DashboardPage />, hub);
     const card = sectionOf(await screen.findByRole("heading", { name: "0 open goals" }));
     expect(within(card).getByText("No goals yet. Add one for this year or next, or a BHAG.")).toBeInTheDocument();
     expect(within(card).getByRole("link", { name: "Manage goals" })).toBeInTheDocument();
     expect(within(card).queryByText("Set your first goal")).not.toBeInTheDocument();
     expect(card.querySelector(".border-dashed")).toBeNull();
-    expect(container).toBeTruthy();
   });
 });

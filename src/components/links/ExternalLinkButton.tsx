@@ -32,7 +32,7 @@ export default function ExternalLinkButton({ link }: { link: ExternalLink }) {
         </span>
         {link.destination_note ? <span className="mt-0.5 block text-[12.5px] text-ink-2">{link.destination_note}</span> : null}
       </span>
-      <ExternalLinkIcon size={14} aria-hidden className="mt-1 shrink-0 text-ink-3 transition-colors duration-150 group-hover:text-accent" />
+      <ExternalLinkIcon size={14} aria-hidden className="mt-1 shrink-0 text-ink-3 transition-colors duration-150 group-hover:text-link" />
     </a>
   );
 }

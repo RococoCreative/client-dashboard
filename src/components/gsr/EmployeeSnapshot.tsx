@@ -10,8 +10,8 @@ import KpiList from "../people/KpiList.tsx";
 import { formatDate } from "../../lib/format.ts";
 import { formatTenure } from "../../lib/people.ts";
 import type { CompanyGoal, EmployeeKpi, Profile } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 function Fact({ label, value }: { label: string; value: string | null }) {
   return (
@@ -53,7 +53,7 @@ export default function EmployeeSnapshot({
       eyebrow="Employee"
       title={employee.title ?? "Profile"}
       description={employee.email}
-      actions={canOpenProfile ? <Link to={`/people/${employee.id}`} className="text-[13px] text-link hover:underline">Full profile</Link> : undefined}
+      actions={canOpenProfile ? <Link to={`/people/${employee.id}`} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Full profile</Link> : undefined}
     >
       <div className="grid gap-6 md:grid-cols-3">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-1">

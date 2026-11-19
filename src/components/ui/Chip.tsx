@@ -1,6 +1,8 @@
 // The filter pill: one of a row of choices above a list (All, Monthly, a category, a tag), or a
 // tag on a card that filters by itself. One primitive so the pill reads the same on every page
 // and a density or focus change lands everywhere at once. aria-pressed says which one is on.
+// Under a finger or at phone width the button is a real 44px box with the pill drawn inside it, so
+// the part a thumb can hit is layout, never an overlay reaching into the chip beside or below.
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type Size = "sm" | "md";
@@ -9,6 +11,9 @@ const SIZES: Record<Size, string> = {
   md: "px-3 py-1 text-[12px]",
   sm: "px-2 py-0.5 text-[11px]",
 };
+
+// The button: no look of its own, just the box a thumb hits. The pill inside carries the look.
+const HIT = "group inline-flex items-center justify-center rounded-full tap:min-h-11 tap:min-w-11";
 
 export default function Chip({
   active = false,
@@ -26,10 +31,14 @@ export default function Chip({
     <button
       type={type}
       aria-pressed={active}
-      className={`rounded-full border transition-colors duration-150 ${SIZES[size]} ${active ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink"} ${className}`}
+      className={`${HIT} ${className}`}
       {...rest}
     >
-      {children}
+      <span
+        className={`rounded-full border transition-colors duration-150 ${SIZES[size]} ${active ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 group-hover:border-line-strong group-hover:text-ink"}`}
+      >
+        {children}
+      </span>
     </button>
   );
 }

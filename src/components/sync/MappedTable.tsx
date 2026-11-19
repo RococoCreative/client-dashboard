@@ -5,6 +5,7 @@ import { tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { formatMappedValue } from "../../lib/sync/format.ts";
 import { recordLink } from "../../../supabase/functions/_shared/sync/links.ts";
 import { CONNECTION_PROVIDER_LABELS, type FieldType, type SyncRecord, type SyncSource } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 const NUMERIC: ReadonlySet<FieldType> = new Set(["number", "currency", "percent"]);
 
@@ -51,7 +52,7 @@ export default function MappedTable({ source, records }: { source: SyncSource; r
                     <td className={`${tdClass} whitespace-nowrap`}>
                       {link ? (
                         <>
-                          <a href={link.href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">{link.label}</a>
+                          <a href={link.href} target="_blank" rel="noopener noreferrer" className={`text-link hover:underline ${tapTargetClass}`}>{link.label}</a>
                           {link.note !== null ? <span className="ml-1 text-ink-3">{link.note}</span> : null}
                         </>
                       ) : (

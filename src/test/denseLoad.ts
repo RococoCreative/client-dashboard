@@ -1,6 +1,6 @@
 // A heavier RBA roster for visual checks of dense screens (npm run demo with ?load=dense):
 // 22 people, 17 job roles, 54 role metrics and 35 role goals, including long role names and a
-// long unbroken name to test wrapping. Everything here is made up. Tests never set the address
+// long unbroken name to test wrapping, and one rated pillar on a 10-point scale. Everything here is made up. Tests never set the address
 // flag, so this never runs under them.
 import type { CompanyBundle } from "./fixtures.ts";
 import type { JobRole, JobRoleGoal, MetricKind, Profile, RoleMetric } from "../types/database.ts";
@@ -130,6 +130,11 @@ export function applyDenseLoad(bundle: CompanyBundle): void {
     bundle.roleMetrics.push(metric);
     k++;
   }
+
+  // One rated pillar on a 10-point scale, the longest a company can set, so the phone check sees
+  // the longest rating row. Ratings already given (1 to 5) stay within it.
+  const rated = bundle.pillars.find((p) => p.is_active && p.scoring_type === "rating");
+  if (rated) rated.rating_scale_max = 10;
 
   // Role goals: until 35 are active, cycling kinds.
   const kinds: JobRoleGoal["kind"][] = ["role", "professional", "personal"];

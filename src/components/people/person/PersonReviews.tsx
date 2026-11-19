@@ -22,6 +22,7 @@ import { scoreGsrMonths } from "../../../lib/gsr/goals.ts";
 import { formatPeriod } from "../../../lib/format.ts";
 import { REVIEW_STATUS_LABELS } from "../../../types/database.ts";
 import type { PersonTabProps } from "../../../pages/people/personTabs.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 
 export default function PersonReviews({
   companyId,
@@ -168,7 +169,7 @@ export default function PersonReviews({
             eyebrow="Reviews"
             title="Review history"
             padded={false}
-            actions={isAdmin ? <Link to="/reviews" className="text-link text-[13px] hover:underline">Review cycles</Link> : undefined}
+            actions={isAdmin ? <Link to="/reviews" className={`text-link text-[13px] hover:underline ${tapTargetClass}`}>Review cycles</Link> : undefined}
           >
             {rows.length === 0 ? (
               isAdmin ? (
@@ -197,7 +198,7 @@ export default function PersonReviews({
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                         <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className="text-link text-[13px] hover:underline">Open</Link></td>
+                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className={`text-link text-[13px] hover:underline ${tapTargetClass}`}>Open</Link></td>
                       </tr>
                     ))}
                   </tbody>

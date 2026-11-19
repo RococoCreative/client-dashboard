@@ -132,9 +132,9 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
         description="The topic each month's #1 GSR is built on, such as a core value or a process push. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is."
         padded={false}
       >
-        {state.error && !state.data ? <Notice tone="error" className="m-5">{state.error}</Notice> : null}
-        {!state.data && !state.error ? <div className="p-5"><SkeletonRows rows={6} /></div> : null}
-        {error ? <Notice tone="error" className="mx-5 mt-4">{error}</Notice> : null}
+        {state.error && !state.data ? <Notice tone="error" className="m-4 sm:m-6">{state.error}</Notice> : null}
+        {!state.data && !state.error ? <div className="p-4 sm:p-6"><SkeletonRows rows={6} /></div> : null}
+        {error ? <Notice tone="error" className="mx-4 mt-4 sm:mx-6">{error}</Notice> : null}
         {state.data ? (
           <ul className="divide-y divide-line">
             {months.map((month, index) => {
@@ -143,7 +143,7 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
               return (
                 // One grid for both widths: on a phone the month and its Remove button share the
                 // first line and the fields stack under them; from md up the four sit in a row.
-                <li key={month} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-5 py-3 md:grid-cols-[9.5rem_minmax(0,2fr)_minmax(0,3fr)_2rem] md:items-start">
+                <li key={month} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 sm:px-6 md:grid-cols-[9.5rem_minmax(0,2fr)_minmax(0,3fr)_2rem] md:items-start">
                   <div className="flex min-h-9 items-center gap-2">
                     <span className={`whitespace-nowrap text-[13px] ${topic ? "text-ink" : "text-ink-3"}`}>{label}</span>
                     {index === 0 ? <Badge tone="accent">Now</Badge> : null}

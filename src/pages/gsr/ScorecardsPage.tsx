@@ -30,6 +30,7 @@ import { formatMetricValue, monthOf, monthResult, monthsOfYear, ytd, type Metric
 import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, RoleMetric } from "../../types/database.ts";
+import { tapStretchClass } from "../../components/ui/tap.ts";
 
 function toneOf(result: MetricResult): string {
   if (result.value === null) return "text-ink-3";
@@ -71,34 +72,35 @@ function RoleBlock({
   return (
     <div className="border-b border-line last:border-b-0">
       <div className="relative md:overflow-x-auto">
-        <table className={`${tableClass} max-md:block md:min-w-[36rem]`}>
-          <thead className="bg-surface-2 max-md:block">
-            <tr className="max-md:block">
-              <th scope="col" className={`${roleHeadClass} md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
+        <table role="table" className={`${tableClass} max-md:block md:min-w-[36rem]`}>
+          <thead role="rowgroup" className="bg-surface-2 max-md:block">
+            <tr role="row" className="max-md:block">
+              <th scope="col" role="columnheader" className={`${roleHeadClass} md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
                 <span className="sr-only">Person, </span>
                 <h2 className={`${itemTitleClass} font-display normal-case tracking-normal`}>{title}</h2>
                 <span className={`block normal-case tracking-normal ${metaClass}`}>{pluralize(people.length, "person", "people")}</span>
               </th>
               {metrics.map((m) => (
-                <th key={m.id} scope="col" className={`${thClass} text-right align-bottom md:min-w-[7.5rem] max-md:sr-only`}>
+                <th key={m.id} scope="col" role="columnheader" className={`${thClass} text-right align-bottom md:min-w-[7.5rem] max-md:sr-only`}>
                   <span className="block normal-case tracking-normal text-[12px] text-ink-2">{m.name}</span>
                   <span className="tnum block">{m.target === null ? "No target" : `Target ${formatMetricValue(m, m.target)}`}</span>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="max-md:block">
+          <tbody role="rowgroup" className="max-md:block">
             {people.map((person) => {
               const own = entries.filter((e) => e.employee_id === person.id);
               const name = displayName(person);
               const division = divisionName(person);
               return (
-                <tr key={person.id} className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0">
+                <tr key={person.id} role="row" className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0">
                   <th
                     scope="row"
-                    className="border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0"
+                    role="rowheader"
+                    className="relative border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:flex max-md:flex-col max-md:justify-center max-md:border-b-0 max-md:px-0 max-md:py-0 tap:min-h-11"
                   >
-                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link`}>
+                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
                       {name}
                     </Link>
                     {division || person.title ? <p className={`truncate ${metaClass}`}>{[division, person.title].filter(Boolean).join(" · ")}</p> : null}
@@ -109,6 +111,7 @@ function RoleBlock({
                     return (
                       <td
                         key={m.id}
+                        role="cell"
                         data-label={m.name}
                         className={`${tdClass} py-1.5 text-right max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:px-0 max-md:py-1 max-md:text-left max-md:before:text-[12.5px] max-md:before:text-ink-2 max-md:before:content-[attr(data-label)]`}
                       >
@@ -116,8 +119,8 @@ function RoleBlock({
                           className="inline-block max-md:text-right"
                           aria-label={`${name}, ${m.name}, ${monthLabel(month)}: ${result.value === null ? "" : formatMetricValue(m, result.value)}${verdict(result)}; year to date ${year2date.value === null ? "" : formatMetricValue(m, year2date.value)}${verdict(year2date)}`}
                         >
-                          <span className={`tnum block text-[13px] font-medium ${toneOf(result)}`}>{formatMetricValue(m, result.value)}</span>
-                          <span className="tnum block text-[11px] text-ink-3">
+                          <span className={`tnum block text-[13px] font-medium max-md:inline ${toneOf(result)}`}>{formatMetricValue(m, result.value)}</span>
+                          <span className="tnum block text-[11px] text-ink-3 max-md:ml-2 max-md:inline">
                             YTD <span className={year2date.value === null ? "" : toneOf(year2date)}>{formatMetricValue(m, year2date.value)}</span>
                           </span>
                         </span>
@@ -296,8 +299,8 @@ export default function ScorecardsPage() {
             <Section eyebrow="Not on a scorecard" title={pluralize(unscored.length, "person", "people")} description="Their job role has no scorecard metrics, or they have no job role yet." padded={false}>
               <ul className="grid gap-x-6 gap-y-1 px-4 py-3 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
                 {unscored.map((p) => (
-                  <li key={p.id} className="min-w-0">
-                    <Link to={`/people/${p.id}`} className="block truncate text-sm text-ink hover:text-link">
+                  <li key={p.id} className="relative min-w-0 tap:py-1">
+                    <Link to={`/people/${p.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
                       {displayName(p)}
                     </Link>
                     <span className={`block truncate ${metaClass}`}>{[divisionName(p), roleName(p.job_role_id) ?? "No job role"].filter(Boolean).join(" · ")}</span>

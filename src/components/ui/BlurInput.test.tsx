@@ -54,6 +54,40 @@ describe("BlurInput", () => {
     expect(box).toHaveAttribute("data-save-state", "failed");
   });
 
+  it("shows Not saved as visible text tied to the field, and clears it after a later success", async () => {
+    const save = vi.fn<(next: string, set: (v: string) => void) => Promise<boolean>>().mockResolvedValueOnce(false).mockImplementationOnce(async (next, set) => { set(next); return true; });
+    render(<Harness onSave={save} />);
+    const box = type("New");
+    await act(async () => {});
+    const note = screen.getByText("Not saved");
+    expect(note).toBeVisible();
+    expect(note).not.toHaveClass("sr-only");
+    expect(box).toHaveAttribute("aria-describedby", note.id);
+    expect(box).toHaveAccessibleDescription("Not saved");
+    fireEvent.blur(box);
+    await act(async () => {});
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(box).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("drops Not saved when the stored value is typed back in", async () => {
+    render(<Harness onSave={() => Promise.resolve(false)} />);
+    const box = type("New");
+    await act(async () => {});
+    expect(screen.getByText("Not saved")).toBeVisible();
+    fireEvent.change(box, { target: { value: "Old" } });
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(box).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("keeps the field's sizing classes on a wrapper so a flex row does not change", async () => {
+    render(<BlurInput ariaLabel="Name" value="Old" onSave={() => Promise.resolve(false)} className="mt-0 min-w-0 flex-1 sm:w-48" />);
+    const box = screen.getByLabelText("Name");
+    expect(box.parentElement).toHaveClass("min-w-0", "flex-1", "sm:w-48");
+    expect(box.parentElement).toHaveClass("mt-0");
+    expect(box).not.toHaveClass("mt-0");
+  });
+
   it("does not call onSave when nothing changed", () => {
     const save = vi.fn();
     render(<Harness onSave={save} />);

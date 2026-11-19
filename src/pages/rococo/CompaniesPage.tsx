@@ -2,12 +2,14 @@
 // on, the display settings (days a win stays on Home, the manual Financials page), and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
 // which already lets Rococo admins do all of this. Deleting a company also tidies what the
 // database cannot reach on its own: the grant each connected provider holds, and the company's
-// stored files.
+// stored files. Each company's name, theme, logo and win days read as text first, one open at a
+// time; the module and Financials switches stay live, and Delete sits at the foot of the card.
 import { useRef, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
+import EditRow from "../../components/ui/EditRow.tsx";
 import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -15,7 +17,8 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { checkboxClass, checkboxHitClass, helpClass, inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { bodyClass, eyebrowLabelClass, metaClass } from "../../components/ui/type.ts";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -35,6 +38,16 @@ import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 // A company already deleted whose stored files did not all go. One entry per company, so a later
 // delete never drops an earlier one: nothing else in the app could reach those files again.
 type StrandedFiles = { company: Company; reason: string; retrying: boolean };
+
+// A setup value as it reads before its pencil opens it: the label over the value.
+function Shown({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <p className={eyebrowLabelClass}>{label}</p>
+      <p className={`mt-1 [overflow-wrap:anywhere] ${bodyClass}`}>{value}</p>
+    </>
+  );
+}
 
 export default function CompaniesPage() {
   const { refreshCompanies } = useHub();
@@ -61,6 +74,13 @@ export default function CompaniesPage() {
   const [savingModules, setSavingModules] = useState<Record<string, number>>({});
   // The company whose new domain is on its way, so a double Enter does not send it twice.
   const [addingDomain, setAddingDomain] = useState<string | null>(null);
+  // The one setup value open for editing, as "companyId:field".
+  const [openField, setOpenField] = useState<string | null>(null);
+  const editRow = (company: Company, field: string) => ({
+    editing: openField === `${company.id}:${field}`,
+    onEdit: () => setOpenField(`${company.id}:${field}`),
+    onDone: () => setOpenField(null),
+  });
 
   const state = useAsync(async () => {
     const [companies, domains, profiles] = await Promise.all([listCompanies(), listAllDomains(), listAllProfiles()]);
@@ -246,29 +266,25 @@ export default function CompaniesPage() {
             const members = profiles.filter((p) => p.company_id === company.id);
             const shown = { modules: pendingModules[company.id] ?? company.modules };
             return (
-              <Section
-                key={company.id}
-                eyebrow={company.slug}
-                title={company.name}
-                description={pluralize(members.length, "person", "people")}
-                actions={<IconButton label={`Delete ${company.name}`} onClick={() => openDelete(company)}><Trash2 size={14} aria-hidden /></IconButton>}
-              >
+              <Section key={company.id} eyebrow={company.slug} title={company.name} description={pluralize(members.length, "person", "people")}>
                 <div className="grid gap-4 md:grid-cols-12">
-                  <div className="md:col-span-4">
-                    <label htmlFor={`co-name-${company.id}`} className={labelClass}>Name</label>
-                    <BlurInput id={`co-name-${company.id}`} value={company.name} required onSave={(next) => patchCompany(company, { name: next.trim() })} />
-                  </div>
-                  <div className="md:col-span-3">
-                    <label htmlFor={`co-theme-${company.id}`} className={labelClass}>Theme</label>
-                    <select id={`co-theme-${company.id}`} value={company.theme_key} onChange={(e) => void patchCompany(company, { theme_key: e.target.value as ThemeKey })} className={selectClass}>
-                      {THEME_KEYS.map((k) => (
-                        <option key={k} value={k}>{THEMES[k].label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-5">
-                    <label htmlFor={`co-logo-${company.id}`} className={labelClass}>Logo URL</label>
-                    <BlurInput id={`co-logo-${company.id}`} value={company.logo_url ?? ""} placeholder="https://" onSave={(next) => patchCompany(company, { logo_url: next.trim() || null })} />
+                  <div className="grid gap-x-6 md:col-span-12 md:grid-cols-3">
+                    <EditRow display={<Shown label="Name" value={company.name} />} editLabel={`Edit name for ${company.name}`} {...editRow(company, "name")}>
+                      <label htmlFor={`co-name-${company.id}`} className={labelClass}>Name</label>
+                      <BlurInput id={`co-name-${company.id}`} value={company.name} required onSave={(next) => patchCompany(company, { name: next.trim() })} />
+                    </EditRow>
+                    <EditRow display={<Shown label="Theme" value={THEMES[company.theme_key].label} />} editLabel={`Edit theme for ${company.name}`} {...editRow(company, "theme")}>
+                      <label htmlFor={`co-theme-${company.id}`} className={labelClass}>Theme</label>
+                      <select id={`co-theme-${company.id}`} value={company.theme_key} onChange={(e) => void patchCompany(company, { theme_key: e.target.value as ThemeKey })} className={selectClass}>
+                        {THEME_KEYS.map((k) => (
+                          <option key={k} value={k}>{THEMES[k].label}</option>
+                        ))}
+                      </select>
+                    </EditRow>
+                    <EditRow display={<Shown label="Logo URL" value={company.logo_url ?? "None"} />} editLabel={`Edit logo URL for ${company.name}`} {...editRow(company, "logo")}>
+                      <label htmlFor={`co-logo-${company.id}`} className={labelClass}>Logo URL</label>
+                      <BlurInput id={`co-logo-${company.id}`} value={company.logo_url ?? ""} placeholder="https://" onSave={(next) => patchCompany(company, { logo_url: next.trim() || null })} />
+                    </EditRow>
                   </div>
                   <fieldset aria-label={`Modules for ${company.name}`} disabled={(savingModules[company.id] ?? 0) > 0} className="md:col-span-12">
                     <legend className={labelClass}>Modules</legend>
@@ -277,15 +293,17 @@ export default function CompaniesPage() {
                         const id = `co-module-${company.id}-${key}`;
                         return (
                           <div key={key} className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              id={id}
-                              className={`${checkboxClass} mt-0.5`}
-                              checked={hasModule(shown, key)}
-                              aria-describedby={`${id}-help`}
-                              onChange={(e) => void toggleModule(company, key, e.target.checked)}
-                            />
-                            <div className="min-w-0">
+                            <label className={`${checkboxHitClass} mt-0.5 tap:mt-0`}>
+                              <input
+                                type="checkbox"
+                                id={id}
+                                className={checkboxClass}
+                                checked={hasModule(shown, key)}
+                                aria-describedby={`${id}-help`}
+                                onChange={(e) => void toggleModule(company, key, e.target.checked)}
+                              />
+                            </label>
+                            <div className="min-w-0 tap:pt-3">
                               <label htmlFor={id} className="text-[13px] text-ink">{MODULE_LABELS[key]}</label>
                               <p id={`${id}-help`} className={helpClass}>{MODULE_DESCRIPTIONS[key]}</p>
                             </div>
@@ -298,26 +316,34 @@ export default function CompaniesPage() {
                   <fieldset aria-label={`Display settings for ${company.name}`} className="grid gap-4 md:col-span-12 md:grid-cols-12">
                     <legend className="sr-only">Display settings</legend>
                     <div className="md:col-span-4">
-                      <label htmlFor={`co-wins-days-${company.id}`} className={labelClass}>Days a win stays on Home</label>
-                      <BlurInput id={`co-wins-days-${company.id}`} type="text" inputMode="numeric" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
-                      <p className={helpClass}>Blank means the five newest, with no age limit.</p>
+                      <EditRow
+                        display={<Shown label="Days a win stays on Home" value={company.wins_home_days === null ? "The five newest, with no age limit" : pluralize(company.wins_home_days, "day")} />}
+                        editLabel={`Edit days a win stays on Home for ${company.name}`}
+                        {...editRow(company, "wins")}
+                      >
+                        <label htmlFor={`co-wins-days-${company.id}`} className={labelClass}>Days a win stays on Home</label>
+                        <BlurInput id={`co-wins-days-${company.id}`} type="text" inputMode="numeric" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
+                        <p className={helpClass}>Blank means the five newest, with no age limit.</p>
+                      </EditRow>
                     </div>
-                    <div className="flex items-start gap-2 md:col-span-8">
-                      <input
-                        type="checkbox"
-                        id={`co-manual-financials-${company.id}`}
-                        className={`${checkboxClass} mt-0.5`}
-                        checked={company.manual_financials}
-                        onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
-                      />
-                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink">Manual Financials page</label>
+                    <div className="flex items-start gap-2 md:col-span-8 md:pt-3">
+                      <label className={`${checkboxHitClass} mt-0.5 tap:mt-0`}>
+                        <input
+                          type="checkbox"
+                          id={`co-manual-financials-${company.id}`}
+                          className={checkboxClass}
+                          checked={company.manual_financials}
+                          onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
+                        />
+                      </label>
+                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink tap:mt-3">Manual Financials page</label>
                     </div>
                   </fieldset>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       {ownDomains.map((d) => (
-                        <Badge key={d.domain} tone="accent" className="pr-1">
+                        <Badge key={d.domain} tone="accent" className="pr-1 tap:py-0">
                           {d.domain}
                           <IconButton size="sm" label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)}><X size={11} aria-hidden /></IconButton>
                         </Badge>
@@ -333,7 +359,10 @@ export default function CompaniesPage() {
                         <Button type="submit" variant="secondary" size="sm" disabled={!(newDomain[company.id] ?? "").trim() || addingDomain !== null}><Plus size={12} aria-hidden /> Add</Button>
                       </form>
                     </div>
-                    <p className="mt-1.5 text-[12px] text-ink-3">Anyone with an email on these domains can create an account without an invitation.</p>
+                    <p className={`mt-1.5 ${metaClass}`}>Anyone with an email on these domains can create an account without an invitation.</p>
+                  </div>
+                  <div className="border-t border-line pt-4 md:col-span-12">
+                    <Button variant="danger" size="sm" aria-label={`Delete ${company.name}`} onClick={() => openDelete(company)}>Delete</Button>
                   </div>
                 </div>
               </Section>

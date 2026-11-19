@@ -1,7 +1,8 @@
 // The four-step rating a deliverable task carries: Miss, Partial, Hit, Exceeded. A row of
 // buttons rather than a select, because in the meeting this gets set at a glance and a select
 // costs two clicks. Clicking the step already chosen clears it back to unrated, the same way
-// RatingInput behaves. Read-only when onChange is omitted.
+// RatingInput behaves. Read-only when onChange is omitted. Under a finger or at phone width each
+// step is 44px tall, so a thumb can set it in the meeting.
 import { DELIVERABLE_RATINGS, RATING_LABELS, isDeliverableRating, type DeliverableRating } from "../../lib/gsr/deliverables.ts";
 
 const TONE: Record<DeliverableRating, string> = {
@@ -50,7 +51,7 @@ export default function RatingChoice({
             aria-label={`${RATING_LABELS[step]} (${step})`}
             disabled={disabled}
             onClick={() => onChange(chosen ? null : step)}
-            className={`${base} ${look} hover:border-accent disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`${base} ${look} hover:border-accent disabled:cursor-not-allowed disabled:opacity-60 tap:min-h-11 tap:min-w-11 tap:px-3 tap:text-[12px]`}
           >
             {RATING_LABELS[step]}
           </button>

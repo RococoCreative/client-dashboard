@@ -17,6 +17,7 @@ import { createEmployeeKpi, deleteEmployeeKpi, updateEmployeeKpi } from "../../s
 import { errorMessage } from "../../lib/errors.ts";
 import { enqueueWrite } from "../../lib/writeQueue.ts";
 import type { EmployeeKpi } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function KpiList({
   companyId,
@@ -151,7 +152,7 @@ export default function KpiList({
             ) : null}
             <div className="flex items-center gap-1.5">
               {canEdit ? (
-                <button type="button" onClick={() => void save(kpi, (current) => ({ is_hit: !current.is_hit }))} aria-label={kpi.is_hit ? `Mark ${kpi.name} not hit` : `Mark ${kpi.name} hit`}>
+                <button type="button" onClick={() => void save(kpi, (current) => ({ is_hit: !current.is_hit }))} aria-label={kpi.is_hit ? `Mark ${kpi.name} not hit` : `Mark ${kpi.name} hit`} className={tapTargetClass}>
                   {hitBadge(kpi)}
                 </button>
               ) : (

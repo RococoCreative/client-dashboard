@@ -83,7 +83,7 @@ function ViewAccessFields({ person, divisions, onPatch }: { person: Profile; div
             ["none", "None"],
           ] as const
         ).map(([value, label]) => (
-          <label key={value} className="inline-flex items-center gap-1.5 text-[13px] text-ink">
+          <label key={value} className="inline-flex items-center gap-1.5 text-[13px] text-ink tap:min-h-11">
             <input type="radio" name={group} value={value} checked={mode === value} onChange={() => pick(value)} />
             {label}
           </label>
@@ -92,7 +92,7 @@ function ViewAccessFields({ person, divisions, onPatch }: { person: Profile; div
       {mode === "chosen" ? (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {divisions.map((d) => (
-            <label key={d.id} className="inline-flex items-center gap-1.5 text-[13px] text-ink">
+            <label key={d.id} className="inline-flex items-center gap-1.5 text-[13px] text-ink tap:min-h-11">
               <input
                 type="checkbox"
                 className={checkboxClass}
@@ -135,7 +135,7 @@ export default function DivisionFields({ person, me, divisions, onPatch }: { per
           {divisions.map((d) => {
             const canPlace = canViewDivision(me, d.id);
             return (
-              <label key={d.id} className={`inline-flex items-center gap-1.5 text-[13px] ${canPlace ? "text-ink" : "text-ink-3"}`}>
+              <label key={d.id} className={`inline-flex items-center gap-1.5 text-[13px] ${canPlace ? "text-ink" : "text-ink-3"} tap:min-h-11`}>
                 <input
                   type="checkbox"
                   className={checkboxClass}
@@ -165,7 +165,7 @@ export default function DivisionFields({ person, me, divisions, onPatch }: { per
       ) : null}
       {setsAccess ? (
         <div>
-          <label className="flex items-start gap-2 text-[13px] text-ink">
+          <label className="flex items-start gap-2 text-[13px] text-ink tap:min-h-11">
             <input
               type="checkbox"
               className={`${checkboxClass} mt-0.5`}

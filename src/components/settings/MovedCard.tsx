@@ -7,6 +7,7 @@ import Section from "../ui/Section.tsx";
 import { secondaryClass } from "../ui/type.ts";
 import { hasModule } from "../../lib/modules.ts";
 import type { Company } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function MovedCard({ company }: { company: Pick<Company, "modules"> }) {
   const rows = [
@@ -16,11 +17,11 @@ export default function MovedCard({ company }: { company: Pick<Company, "modules
     ...(hasModule(company, "production") ? [{ label: "Standard milestones", to: "/production/setup" }] : []),
   ];
   return (
-    <Section title="Set up elsewhere" description="These settings now live with the part of the hub they shape.">
-      <ul className="-mt-4 divide-y divide-line border-b border-line sm:-mt-6">
+    <Section title="Set up elsewhere" description="These settings now live with the part of the hub they shape." flush>
+      <ul className="divide-y divide-line border-b border-line">
         {rows.map((row) => (
           <li key={row.to} className="py-3">
-            <Link to={row.to} className={`text-link hover:underline [overflow-wrap:anywhere] ${secondaryClass}`}>{row.label}</Link>
+            <Link to={row.to} className={`text-link hover:underline [overflow-wrap:anywhere] ${secondaryClass} ${tapTargetClass}`}>{row.label}</Link>
           </li>
         ))}
       </ul>

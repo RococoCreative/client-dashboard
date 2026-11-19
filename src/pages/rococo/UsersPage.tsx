@@ -1,15 +1,20 @@
 // People tab of the Rococo portfolio: everyone on every company's roster, signed in or not,
 // with company assignment, role, Rococo access, and active flag. Filter by company or search
-// by name and email. A person who has never signed in is marked, never left out.
+// by name and email. A person who has never signed in is marked, never left out. A person's
+// company and role read as text until the row's pencil opens them, one row at a time; the Rococo
+// and Active switches stay live.
 import { useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
+import Button from "../../components/ui/Button.tsx";
+import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, checkboxHitClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { metaClass, secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
@@ -19,11 +24,17 @@ import { grantableRoles, hasAccount } from "../../lib/people.ts";
 import { ROLE_LABELS, type Profile, type Role } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
 
+// A company or role shown as text in a row: the secondary size with the ink in place of the
+// secondary ink, swapped rather than stacked.
+const CELL_TEXT = secondaryClass.replace(/(^|\s)text-ink-2(?=\s|$)/, "$1text-ink");
+
 export default function UsersPage() {
   const { profile: me, companies } = useHub();
   const [companyFilter, setCompanyFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  // The one person whose company and role are open for editing.
+  const [openId, setOpenId] = useState<string | null>(null);
   const state = useAsync(() => listAllProfiles(), []);
 
   const profiles = useMemo(() => state.data ?? [], [state.data]);
@@ -66,7 +77,7 @@ export default function UsersPage() {
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people" aria-label="Search people" className={`${inputClass} mt-0 pl-8`} />
         </div>
-        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} aria-label="Filter by company" className={`${selectClass} mt-0 w-auto`}>
+        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} aria-label="Filter by company" className={`${selectClass} mt-0 !w-auto max-w-full`}>
           <option value="all">All companies</option>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
@@ -90,11 +101,13 @@ export default function UsersPage() {
                   <th className={thClass}>Role</th>
                   <th className={thClass}>Rococo</th>
                   <th className={thClass}>Active</th>
+                  <th className={thClass}><span className="sr-only">Edit</span></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((person) => {
                   const self = person.id === me.id;
+                  const editing = openId === person.id;
                   return (
                     <tr key={person.id} className={`hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}>
                       <td className={tdClass}>
@@ -102,35 +115,52 @@ export default function UsersPage() {
                           {displayName(person)}{self ? " (you)" : ""}
                           {hasAccount(person) ? null : <Badge tone="warning">Not signed in yet</Badge>}
                         </p>
-                        <p className="text-[12px] text-ink-3">{person.email}{person.title ? ` · ${person.title}` : ""}</p>
+                        <p className={metaClass}>{person.email}{person.title ? ` · ${person.title}` : ""}</p>
                       </td>
                       <td className={tdClass}>
-                        <select value={person.company_id ?? ""} aria-label={`Company for ${person.email}`} onChange={(e) => void patch(person, { company_id: e.target.value || null })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-                          <option value="">{companyName(null)}</option>
-                          {companies.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </select>
+                        {editing ? (
+                          <select value={person.company_id ?? ""} aria-label={`Company for ${person.email}`} onChange={(e) => void patch(person, { company_id: e.target.value || null })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
+                            <option value="">{companyName(null)}</option>
+                            {companies.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={CELL_TEXT}>{companyName(person.company_id)}</span>
+                        )}
                       </td>
                       <td className={tdClass}>
-                        <select value={person.role} aria-label={`Role for ${person.email}`} onChange={(e) => void patch(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
-                          {grantableRoles(me).map((r) => (
-                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                          ))}
-                        </select>
+                        {editing ? (
+                          <select value={person.role} aria-label={`Role for ${person.email}`} onChange={(e) => void patch(person, { role: e.target.value as Role })} className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}>
+                            {grantableRoles(me).map((r) => (
+                              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={CELL_TEXT}>{ROLE_LABELS[person.role]}</span>
+                        )}
                       </td>
                       <td className={tdClass}>
-                        <input type="checkbox" checked={person.is_rococo_admin} disabled={self} aria-label={`Rococo admin: ${person.email}`} onChange={(e) => void patch(person, { is_rococo_admin: e.target.checked })} className={checkboxClass} />
+                        <label className={checkboxHitClass}><input type="checkbox" checked={person.is_rococo_admin} disabled={self} aria-label={`Rococo admin: ${person.email}`} onChange={(e) => void patch(person, { is_rococo_admin: e.target.checked })} className={checkboxClass} /></label>
                       </td>
                       <td className={tdClass}>
-                        <input type="checkbox" checked={person.is_active} disabled={self} aria-label={`Active: ${person.email}`} onChange={(e) => void patch(person, { is_active: e.target.checked })} className={checkboxClass} />
+                        <label className={checkboxHitClass}><input type="checkbox" checked={person.is_active} disabled={self} aria-label={`Active: ${person.email}`} onChange={(e) => void patch(person, { is_active: e.target.checked })} className={checkboxClass} /></label>
+                      </td>
+                      <td className={`${tdClass} text-right`}>
+                        {editing ? (
+                          <Button variant="secondary" size="sm" onClick={() => setOpenId(null)}>Done</Button>
+                        ) : (
+                          <IconButton label={`Edit ${person.email}`} onClick={() => setOpenId(person.id)}>
+                            <Pencil size={15} aria-hidden />
+                          </IconButton>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
                 {filtered.length === 0 ? (
                   <tr>
-                    <td className={`${tdClass} text-ink-3`} colSpan={5}>Nobody matches.</td>
+                    <td className={`${tdClass} text-ink-3`} colSpan={6}>Nobody matches.</td>
                   </tr>
                 ) : null}
               </tbody>

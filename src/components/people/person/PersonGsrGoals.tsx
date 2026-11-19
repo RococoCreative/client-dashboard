@@ -19,6 +19,7 @@ import { displayName } from "../../../lib/format.ts";
 import { ledBy } from "../../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, type Profile, type Review, type ReviewCycle } from "../../../types/database.ts";
 import type { PersonRecord, PersonTabProps } from "../../../pages/people/personTabs.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 
 // This month's Goal Setting Review for the person, for an admin or someone who leads them: a link
 // into it when it is open, or a way to start it. Starting is an insert that ignores a duplicate
@@ -69,7 +70,7 @@ function ThisMonthGsrCard({
           {cycle.name}
           <Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge>
         </span>
-        <Link to={reviewPath(review.id, cycle.cadence)} className="text-link text-[13px] font-medium hover:underline">Open {cycle.name} GSR</Link>
+        <Link to={reviewPath(review.id, cycle.cadence)} className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>Open {cycle.name} GSR</Link>
       </div>
     );
   } else if (omittedCycleIds.includes(cycle.id)) {

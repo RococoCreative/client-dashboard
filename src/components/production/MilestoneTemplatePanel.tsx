@@ -2,10 +2,11 @@
 // letters every new project starts with, in order. The database copies the live rows onto a
 // project when it is created (0044), so a change here reaches projects created from now on and
 // never the ones that already exist. Rows are renamed in place, marked as a milestone or a letter,
-// moved up or down, and removed (archived, not deleted). The list is the company's own rows
-// (rule 12): nothing here knows a company by name.
+// moved up or down, and removed (archived, not deleted). Each row reads as text until its pencil
+// opens it. The list is the company's own rows (rule 12): nothing here knows a company by name.
 import { useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil } from "lucide-react";
+import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
@@ -14,6 +15,7 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass, selectClass } from "../ui/forms.ts";
+import { itemTitleClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import {
@@ -26,15 +28,22 @@ import {
 } from "../../services/milestoneTemplates.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type MilestoneTemplate } from "../../types/database.ts";
 
+
 function byOrder(a: MilestoneTemplate, b: MilestoneTemplate): number {
   return a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at);
 }
 
+// A row reads as text first: the title and, for a letter, its kind. The pencil opens the title and
+// kind in place (each still saves on its own) with Remove beside Done, away from the arrows that
+// reorder the list.
 function TemplateRow({
   template,
   first,
   last,
   busy,
+  editing,
+  onEdit,
+  onDone,
   onSave,
   onMove,
   onRemove,
@@ -43,30 +52,56 @@ function TemplateRow({
   first: boolean;
   last: boolean;
   busy: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
   onSave: (patch: MilestoneTemplatePatch) => Promise<boolean>;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
 }) {
   const { title } = template;
   return (
-    <li className="flex flex-wrap items-center gap-2 py-2 first:pt-0 last:pb-0">
-      <div className="min-w-[180px] flex-1">
-        <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} mt-0 text-[13px]`} />
+    <li className="py-3 first:pt-0 last:pb-0">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-[180px] flex-1">
+                <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} mt-0`} />
+              </div>
+              <select aria-label={`Kind of ${title}`} value={template.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={`${selectClass} mt-0 w-auto`}>
+                {keysOf(MILESTONE_KIND_LABELS).map((k) => (
+                  <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={`${itemTitleClass} min-w-0 [overflow-wrap:anywhere]`}>{title}</span>
+              {template.kind === "letter" ? <Badge tone="neutral">{MILESTONE_KIND_LABELS.letter}</Badge> : null}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center">
+          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove(-1)}>
+            <ArrowUp size={14} aria-hidden />
+          </IconButton>
+          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove(1)}>
+            <ArrowDown size={14} aria-hidden />
+          </IconButton>
+          {editing ? null : (
+            <IconButton label={`Edit ${title}`} onClick={onEdit}>
+              <Pencil size={15} aria-hidden="true" />
+            </IconButton>
+          )}
+        </div>
       </div>
-      <select aria-label={`Kind of ${title}`} value={template.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={`${selectClass} mt-0 w-auto text-[13px]`}>
-        {keysOf(MILESTONE_KIND_LABELS).map((k) => (
-          <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
-        ))}
-      </select>
-      <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove(-1)}>
-        <ArrowUp size={14} aria-hidden />
-      </IconButton>
-      <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove(1)}>
-        <ArrowDown size={14} aria-hidden />
-      </IconButton>
-      <IconButton label={`Remove ${title}`} disabled={busy} onClick={onRemove}>
-        <Trash2 size={14} aria-hidden />
-      </IconButton>
+      {editing ? (
+        <div className="mt-3 flex flex-wrap justify-between gap-2">
+          <Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={onRemove}>Remove</Button>
+          <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -81,6 +116,8 @@ export default function MilestoneTemplatePanel({ companyId }: { companyId: strin
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<MilestoneTemplate | null>(null);
   const [dialogError, setDialogError] = useState("");
+  // One row open at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const templates = [...(state.data ?? [])].sort(byOrder);
 
@@ -175,7 +212,7 @@ export default function MilestoneTemplatePanel({ companyId }: { companyId: strin
       {state.data ? (
         <>
           {templates.length === 0 ? (
-            <p className="text-sm text-ink-2">No standard milestones yet. Add the checkpoints every project should start with.</p>
+            <p className={secondaryClass}>No standard milestones yet. Add the checkpoints every project should start with.</p>
           ) : (
             <ul className="divide-y divide-line">
               {templates.map((template, index) => (
@@ -185,6 +222,9 @@ export default function MilestoneTemplatePanel({ companyId }: { companyId: strin
                   first={index === 0}
                   last={index === templates.length - 1}
                   busy={busy}
+                  editing={openId === template.id}
+                  onEdit={() => setOpenId(template.id)}
+                  onDone={() => setOpenId(null)}
                   onSave={(patch) => save(template, patch)}
                   onMove={(direction) => void move(index, direction)}
                   onRemove={() => openRemove(template)}
@@ -199,7 +239,7 @@ export default function MilestoneTemplatePanel({ companyId }: { companyId: strin
               placeholder="Add a milestone or letter"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className={`${inputClass} mt-0 min-w-[180px] flex-1 text-[13px]`}
+              className={`${inputClass} mt-0 min-w-[180px] flex-1`}
             />
             <Button type="submit" variant="secondary" size="sm" disabled={adding}>Add</Button>
           </form>

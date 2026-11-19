@@ -1,8 +1,9 @@
 // Resources > Files & media: the company's files, templates, videos, documents and saved links,
 // found by search and tags. Everyone browses; admins add, edit, and remove. Files live in the
-// private bucket and open through signed URLs only.
+// private bucket and open through signed URLs only. A card carries one pencil; deleting a resource
+// sits in its own dialog, away from Open.
 import { useMemo, useState, type FormEvent } from "react";
-import { ExternalLink, FileText, Link2, Pencil, Plus, Search, Trash2, Video } from "lucide-react";
+import { ExternalLink, FileText, Link2, Pencil, Plus, Search, Video } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
 import Chip from "../ui/Chip.tsx";
@@ -15,6 +16,7 @@ import Notice from "../ui/Notice.tsx";
 import PanelHeader from "../ui/PanelHeader.tsx";
 import SkeletonCard from "../ui/SkeletonCard.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
+import { itemTitleClass, secondaryClass } from "../ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createResource, deleteResource, listResources, parseTags, updateResource } from "../../services/resources.ts";
@@ -36,7 +38,20 @@ function refused(err: unknown): boolean {
   return typeof code === "string" && code.length > 0;
 }
 
-function ResourceDialog({ companyId, resource, onClose, onSaved }: { companyId: string; resource: Resource | null; onClose: () => void; onSaved: (r: Resource) => void }) {
+function ResourceDialog({
+  companyId,
+  resource,
+  onClose,
+  onSaved,
+  onDelete,
+}: {
+  companyId: string;
+  resource: Resource | null;
+  onClose: () => void;
+  onSaved: (r: Resource) => void;
+  // Asks to delete the resource being edited; the panel confirms it.
+  onDelete: (r: Resource) => void;
+}) {
   const [title, setTitle] = useState(resource?.title ?? "");
   const [kind, setKind] = useState<ResourceKind>(resource?.kind ?? "link");
   const [description, setDescription] = useState(resource?.description ?? "");
@@ -119,9 +134,14 @@ function ResourceDialog({ companyId, resource, onClose, onSaved }: { companyId: 
           </Field>
           {error ? <Notice tone="error">{error}</Notice> : null}
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving..." : resource ? "Save" : "Add resource"}</Button>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+          {resource ? (
+            <Button variant="danger" disabled={busy} onClick={() => onDelete(resource)}>Delete resource</Button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving..." : resource ? "Save" : "Add resource"}</Button>
+          </div>
         </div>
       </form>
     </Modal>
@@ -215,28 +235,27 @@ export default function FilesPanel() {
           eyebrow="Resources"
           title={resources.length > 0 ? "Nothing matches" : "No resources yet"}
           body={resources.length > 0 ? "Try another search or tag." : isAdmin ? "Add the links, templates, and files people keep asking for." : "Your admins have not added any resources yet."}
-          action={isAdmin && resources.length === 0 ? <Button onClick={() => setDialog({ resource: null })}>Add resource</Button> : undefined}
+          action={isAdmin && resources.length === 0 ? <Button variant="secondary" onClick={() => setDialog({ resource: null })}>Add resource</Button> : undefined}
         />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((resource) => (
-            <li key={resource.id} className="flex flex-col rounded-lg border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong">
+            <li key={resource.id} className="flex flex-col rounded-lg border border-line bg-surface p-4 sm:p-6 transition-colors duration-150 hover:border-line-strong">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <KindIcon kind={resource.kind} />
                   <Badge>{RESOURCE_KIND_LABELS[resource.kind]}</Badge>
                 </div>
                 {isAdmin ? (
-                  <div className="flex items-center">
-                    <IconButton label="Edit resource" onClick={() => setDialog({ resource })}><Pencil size={13} aria-hidden /></IconButton>
-                    <IconButton label="Delete resource" onClick={() => setDeleting(resource)}><Trash2 size={13} aria-hidden /></IconButton>
-                  </div>
+                  <IconButton label="Edit resource" onClick={() => setDialog({ resource })} className="-mr-2 -mt-2">
+                    <Pencil size={15} aria-hidden />
+                  </IconButton>
                 ) : null}
               </div>
               <Button variant="row" onClick={() => void open(resource)} className="mt-3">
-                <span className="font-medium">{resource.title}</span>
+                <span className={itemTitleClass}>{resource.title}</span>
               </Button>
-              {resource.description ? <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-ink-2">{resource.description}</p> : null}
+              {resource.description ? <p className={`mt-1 line-clamp-3 ${secondaryClass}`}>{resource.description}</p> : null}
               {resource.tags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {resource.tags.map((t) => (
@@ -259,6 +278,11 @@ export default function FilesPanel() {
           companyId={companyId}
           resource={dialog.resource}
           onClose={() => setDialog(null)}
+          onDelete={(resource) => {
+            setDialog(null);
+            setDeleteError("");
+            setDeleting(resource);
+          }}
           onSaved={(saved) => {
             state.setData((prev) => {
               const list = prev ?? [];

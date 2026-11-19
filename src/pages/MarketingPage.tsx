@@ -1,9 +1,10 @@
 // Marketing campaign tracker: a board of what is planned, running, paused, and done, with
 // budget vs actual spend and the key result for each. A tracking surface, not a marketing
-// platform. Admin-only. With the tasks module on, each campaign also shows the work behind it
-// (CampaignTasks), from one read of the company's tasks grouped here by campaign.
+// platform. Admin-only. Moving a campaign is everyday work, so its status stays live on the card;
+// Delete sits in the campaign's own dialog. With the tasks module on, each campaign also shows the
+// work behind it (CampaignTasks), from one read of the company's tasks grouped here by campaign.
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import CampaignTasks from "../components/tasks/CampaignTasks.tsx";
 import Badge from "../components/ui/Badge.tsx";
 import Button from "../components/ui/Button.tsx";
@@ -17,6 +18,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonCard from "../components/ui/SkeletonCard.tsx";
 import { inputClass, selectClass, textareaClass } from "../components/ui/forms.ts";
+import { eyebrowLabelClass, itemTitleClass, metaClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
 import { createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "../services/marketing.ts";
@@ -38,7 +40,9 @@ const NUMBER_COPY: Record<NumberField, { label: string; example: string }> = {
   metricValue: { label: "the key metric value", example: "27" },
 };
 
-function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { companyId: string; campaign: MarketingCampaign | null; count: number; onClose: () => void; onSaved: (c: MarketingCampaign) => void }) {
+// The campaign's own view: everything about it, and for a campaign already on the board, Delete at
+// the foot, away from the card's everyday controls.
+function CampaignDialog({ companyId, campaign, count, onClose, onSaved, onDelete }: { companyId: string; campaign: MarketingCampaign | null; count: number; onClose: () => void; onSaved: (c: MarketingCampaign) => void; onDelete: (c: MarketingCampaign) => void }) {
   const [name, setName] = useState(campaign?.name ?? "");
   const [channel, setChannel] = useState(campaign?.channel ?? "");
   const [status, setStatus] = useState<CampaignStatus>(campaign?.status ?? "planned");
@@ -149,16 +153,19 @@ function CampaignDialog({ companyId, campaign, count, onClose, onSaved }: { comp
           </Field>
         </div>
         {error ? <Notice tone="error" className="mt-4">{error}</Notice> : null}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving..." : campaign ? "Save" : "Add campaign"}</Button>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+          {campaign ? <Button variant="danger" disabled={busy} onClick={() => onDelete(campaign)}>Delete campaign</Button> : <span />}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy}>{busy ? "Saving..." : campaign ? "Save" : "Add campaign"}</Button>
+          </div>
         </div>
       </form>
     </Modal>
   );
 }
 
-function CampaignCard({ campaign, footer, onEdit, onDelete, onStatus }: { campaign: MarketingCampaign; footer: ReactNode; onEdit: () => void; onDelete: () => void; onStatus: (status: CampaignStatus) => void }) {
+function CampaignCard({ campaign, footer, onEdit, onStatus }: { campaign: MarketingCampaign; footer: ReactNode; onEdit: () => void; onStatus: (status: CampaignStatus) => void }) {
   const budget = campaign.budget ?? 0;
   const spend = campaign.actual_spend ?? 0;
   const ratio = budget > 0 ? spend / budget : null;
@@ -167,16 +174,13 @@ function CampaignCard({ campaign, footer, onEdit, onDelete, onStatus }: { campai
     <li className="rounded-lg border border-line bg-surface p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-sm font-medium text-ink">{campaign.name}</h3>
-          <p className="mt-0.5 text-[12px] text-ink-3">
+          <h3 className={`${itemTitleClass} [overflow-wrap:anywhere]`}>{campaign.name}</h3>
+          <p className={`mt-0.5 ${metaClass}`}>
             {campaign.channel ?? "No channel"}
             {campaign.start_date ? ` · ${formatDate(campaign.start_date)}${campaign.end_date ? ` to ${formatDate(campaign.end_date)}` : " onward"}` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 items-center">
-          <IconButton label="Edit campaign" onClick={onEdit}><Pencil size={13} aria-hidden /></IconButton>
-          <IconButton label="Delete campaign" onClick={onDelete}><Trash2 size={13} aria-hidden /></IconButton>
-        </div>
+        <IconButton label="Edit campaign" onClick={onEdit} className="-mr-2 -mt-1"><Pencil size={15} aria-hidden /></IconButton>
       </div>
       <div className="mt-3">
         <div className="flex items-baseline justify-between text-[12px]">
@@ -296,10 +300,10 @@ export default function MarketingPage() {
       {!state.data && !state.error ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
       ) : !state.data ? null : campaigns.length === 0 ? (
-        <EmptyState eyebrow="Marketing" title="No campaigns yet" body="Add what is running or planned so leadership sees the whole board at a glance." action={<Button onClick={() => setDialog({ campaign: null })}>New campaign</Button>} />
+        <EmptyState eyebrow="Marketing" title="No campaigns yet" body="Add what is running or planned so leadership sees the whole board at a glance." action={<Button variant="secondary" onClick={() => setDialog({ campaign: null })}>New campaign</Button>} />
       ) : (
         <>
-          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             <Stat label="Live campaigns" value={live.length} hint={`${campaigns.filter((c) => c.status === "planned").length} planned`} />
             <Stat
               label="Live budget"
@@ -314,7 +318,7 @@ export default function MarketingPage() {
               return (
                 <section key={status} className="min-w-0 rounded-lg border border-line bg-bg/40 p-3">
                   <header className="mb-3 flex items-center justify-between px-1">
-                    <h2 className="text-[11px] font-medium uppercase tracking-label text-ink-3">{CAMPAIGN_STATUS_LABELS[status]}</h2>
+                    <h2 className={eyebrowLabelClass}>{CAMPAIGN_STATUS_LABELS[status]}</h2>
                     <span className="tnum text-[11px] text-ink-3">{column.length}</span>
                   </header>
                   {column.length === 0 ? (
@@ -322,7 +326,7 @@ export default function MarketingPage() {
                   ) : (
                     <ul className="space-y-3">
                       {column.map((campaign) => (
-                        <CampaignCard key={campaign.id} campaign={campaign} footer={taskFooter(campaign)} onEdit={() => setDialog({ campaign })} onDelete={() => setDeleting(campaign)} onStatus={(next) => void move(campaign, next)} />
+                        <CampaignCard key={campaign.id} campaign={campaign} footer={taskFooter(campaign)} onEdit={() => setDialog({ campaign })} onStatus={(next) => void move(campaign, next)} />
                       ))}
                     </ul>
                   )}
@@ -339,6 +343,11 @@ export default function MarketingPage() {
           campaign={dialog.campaign}
           count={campaigns.length}
           onClose={() => setDialog(null)}
+          onDelete={(campaign) => {
+            setDialog(null);
+            setError("");
+            setDeleting(campaign);
+          }}
           onSaved={(saved) => {
             upsert(saved);
             setDialog(null);
