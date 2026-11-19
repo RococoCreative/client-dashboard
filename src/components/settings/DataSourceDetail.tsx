@@ -20,12 +20,19 @@ import SourceRuns from "./SourceRuns.tsx";
 // Monday first, as the editor ticks them; the number is the day in the database (0 = Sunday).
 const DAY_LABELS: Array<[number, string]> = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
 
+// One line of facts in the list: each label over its value, side by side from sm up and stacked
+// on a phone. Every label and value sits in exactly one wrapper inside the list, as a dl allows.
+function Facts({ cols = 1, children }: { cols?: 1 | 2 | 3; children: ReactNode }) {
+  const grid = cols === 3 ? "sm:grid-cols-3" : cols === 2 ? "sm:grid-cols-2" : "";
+  return <div className={`grid gap-x-6 py-2.5 sm:grid-flow-col sm:grid-rows-[auto_auto] ${grid}`}>{children}</div>;
+}
+
 function Value({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="py-2.5">
-      <dt className={eyebrowLabelClass}>{label}</dt>
+    <>
+      <dt className={`${eyebrowLabelClass} [&:not(:first-child)]:mt-5 sm:[&:not(:first-child)]:mt-0`}>{label}</dt>
       <dd className={`mt-1 ${bodyClass} [overflow-wrap:anywhere]`}>{children}</dd>
-    </div>
+    </>
   );
 }
 
@@ -92,40 +99,46 @@ export default function DataSourceDetail({
           </IconButton>
         </div>
         <dl className="divide-y divide-line">
-          <div className="grid gap-x-6 sm:grid-cols-2">
+          <Facts cols={2}>
             <Value label="Feeds">{TARGET_MODULE_LABELS[source.target_module]}</Value>
             <Value label="Source">{CONNECTION_PROVIDER_LABELS[source.provider]}</Value>
-          </div>
+          </Facts>
           {sheets ? (
-            <div className="grid gap-x-6 sm:grid-cols-3">
+            <Facts cols={3}>
               <Value label="Spreadsheet">{`${sheets.spreadsheet_id}, tab ${sheets.sheet_gid}`}</Value>
               <Value label="Header row">{draft.header_row}</Value>
               <Value label="Range">{draft.range || "The whole tab"}</Value>
-            </div>
+            </Facts>
           ) : (
-            <Value label="QuickBooks records">{draft.entity}</Value>
+            <Facts>
+              <Value label="QuickBooks records">{draft.entity}</Value>
+            </Facts>
           )}
-          <Value label="Fields">
-            {draft.fields.length === 0 ? (
-              "No fields mapped yet."
-            ) : (
-              <ul className="space-y-1.5">
-                {draft.fields.map((field) => (
-                  <li key={field.key || field.header}>
-                    <span className="block">{field.header}</span>
-                    <span className={`block ${metaClass}`}>
-                      {[field.key, FIELD_TYPE_LABELS[field.type], field.unit, field.required ? "Required" : ""].filter(Boolean).join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Value>
-          <Value label="Record key">{draft.record_key.length > 0 ? draft.record_key.join(", ") : "None. Each sync replaces the whole tab."}</Value>
-          <div className="grid gap-x-6 sm:grid-cols-2">
+          <Facts>
+            <Value label="Fields">
+              {draft.fields.length === 0 ? (
+                "No fields mapped yet."
+              ) : (
+                <ul className="space-y-1.5">
+                  {draft.fields.map((field) => (
+                    <li key={field.key || field.header}>
+                      <span className="block">{field.header}</span>
+                      <span className={`block ${metaClass}`}>
+                        {[field.key, FIELD_TYPE_LABELS[field.type], field.unit, field.required ? "Required" : ""].filter(Boolean).join(" · ")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Value>
+          </Facts>
+          <Facts>
+            <Value label="Record key">{draft.record_key.length > 0 ? draft.record_key.join(", ") : "None. Each sync replaces the whole tab."}</Value>
+          </Facts>
+          <Facts cols={2}>
             <Value label="Syncs">{schedule(draft.weekdays, draft.time, draft.timezone)}</Value>
             <Value label="Stale">{stale}</Value>
-          </div>
+          </Facts>
         </dl>
       </div>
 

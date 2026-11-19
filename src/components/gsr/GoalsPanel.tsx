@@ -9,7 +9,7 @@
 // description or period and no deleting it, while its completion, steps and notes stay theirs
 // (0035). Steps and completion save as they change; text saves on blur.
 import { useState, type FormEvent } from "react";
-import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
 import GoalNotes from "./GoalNotes.tsx";
 import Badge from "../ui/Badge.tsx";
@@ -218,7 +218,7 @@ function GoalCard({
           {canEdit && !setForThem ? (
             <>
               <IconButton label="Edit goal" onClick={onEdit}><Pencil size={15} aria-hidden /></IconButton>
-              <IconButton label="Delete goal" onClick={onDelete}><Trash2 size={14} aria-hidden /></IconButton>
+              <Button variant="danger" size="sm" aria-label="Delete goal" onClick={onDelete}>Delete</Button>
             </>
           ) : null}
         </div>

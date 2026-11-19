@@ -1,7 +1,8 @@
 // A heavier RBA roster for visual checks of dense screens (npm run demo with ?load=dense):
-// 22 people, 17 job roles, 54 role metrics and 35 role goals, including long role names and a
-// long unbroken name to test wrapping, and one rated pillar on a 10-point scale. Everything here is made up. Tests never set the address
-// flag, so this never runs under them.
+// 22 people, 17 job roles, 54 role metrics and 35 role goals, including long role names, a long
+// unbroken name to test wrapping, a person with a long name, no title and no account (how every
+// new roster starts), and one rated pillar on a 10-point scale. Everything here is made up. Tests
+// never set the address flag, so this never runs under them.
 import type { CompanyBundle } from "./fixtures.ts";
 import type { JobRole, JobRoleGoal, MetricKind, Profile, RoleMetric } from "../types/database.ts";
 
@@ -27,11 +28,12 @@ const ROLE_NAMES = [
   "Accounts Coordinator",
 ];
 
-const PEOPLE: Array<[string, string]> = [
+// A null title leaves the person with only their email under their name.
+const PEOPLE: Array<[string, string | null]> = [
   ["Marlowe Fenwick", "Estimator"],
   ["Tessa Orlando", "Scheduler"],
   ["Dev Anand Rao", "Safety Coordinator"],
-  ["Imogen Pryce", "Field Engineer"],
+  ["Maximiliana Featherstonehaugh-Abernathy", null],
   ["Bastian Holt", "Purchasing Agent"],
   ["Wolfeschlegelsteinhausen", "Site Coordinator"],
   ["Ulrika Sandvik", "Lead Carpenter"],

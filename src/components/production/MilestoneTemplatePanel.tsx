@@ -5,11 +5,12 @@
 // moved up or down, and removed (archived, not deleted). Each row reads as text until its pencil
 // opens it. The list is the company's own rows (rule 12): nothing here knows a company by name.
 import { useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import EditRow from "../ui/EditRow.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
@@ -27,7 +28,6 @@ import {
   type MilestoneTemplatePatch,
 } from "../../services/milestoneTemplates.ts";
 import { MILESTONE_KIND_LABELS, keysOf, type MilestoneKind, type MilestoneTemplate } from "../../types/database.ts";
-
 
 function byOrder(a: MilestoneTemplate, b: MilestoneTemplate): number {
   return a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at);
@@ -61,48 +61,42 @@ function TemplateRow({
 }) {
   const { title } = template;
   return (
-    <li className="py-3 first:pt-0 last:pb-0">
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          {editing ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-[180px] flex-1">
-                <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} mt-0`} />
-              </div>
-              <select aria-label={`Kind of ${title}`} value={template.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={`${selectClass} mt-0 w-auto`}>
-                {keysOf(MILESTONE_KIND_LABELS).map((k) => (
-                  <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1">
-              <span className={`${itemTitleClass} min-w-0 [overflow-wrap:anywhere]`}>{title}</span>
-              {template.kind === "letter" ? <Badge tone="neutral">{MILESTONE_KIND_LABELS.letter}</Badge> : null}
-            </div>
-          )}
+    <EditRow
+      as="li"
+      className="py-3 first:pt-0 last:pb-0"
+      display={
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={`${itemTitleClass} min-w-0 [overflow-wrap:anywhere]`}>{title}</span>
+          {template.kind === "letter" ? <Badge tone="neutral">{MILESTONE_KIND_LABELS.letter}</Badge> : null}
         </div>
-        <div className="flex shrink-0 items-center">
+      }
+      editLabel={`Edit ${title}`}
+      editing={editing}
+      onEdit={onEdit}
+      onDone={onDone}
+      actions={
+        <>
           <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove(-1)}>
             <ArrowUp size={14} aria-hidden />
           </IconButton>
           <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove(1)}>
             <ArrowDown size={14} aria-hidden />
           </IconButton>
-          {editing ? null : (
-            <IconButton label={`Edit ${title}`} onClick={onEdit}>
-              <Pencil size={15} aria-hidden="true" />
-            </IconButton>
-          )}
+        </>
+      }
+      footer={<Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={onRemove}>Remove</Button>}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-[180px] flex-1">
+          <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} mt-0`} />
         </div>
+        <select aria-label={`Kind of ${title}`} value={template.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={`${selectClass} mt-0 w-auto`}>
+          {keysOf(MILESTONE_KIND_LABELS).map((k) => (
+            <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
+          ))}
+        </select>
       </div>
-      {editing ? (
-        <div className="mt-3 flex flex-wrap justify-between gap-2">
-          <Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={onRemove}>Remove</Button>
-          <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
-        </div>
-      ) : null}
-    </li>
+    </EditRow>
   );
 }
 

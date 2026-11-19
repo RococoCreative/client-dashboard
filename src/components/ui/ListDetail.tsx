@@ -2,17 +2,18 @@
 // link with its own address, so the open item survives a reload and can be shared. At lg and up the
 // list and the detail sit side by side; below lg the list shows alone until something is chosen,
 // then the detail shows alone with a back link naming the list (backLabel), as a person page reads
-// "People" beside its arrow. Responsive classes do that work, so
-// no script measures the screen. With nothing selected the detail is not rendered at any width.
-// An empty list shows nothing of its own, so the page says what an empty list means (its footer);
-// "Nothing matches that." is only for a search that found nothing. Items carrying a group (retired
-// roles) follow the rest under that group's label; a page that wants the label to carry the count
-// of the rows shown passes groupLabel, which is given the group and how many of its rows match.
+// "People" beside its arrow. Responsive classes do that work, so this component measures nothing;
+// a page that opens an item on a wide screen when none is chosen (Roles) decides that itself with
+// useIsWide. With nothing selected the detail is not rendered at any width. An empty list shows
+// nothing of its own, so the page says what an empty list means (its footer); "Nothing matches
+// that." is only for a search that found nothing. Items carrying a group (retired roles) follow the
+// rest under that group's label; a page that wants the label to carry the count of the rows shown
+// passes groupLabel, which is given the group and how many of its rows match.
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { inputClass } from "./forms.ts";
-import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "./type.ts";
+import { eyebrowLabelClass, itemTitleClass, itemTitleSizeClass, metaClass, secondaryClass } from "./type.ts";
 
 export interface ListDetailItem {
   id: string;
@@ -23,9 +24,9 @@ export interface ListDetailItem {
 }
 
 const CARD = "rounded-lg border border-line bg-surface p-4 sm:p-6";
-// A muted title swaps the ink for ink-3 rather than stacking both, so which one wins never depends
-// on the order the stylesheet happens to list them in.
-const MUTED_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-3");
+// A muted title is the item title's size in ink-3, composed rather than stacked on the ink, so which
+// colour wins never depends on the order the stylesheet lists them in.
+const MUTED_TITLE = `${itemTitleSizeClass} text-ink-3`;
 const GROUP_LABEL = `px-2 pb-1.5 pt-4 ${eyebrowLabelClass}`;
 
 export default function ListDetail({

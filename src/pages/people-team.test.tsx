@@ -334,7 +334,7 @@ describe("a viewer who sees only some divisions", () => {
     expect(await screen.findByText("RBA South")).toBeInTheDocument();
     expect(screen.getByText(/only an owner, Rococo, or an admin who sees every division/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Remove|Add division/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Remove|Add division|^Edit / })).not.toBeInTheDocument();
   });
 
   it("says the not-signed-in count covers their divisions", async () => {
@@ -345,8 +345,11 @@ describe("a viewer who sees only some divisions", () => {
   });
 
   it("leaves a full-scope admin's labels as they were", async () => {
+    const user = userEvent.setup();
     renderWithHub(<DivisionsPanel companyId={RBA.company.id} />, rbaAdmin);
-    expect(await screen.findByLabelText("Division name RBA South")).toBeInTheDocument();
+    // Read first: the pencil opens the name, with Remove beside Done.
+    await user.click(await screen.findByRole("button", { name: "Edit RBA South" }));
+    expect(screen.getByLabelText("Division name RBA South")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Remove RBA South" })).toBeInTheDocument());
   });
 });

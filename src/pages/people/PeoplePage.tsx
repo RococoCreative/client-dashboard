@@ -25,20 +25,20 @@
 // columns.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
+import { Check, Copy, Search, Send, UserPlus } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import Chip from "../../components/ui/Chip.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Field from "../../components/ui/Field.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
@@ -60,7 +60,6 @@ import {
   viewerDivisions,
 } from "../../lib/people.ts";
 import { ROLE_LABELS, type CompanyDivision, type DirectoryEntry, type Invitation, type Profile, type Role } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // What each role opens up, shown under the Role select when adding someone.
 const ROLE_HINTS: Record<Role, string> = {
@@ -376,7 +375,7 @@ export default function PeoplePage() {
   }
 
   const filters = state.data ? (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 sm:px-6 py-3">
       {hasDivisions ? (
         <div role="group" aria-label="Division" className="flex flex-wrap items-center gap-1.5">
           <CountChip active={activeDivision === ALL} count={countFor(ALL)} onClick={() => setDivision(ALL)}>All</CountChip>
@@ -442,7 +441,7 @@ export default function PeoplePage() {
         >
           {people.length > 0 ? filters : null}
           {shown.length === 0 ? (
-            <div className="px-5 py-6 text-sm text-ink-2">
+            <div className="px-4 sm:px-6 py-6 text-sm text-ink-2">
               <p>{emptyLine()}</p>
               {hiddenInactive > 0 ? (
                 <p className="mt-1 text-[13px] text-ink-3">
@@ -454,7 +453,7 @@ export default function PeoplePage() {
             <div className="relative lg:overflow-x-auto">
               <table role="table" className={`${tableClass} max-lg:block`}>
                 <thead role="rowgroup" className="max-lg:sr-only">
-                  <tr role="row">
+                  <tr role="row" className={edgeCellsWideClass}>
                     <th role="columnheader" className={thClass}>Person</th>
                     {hasDivisions ? <th role="columnheader" className={thClass}>Division</th> : null}
                     <th role="columnheader" className={thClass}>Reports to</th>
@@ -476,7 +475,7 @@ export default function PeoplePage() {
                       <tr
                         key={person.id}
                         role="row"
-                        className={`hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
+                        className={`${edgeCellsWideClass} hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
                       >
                         <td role="cell" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-1 max-lg:min-w-0 max-lg:flex-1`}>
                           <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
@@ -498,7 +497,7 @@ export default function PeoplePage() {
                           className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
                         >
                           {manager ? (
-                            <Link to={`/people/${manager.id}`} className="hover:text-link tap:inline-flex tap:min-h-11 tap:items-center">{displayName(manager)}</Link>
+                            <Link to={`/people/${manager.id}`} className={`hover:text-link ${tapTargetClass}`}>{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
@@ -533,9 +532,9 @@ export default function PeoplePage() {
                                       {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
                                     </Button>
                                   ) : null}
-                                  <IconButton label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
-                                    <Trash2 size={14} aria-hidden />
-                                  </IconButton>
+                                  <Button variant="danger" size="sm" aria-label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
+                                    Cancel invitation
+                                  </Button>
                                 </>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (
@@ -554,12 +553,12 @@ export default function PeoplePage() {
             </div>
           )}
           {teamView ? (
-            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
+            <p className="border-t border-line px-4 sm:px-6 py-3 text-[12px] text-ink-3">
               Admins add people, place them in divisions and set who they report to. Someone not signed in yet still has
               their goals and tasks waiting on their profile.
             </p>
           ) : (
-            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-3">
+            <p className="border-t border-line px-4 sm:px-6 py-3 text-[12px] text-ink-3">
               Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
               set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
               invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.

@@ -195,7 +195,9 @@ describe("divisions in People, Divisions", () => {
   async function panel() {
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
-    await within(section).findByLabelText("Division name RBA South");
+    // Each division reads as text first.
+    await within(section).findByText("RBA South");
+    expect(within(section).queryByLabelText("Division name RBA South")).not.toBeInTheDocument();
     return section;
   }
 
@@ -203,16 +205,17 @@ describe("divisions in People, Divisions", () => {
     const user = userEvent.setup();
     renderWithHub(<DivisionsPage />, rbaAdmin);
     const section = await panel();
-    expect(within(section).getByLabelText("Division name RBA North")).toBeInTheDocument();
+    expect(within(section).getByText("RBA North")).toBeInTheDocument();
     // Rowan Ellis works in both, so counts in each. Morgan Reyes, on a weekly GSR, is in South.
     expect(within(section).getByText("6 people")).toBeInTheDocument();
     expect(within(section).getByText("3 people")).toBeInTheDocument();
 
     await user.type(within(section).getByLabelText("New division"), "West office");
     await user.click(within(section).getByRole("button", { name: /Add division/ }));
-    expect(await within(section).findByLabelText("Division name West office")).toBeInTheDocument();
+    expect(await within(section).findByText("West office")).toBeInTheDocument();
     expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toEqual(["RBA South", "RBA North", "West office"]);
 
+    await user.click(within(section).getByRole("button", { name: "Edit RBA North" }));
     const north = within(section).getByLabelText("Division name RBA North");
     await user.clear(north);
     await user.type(north, "North office");
@@ -220,6 +223,7 @@ describe("divisions in People, Divisions", () => {
     await waitFor(async () => expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toContain("North office"));
 
     // A division people still work in stays: the database refuses, and the dialog says why.
+    await user.click(within(section).getByRole("button", { name: "Edit RBA South" }));
     await user.click(within(section).getByRole("button", { name: "Remove RBA South" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/6 people still work in it/)).toBeInTheDocument();
@@ -233,11 +237,12 @@ describe("divisions in People, Divisions", () => {
     // An empty one goes.
     await user.type(within(section).getByLabelText("New division"), "Spare yard");
     await user.click(within(section).getByRole("button", { name: /Add division/ }));
-    await user.click(await within(section).findByRole("button", { name: "Remove Spare yard" }));
+    await user.click(await within(section).findByRole("button", { name: "Edit Spare yard" }));
+    await user.click(within(section).getByRole("button", { name: "Remove Spare yard" }));
     const empty = await screen.findByRole("dialog");
     expect(within(empty).getByText(/Nobody works in it/)).toBeInTheDocument();
     await user.click(within(empty).getByRole("button", { name: "Remove division" }));
-    await waitFor(() => expect(within(section).queryByLabelText("Division name Spare yard")).not.toBeInTheDocument());
+    await waitFor(() => expect(within(section).queryByText("Spare yard")).not.toBeInTheDocument());
     expect((await listDivisions(RBA.company.id)).map((d) => d.name)).toEqual(["RBA South", "North office", "West office"]);
   });
 
@@ -246,7 +251,7 @@ describe("divisions in People, Divisions", () => {
     renderWithHub(<DivisionsPage />, rbaAdmin);
     const heading = await screen.findByRole("heading", { name: "Divisions" });
     const section = heading.closest("section") as HTMLElement;
-    await within(section).findByLabelText("Division name West office");
+    await within(section).findByText("West office");
     await user.type(within(section).getByLabelText("New division"), "West office");
     await user.click(within(section).getByRole("button", { name: /Add division/ }));
     expect(await within(section).findByText("That already exists.")).toBeInTheDocument();

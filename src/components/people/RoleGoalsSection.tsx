@@ -3,11 +3,10 @@
 // reads as text until its pencil opens it; one Add role goal button opens the one add form. Role
 // goals are rows of the role (rule 12), so nothing here knows a company by name.
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import EditRow from "../ui/EditRow.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { createJobRoleGoal, deleteJobRoleGoal, updateJobRoleGoal } from "../../services/jobRoles.ts";
@@ -116,13 +115,13 @@ export default function RoleGoalsSection({
                 onEdit={() => setEditingId(goal.id)}
                 onDone={() => setEditingId(null)}
                 display={<p className={`${bodyClass} break-words`}>{goal.title}</p>}
+                footer={
+                  <Button variant="danger" size="sm" aria-label={`Remove role goal ${goal.title}`} onClick={() => void remove(goal)}>
+                    Remove
+                  </Button>
+                }
               >
-                <div className="flex items-center gap-2">
-                  <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => rename(goal, next)} className={`${inputClass} mt-0 flex-1 text-[13px]`} />
-                  <IconButton label={`Remove role goal ${goal.title}`} onClick={() => void remove(goal)}>
-                    <Trash2 size={14} aria-hidden />
-                  </IconButton>
-                </div>
+                <BlurInput value={goal.title} required ariaLabel={`Role goal ${goal.title}`} onSave={(next) => rename(goal, next)} className={`${inputClass} mt-0 text-[13px]`} />
               </EditRow>
             </li>
           ))}

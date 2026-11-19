@@ -88,7 +88,7 @@ describe("Divisions and Roles", () => {
     renderWithHub(<DivisionsPage />, rbaAdmin, { path: "/people/divisions", pattern: "/people/divisions" });
     const nav = await screen.findByRole("navigation", { name: "People" });
     expect(within(nav).getByRole("link", { name: "Divisions" })).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByLabelText("Division name RBA North")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Edit RBA North" })).toBeInTheDocument();
   });
 
   it("keeps job roles and role goals editable on Roles", async () => {

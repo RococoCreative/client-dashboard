@@ -33,17 +33,17 @@ export default function FreshnessCard({ companyId, companyTimeZone, canViewProdu
   return (
     <Section eyebrow="Data sources" title="Freshness" description="When each source last synced. Imported values are read-only." padded={false}>
       {state.error && !state.data ? (
-        <div className="p-5"><Notice tone="error">{state.error}</Notice></div>
+        <div className="p-4 sm:p-6"><Notice tone="error">{state.error}</Notice></div>
       ) : !state.data ? (
-        <div className="p-5"><SkeletonRows rows={3} /></div>
+        <div className="p-4 sm:p-6"><SkeletonRows rows={3} /></div>
       ) : state.data.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">
           No data sources yet. Add one in <Link to="/settings/connections" className="text-link hover:underline">Settings</Link>.
         </p>
       ) : (
         <ul className="divide-y divide-line">
           {state.data.map(({ source, connection }) => (
-            <li key={source.id} className="px-5 py-3">
+            <li key={source.id} className="px-4 sm:px-6 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   {source.target_module === "pm_capacity" && !canViewProduction ? (

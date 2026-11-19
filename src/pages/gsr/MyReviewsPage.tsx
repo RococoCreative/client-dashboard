@@ -11,7 +11,7 @@ import ScoreRing from "../../components/ui/ScoreRing.tsx";
 import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { edgeCellsClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -94,7 +94,7 @@ export default function MyReviewsPage() {
             <div className="relative overflow-x-auto">
               <table className={tableClass}>
                 <thead>
-                  <tr>
+                  <tr className={edgeCellsClass}>
                     <th className={thClass}>Cycle</th>
                     <th className={thClass}>Period</th>
                     <th className={thClass}>Status</th>
@@ -104,7 +104,7 @@ export default function MyReviewsPage() {
                 </thead>
                 <tbody>
                   {rows.map(({ review, cycle, result }) => (
-                    <tr key={review.id} className="hover:bg-surface-2/60">
+                    <tr key={review.id} className={`${edgeCellsClass} hover:bg-surface-2/60`}>
                       <td className={tdClass}>{cycle?.name ?? "Review"}</td>
                       <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                       <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>

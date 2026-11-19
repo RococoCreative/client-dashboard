@@ -20,12 +20,12 @@ import TaskForm from "./TaskForm.tsx";
 import TaskRow, { type TaskBackState } from "./TaskRow.tsx";
 import { sendAssignmentEmail } from "./assignmentEmail.ts";
 import { metaClass, secondaryClass } from "../ui/type.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
 import { isDone, sortTasks } from "../../lib/tasks.ts";
 import { listTasks } from "../../services/tasks.ts";
 import type { Profile, TaskWithSteps } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 // How many finished tasks the page keeps in view. The Tasks page has the rest.
 const RECENT_DONE = 5;

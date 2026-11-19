@@ -125,13 +125,13 @@ describe("action steps", () => {
     expect(screen.getByLabelText("Ask two clients how it landed")).toBeChecked();
   });
 
-  it("removes a step with the shared icon button", async () => {
+  it("removes a step with the shared worded danger button", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewPage />, employee, { path: `/gsr/reviews/${inProgressReview.id}`, pattern: "/gsr/reviews/:reviewId" });
     const remove = await screen.findByRole("button", { name: "Remove step: Send three Fridays in a row" });
-    // IconButton labels its tooltip with the same words and owns its size: 36px with a mouse, 44px under a finger.
-    expect(remove).toHaveAttribute("title", "Remove step: Send three Fridays in a row");
-    expect(remove.className).toContain("h-9 w-9 rounded-md tap:h-11 tap:w-11");
+    // A destructive control keeps its word on screen, and the shared Button owns its size: 44px under a finger.
+    expect(remove).toHaveTextContent("Remove");
+    expect(remove.className).toContain("tap:min-h-11");
     await user.click(remove);
     await waitFor(() => expect(screen.queryByLabelText("Send three Fridays in a row")).not.toBeInTheDocument());
   });

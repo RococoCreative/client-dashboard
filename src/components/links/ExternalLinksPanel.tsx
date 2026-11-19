@@ -6,13 +6,13 @@
 // opens the fields in place, one link at a time, with Remove beside Done. Every change saves on its
 // own.
 import { useState, type FormEvent } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
+import EditRow from "../ui/EditRow.tsx";
 import Field from "../ui/Field.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
@@ -39,40 +39,38 @@ function Caption({ children }: { children: string }) {
   return <span className={labelClass} aria-hidden>{children}</span>;
 }
 
-
 // A link as text: its label, what it is for, where it goes, and who sees it.
-function LinkSummary({ link, onEdit }: { link: ExternalLink; onEdit: () => void }) {
+function LinkSummary({ link }: { link: ExternalLink }) {
   return (
-    <li className="flex items-start justify-between gap-3 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={`min-w-0 [overflow-wrap:anywhere] ${itemTitleClass}`}>{link.label}</span>
-          <Badge tone="neutral">{LINK_AUDIENCE_LABELS[link.audience]}</Badge>
-          {link.embed_is_public ? <Badge tone="accent">Public embed</Badge> : null}
-        </div>
-        {link.destination_note ? <p className={`mt-0.5 ${secondaryClass}`}>{link.destination_note}</p> : null}
-        <p className={`mt-0.5 truncate ${metaClass}`} title={link.url}>
-          {link.url}
-          <span className="px-1.5" aria-hidden>·</span>
-          {LINK_PROVIDER_LABELS[link.provider]}
-          <span className="px-1.5" aria-hidden>·</span>
-          <span className="tnum">Order {link.sort_order}</span>
-        </p>
+    <>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={`min-w-0 [overflow-wrap:anywhere] ${itemTitleClass}`}>{link.label}</span>
+        <Badge tone="neutral">{LINK_AUDIENCE_LABELS[link.audience]}</Badge>
+        {link.embed_is_public ? <Badge tone="accent">Public embed</Badge> : null}
       </div>
-      <IconButton label={`Edit ${link.label}`} onClick={onEdit}>
-        <Pencil size={15} aria-hidden />
-      </IconButton>
-    </li>
+      {link.destination_note ? <p className={`mt-0.5 ${secondaryClass}`}>{link.destination_note}</p> : null}
+      <p className={`mt-0.5 truncate ${metaClass}`} title={link.url}>
+        {link.url}
+        <span className="px-1.5" aria-hidden>·</span>
+        {LINK_PROVIDER_LABELS[link.provider]}
+        <span className="px-1.5" aria-hidden>·</span>
+        <span className="tnum">Order {link.sort_order}</span>
+      </p>
+    </>
   );
 }
 
 function LinkRow({
   link,
+  editing,
+  onEdit,
   onSaved,
   onError,
   onRemove,
   onDone,
 }: {
+  editing: boolean;
+  onEdit: () => void;
   onDone: () => void;
   link: ExternalLink;
   onSaved: (link: ExternalLink) => void;
@@ -122,7 +120,16 @@ function LinkRow({
 
   const noEmbed = !link.embed_url;
   return (
-    <li className="py-3">
+    <EditRow
+      as="li"
+      className="py-3"
+      display={<LinkSummary link={link} />}
+      editLabel={`Edit ${link.label}`}
+      editing={editing}
+      onEdit={onEdit}
+      onDone={onDone}
+      footer={<Button variant="danger" size="sm" aria-label={`Remove ${link.label}`} onClick={onRemove}>Remove</Button>}
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <Caption>Label</Caption>
@@ -182,11 +189,7 @@ function LinkRow({
           <p className={`${helpClass} mt-1`}>Only for a view the board owner has shared publicly. Anyone with that link can see what it shows, including data hidden from the view.</p>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap justify-between gap-2">
-        <Button variant="danger" size="sm" aria-label={`Remove ${link.label}`} onClick={onRemove}>Remove</Button>
-        <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
-      </div>
-    </li>
+    </EditRow>
   );
 }
 
@@ -319,13 +322,12 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
                 <div key={g.group}>
                   <p className={eyebrowLabelClass}>{LINK_GROUP_LABELS[g.group]}</p>
                   <ul className="mt-1 divide-y divide-line">
-                    {g.links.map((link) =>
-                      openId !== link.id ? (
-                        <LinkSummary key={link.id} link={link} onEdit={() => setOpenId(link.id)} />
-                      ) : (
+                    {g.links.map((link) => (
                       <LinkRow
                         key={link.id}
                         link={link}
+                        editing={openId === link.id}
+                        onEdit={() => setOpenId(link.id)}
                         onSaved={(next) => state.setData((prev) => (prev ? prev.map((l) => (l.id === next.id ? next : l)) : prev))}
                         onError={setError}
                         onRemove={() => {
@@ -334,8 +336,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
                         }}
                         onDone={() => setOpenId(null)}
                       />
-                      ),
-                    )}
+                    ))}
                   </ul>
                 </div>
               ))}

@@ -330,13 +330,19 @@ describe("deliverable categories", () => {
   it("reorders categories", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await openCategory(user, "Production & QA");
+    // One row opens at a time, so the order is read from the rows' pencils, open row included.
+    const order = () =>
+      screen
+        .getAllByRole("button", { name: /^(Edit category |Move .+ up$)/ })
+        .map((el) => el.getAttribute("aria-label")!.replace(/^Edit category /, "").replace(/^Move (.+) up$/, "$1"))
+        .filter((name) => name === "BD & Sales" || name === "Production & QA");
+    await screen.findByRole("button", { name: "Edit category BD & Sales" });
+    expect(order()).toEqual(["BD & Sales", "Production & QA"]);
     await openCategory(user, "BD & Sales");
-    const boxes = () => screen.getAllByLabelText(/^Category name /).map((el) => (el as HTMLInputElement).value);
-    expect(boxes()).toEqual(["BD & Sales", "Production & QA"]);
     expect(screen.getByRole("button", { name: "Move BD & Sales up" })).toBeDisabled();
+    await openCategory(user, "Production & QA");
     await user.click(screen.getByRole("button", { name: "Move Production & QA up" }));
-    await waitFor(() => expect(boxes()).toEqual(["Production & QA", "BD & Sales"]));
+    await waitFor(() => expect(order()).toEqual(["Production & QA", "BD & Sales"]));
   });
 
   it("retires a category: settings mark it, and the person page stops offering it", async () => {
@@ -430,7 +436,6 @@ describe("deliverable categories", () => {
     const user = userEvent.setup();
     await createDeliverableCategory({ company_id: KLASIK.company.id, name: "Estimating", sort_order: 9 });
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await openCategory(user, "Estimating");
     await openCategory(user, "BD & Sales");
     await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
     const dialog = screen.getByRole("dialog");
@@ -438,9 +443,13 @@ describe("deliverable categories", () => {
     vi.mocked(deleteDeliverableCategory).mockImplementationOnce(() => call.promise);
     await user.click(within(dialog).getByRole("button", { name: "Delete category" }));
 
-    // Modal keeps Tab inside the dialog; this puts focus on a Delete button under the scrim directly.
+    // Modal keeps Tab inside the dialog; this puts focus on controls under the scrim directly: the
+    // other category's pencil, which opens its row (one row at a time), then its Delete.
+    screen.getByRole("button", { name: "Edit category Estimating" }).focus();
+    await user.keyboard("{Enter}");
     screen.getByRole("button", { name: "Delete Estimating" }).focus();
     await user.keyboard("{Enter}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(dialog).toHaveTextContent('Delete "BD & Sales"?');
 
     call.reject(new Error("Failed to fetch"));
@@ -456,16 +465,16 @@ describe("deliverable categories", () => {
     expect(next).not.toHaveTextContent("The connection dropped");
     await user.click(within(next).getByRole("button", { name: "Delete category" }));
     await waitFor(() => expect(screen.queryByLabelText("Category name Estimating")).not.toBeInTheDocument());
-    expect(screen.getByLabelText("Category name BD & Sales")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit category BD & Sales" })).toBeInTheDocument();
   });
 });
 
 describe("deleting a company", () => {
-  it("says what the delete removes and what it leaves, and removes a domain with the shared icon button", async () => {
+  it("says what the delete removes and what it leaves, and removes a domain with a worded button", async () => {
     const user = userEvent.setup();
     renderCompanies();
     const remove = await screen.findByRole("button", { name: "Remove beklasik.com" });
-    expect(remove).toHaveAttribute("title", "Remove beklasik.com");
+    expect(remove).toHaveTextContent("Remove");
 
     await user.click(screen.getByRole("button", { name: "Delete Kingdom Custom Construction" }));
     const dialog = screen.getByRole("dialog");

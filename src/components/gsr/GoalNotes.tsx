@@ -5,7 +5,7 @@
 // Authors are named from the company directory, because the reader may not be able to open the
 // profile of the person who wrote a note (an employee reading their manager's note, say).
 import { useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import IconButton from "../ui/IconButton.tsx";
@@ -55,9 +55,9 @@ function NoteEntry({
           <input type="text" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} aria-label={`Edit note from ${stamp}`} className={fieldClass} />
           <Button type="submit" variant="secondary" size="sm" disabled={!draft.trim() || busy}>Save</Button>
           <Button variant="ghost" size="sm" onClick={() => { setDraft(note.body); setEditing(false); }}>Cancel</Button>
-          <IconButton label={`Delete note from ${stamp}`} onClick={onDelete}>
-            <Trash2 size={13} aria-hidden />
-          </IconButton>
+          <Button variant="danger" size="sm" aria-label={`Delete note from ${stamp}`} onClick={onDelete}>
+            Delete
+          </Button>
         </form>
       </li>
     );

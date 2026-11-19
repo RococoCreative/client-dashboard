@@ -268,7 +268,7 @@ function NewCycleDialog({
 }
 
 export default function CyclesPage({ section }: { section: HubSection }) {
-  const { company, isAdmin } = useHub();
+  const { company } = useHub();
   const navigate = useNavigate();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
@@ -320,7 +320,7 @@ export default function CyclesPage({ section }: { section: HubSection }) {
           </>
         }
       />
-      {gsr ? <Tabs items={isAdmin ? GSR_TABS : GSR_TABS.filter((t) => t.key !== "setup")} label="GSRs" /> : <Tabs items={REVIEWS_TABS} label="Reviews" />}
+      {gsr ? <Tabs items={GSR_TABS} label="GSRs" /> : <Tabs items={REVIEWS_TABS} label="Reviews" />}
 
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {!state.data && !state.error ? (

@@ -30,7 +30,7 @@
 // button to forget.
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CheckCircle2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, RotateCcw } from "lucide-react";
 import EmployeeSnapshot from "../../components/gsr/EmployeeSnapshot.tsx";
 import GoalSettingPanel from "../../components/gsr/GoalSettingPanel.tsx";
 import GoalsPanel from "../../components/gsr/GoalsPanel.tsx";
@@ -43,7 +43,6 @@ import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import RatingInput from "../../components/ui/RatingInput.tsx";
@@ -53,6 +52,7 @@ import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
 import { eyebrowLabelClass } from "../../components/ui/type.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { hasModule } from "../../lib/modules.ts";
@@ -88,7 +88,6 @@ import {
   type ReviewScore,
   type TaskWithSteps,
 } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // Who signed off a review when the company directory does not list them. Rococo only when the page
 // knows it: the viewer is that Rococo admin, or the reviewer is on the list the viewer reads and is
@@ -1004,9 +1003,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                     </td>
                                     <td role="cell" className="w-10 py-2 text-right align-top max-sm:self-end max-sm:p-0">
                                       {canScore ? (
-                                        <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
-                                          <Trash2 size={14} aria-hidden />
-                                        </IconButton>
+                                        <Button variant="danger" size="sm" aria-label="Remove deliverable" onClick={() => setRemoving(item)}>
+                                          Remove
+                                        </Button>
                                       ) : null}
                                     </td>
                                   </tr>

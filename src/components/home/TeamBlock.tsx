@@ -16,6 +16,7 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
+import { tapStretchClass } from "../ui/tap.ts";
 import { REVIEW_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -37,11 +38,11 @@ function TeamRow({ person, standing, period, tasks, withTasks }: { person: Profi
   const today = todayIso();
   const overdue = tasks.filter((t) => isOverdue(t, today)).length;
   return (
-    <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <li className="relative flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <Avatar person={person} size={28} />
         <div className="min-w-0">
-          <Link to={`/people/${person.id}`} className={`${itemTitleClass} hover:text-link`}>
+          <Link to={`/people/${person.id}`} className={`${itemTitleClass} hover:text-link ${tapStretchClass}`}>
             {displayName(person)}
           </Link>
           <p className={`truncate ${metaClass}`}>{person.title ?? ROLE_LABELS[person.role]}</p>

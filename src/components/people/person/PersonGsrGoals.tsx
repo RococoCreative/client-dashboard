@@ -9,6 +9,8 @@ import Badge from "../../ui/Badge.tsx";
 import Button from "../../ui/Button.tsx";
 import Notice from "../../ui/Notice.tsx";
 import Section from "../../ui/Section.tsx";
+import { tapTargetClass } from "../../ui/tap.ts";
+import { secondaryClass, secondarySizeClass, sectionEyebrowClass, sectionTitleClass } from "../../ui/type.ts";
 import GoalsPanel from "../../gsr/GoalsPanel.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
 import { useHub } from "../../../context/HubContext.tsx";
@@ -19,7 +21,6 @@ import { displayName } from "../../../lib/format.ts";
 import { ledBy } from "../../../lib/people.ts";
 import { REVIEW_STATUS_LABELS, type Profile, type Review, type ReviewCycle } from "../../../types/database.ts";
 import type { PersonRecord, PersonTabProps } from "../../../pages/people/personTabs.ts";
-import { tapTargetClass } from "../../ui/tap.ts";
 
 // The person's current Goal Setting Review, at their rhythm, for an admin or someone who leads
 // them: a link into it when it is open, or a way to start it. The period opens itself (0046), so
@@ -74,17 +75,17 @@ function CurrentGsrCard({
           {cycle.name}
           <Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge>
         </span>
-        <Link to={reviewPath(review.id, cycle)} className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>Open {cycle.name} GSR</Link>
+        <Link to={reviewPath(review.id, cycle)} className={`${secondarySizeClass} font-medium text-link hover:underline ${tapTargetClass}`}>Open {cycle.name} GSR</Link>
       </div>
     );
   } else if (cycle && omittedCycleIds.includes(cycle.id)) {
-    body = <p className="text-[13px] text-ink-2">{first} is left out of the {cycle.name} GSRs, so there is nothing to start.</p>;
+    body = <p className={secondaryClass}>{first} is left out of the {cycle.name} GSRs, so there is nothing to start.</p>;
   } else if (!person.is_active) {
-    body = <p className="text-[13px] text-ink-2">{first} is inactive, so they are not in the {periodName} GSRs.</p>;
+    body = <p className={secondaryClass}>{first} is inactive, so they are not in the {periodName} GSRs.</p>;
   } else {
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[13px] text-ink-2">{cycle ? `${cycle.name} is open.` : `${periodName} is not open yet.`} {first}'s GSR has not been started.</span>
+        <span className={secondaryClass}>{cycle ? `${cycle.name} is open.` : `${periodName} is not open yet.`} {first}'s GSR has not been started.</span>
         <Button size="sm" disabled={starting} onClick={() => void start()}>
           <PencilLine size={14} aria-hidden /> {starting ? "Starting..." : `Start ${copy.possessive} GSR`}
         </Button>
@@ -114,8 +115,8 @@ export default function PersonGsrGoals({ companyId, data, person }: PersonTabPro
       <CurrentGsr companyId={companyId} data={data} person={person} />
       <section aria-labelledby="person-goals-heading">
         <div className="mb-3">
-          <p className="eyebrow">Goals</p>
-          <h2 id="person-goals-heading" className="mt-1 font-display text-lg text-heading">This year, next year and the BHAG</h2>
+          <p className={sectionEyebrowClass}>Goals</p>
+          <h2 id="person-goals-heading" className={`mt-1 ${sectionTitleClass}`}>This year, next year and the BHAG</h2>
         </div>
         <GoalsPanel companyId={companyId} employeeId={person.id} canEdit={isAdmin} ownerName={displayName(person).split(" ")[0]} />
       </section>
