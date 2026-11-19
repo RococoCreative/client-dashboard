@@ -8,7 +8,7 @@
 // The direct reports show; a report with people below them starts closed, and their "N below" is
 // the button that opens that branch, so a large company's chain does not run the page long. Every
 // level stays reachable. Which branches are open is this screen's own state, never saved.
-import { useId, useState } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import Avatar from "../ui/Avatar.tsx";
@@ -70,17 +70,24 @@ function TeamRow({ node, divisions, depth }: { node: Node; divisions: readonly C
   const name = displayName(person);
   return (
     <li>
-      <div className="flex items-center gap-3 border-b border-line py-2" style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}>
+      {/* Each level indents 12px on a phone and 20px from sm, six levels at most, so a deep row
+          keeps room for its name and its "N below". On a phone the row is a small grid (avatar,
+          name, "N below") and the Not signed in yet badge drops under the name instead of taking
+          the name's room. */}
+      <div
+        className="flex items-center gap-3 border-b border-line py-2 pl-[calc(var(--depth)*12px)] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 sm:pl-[calc(var(--depth)*20px)]"
+        style={{ "--depth": Math.min(depth, 6) } as CSSProperties}
+      >
         <Avatar person={person} size={24} />
         <div className="min-w-0 flex-1">
-          <Link to={`/people/${person.id}`} className="text-sm font-medium text-ink hover:text-link">
+          <Link to={`/people/${person.id}`} title={name} className="block truncate text-sm font-medium text-ink hover:text-link">
             {name}
           </Link>
           <p className="truncate text-[12px] text-ink-3">
             {[person.title ?? ROLE_LABELS[person.role], divisions.length > 0 ? divisionLabel(person.division_ids, divisions) : null].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 max-sm:contents">
           {below > 0 ? (
             <Button
               variant="ghost"
@@ -89,13 +96,17 @@ function TeamRow({ node, divisions, depth }: { node: Node; divisions: readonly C
               aria-controls={open ? branchId : undefined}
               aria-label={`${below} below ${name}`}
               onClick={() => setOpen((was) => !was)}
-              className="tnum"
+              className="tnum max-sm:col-start-3 max-sm:row-start-1"
             >
               <ChevronRight size={13} aria-hidden className={`transition-transform duration-150 ${open ? "rotate-90" : ""}`} />
               {below} below
             </Button>
           ) : null}
-          {hasAccount(person) ? null : <Badge tone="warning">Not signed in yet</Badge>}
+          {hasAccount(person) ? null : (
+            <Badge tone="warning" className="max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-self-start">
+              Not signed in yet
+            </Badge>
+          )}
         </div>
       </div>
       {open && reports.length > 0 ? (

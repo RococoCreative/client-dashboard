@@ -36,8 +36,9 @@ type Status = "open" | "done" | "all";
 
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
 const STATUS_LABELS: Record<Status, string> = { open: "Open", done: "Done", all: "Open and done" };
-// The shared select is full width; a filter sizes to its choice so the row reads as one line.
-const filterClass = `${selectClass} mt-0 !w-auto max-w-full`;
+// The shared select is full width; from sm a filter sizes to its choice so the row reads as one
+// line. On a phone the filters sit in an even two-column grid, each filling its cell.
+const filterClass = `${selectClass} mt-0 sm:!w-auto max-w-full`;
 
 function matchesStatus(task: TaskWithSteps, status: Status): boolean {
   return status === "all" || (status === "done") === isDone(task);
@@ -77,7 +78,7 @@ function Filters({
   onStatus: (next: Status) => void;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
       <select value={person} onChange={(e) => onPerson(e.target.value)} aria-label="Filter by person" className={filterClass}>
         <option value="">All people</option>
         {showUnassigned ? <option value="none">Unassigned</option> : null}

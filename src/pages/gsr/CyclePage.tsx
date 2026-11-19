@@ -9,7 +9,7 @@
 // Rococo admin, or an admin who sees every division) edits, closes, reopens or deletes one (0038);
 // any admin starts reviews and chooses who is in it. A closed cycle starts nothing (0039), and
 // closing one asks first, with how many reviews in it are not complete.
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Pencil, Trash2, Unlock, UserMinus, UserPlus, UsersRound } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -72,12 +72,15 @@ import { tapTargetClass } from "../../components/ui/tap.ts";
 // padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
 const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
-// Below md the team table stacks: each person is a block with their name, then the status and each
-// score as labelled cells two to a line (the column's name from data-label), then the row's actions. It is the
-// same table underneath, with explicit table roles so a screen reader still reads rows and columns.
-const STACKED_CELL =
-  "max-md:flex max-md:items-center max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left " +
-  "max-md:before:text-[12.5px] max-md:before:text-ink-3 max-md:before:content-[attr(data-label)]";
+// Below md the team table stacks into compact, even rows: the name with the status badge on its
+// line, then the scores as one even grid under column headings shown once above the rows, then the
+// row's actions. The grid has one column per score (--score-cols, set on the table). It is the same
+// table underneath, with explicit table roles and each cell's column name (data-label) so a screen
+// reader still reads rows and columns.
+const STACKED_GRID = "max-md:grid max-md:grid-cols-[repeat(var(--score-cols),minmax(0,1fr))] max-md:gap-x-3";
+const STACKED_SCORE = "max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left";
+// The headings for the columns only the stacked grid shows; the rest stay for screen readers.
+const STACKED_HEAD = "max-md:!px-0 max-md:pt-3 max-md:pb-0 max-md:border-b-0 max-md:text-left max-md:align-bottom max-md:text-[12px] max-md:normal-case max-md:tracking-normal";
 
 // A month is a calendar month, here as in the New month form: the start snaps to the first and
 // the end follows it. Other cadences keep the dates the admin types.
@@ -454,27 +457,31 @@ export default function CyclePage() {
           </p>
         ) : (
           <div className="relative md:overflow-x-auto">
-            <table role="table" className={`${tableClass} max-md:block`}>
-              <thead role="rowgroup" className="max-md:sr-only">
-                <tr role="row" className={edgeCells}>
-                  <th role="columnheader" className={thClass}>Person</th>
-                  <th role="columnheader" className={thClass}>Status</th>
+            <table
+              role="table"
+              className={`${tableClass} max-md:block`}
+              style={{ "--score-cols": Math.max(1, (columns.pillarScores ? pillars.length + 1 : 0) + (columns.gsrScore ? 1 : 0)) } as CSSProperties}
+            >
+              <thead role="rowgroup" className="max-md:block max-md:border-b max-md:border-line">
+                <tr role="row" className={`${edgeCells} ${STACKED_GRID} max-md:px-4`}>
+                  <th role="columnheader" className={`${thClass} max-md:sr-only`}>Person</th>
+                  <th role="columnheader" className={`${thClass} max-md:sr-only`}>Status</th>
                   {columns.pillarScores ? (
                     <>
                       {pillars.map((p) => (
-                        <th key={p.id} role="columnheader" className={`${thClass} text-right`}>{p.name}</th>
+                        <th key={p.id} role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>{p.name}</th>
                       ))}
-                      <th role="columnheader" className={`${thClass} text-right`}>Overall</th>
+                      <th role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>Overall</th>
                     </>
                   ) : null}
-                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right`}>GSR score</th> : null}
-                  <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>
+                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right ${STACKED_HEAD}`}>GSR score</th> : null}
+                  <th role="columnheader" className={`${thClass} max-md:sr-only`}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody role="rowgroup" className="max-md:block">
                 {rows.map(({ person, review, result }) => (
-                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0`}>
-                    <td role="cell" className={`${tdClass} max-md:col-span-2 max-md:block max-md:border-b-0 max-md:!p-0 max-md:pb-1`}>
+                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 ${STACKED_GRID} max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
+                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">
@@ -486,7 +493,7 @@ export default function CyclePage() {
                         </div>
                       </div>
                     </td>
-                    <td role="cell" data-label="Status" className={`${tdClass} ${STACKED_CELL}`}>
+                    <td role="cell" data-label="Status" className={`${tdClass} max-md:absolute max-md:top-2.5 max-md:right-4 max-md:flex max-md:h-[38px] max-md:items-center max-md:border-b-0 max-md:!p-0`}>
                       <Badge tone={review ? REVIEW_STATUS_TONE[review.status] : "neutral"}>
                         {review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}
                       </Badge>
@@ -496,18 +503,18 @@ export default function CyclePage() {
                         {pillars.map((p) => {
                           const pillar = result?.pillars.find((x) => x.pillarId === p.id);
                           return (
-                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${STACKED_CELL}`}>
+                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${STACKED_SCORE}`}>
                               {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
                             </td>
                           );
                         })}
-                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${STACKED_CELL}`}>
+                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${STACKED_SCORE}`}>
                           {result ? result.overall : "-"}
                         </td>
                       </>
                     ) : null}
                     {columns.gsrScore ? (
-                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${STACKED_CELL}`}>
+                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${STACKED_SCORE}`}>
                         {review && monthLocked(review) ? (
                           <span className="font-medium text-ink">{review.gsr_score}%</span>
                         ) : (
@@ -515,7 +522,7 @@ export default function CyclePage() {
                         )}
                       </td>
                     ) : null}
-                    <td role="cell" className={`${tdClass} text-right max-md:col-span-2 max-md:block max-md:border-b-0 max-md:!p-0 max-md:pt-1`}>
+                    <td role="cell" className={`${tdClass} text-right max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0`}>
                       <div className="flex items-center justify-end gap-3 whitespace-nowrap max-md:justify-start">
                         {review ? (
                           <Link to={reviewPath(review.id, cycle.cadence)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link>

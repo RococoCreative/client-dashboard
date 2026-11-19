@@ -18,9 +18,11 @@
 // manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
 // no invite.
 //
-// Below lg the table stacks: each person is a block with their name and title, then division,
-// reports to, role and status as labelled lines, then the row's actions. It is the same table
-// underneath, with explicit table roles so a screen reader still reads rows and columns.
+// Below lg the table stacks into compact, even rows: the name and title with the status badge on
+// the same line, then division, reports to (labelled) and role on one quiet line that wraps, then
+// the invitation actions for a person who has them. It is the same table underneath, with explicit
+// table roles and each cell's column name (data-label) so a screen reader still reads rows and
+// columns.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
@@ -73,11 +75,14 @@ const ALL = "all";
 const EVERY = "every";
 const NONE = "none";
 
-// The stacked roster's labelled lines: the column's name (data-label) beside the value, indented to
-// line up with the name above. From md to lg they sit two to a line.
-const STACKED_CELL =
-  "max-lg:flex max-lg:items-center max-lg:gap-3 max-lg:border-b-0 max-lg:py-0.5 max-lg:pr-0 max-lg:pl-9 " +
-  "max-lg:before:w-24 max-lg:before:shrink-0 max-lg:before:text-[12.5px] max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)]";
+// The stacked roster row is one wrapping flex line. Order puts the name and status first; the row's
+// ::after is a zero-height full-width item that breaks the line; the facts follow, then the actions.
+const STACKED_ROW =
+  "max-lg:flex max-lg:flex-wrap max-lg:items-center max-lg:gap-x-4 max-lg:border-b max-lg:border-line max-lg:px-4 max-lg:py-1.5 max-lg:last:border-b-0 " +
+  "max-lg:after:order-3 max-lg:after:basis-full";
+const STACKED_RESET = "max-lg:border-b-0 max-lg:p-0";
+// A fact on the quiet line: no label of its own except Reports to, which names itself.
+const STACKED_FACT = `${STACKED_RESET} max-lg:order-4 max-lg:flex max-lg:items-center max-lg:text-[13px]`;
 
 function AddStaffDialog({
   companyId,
@@ -471,9 +476,9 @@ export default function PeoplePage() {
                       <tr
                         key={person.id}
                         role="row"
-                        className={`hover:bg-surface-2/60 max-lg:block max-lg:border-b max-lg:border-line max-lg:px-4 max-lg:py-3 max-lg:last:border-b-0 md:max-lg:grid md:max-lg:grid-cols-2 md:max-lg:gap-x-6 ${person.is_active ? "" : "opacity-60"}`}
+                        className={`hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
                       >
-                        <td role="cell" className={`${tdClass} py-2 max-lg:block max-lg:border-b-0 max-lg:p-0 md:max-lg:col-span-2`}>
+                        <td role="cell" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-1 max-lg:min-w-0 max-lg:flex-1`}>
                           <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
                             <Avatar person={person} size={26} />
                             <span className="min-w-0">
@@ -483,25 +488,29 @@ export default function PeoplePage() {
                           </Link>
                         </td>
                         {hasDivisions ? (
-                          <td role="cell" data-label="Division" className={`${tdClass} py-2 text-[13px] ${STACKED_CELL}`}>
+                          <td role="cell" data-label="Division" className={`${tdClass} py-2 text-[13px] ${STACKED_FACT}`}>
                             {placed === "No division" && !rococo ? <Badge tone="warning">No division</Badge> : <span className="text-ink-2">{rococo ? "-" : placed}</span>}
                           </td>
                         ) : null}
-                        <td role="cell" data-label="Reports to" className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_CELL}`}>
+                        <td
+                          role="cell"
+                          data-label="Reports to"
+                          className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
+                        >
                           {manager ? (
                             <Link to={`/people/${manager.id}`} className="hover:text-link tap:inline-flex tap:min-h-11 tap:items-center">{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
                         </td>
-                        <td role="cell" data-label="Role" className={`${tdClass} py-2 ${STACKED_CELL}`}>
+                        <td role="cell" data-label="Role" className={`${tdClass} py-2 ${STACKED_FACT}`}>
                           {rococo ? (
                             <Badge>Rococo Creative</Badge>
                           ) : (
                             <span className="text-[13px] text-ink-2">{ROLE_LABELS[person.role]}</span>
                           )}
                         </td>
-                        <td role="cell" data-label="Status" className={`${tdClass} py-2 ${STACKED_CELL}`}>
+                        <td role="cell" data-label="Status" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-2 max-lg:shrink-0`}>
                           {!person.is_active ? (
                             <Badge tone="neutral">Inactive</Badge>
                           ) : account ? (
@@ -515,8 +524,8 @@ export default function PeoplePage() {
                           )}
                         </td>
                         {teamView ? null : (
-                          <td role="cell" className={`${tdClass} py-2 text-right max-lg:block max-lg:border-b-0 max-lg:p-0 max-lg:pl-9 max-lg:text-left md:max-lg:col-span-2`}>
-                            <span className="flex items-center justify-end gap-1.5 max-lg:flex-wrap max-lg:justify-start max-lg:not-empty:mt-2">
+                          <td role="cell" className={`${tdClass} py-2 text-right ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
+                            <span className="flex items-center justify-end gap-1.5 max-lg:flex-wrap max-lg:justify-start max-lg:not-empty:mb-1">
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (

@@ -2,7 +2,8 @@
 // title, then who it is for (when the list spans people), when it is due, whether it repeats, how
 // far along its steps are, its priority, and a mark when it is overdue or done. A list that knows
 // more about a task (the GSR month it serves, on a person page) passes it as a note, and a list
-// that wants the task page to lead back to it passes where back is as link state.
+// that wants the task page to lead back to it passes where back is as link state. On a phone every
+// row reads the same way: the title at full width, then the meta with the badges on its line.
 import { Repeat } from "lucide-react";
 import { Link } from "react-router-dom";
 import Badge, { type BadgeTone } from "../ui/Badge.tsx";
@@ -45,10 +46,12 @@ export default function TaskRow({
   const who = task.assignee_id === null ? "Unassigned" : assigneeName;
   return (
     <li>
-      <Link to={`/tasks/${task.id}`} state={linkState} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors duration-150 hover:bg-surface-2/60 sm:px-6">
-        <div className="min-w-0 flex-1 basis-40">
-          <p className={`line-clamp-2 break-words sm:line-clamp-1 sm:truncate ${done ? `${DONE_TITLE} line-through` : itemTitleClass}`}>{task.title}</p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-ink-2">
+      <Link to={`/tasks/${task.id}`} state={linkState} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors duration-150 hover:bg-surface-2/60 sm:gap-y-1.5 sm:px-6">
+        {/* Below sm this box steps aside (contents), so the title, the meta and the badges share the
+            row's own line wrapping: the title takes a full line and the badges follow the meta. */}
+        <div className="min-w-0 flex-1 basis-40 max-sm:contents">
+          <p className={`line-clamp-2 break-words max-sm:basis-full sm:line-clamp-1 sm:truncate ${done ? `${DONE_TITLE} line-through` : itemTitleClass}`}>{task.title}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-ink-2 max-sm:mt-0 max-sm:min-w-0 max-sm:flex-1">
             {showAssignee && who ? (
               <>
                 <span>{who}</span>
