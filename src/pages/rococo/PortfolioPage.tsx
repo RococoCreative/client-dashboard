@@ -14,6 +14,7 @@ import Stat from "../../components/ui/Stat.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonCard from "../../components/ui/SkeletonCard.tsx";
 import NewCompanyDialog from "../../components/rococo/NewCompanyDialog.tsx";
+import { eyebrowLabelClass, metaClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllDomains } from "../../services/companies.ts";
@@ -148,9 +149,9 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
 function Signal({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <dt className="text-[11px] font-medium uppercase tracking-label text-ink-3">{label}</dt>
+      <dt className={eyebrowLabelClass}>{label}</dt>
       <dd className="tnum mt-0.5 text-sm font-medium text-ink">{value}</dd>
-      {hint ? <dd className="truncate text-[12px] text-ink-2">{hint}</dd> : null}
+      {hint ? <dd className="truncate text-[12.5px] text-ink-2" title={hint}>{hint}</dd> : null}
     </div>
   );
 }
@@ -169,19 +170,20 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
   const theme = THEMES[company.theme_key];
   const derived = latestSnapshot ? deriveSnapshot(latestSnapshot) : null;
   return (
-    <li className="rounded-lg border border-line bg-surface p-5 shadow-xs">
+    <li className="rounded-lg border border-line bg-surface p-4 shadow-xs sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           {/* The tenant's own accent as a swatch: data about their theme, not our styling. */}
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: theme.accent }} aria-hidden />
           <div className="min-w-0">
             <h2 className="font-display text-xl text-heading">{company.name}</h2>
-            <p className="truncate text-[12px] text-ink-3">
+            <p className={`truncate ${metaClass}`}>
               {company.slug} · {summary.domains.length > 0 ? summary.domains.join(", ") : "invitation only"} · {theme.label} theme
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => onEnter("/")}>
+        {/* Quiet on each card, so New company stays the page's one primary action. */}
+        <Button size="sm" variant="secondary" onClick={() => onEnter("/")}>
           Open hub <ArrowRight size={14} aria-hidden />
         </Button>
       </header>
@@ -221,7 +223,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-[12px] text-success">Nothing needs your hand.</p>
+        <p className="mt-4 text-[12.5px] text-success">Nothing needs your hand.</p>
       )}
 
       <footer className="mt-4 flex flex-wrap gap-1 border-t border-line pt-3">
@@ -284,7 +286,7 @@ export default function PortfolioPage() {
       {!state.data && !state.error ? (
         <div className="grid gap-4"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div>
       ) : !state.data ? null : companies.length === 0 ? (
-        <EmptyState eyebrow="Portfolio" title="No companies yet" body="Create the first company, set its theme and sign-in domain, and invite its owner." action={<Button onClick={() => setCreating(true)}>New company</Button>} />
+        <EmptyState eyebrow="Portfolio" title="No companies yet" body="Create the first company, set its theme and sign-in domain, and invite its owner." action={<Button variant="secondary" onClick={() => setCreating(true)}>New company</Button>} />
       ) : (
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-4">

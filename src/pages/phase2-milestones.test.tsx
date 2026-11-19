@@ -57,7 +57,8 @@ const job102 = { path: "/production/projects/kingdom-project-2", pattern: "/prod
 const TODAY = "2026-09-15";
 
 const rowOf = (title: string) => screen.getByText(title).closest("li") as HTMLElement;
-const editRowOf = (title: string) => screen.getByLabelText(`Title of ${title}`).closest("li") as HTMLElement;
+// An editable item, found by its live status select (its title reads as text until opened).
+const editRowOf = (title: string) => screen.getByRole("combobox", { name: `Status of ${title}` }).closest("li") as HTMLElement;
 const badge = (row: HTMLElement, text: string) => within(row).queryByText(text, { selector: "span" });
 
 // The done-of-total count the project list shows (milestoneCounts), read and then put away.

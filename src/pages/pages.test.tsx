@@ -570,6 +570,7 @@ describe("admin", () => {
     renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });
     expect(await screen.findByRole("heading", { name: "Companies" })).toBeInTheDocument();
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Edit name for RBA Projects" }));
     expect(await screen.findByDisplayValue("RBA Projects")).toBeInTheDocument();
   });
 
@@ -1356,7 +1357,8 @@ describe("production", () => {
   const kingdomEmployee = makeHub("employee", KINGDOM.company);
   const job101 = { path: "/production/projects/kingdom-project-1", pattern: "/production/projects/:projectId" };
   const job102 = { path: "/production/projects/kingdom-project-2", pattern: "/production/projects/:projectId" };
-  const titleOrder = () => screen.getAllByLabelText(/^Title of /).map((input) => (input as HTMLInputElement).value);
+  // Each item's live status select is named after it, open or not, so it reads the order.
+  const titleOrder = () => screen.getAllByRole("combobox", { name: /^Status of / }).map((select) => (select.getAttribute("aria-label") ?? "").replace(/^Status of /, ""));
 
   it("lists projects with their counts and next target for an admin", async () => {
     renderWithHub(<ProductionPage />, kingdomAdmin, { path: "/production", pattern: "/production" });
@@ -1435,6 +1437,7 @@ describe("production", () => {
     const user = userEvent.setup();
     renderWithHub(<ProjectPage />, kingdomAdmin, job102);
     await screen.findByRole("heading", { name: "Sample job 102" });
+    await user.click(screen.getByRole("button", { name: "Edit Permit approved" }));
     const title = screen.getByLabelText("Title of Permit approved");
     await user.clear(title);
     await user.type(title, "Permit issued");
@@ -1454,7 +1457,7 @@ describe("production", () => {
     await user.selectOptions(screen.getByLabelText("New milestone kind"), "Letter");
     await user.click(screen.getByRole("button", { name: "Add milestone" }));
     await waitFor(() => expect(titleOrder().at(-1)).toBe("Sample milestone"));
-    const row = screen.getByLabelText("Title of Sample milestone").closest("li") as HTMLElement;
+    const row = screen.getByRole("combobox", { name: "Status of Sample milestone" }).closest("li") as HTMLElement;
     expect(within(row).getByText("Letter", { selector: "span" })).toBeInTheDocument();
   });
 
@@ -2022,8 +2025,11 @@ describe("external links", () => {
     renderWithHub(<ResourcesPage tab="links" />, kingdomAdmin, { path: "/resources/links", pattern: "/resources/links" });
     await screen.findByRole("heading", { name: "Links to outside tools" });
     const panel = card("Links to outside tools");
+    // Each link reads as text first; its pencil opens its fields, one link at a time.
     for (const label of ["Sample sales board", "Sample production board", "Sample owner report", "Sample schedule view"]) {
-      expect(await within(panel).findByLabelText(`Label for ${label}`)).toHaveValue(label);
+      await user.click(await within(panel).findByRole("button", { name: `Edit ${label}` }));
+      expect(within(panel).getByLabelText(`Label for ${label}`)).toHaveValue(label);
+      await user.click(within(panel).getByRole("button", { name: "Done" }));
     }
 
     const add = within(panel).getByRole("form", { name: "Add a link" });
@@ -2038,25 +2044,30 @@ describe("external links", () => {
     await user.clear(within(add).getByLabelText("Link"));
     await user.type(within(add).getByLabelText("Link"), "https://example.com/monday/sample-estimating");
     await user.click(within(add).getByRole("button", { name: "Add link" }));
-    expect(await within(panel).findByLabelText("Label for Sample estimating board")).toHaveValue("Sample estimating board");
+    await user.click(await within(panel).findByRole("button", { name: "Edit Sample estimating board" }));
+    expect(within(panel).getByLabelText("Label for Sample estimating board")).toHaveValue("Sample estimating board");
     expect(within(panel).queryByText("Links must start with https://.")).not.toBeInTheDocument();
 
+    await user.click(within(panel).getByRole("button", { name: "Edit Sample sales board" }));
     const sales = within(panel).getByLabelText("Label for Sample sales board");
     await user.clear(sales);
     await user.type(sales, "Sample sales pipeline");
     await user.tab();
     expect(await within(panel).findByLabelText("Label for Sample sales pipeline")).toHaveValue("Sample sales pipeline");
 
+    await user.click(within(panel).getByRole("button", { name: "Edit Sample production board" }));
     await user.click(within(panel).getByLabelText("Show as a public embed for Sample production board"));
     expect(within(panel).getByText("Add the share view's embed link first.")).toBeInTheDocument();
     expect(within(panel).getByLabelText("Show as a public embed for Sample production board")).not.toBeChecked();
 
+    await user.click(within(panel).getByRole("button", { name: "Edit Sample owner report" }));
     await user.click(within(panel).getByRole("button", { name: "Remove Sample owner report" }));
     const dialog = screen.getByRole("dialog", { name: "Remove this link?" });
     expect(within(dialog).getByText("People will no longer see it in the hub. The page it points to is not affected.")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(within(panel).queryByLabelText("Label for Sample owner report")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("Sample owner report")).not.toBeInTheDocument();
   });
 });
 
@@ -2174,6 +2185,7 @@ describe("roles", () => {
 
   it("lets Rococo grant any role", async () => {
     renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
+    await userEvent.click(await screen.findByRole("button", { name: `Edit ${KINGDOM.profiles[0].email}` }));
     const marcus = await screen.findByLabelText(`Role for ${KINGDOM.profiles[0].email}`);
     expect(optionsOf(marcus)).toEqual(["Owner", "Admin", "Manager", "Employee"]);
     expect(marcus).toHaveDisplayValue("Owner");

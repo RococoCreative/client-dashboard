@@ -1,18 +1,22 @@
-// One project's milestones and letters, in order. Admins edit each item in place (every field
-// saves on its own), move it up or down, and archive it; everyone else reads the same list.
+// One project's milestones and letters, in order. Whoever may edit reads each item as text first,
+// with its status and completed-on date live on the row and the arrows beside them; the pencil
+// opens the title, kind, target, who is responsible and the notes in place (every field saves on
+// its own), with Archive beside Done, one item at a time. Everyone else reads the same list.
 // Each item is Not started, In progress or Complete (0043); the database keeps the status and the
 // completed-on date in step, so after every save the row shows what came back, which is how
 // picking Complete shows today's date and clearing the date shows Not started. Who is responsible is
 // named from the company directory, which every member reads; the picker offers the profiles the
 // viewer may see. Every field save returns whether it landed, so a refused one says "Not saved".
 import { useState } from "react";
-import { Archive, ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
+import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
+import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
 import { nameFromDirectory } from "../../lib/people.ts";
@@ -21,6 +25,9 @@ import { archiveMilestone, listMilestones, reorderMilestones, updateMilestone, t
 import { MILESTONE_KIND_LABELS, MILESTONE_STATUS_LABELS, keysOf, type DirectoryEntry, type MilestoneKind, type MilestoneStatus, type Profile, type ProjectMilestone } from "../../types/database.ts";
 
 type Directory = ReadonlyMap<string, DirectoryEntry>;
+
+// Row icons at the size EditRow gives its pencil: 44px on a phone, 36px from sm up.
+const ROW_ICON = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 function StatusBadge({ milestone }: { milestone: ProjectMilestone }) {
   if (isComplete(milestone)) {
@@ -38,20 +45,27 @@ function Badges({ milestone }: { milestone: ProjectMilestone }) {
   );
 }
 
-function ReadOnlyRow({ milestone, directory }: { milestone: ProjectMilestone; directory: Directory }) {
+// The target date and who is responsible, as one line of text.
+function Meta({ milestone, directory }: { milestone: ProjectMilestone; directory: Directory }) {
   const owner = nameFromDirectory(directory, milestone.responsible_profile_id, milestone.responsible_profile_id ? "Someone no longer here" : "No one assigned");
   return (
-    <li className="px-5 py-3">
+    <p className={`mt-1 ${secondaryClass}`}>
+      {milestone.target_date ? `Target ${formatDate(milestone.target_date)}` : "No target date"}
+      <span className="px-1.5 text-ink-3" aria-hidden>·</span>
+      {owner}
+    </p>
+  );
+}
+
+function ReadOnlyRow({ milestone, directory }: { milestone: ProjectMilestone; directory: Directory }) {
+  return (
+    <li className="px-4 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="min-w-0 text-sm font-medium text-ink">{milestone.title}</span>
+        <span className={`min-w-0 ${itemTitleClass}`}>{milestone.title}</span>
         <Badges milestone={milestone} />
       </div>
-      <p className="mt-1 text-[12.5px] text-ink-2">
-        {milestone.target_date ? `Target ${formatDate(milestone.target_date)}` : "No target date"}
-        <span className="px-1.5 text-ink-3" aria-hidden>·</span>
-        {owner}
-      </p>
-      {milestone.description ? <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{milestone.description}</p> : null}
+      <Meta milestone={milestone} directory={directory} />
+      {milestone.description ? <p className={`mt-1 whitespace-pre-line ${secondaryClass}`}>{milestone.description}</p> : null}
     </li>
   );
 }
@@ -63,6 +77,9 @@ function EditableRow({
   first,
   last,
   busy,
+  editing,
+  onEdit,
+  onDone,
   onSave,
   onMove,
   onArchive,
@@ -73,6 +90,9 @@ function EditableRow({
   first: boolean;
   last: boolean;
   busy: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
   onSave: (patch: MilestonePatch) => Promise<boolean>;
   onMove: (direction: "up" | "down") => void;
   onArchive: () => void;
@@ -83,41 +103,65 @@ function EditableRow({
   const owner = milestone.responsible_profile_id;
   const hiddenOwner = owner !== null && !active.some((p) => p.id === owner);
   return (
-    <li className="px-5 py-3">
+    <li className="px-4 py-3 sm:px-6">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} font-medium`} />
+          {editing ? (
+            <BlurInput value={title} required ariaLabel={`Title of ${title}`} onSave={(next) => onSave({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
+          ) : (
+            <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span className={`min-w-0 [overflow-wrap:anywhere] ${itemTitleClass}`}>{title}</span>
+              <Badges milestone={milestone} />
+            </div>
+          )}
         </div>
-        <div className="mt-2 flex shrink-0 items-center">
-          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove("up")}><ArrowUp size={14} aria-hidden /></IconButton>
-          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove("down")}><ArrowDown size={14} aria-hidden /></IconButton>
-          <IconButton label={`Archive ${title}`} disabled={busy} onClick={onArchive}><Archive size={14} aria-hidden /></IconButton>
+        <div className="flex shrink-0 items-center">
+          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => onMove("up")} className={ROW_ICON}><ArrowUp size={14} aria-hidden /></IconButton>
+          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => onMove("down")} className={ROW_ICON}><ArrowDown size={14} aria-hidden /></IconButton>
+          {editing ? null : (
+            <IconButton label={`Edit ${title}`} onClick={onEdit} className={ROW_ICON}><Pencil size={15} aria-hidden /></IconButton>
+          )}
         </div>
       </div>
-      <div className="mt-2"><Badges milestone={milestone} /></div>
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-5">
-        <div>
-          <label htmlFor={`${id}-kind`} className={labelClass}>Kind</label>
-          <select id={`${id}-kind`} aria-label={`Kind of ${title}`} value={milestone.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={selectClass}>
-            {keysOf(MILESTONE_KIND_LABELS).map((k) => (
-              <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={`${id}-target`} className={labelClass}>Target</label>
-          <BlurInput id={`${id}-target`} type="date" value={milestone.target_date ?? ""} ariaLabel={`Target date for ${title}`} onSave={(next) => onSave({ target_date: next || null })} className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor={`${id}-owner`} className={labelClass}>Responsible</label>
-          <select id={`${id}-owner`} aria-label={`Responsible for ${title}`} value={milestone.responsible_profile_id ?? ""} onChange={(e) => void onSave({ responsible_profile_id: e.target.value || null })} className={selectClass}>
-            <option value="">No one</option>
-            {hiddenOwner && owner ? <option value={owner}>{nameFromDirectory(directory, owner, "Someone no longer here")}</option> : null}
-            {active.map((p) => (
-              <option key={p.id} value={p.id}>{displayName(p)}</option>
-            ))}
-          </select>
-        </div>
+      {editing ? (
+        <>
+          <div className="mt-2"><Badges milestone={milestone} /></div>
+          <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-3">
+            <div>
+              <label htmlFor={`${id}-kind`} className={labelClass}>Kind</label>
+              <select id={`${id}-kind`} aria-label={`Kind of ${title}`} value={milestone.kind} onChange={(e) => void onSave({ kind: e.target.value as MilestoneKind })} className={selectClass}>
+                {keysOf(MILESTONE_KIND_LABELS).map((k) => (
+                  <option key={k} value={k}>{MILESTONE_KIND_LABELS[k]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${id}-target`} className={labelClass}>Target</label>
+              <BlurInput id={`${id}-target`} type="date" value={milestone.target_date ?? ""} ariaLabel={`Target date for ${title}`} onSave={(next) => onSave({ target_date: next || null })} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor={`${id}-owner`} className={labelClass}>Responsible</label>
+              <select id={`${id}-owner`} aria-label={`Responsible for ${title}`} value={milestone.responsible_profile_id ?? ""} onChange={(e) => void onSave({ responsible_profile_id: e.target.value || null })} className={selectClass}>
+                <option value="">No one</option>
+                {hiddenOwner && owner ? <option value={owner}>{nameFromDirectory(directory, owner, "Someone no longer here")}</option> : null}
+                {active.map((p) => (
+                  <option key={p.id} value={p.id}>{displayName(p)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-2">
+            <BlurInput multiline rows={2} value={milestone.description ?? ""} ariaLabel={`Notes for ${title}`} placeholder="Notes" onSave={(next) => onSave({ description: next.trim() || null })} className={`${inputClass} leading-relaxed`} />
+          </div>
+        </>
+      ) : (
+        <>
+          <Meta milestone={milestone} directory={directory} />
+          {milestone.description ? <p className={`mt-1 whitespace-pre-line ${secondaryClass}`}>{milestone.description}</p> : null}
+        </>
+      )}
+      {/* Status and its date are the everyday work on a milestone, so they stay live on the row. */}
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:max-w-md">
         <div>
           <label htmlFor={`${id}-status`} className={labelClass}>Status</label>
           <select id={`${id}-status`} aria-label={`Status of ${title}`} value={milestone.status} onChange={(e) => void onSave({ status: e.target.value as MilestoneStatus })} className={selectClass}>
@@ -131,9 +175,12 @@ function EditableRow({
           <BlurInput id={`${id}-done`} type="date" value={milestone.completed_on ?? ""} ariaLabel={`Completed on for ${title}`} onSave={(next) => onSave({ completed_on: next || null })} className={inputClass} />
         </div>
       </div>
-      <div className="mt-2">
-        <BlurInput multiline rows={2} value={milestone.description ?? ""} ariaLabel={`Notes for ${title}`} placeholder="Notes" onSave={(next) => onSave({ description: next.trim() || null })} className={`${inputClass} leading-relaxed`} />
-      </div>
+      {editing ? (
+        <div className="mt-3 flex flex-wrap justify-between gap-2">
+          <Button variant="danger" size="sm" aria-label={`Archive ${title}`} disabled={busy} onClick={onArchive}>Archive</Button>
+          <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -154,6 +201,8 @@ export default function MilestoneList({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [archiving, setArchiving] = useState<ProjectMilestone | null>(null);
+  // One item open at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
   const ordered = sortMilestones(milestones);
 
   async function save(milestone: ProjectMilestone, patch: MilestonePatch): Promise<boolean> {
@@ -205,9 +254,9 @@ export default function MilestoneList({
 
   return (
     <>
-      {error && !archiving ? <Notice tone="error" className="mx-5 mt-4">{error}</Notice> : null}
+      {error && !archiving ? <Notice tone="error" className="mx-4 mt-4 sm:mx-6">{error}</Notice> : null}
       {ordered.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">No milestones or letters yet.</p>
+        <p className={`px-4 py-4 sm:px-6 ${metaClass}`}>No milestones or letters yet.</p>
       ) : (
         <ul className="divide-y divide-line">
           {ordered.map((milestone, i) =>
@@ -220,6 +269,9 @@ export default function MilestoneList({
                 first={i === 0}
                 last={i === ordered.length - 1}
                 busy={busy}
+                editing={openId === milestone.id}
+                onEdit={() => setOpenId(milestone.id)}
+                onDone={() => setOpenId(null)}
                 onSave={(patch) => save(milestone, patch)}
                 onMove={(direction) => void move(milestone, direction)}
                 onArchive={() => setArchiving(milestone)}

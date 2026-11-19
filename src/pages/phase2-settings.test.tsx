@@ -2,7 +2,7 @@
 // company keeps the manual Financials page. Both save through the page's own write queue, one
 // company at a time, and a bad number is refused with a plain line before anything is sent. Also
 // the screens that read the days: the Home wins card and the Wins page with its Archive.
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -55,8 +55,10 @@ function open() {
   return renderWithHub(<CompaniesPage />, rococo, { path: "/rococo/companies", pattern: "/rococo/companies" });
 }
 
+// The days read as text first; the pencil opens the field.
 async function daysField(company: string) {
   const group = await screen.findByRole("group", { name: `Display settings for ${company}` });
+  fireEvent.click(within(group).getByRole("button", { name: `Edit days a win stays on Home for ${company}` }));
   return within(group).getByLabelText("Days a win stays on Home") as HTMLInputElement;
 }
 
@@ -81,7 +83,7 @@ describe("Rococo Companies display settings", () => {
     // A fresh render reads the stored value back.
     view.unmount();
     open();
-    await waitFor(async () => expect((await screen.findAllByLabelText("Days a win stays on Home")).some((el) => (el as HTMLInputElement).value === "14")).toBe(true));
+    expect((await daysField("Klasik Construction")).value).toBe("14");
     spy.mockRestore();
   });
 

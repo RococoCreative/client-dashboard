@@ -298,7 +298,8 @@ describe("wins, milestones and Production follow their capabilities", () => {
     await screen.findByRole("heading", { name: "Sample job 102" });
     await user.type(screen.getByLabelText("New milestone title"), "Sample inspection");
     await user.click(screen.getByRole("button", { name: "Add milestone" }));
-    expect(await screen.findByLabelText("Title of Sample inspection")).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Status of Sample inspection" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit Permit approved" }));
     const title = screen.getByLabelText("Title of Permit approved");
     await user.clear(title);
     await user.type(title, "Permit issued");

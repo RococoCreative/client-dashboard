@@ -12,6 +12,7 @@ import Notice from "../ui/Notice.tsx";
 import PanelHeader from "../ui/PanelHeader.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
+import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { SOP_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -68,7 +69,7 @@ export default function SopsPanel() {
           eyebrow="SOPs"
           title={state.data && state.data.length > 0 ? "Nothing matches" : "No SOPs yet"}
           body={state.data && state.data.length > 0 ? "Try a different search or category." : isAdmin ? "Write the first procedure. Safety, process, client, admin, or field." : "Your admins have not published any procedures yet."}
-          action={isAdmin && (state.data?.length ?? 0) === 0 ? <Link to="/sops/new"><Button>New SOP</Button></Link> : undefined}
+          action={isAdmin && (state.data?.length ?? 0) === 0 ? <Link to="/sops/new" className="text-link text-[13px] font-medium hover:underline">New SOP</Link> : undefined}
         />
       ) : (
         <div className="space-y-6">
@@ -76,18 +77,18 @@ export default function SopsPanel() {
             .filter((c) => filtered.some((s) => s.category === c))
             .map((c) => (
               <section key={c}>
-                <p className="eyebrow mb-2">{SOP_CATEGORY_LABELS[c]}</p>
+                <p className={`mb-2 ${eyebrowLabelClass}`}>{SOP_CATEGORY_LABELS[c]}</p>
                 <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
                   {filtered
                     .filter((s) => s.category === c)
                     .map((sop) => (
                       <li key={sop.id}>
-                        <Link to={`/sops/${sop.id}`} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 transition-colors duration-150 hover:bg-surface-2/60">
+                        <Link to={`/sops/${sop.id}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 transition-colors duration-150 hover:bg-surface-2/60">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-ink">{sop.title}</p>
-                            {sop.summary ? <p className="mt-0.5 truncate text-[13px] text-ink-2">{sop.summary}</p> : null}
+                            <p className={`truncate ${itemTitleClass}`} title={sop.title}>{sop.title}</p>
+                            {sop.summary ? <p className={`mt-0.5 truncate ${secondaryClass}`} title={sop.summary}>{sop.summary}</p> : null}
                           </div>
-                          <div className="flex items-center gap-3 text-[12px] text-ink-3">
+                          <div className={`flex items-center gap-3 ${metaClass}`}>
                             {isAdmin ? <Badge tone={SOP_STATUS_TONE[sop.status]}>{SOP_STATUS_LABELS[sop.status]}</Badge> : null}
                             <span className="tnum">v{sop.current_version}</span>
                             <span>{formatDate(sop.updated_at)}</span>
