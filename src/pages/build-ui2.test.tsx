@@ -300,6 +300,33 @@ describe("Scorecards report", () => {
     expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
   });
 
+  it("leaves out a role that has metrics but nobody in view, and falls back to all roles when the chosen one empties", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
+    // Avery, the only Site Superintendent, works in RBA South. In RBA North nobody holds that role.
+    const division = screen.getByRole("group", { name: "Division" });
+    await user.click(within(division).getByRole("button", { name: "RBA North" }));
+    // Only one role is left in view, so there is nothing to choose between and the select steps aside.
+    expect(screen.queryByLabelText("Job role")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site Superintendent" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    // Choose Site Superintendent in the whole company, then move to a division it is not in.
+    await user.click(within(division).getByRole("button", { name: "Combined" }));
+    await user.selectOptions(screen.getByLabelText("Job role"), "Site Superintendent");
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    await user.click(within(division).getByRole("button", { name: "RBA North" }));
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
+    // Back in the whole company the choice, which was only set aside, applies again.
+    await user.click(within(division).getByRole("button", { name: "Combined" }));
+    expect((screen.getByLabelText("Job role") as HTMLSelectElement).value).toBe("rba-role-super");
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Job role"), "All roles");
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Site Superintendent" })).toBeInTheDocument();
+  });
+
   it("reads People in the page label and gives each role block its own column headings", async () => {
     renderWithHub(<ScorecardsPage />, rbaAdmin);
     expect(await screen.findByText("People", { selector: "p.eyebrow" })).toBeInTheDocument();
