@@ -9,14 +9,15 @@
 // Who a period covers is cycleRoster's call, the roster every count of a cycle reads, so a report
 // an admin left out of it reads "Not in this cycle" and never "Not started". A report whose period
 // nobody has opened yet reads "Not started": the period opens itself when the GSR is started.
+// The row has no control but the name, so on a phone the name's link stretches over its whole row.
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar.tsx";
 import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
-import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { tapStretchClass } from "../ui/tap.ts";
+import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { REVIEW_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";

@@ -115,7 +115,7 @@ export default function PersonTasks({
       <p className={secondaryClass}>
         You have no open tasks.{" "}
         {moreHref ? (
-          <Link to={moreHref} className="text-link hover:underline">
+          <Link to={moreHref} className={`text-link hover:underline ${tapTargetClass}`}>
             All tasks
           </Link>
         ) : null}

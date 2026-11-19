@@ -196,7 +196,7 @@ describe("people", () => {
   it("says what cancelling an invitation and removing someone really do", async () => {
     const user = userEvent.setup();
     renderWithHub(<PeoplePage />, admin);
-    await user.click(await screen.findByRole("button", { name: "Cancel the invitation for Avery Cole" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
     // The address is on a company domain, so the domain still lets them in after a cancel.
     expect(dialog()).toHaveTextContent(/sign-in domains/);
     expect(dialog()).toHaveTextContent(/deactivate/i);
@@ -227,13 +227,13 @@ describe("people", () => {
     setup.unmount();
 
     renderWithHub(<PeoplePage />, admin);
-    await user.click(await screen.findByRole("button", { name: "Cancel the invitation for Avery Cole" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
     ctl.failures.set("deleteInvitation", new Error("The invitation could not be cancelled."));
     await user.click(within(dialog()).getByRole("button", { name: "Cancel invitation" }));
     expect(await within(dialog()).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
     await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
 
-    await user.click(screen.getByRole("button", { name: "Cancel the invitation for Avery Cole" }));
+    await user.click(screen.getByRole("button", { name: "Cancel invitation for Avery Cole" }));
     expect(within(dialog()).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
     await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
   });

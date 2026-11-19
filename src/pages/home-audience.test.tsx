@@ -43,6 +43,7 @@ import { createTask, deleteTask, listTasks } from "../services/tasks.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import TeamBlock from "../components/home/TeamBlock.tsx";
+import FreshnessCard from "../components/home/FreshnessCard.tsx";
 
 const harper = makeHub("manager", RBA.company);
 const rowan = RBA.profiles.find((p) => p.full_name === "Rowan Ellis")!;
@@ -266,6 +267,33 @@ describe("the team block in a company that runs no GSRs yet", () => {
     const row = (await within(team).findByRole("link", { name: "Rowan Ellis" })).closest("li") as HTMLElement;
     expect(within(row).getByText("-")).toBeInTheDocument();
     expect(within(row).queryByText(/^(Not started|In progress|Complete)$/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Home's row links on a phone", () => {
+  it("make a team member's whole row the target of their name, inside the row", async () => {
+    const people = RBA.profiles.filter((p) => p.company_id === RBA.company.id);
+    renderWithHub(<TeamBlock companyId={RBA.company.id} viewer={harper.profile} people={people} cycles={[]} omissions={[]} />, harper);
+    const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
+    const link = await within(team).findByRole("link", { name: "Rowan Ellis" });
+    const row = link.closest("li") as HTMLElement;
+    expect(row.className.split(/\s+/)[0]).toBe("relative");
+    expect(link.className).toContain("hover:text-link tap:after:absolute tap:after:inset-0");
+  });
+
+  it("make a data source's name block a real 44px target on a phone, never covering its freshness line", async () => {
+    renderWithHub(<FreshnessCard companyId={KINGDOM.company.id} companyTimeZone={KINGDOM.company.time_zone} canViewProduction />, makeHub("admin", KINGDOM.company));
+    const freshness = sectionOf(await screen.findByRole("heading", { name: "Freshness" }));
+    const links = await within(freshness).findAllByRole("link", { name: /^Sample / });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link.className).toContain("tap:after:absolute tap:after:inset-0");
+      const block = link.parentElement as HTMLElement;
+      expect(block.className).toContain("relative");
+      expect(block.className).toContain("tap:min-h-11");
+      // The stretch stops at the name block: the freshness line below sits outside it.
+      expect(block.closest("li")?.lastElementChild?.contains(block)).toBe(false);
+    }
   });
 });
 
