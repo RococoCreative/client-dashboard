@@ -106,6 +106,25 @@ Sidebar naming: "Monthly GSRs" becomes "GSRs". Scorecards carries the People lab
 - **Dangerous actions** (delete, retire) sit in the item's own view, away from everyday controls.
 - **Empty panels** are one quiet line, never a large block above real content.
 
+## Layout rules (the owner's, apply to every screen)
+
+- **Responsive.** Every page works from 390px to wide desktop with no sideways scroll. List and
+  detail becomes list, then detail with a back arrow. Tabs scroll sideways. A table that does not
+  fit becomes stacked rows, or scrolls inside its own box.
+- **Text never breaks a layout.** A one-line name truncates with an ellipsis and shows in full on
+  hover and on its own page. Body text wraps. Long descriptions clamp to two lines with "Show
+  more". A heading wraps rather than truncates.
+- **Room at the edges.** Page gutters are 48px on desktop, 24px on a tablet, 16px on a phone. Card
+  padding is 24px, 16px on a phone. Nothing sits closer than 16px to a card or screen edge, and
+  text never touches a control.
+- **Clean.** One primary action a page. Secondary actions are quiet. Help text is one line or it
+  is cut. No decoration that carries no meaning.
+- **Icons where they are clearer than words.** Repeated row actions the eye already knows become
+  icon buttons: edit (pencil), back (arrow), open (chevron), add (plus, with its word on desktop),
+  search, menu. Every icon button has an accessible name and a tooltip, and is at least 36px on
+  desktop and 44px on a phone. Words stay on primary actions, on anything destructive (Retire,
+  Delete), and on any action an icon would leave ambiguous.
+
 ## Type and contrast
 
 - Scale: page title 30, section title 18, item title 15 medium, body 14, secondary 13, label 11
@@ -163,6 +182,8 @@ Measured at RBA's load on a 1440 by 900 screen:
 - No setup page longer than 3 screens. Roles, Reviews setup and a person tab each under 2.
 - Every repeated item shows its name as a heading and is reachable by its own address.
 - Label, help and link text at 4.5 to 1 or better in all four themes.
+- Every page checked by screenshot at 390, 768 and 1440 wide: no sideways scroll, no clipped or
+  overlapping text, the gutters above held.
 - Every old address redirects. No permission, RLS or scoring test changes meaning.
 
 ## Calls made by the builder, for the owner to check
