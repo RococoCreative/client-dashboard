@@ -151,11 +151,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-18:
   (`marvin@kingdomcustomconstruction.com`, `maddie@kingdomcustomconstruction.com`): Eli Cothran and
   Davis Nix become the owners, Marvin Waters an admin and Maddie Cothran an employee. Confirm the
   two owners' addresses before running it (see Applying capabilities and the Kingdom roster).
-- **Written, not applied:** `0042_company_display_settings`, `0043_milestone_status`,
-  `0044_milestone_templates` and `0045_sync_weekdays` (Phase 2, see Applying Phase 2). Nothing in
-  them is live, and neither is the app or `connections` function that reads them. They go in as a
-  set, in order, before the app; on their own they change nothing visible for any company. Once
-  they are in, these re-pastes undo part of them (go forwards only; if one happens, paste the
+- **Applied 2026-11-19, through the Supabase connection, with the schema reloaded:**
+  `0042_company_display_settings`, `0043_milestone_status`,
+  `0044_milestone_templates` and `0045_sync_weekdays` (Phase 2, see Applying Phase 2). Every
+  company is on the defaults, so nothing visible changed. The app and `connections` function that
+  read them are not live yet. With
+  them in, these re-pastes undo part of them (go forwards only; if one happens, paste the
   named Phase 2 file straight after it):
   - `0001`, `0009` or `0024` puts back an older `guard_company_fields`, and `0025` or `0037` an
     older `companies_audit`; neither older one protects or watches `wins_home_days` and
