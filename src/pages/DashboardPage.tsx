@@ -91,7 +91,7 @@ import {
   type ReviewScore,
   type Sop,
 } from "../types/database.ts";
-import { tapTargetClass } from "../components/ui/tap.ts";
+import { tapStretchClass, tapTargetClass } from "../components/ui/tap.ts";
 
 function RecentSops({ sops }: { sops: Sop[] }) {
   if (sops.length === 0) {
@@ -100,9 +100,9 @@ function RecentSops({ sops }: { sops: Sop[] }) {
   return (
     <ul className="divide-y divide-line">
       {sops.map((sop) => (
-        <li key={sop.id} className="flex items-center justify-between gap-3 py-2.5">
+        <li key={sop.id} className="relative flex items-center justify-between gap-3 py-2.5">
           <div className="min-w-0">
-            <Link to={`/sops/${sop.id}`} className="block truncate text-sm text-ink hover:text-link">
+            <Link to={`/sops/${sop.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
               {sop.title}
             </Link>
             <p className="text-[12px] text-ink-3">

@@ -8,11 +8,11 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 type Size = "sm" | "md";
 
 const SIZES: Record<Size, string> = {
-  md: "px-3 py-1 text-[12px] tap:min-h-7 tap:after:-inset-y-2",
-  sm: "px-2 py-0.5 text-[11px] tap:min-h-6 tap:after:-inset-y-2.5",
+  md: "px-3 py-1 text-[12px] tap:min-h-7 tap:after:-inset-y-2.5",
+  sm: "px-2 py-0.5 text-[11px] tap:min-h-6 tap:after:-inset-y-3",
 };
 
-const HIT = "relative tap:min-w-11 tap:after:absolute tap:after:inset-x-0";
+const HIT = "relative tap:min-w-11 tap:after:absolute tap:after:-inset-x-px";
 
 export default function Chip({
   active = false,

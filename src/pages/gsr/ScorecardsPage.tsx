@@ -30,6 +30,7 @@ import { formatMetricValue, monthOf, monthResult, monthsOfYear, ytd, type Metric
 import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, RoleMetric } from "../../types/database.ts";
+import { tapStretchClass } from "../../components/ui/tap.ts";
 
 function toneOf(result: MetricResult): string {
   if (result.value === null) return "text-ink-3";
@@ -97,9 +98,9 @@ function RoleBlock({
                   <th
                     scope="row"
                     role="rowheader"
-                    className="border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0"
+                    className="relative border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0"
                   >
-                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link`}>
+                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass} tap:after:-inset-y-1.5`}>
                       {name}
                     </Link>
                     {division || person.title ? <p className={`truncate ${metaClass}`}>{[division, person.title].filter(Boolean).join(" · ")}</p> : null}
@@ -298,8 +299,8 @@ export default function ScorecardsPage() {
             <Section eyebrow="Not on a scorecard" title={pluralize(unscored.length, "person", "people")} description="Their job role has no scorecard metrics, or they have no job role yet." padded={false}>
               <ul className="grid gap-x-6 gap-y-1 px-4 py-3 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
                 {unscored.map((p) => (
-                  <li key={p.id} className="min-w-0">
-                    <Link to={`/people/${p.id}`} className="block truncate text-sm text-ink hover:text-link">
+                  <li key={p.id} className="relative min-w-0 tap:py-1">
+                    <Link to={`/people/${p.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
                       {displayName(p)}
                     </Link>
                     <span className={`block truncate ${metaClass}`}>{[divisionName(p), roleName(p.job_role_id) ?? "No job role"].filter(Boolean).join(" · ")}</span>

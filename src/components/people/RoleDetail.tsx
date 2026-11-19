@@ -239,7 +239,7 @@ export default function RoleDetail({
           <ul className="mt-1.5 space-y-1.5">
             {keysOf(DASHBOARD_MODULE_LABELS).map((module) => (
               <li key={module}>
-                <label className="flex items-start gap-2 text-[13px] text-ink">
+                <label className="flex items-start gap-2 text-[13px] text-ink tap:min-h-11">
                   <input type="checkbox" className={`${checkboxClass} mt-0.5`} checked={shownModules.includes(module)} aria-label={`${DASHBOARD_MODULE_LABELS[module]} for ${role.name}`} onChange={(e) => void toggleModule(module, e.target.checked)} />
                   <span>{DASHBOARD_MODULE_LABELS[module]}</span>
                 </label>

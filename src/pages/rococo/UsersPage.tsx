@@ -14,7 +14,7 @@ import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, checkboxHitClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
-import { metaClass } from "../../components/ui/type.ts";
+import { metaClass, secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
@@ -23,6 +23,10 @@ import { displayName, pluralize } from "../../lib/format.ts";
 import { grantableRoles, hasAccount } from "../../lib/people.ts";
 import { ROLE_LABELS, type Profile, type Role } from "../../types/database.ts";
 import { PORTFOLIO_TABS } from "./portfolioTabs.ts";
+
+// A company or role shown as text in a row: the secondary size with the ink in place of the
+// secondary ink, swapped rather than stacked.
+const CELL_TEXT = secondaryClass.replace(/(^|\s)text-ink-2(?=\s|$)/, "$1text-ink");
 
 export default function UsersPage() {
   const { profile: me, companies } = useHub();
@@ -122,7 +126,7 @@ export default function UsersPage() {
                             ))}
                           </select>
                         ) : (
-                          <span className="text-[13px] text-ink">{companyName(person.company_id)}</span>
+                          <span className={CELL_TEXT}>{companyName(person.company_id)}</span>
                         )}
                       </td>
                       <td className={tdClass}>
@@ -133,7 +137,7 @@ export default function UsersPage() {
                             ))}
                           </select>
                         ) : (
-                          <span className="text-[13px] text-ink">{ROLE_LABELS[person.role]}</span>
+                          <span className={CELL_TEXT}>{ROLE_LABELS[person.role]}</span>
                         )}
                       </td>
                       <td className={tdClass}>

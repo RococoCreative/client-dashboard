@@ -168,7 +168,7 @@ function AddStaffDialog({
                 <legend className={labelClass}>Division (optional)</legend>
                 <div className="mt-2 space-y-1.5">
                   {divisions.map((d) => (
-                    <label key={d.id} className="flex items-center gap-2 text-sm text-ink">
+                    <label key={d.id} className="flex items-center gap-2 text-sm text-ink tap:min-h-11">
                       <input type="checkbox" className={checkboxClass} checked={divisionIds.includes(d.id)} onChange={(e) => toggleDivision(d.id, e.target.checked)} />
                       {d.name}
                     </label>
@@ -400,7 +400,7 @@ export default function PeoplePage() {
             className={`${inputClass} mt-0 py-1.5 pl-8 text-[13px]`}
           />
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-[13px] text-ink-2">
+        <label className="flex shrink-0 items-center gap-2 text-[13px] text-ink-2 tap:min-h-11">
           <input type="checkbox" className={checkboxClass} checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           Show inactive
           <span className="tnum text-ink-3">({inactiveCount})</span>

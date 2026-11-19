@@ -6,6 +6,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
+import Chip from "../../components/ui/Chip.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import EditRow from "../../components/ui/EditRow.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
@@ -169,15 +170,9 @@ export default function ProjectPage() {
           actions={
             <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  aria-pressed={filter === f.key}
-                  onClick={() => setFilter(f.key)}
-                  className={`rounded-full border px-3 py-1 text-[12px] transition-colors duration-150 ${filter === f.key ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`}
-                >
+                <Chip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>
                   {f.label}
-                </button>
+                </Chip>
               ))}
             </div>
           }

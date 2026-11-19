@@ -192,7 +192,7 @@ function OpenPillar({
         "status",
         "Edit status",
         <Fact label="Status">{pillar.is_active ? "Active, counts toward the score" : "Inactive, left out of the score"}</Fact>,
-        <label className="flex items-center gap-2 text-sm text-ink">
+        <label className="flex items-center gap-2 text-sm text-ink tap:min-h-11">
           <input type="checkbox" checked={pillar.is_active} onChange={(e) => void onPatch({ is_active: e.target.checked })} className={checkboxClass} /> Active (counts toward the score)
         </label>,
       )}

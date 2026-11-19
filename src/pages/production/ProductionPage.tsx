@@ -29,6 +29,7 @@ import { milestoneCounts, nextTargetDate } from "../../lib/milestones.ts";
 import { createProject, listCompanyMilestones, listProjects } from "../../services/projects.ts";
 import type { Project, ProjectMilestone } from "../../types/database.ts";
 import { PRODUCTION_TABS } from "./productionTabs.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // The table's first and last cells take the card's padding, 16px on a phone and 24px above.
 const EDGE_CELLS = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
@@ -140,7 +141,7 @@ export default function ProductionPage() {
                   return (
                     <tr key={project.id} className={`${EDGE_CELLS} hover:bg-surface-2/60`}>
                       <td className={tdClass}>
-                        <Link to={`/production/projects/${project.id}`} className="font-medium text-ink hover:text-link">{project.name}</Link>
+                        <Link to={`/production/projects/${project.id}`} className={`font-medium text-ink hover:text-link ${tapTargetClass}`}>{project.name}</Link>
                       </td>
                       <td className={`${tdClass} hidden text-ink-2 sm:table-cell`}>{project.reference ?? "-"}</td>
                       <td className={`${tdClass} whitespace-nowrap text-ink-2`}>{`${done} of ${total} done`}</td>

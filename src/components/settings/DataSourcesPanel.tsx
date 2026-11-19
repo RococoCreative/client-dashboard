@@ -321,7 +321,7 @@ function SourceEditor({
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
                 {mappedKeys.map((key) => (
-                  <label key={key} className="inline-flex items-center gap-2 font-mono text-[12.5px] text-ink">
+                  <label key={key} className="inline-flex items-center gap-2 font-mono text-[12.5px] text-ink tap:min-h-11">
                     <input type="checkbox" checked={draft.record_key.includes(key)} onChange={(e) => toggleKey(key, e.target.checked)} className={checkboxClass} />
                     {key}
                   </label>
@@ -336,7 +336,7 @@ function SourceEditor({
               <legend className={labelClass}>Sync days</legend>
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
                 {WEEKDAYS.map((day) => (
-                  <label key={day.value} className="inline-flex items-center gap-2 text-[12.5px] text-ink">
+                  <label key={day.value} className="inline-flex items-center gap-2 text-[12.5px] text-ink tap:min-h-11 tap:min-w-11">
                     <input type="checkbox" checked={draft.weekdays.includes(day.value)} onChange={(e) => toggleDay(day.value, e.target.checked)} className={checkboxClass} />
                     {day.label}
                   </label>
@@ -364,13 +364,13 @@ function SourceEditor({
               <input id="source-stale" type="text" inputMode="numeric" value={draft.stale_after_hours} onChange={(e) => set("stale_after_hours", e.target.value)} className={inputClass} />
             </Field>
             <div className="self-start pt-7">
-              <label className="inline-flex items-center gap-2 text-sm text-ink">
+              <label className="inline-flex items-center gap-2 text-sm text-ink tap:min-h-11">
                 <input type="checkbox" checked={draft.stale_business_days} onChange={(e) => set("stale_business_days", e.target.checked)} className={checkboxClass} />
                 Count weekdays only
               </label>
               <p className={helpClass}>Weekends do not count toward the limit.</p>
             </div>
-            <label className="inline-flex items-center gap-2 self-start pt-7 text-sm text-ink">
+            <label className="inline-flex items-center gap-2 self-start pt-7 text-sm text-ink tap:min-h-11">
               <input type="checkbox" checked={draft.enabled} onChange={(e) => set("enabled", e.target.checked)} className={checkboxClass} />
               Enabled
             </label>
@@ -548,7 +548,7 @@ export default function DataSourcesPanel({ companyId, companyTimeZone }: { compa
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-2">
+                    <label className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-2 tap:min-h-11">
                       <input type="checkbox" aria-label={`Enable ${source.name}`} checked={source.enabled} onChange={(e) => void toggle(source, e.target.checked)} className={checkboxClass} />
                       Enabled
                     </label>

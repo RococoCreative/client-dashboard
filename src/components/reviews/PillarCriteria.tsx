@@ -103,7 +103,7 @@ export default function PillarCriteria({
                   <BlurInput ariaLabel="Criterion name" value={criterion.name} required className={`${inputClass} mt-0`} onSave={(next) => onPatch(criterion, { name: next.trim() })} />
                   <BlurInput ariaLabel="Criterion description" value={criterion.description ?? ""} placeholder="Description shown to the reviewer" className={`${inputClass} mt-0`} onSave={(next) => onPatch(criterion, { description: next.trim() || null })} />
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-[13px] text-ink">
+                    <label className="flex items-center gap-2 text-[13px] text-ink tap:min-h-11">
                       <input type="checkbox" checked={criterion.is_active} onChange={(e) => void onPatch(criterion, { is_active: e.target.checked })} className={checkboxClass} /> Active
                     </label>
                     <Button variant="danger" size="sm" onClick={() => onDelete(criterion)}>

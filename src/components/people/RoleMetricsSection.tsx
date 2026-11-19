@@ -24,7 +24,7 @@ const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 const compact = (cls: string) => `${cls.replace("mt-1.5 ", "").replace("py-2 ", "")} py-1.5 text-[13px]`;
 const smallInput = compact(inputClass);
 const smallSelect = compact(selectClass);
-const toggleLabel = "flex items-center gap-1.5 text-[12.5px] text-ink-2";
+const toggleLabel = "flex items-center gap-1.5 text-[12.5px] text-ink-2 tap:min-h-11";
 
 // A number typed into a metric field: blank is none, anything else has to read as a number.
 function parseNumber(text: string): number | null | undefined {

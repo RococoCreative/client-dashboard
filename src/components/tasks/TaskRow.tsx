@@ -6,6 +6,7 @@
 import { Repeat } from "lucide-react";
 import { Link } from "react-router-dom";
 import Badge, { type BadgeTone } from "../ui/Badge.tsx";
+import { itemTitleClass } from "../ui/type.ts";
 import { formatDate } from "../../lib/format.ts";
 import { PRIORITY_LABELS, RECURRENCE_LABELS, isDone, isOverdue, percentComplete } from "../../lib/tasks.ts";
 import type { TaskPriority, TaskWithSteps } from "../../types/database.ts";
@@ -15,6 +16,10 @@ const PRIORITY_TONE: Record<TaskPriority, BadgeTone> = { high: "warning", medium
 function Dot() {
   return <span className="text-ink-3" aria-hidden>·</span>;
 }
+
+// A done task's title: the item title with the secondary ink in place of the ink, swapped rather
+// than stacked so which color wins never depends on stylesheet order.
+const DONE_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-2");
 
 // What a task page reads to send the person back where they came from.
 export type TaskBackState = { from: { to: string; label: string } };
@@ -42,7 +47,7 @@ export default function TaskRow({
     <li>
       <Link to={`/tasks/${task.id}`} state={linkState} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors duration-150 hover:bg-surface-2/60 sm:px-6">
         <div className="min-w-0 flex-1 basis-40">
-          <p className={`line-clamp-2 break-words text-[15px] leading-snug sm:line-clamp-1 sm:truncate font-medium ${done ? "text-ink-2 line-through" : "text-ink"}`}>{task.title}</p>
+          <p className={`line-clamp-2 break-words sm:line-clamp-1 sm:truncate ${done ? `${DONE_TITLE} line-through` : itemTitleClass}`}>{task.title}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-ink-2">
             {showAssignee && who ? (
               <>

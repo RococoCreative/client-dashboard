@@ -75,7 +75,7 @@ export default function DataSourceDetail({
         <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <label className={`inline-flex min-h-9 items-center gap-2 ${secondaryClass}`}>
+        <label className={`inline-flex min-h-9 items-center gap-2 ${secondaryClass} tap:min-h-11`}>
           <input type="checkbox" aria-label={`Enable ${source.name}`} checked={source.enabled} onChange={(e) => onToggle(e.target.checked)} className={checkboxClass} />
           Enabled
         </label>

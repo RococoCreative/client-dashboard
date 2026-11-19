@@ -168,7 +168,7 @@ function LinkRow({
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
           {/* aria-disabled rather than disabled, so a click explains why instead of doing nothing. */}
-          <label className={`flex items-center gap-2 text-[13px] text-ink ${noEmbed ? "opacity-60" : ""}`}>
+          <label className={`flex items-center gap-2 text-[13px] text-ink ${noEmbed ? "opacity-60" : ""} tap:min-h-11`}>
             <input
               type="checkbox"
               className={checkboxClass}

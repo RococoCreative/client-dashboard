@@ -197,7 +197,7 @@ export default function TasksPage({ tab }: { tab: TasksTab }) {
       {roster.error ? <Notice tone="error" className="mb-4">{roster.error}</Notice> : null}
 
       {view === "mine" ? (
-        <label className={`mb-4 inline-flex min-h-11 items-center gap-2 sm:min-h-0 ${secondaryClass}`}>
+        <label className={`mb-4 inline-flex items-center gap-2 tap:min-h-11 ${secondaryClass}`}>
           <input type="checkbox" className={checkboxClass} checked={showCompleted} onChange={(e) => setShowCompleted(e.target.checked)} />
           Show completed
         </label>
