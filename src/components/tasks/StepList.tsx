@@ -5,9 +5,10 @@
 // read as they were left. A step's title reads as text first: ticking and the arrows stay on the
 // row, and the pencil opens the title in place with Remove beside Done, one step at a time.
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
+import EditRow from "../ui/EditRow.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import { checkboxClass, checkboxHitClass, inputClass } from "../ui/forms.ts";
@@ -16,6 +17,7 @@ import { errorMessage } from "../../lib/errors.ts";
 import { addStep, moveStep, removeStep, renameStep, setStepDone } from "../../services/tasks.ts";
 import type { TaskStep, TaskWithSteps } from "../../types/database.ts";
 
+const ROW = "px-4 py-2 sm:px-6";
 
 function StepRow({
   step,
@@ -42,44 +44,49 @@ function StepRow({
 }) {
   const { id, title } = step;
   const done = step.done_at !== null;
-  const open = canEdit && editing;
-  return (
-    <li className="px-4 py-2 sm:px-6">
-      <div className="flex min-h-11 items-center gap-3 sm:min-h-9">
-        <label className={checkboxHitClass}>
-          <input
-            type="checkbox"
-            aria-label={title}
-            className={checkboxClass}
-            checked={done}
-            disabled={!canTick || busy}
-            onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
-          />
-        </label>
-        {open ? (
-          <div className="min-w-0 flex-1">
-            <BlurInput value={title} required ariaLabel={`Rename ${title}`} onSave={(next) => run(() => renameStep(id, next.trim()))} className={`${inputClass} mt-0 py-1.5`} />
-          </div>
-        ) : (
-          <span className={`min-w-0 flex-1 text-sm [overflow-wrap:anywhere] ${done ? "text-ink-2 line-through" : "text-ink"}`}>{title}</span>
-        )}
-        {canEdit ? (
-          <div className="flex shrink-0 items-center">
-            <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => void run(() => moveStep(id, "up"))}><ArrowUp size={14} aria-hidden /></IconButton>
-            <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => void run(() => moveStep(id, "down"))}><ArrowDown size={14} aria-hidden /></IconButton>
-            {open ? null : (
-              <IconButton label={`Edit ${title}`} onClick={onEdit}><Pencil size={15} aria-hidden /></IconButton>
-            )}
-          </div>
-        ) : null}
-      </div>
-      {open ? (
-        <div className="mt-2 flex flex-wrap justify-between gap-2">
-          <Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={() => void run(() => removeStep(id))}>Remove</Button>
-          <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
+  const tick = (
+    <label className={checkboxHitClass}>
+      <input
+        type="checkbox"
+        aria-label={title}
+        className={checkboxClass}
+        checked={done}
+        disabled={!canTick || busy}
+        onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
+      />
+    </label>
+  );
+  const text = <span className={`min-w-0 text-sm [overflow-wrap:anywhere] ${done ? "text-ink-2 line-through" : "text-ink"}`}>{title}</span>;
+  if (!canEdit) {
+    return (
+      <li className={ROW}>
+        <div className="flex min-h-11 items-center gap-3 sm:min-h-9">
+          {tick}
+          <span className="min-w-0 flex-1">{text}</span>
         </div>
-      ) : null}
-    </li>
+      </li>
+    );
+  }
+  return (
+    <EditRow
+      as="li"
+      className={ROW}
+      leading={tick}
+      display={text}
+      editLabel={`Edit ${title}`}
+      editing={editing}
+      onEdit={onEdit}
+      onDone={onDone}
+      actions={
+        <>
+          <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => void run(() => moveStep(id, "up"))}><ArrowUp size={14} aria-hidden /></IconButton>
+          <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => void run(() => moveStep(id, "down"))}><ArrowDown size={14} aria-hidden /></IconButton>
+        </>
+      }
+      footer={<Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={() => void run(() => removeStep(id))}>Remove</Button>}
+    >
+      <BlurInput value={title} required ariaLabel={`Rename ${title}`} onSave={(next) => run(() => renameStep(id, next.trim()))} className={`${inputClass} mt-0 py-1.5`} />
+    </EditRow>
   );
 }
 

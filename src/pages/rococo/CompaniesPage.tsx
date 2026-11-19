@@ -5,12 +5,11 @@
 // stored files. Each company's name, theme, logo and win days read as text first, one open at a
 // time; the module and Financials switches stay live, and Delete sits at the foot of the card.
 import { useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import BlurInput from "../../components/ui/BlurInput.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EditRow from "../../components/ui/EditRow.tsx";
-import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -343,10 +342,10 @@ export default function CompaniesPage() {
                     <p className={labelClass}>Sign-in domains</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       {ownDomains.map((d) => (
-                        <Badge key={d.domain} tone="accent" className="pr-1 tap:py-0">
-                          {d.domain}
-                          <IconButton size="sm" label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)}><X size={11} aria-hidden /></IconButton>
-                        </Badge>
+                        <span key={d.domain} className="inline-flex items-center gap-1.5">
+                          <Badge tone="accent">{d.domain}</Badge>
+                          <Button variant="danger" size="sm" aria-label={`Remove ${d.domain}`} onClick={() => void dropDomain(d.domain)}>Remove</Button>
+                        </span>
                       ))}
                       <form
                         onSubmit={(e) => {

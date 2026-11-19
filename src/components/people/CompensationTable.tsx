@@ -6,11 +6,10 @@
 // stored figure, rather than being saved as a zero nobody typed. Saves for one line queue behind
 // each other, so two quick edits never land out of order and undo each other on screen.
 import { useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import { inputClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { createCompensationItem, deleteCompensationItem, updateCompensationItem } from "../../services/employees.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -118,7 +117,7 @@ export default function CompensationTable({
   return (
     <div>
       {items.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">{canEdit ? "No compensation recorded yet. Add the base and any stipends below." : "No compensation recorded."}</p>
       ) : (
         <div className="relative overflow-x-auto">
           <table className={tableClass}>
@@ -146,9 +145,9 @@ export default function CompensationTable({
                   </td>
                   {canEdit ? (
                     <td className={`${tdClass} text-right`}>
-                      <IconButton label={`Remove ${item.name}`} onClick={() => setDeleting(item)}>
-                        <Trash2 size={14} aria-hidden />
-                      </IconButton>
+                      <Button variant="danger" size="sm" aria-label={`Remove ${item.name}`} onClick={() => setDeleting(item)}>
+                        Remove
+                      </Button>
                     </td>
                   ) : null}
                 </tr>
@@ -166,7 +165,7 @@ export default function CompensationTable({
         </div>
       )}
       {canEdit ? (
-        <form onSubmit={add} className="flex flex-wrap gap-2 border-t border-line px-5 py-4">
+        <form onSubmit={add} className="flex flex-wrap gap-2 border-t border-line px-4 sm:px-6 py-4">
           <div className="min-w-[220px] flex-1">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Add a line (base salary, vehicle stipend, match)" aria-label="Add a compensation line" className={`${inputClass} mt-0`} />
           </div>

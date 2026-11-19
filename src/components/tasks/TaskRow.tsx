@@ -7,7 +7,7 @@
 import { Repeat } from "lucide-react";
 import { Link } from "react-router-dom";
 import Badge, { type BadgeTone } from "../ui/Badge.tsx";
-import { itemTitleClass } from "../ui/type.ts";
+import { itemTitleClass, itemTitleSizeClass } from "../ui/type.ts";
 import { formatDate } from "../../lib/format.ts";
 import { PRIORITY_LABELS, RECURRENCE_LABELS, isDone, isOverdue, percentComplete } from "../../lib/tasks.ts";
 import type { TaskPriority, TaskWithSteps } from "../../types/database.ts";
@@ -18,9 +18,9 @@ function Dot() {
   return <span className="text-ink-3" aria-hidden>·</span>;
 }
 
-// A done task's title: the item title with the secondary ink in place of the ink, swapped rather
-// than stacked so which color wins never depends on stylesheet order.
-const DONE_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-2");
+// A done task's title: the item title's size in the secondary ink, composed rather than stacked on
+// the ink, so which colour wins never depends on stylesheet order.
+const DONE_TITLE = `${itemTitleSizeClass} text-ink-2`;
 
 // What a task page reads to send the person back where they came from.
 export type TaskBackState = { from: { to: string; label: string } };

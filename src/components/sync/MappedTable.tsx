@@ -2,10 +2,10 @@
 // linked back to where it came from. Read-only by design: a figure is changed at its source, and
 // nothing here adds, averages or compares one.
 import { tableClass, tdClass, thClass } from "../ui/forms.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { formatMappedValue } from "../../lib/sync/format.ts";
 import { recordLink } from "../../../supabase/functions/_shared/sync/links.ts";
 import { CONNECTION_PROVIDER_LABELS, type FieldType, type SyncRecord, type SyncSource } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 const NUMERIC: ReadonlySet<FieldType> = new Set(["number", "currency", "percent"]);
 

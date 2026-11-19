@@ -24,9 +24,10 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
+import { edgeCellsClass, inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { bandClass } from "../../components/ui/bandClass.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
@@ -66,11 +67,6 @@ import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
-import { tapTargetClass } from "../../components/ui/tap.ts";
-
-// The team table runs edge to edge in its card, so its first and last cells take the card's own
-// padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
-const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
 // Below md the team table stacks into compact, even rows: the name with the status badge on its
 // line, then, for a row with at least one score, each score with its label beside it (the column's
@@ -464,7 +460,7 @@ export default function CyclePage() {
           <div className="relative md:overflow-x-auto">
             <table role="table" className={`${tableClass} max-md:block`}>
               <thead role="rowgroup" className="max-md:sr-only">
-                <tr role="row" className={edgeCells}>
+                <tr role="row" className={edgeCellsClass}>
                   <th role="columnheader" className={thClass}>Person</th>
                   <th role="columnheader" className={thClass}>Status</th>
                   {columns.pillarScores ? (
@@ -481,8 +477,8 @@ export default function CyclePage() {
               </thead>
               <tbody role="rowgroup" className="max-md:block">
                 {rows.map(({ person, review, result, scored }) => (
-                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
-                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:pr-28`}>
+                  <tr key={person.id} role="row" className={`${edgeCellsClass} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
+                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:!pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">

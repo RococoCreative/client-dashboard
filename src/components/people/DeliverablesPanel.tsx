@@ -15,13 +15,12 @@
 // The same panel serves the person page and the review, because the ratings are set in the
 // meeting. `canEdit` is what separates an admin from the employee reading their own.
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import EmptyState from "../ui/EmptyState.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
 import RatingChoice from "../ui/RatingChoice.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
@@ -107,9 +106,9 @@ function TaskRow({
             onChange={canEdit ? (next) => void onSave({ rating: next }) : undefined}
           />
           {canEdit ? (
-            <IconButton label={`Remove task ${task.name}`} onClick={onRemove}>
-              <Trash2 size={14} aria-hidden />
-            </IconButton>
+            <Button variant="danger" size="sm" aria-label={`Remove task ${task.name}`} onClick={onRemove}>
+              Remove
+            </Button>
           ) : null}
         </div>
       </div>
@@ -457,9 +456,9 @@ export default function DeliverablesPanel({
                         ) : null}
                         <Figure actual={figure.actual} target={figure.target} hit={figure.hit} />
                         {canEdit ? (
-                          <IconButton label={`Remove ${deliverable.name}`} onClick={() => setRemoving(deliverable)}>
-                            <Trash2 size={14} aria-hidden />
-                          </IconButton>
+                          <Button variant="danger" size="sm" aria-label={`Remove ${deliverable.name}`} onClick={() => setRemoving(deliverable)}>
+                            Remove
+                          </Button>
                         ) : null}
                       </div>
 

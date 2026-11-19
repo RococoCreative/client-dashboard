@@ -30,9 +30,8 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState<DeliverableCategory | null>(null);
   const [busy, setBusy] = useState(false);
-  // The rows whose pencil is open. Several can be open at once; each closes with its own Done.
-  const [openIds, setOpenIds] = useState<string[]>([]);
-  const setOpen = (id: string, open: boolean) => setOpenIds((ids) => (open ? (ids.includes(id) ? ids : [...ids, id]) : ids.filter((x) => x !== id)));
+  // The one row whose pencil is open, as on every other list: opening another closes it.
+  const [openId, setOpenId] = useState<string | null>(null);
   // The delete dialog reports only its own failure, never an inline save's or an earlier
   // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
   // back, so the dialog waits for the answer rather than closing on Cancel mid-flight.
@@ -139,9 +138,9 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
               <li key={category.id} className={category.is_active ? "" : "opacity-70"}>
                 <EditRow
                   editLabel={`Edit category ${category.name}`}
-                  editing={openIds.includes(category.id)}
-                  onEdit={() => setOpen(category.id, true)}
-                  onDone={() => setOpen(category.id, false)}
+                  editing={openId === category.id}
+                  onEdit={() => setOpenId(category.id)}
+                  onDone={() => setOpenId(null)}
                   display={
                     <p className={`${bodyClass} break-words`}>
                       {category.name} {category.is_active ? null : <Badge>Retired</Badge>}

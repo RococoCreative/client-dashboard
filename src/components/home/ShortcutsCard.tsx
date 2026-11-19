@@ -18,7 +18,7 @@ export default function ShortcutsCard({ company, isAdmin, isRococo, can }: { com
           <li key={shortcut.group}>
             <Link
               to={shortcut.to}
-              className="group flex items-center justify-between gap-3 px-5 py-2.5 text-sm font-medium text-ink transition-colors duration-150 hover:bg-surface-2/60 hover:text-link tap:min-h-11"
+              className="group flex items-center justify-between gap-3 px-4 sm:px-6 py-2.5 text-sm font-medium text-ink transition-colors duration-150 hover:bg-surface-2/60 hover:text-link tap:min-h-11"
             >
               {shortcut.heading}
               <ArrowRight size={14} aria-hidden className="shrink-0 text-ink-3 transition-colors duration-150 group-hover:text-link" />

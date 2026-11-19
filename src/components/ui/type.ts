@@ -3,12 +3,19 @@
 // theme tokens; nothing here names a tenant.
 export const pageTitleClass = "font-display text-[30px] leading-tight tracking-display text-heading";
 export const sectionTitleClass = "font-display text-[18px] leading-snug text-heading";
-export const itemTitleClass = "text-[15px] font-medium leading-snug text-ink";
+// The item title, secondary and meta sizes come with no colour as well, for a line that brings its
+// own (a muted title, a done task, an error in text-danger): the colour is added, never edited in.
+export const itemTitleSizeClass = "text-[15px] font-medium leading-snug";
+export const itemTitleClass = `${itemTitleSizeClass} text-ink`;
 export const bodyClass = "text-[14px] leading-relaxed text-ink";
-export const secondaryClass = "text-[13px] leading-relaxed text-ink-2";
-export const metaClass = "text-[12.5px] leading-relaxed text-ink-3";
-// The meta size and leading with no colour, for a line that brings its own (an error in text-danger).
+export const secondarySizeClass = "text-[13px] leading-relaxed";
+export const secondaryClass = `${secondarySizeClass} text-ink-2`;
 export const metaSizeClass = "text-[12.5px] leading-relaxed";
+export const metaClass = `${metaSizeClass} text-ink-3`;
+// The themed eyebrow over a section title, the one a Section's header carries (the .eyebrow
+// component class in index.css: mono, uppercase, wide-tracked, bracketed on the Rococo theme), for
+// a section heading built outside a Section.
+export const sectionEyebrowClass = "eyebrow";
 // The small uppercase eyebrow over a section or a field. forms.ts has its own labelClass (a block
 // label for form controls), so this one is named apart.
 export const eyebrowLabelClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";

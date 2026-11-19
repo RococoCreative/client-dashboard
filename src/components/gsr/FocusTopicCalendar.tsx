@@ -8,10 +8,9 @@
 // anyone else the topic saves and the open GSR keeps its own theme until one of them saves it.
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Trash2 } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
-import IconButton from "../ui/IconButton.tsx";
+import Button from "../ui/Button.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
@@ -143,16 +142,16 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
               return (
                 // One grid for both widths: on a phone the month and its Remove button share the
                 // first line and the fields stack under them; from md up the four sit in a row.
-                <li key={month} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 sm:px-6 md:grid-cols-[9.5rem_minmax(0,2fr)_minmax(0,3fr)_2rem] md:items-start">
+                <li key={month} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 sm:px-6 md:grid-cols-[9.5rem_minmax(0,2fr)_minmax(0,3fr)_5rem] md:items-start">
                   <div className="flex min-h-9 items-center gap-2">
                     <span className={`whitespace-nowrap text-[13px] ${topic ? "text-ink" : "text-ink-3"}`}>{label}</span>
                     {index === 0 ? <Badge tone="accent">Now</Badge> : null}
                   </div>
                   <div className="flex min-h-9 items-center justify-end md:col-start-4 md:row-start-1">
                     {topic ? (
-                      <IconButton label={`Remove the ${label} topic`} onClick={() => void remove(topic)}>
-                        <Trash2 size={14} aria-hidden />
-                      </IconButton>
+                      <Button variant="danger" size="sm" aria-label={`Remove the ${label} topic`} onClick={() => void remove(topic)}>
+                        Remove
+                      </Button>
                     ) : null}
                   </div>
                   <div className="col-span-2 md:col-span-1 md:col-start-2 md:row-start-1">

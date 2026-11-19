@@ -1,20 +1,22 @@
 // The company's divisions, for an admin on People, Divisions: the parts it splits into for
 // reporting, such as two regions or two offices. Each is a company row (rule 12), added, renamed
-// on blur and removed here; a person's divisions are set on their person page. Divisions decide
+// on blur and removed here; a person's divisions are set on their person page. Each division reads
+// as text first; its pencil opens the name in place, one at a time, with Remove beside Done. Divisions decide
 // who sees whom (0038), so only a full-scope admin (an owner, Rococo, or an admin who sees every
 // division) changes them; any other admin reads the list. A division someone still works in
 // cannot be removed: the database refuses, and the dialog shows its answer. A person in two
 // divisions counts in each.
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
+import EditRow from "../ui/EditRow.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
+import { bodyClass, metaClass } from "../ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createDivision, deleteDivision, listDivisions, updateDivision } from "../../services/divisions.ts";
@@ -39,6 +41,8 @@ export default function DivisionsPanel({ companyId }: { companyId: string }) {
   // The dialog reports only its own failure, so its error is cleared whenever it opens. A delete
   // already sent cannot be called back, so the dialog waits for the answer.
   const [dialogError, setDialogError] = useState("");
+  // One division open for editing at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const divisions = [...(state.data?.divisions ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
   const memberCount = (id: string) => (state.data?.people ?? []).filter((p) => p.division_ids.includes(id)).length;
@@ -132,30 +136,48 @@ export default function DivisionsPanel({ companyId }: { companyId: string }) {
           {divisions.length === 0 ? (
             <p className="text-sm text-ink-2">No divisions yet.</p>
           ) : (
-            <ul className="divide-y divide-line">
-              {divisions.map((division) => (
-                <li key={division.id} className="flex items-center gap-3 py-2 first:pt-0">
-                  <div className="min-w-0 flex-1">
-                    {canChange ? (
+            <ul>
+              {divisions.map((division) => {
+                const count = <span className={`tnum ${metaClass}`}>{pluralize(memberCount(division.id), "person", "people")}</span>;
+                const text = (
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className={`min-w-0 [overflow-wrap:anywhere] ${bodyClass}`}>{division.name}</span>
+                    {count}
+                  </div>
+                );
+                return canChange ? (
+                  <EditRow
+                    key={division.id}
+                    as="li"
+                    className="border-b border-line py-3 first:pt-0 last:border-b-0 last:pb-0"
+                    display={text}
+                    editLabel={`Edit ${division.name}`}
+                    editing={openId === division.id}
+                    onEdit={() => setOpenId(division.id)}
+                    onDone={() => setOpenId(null)}
+                    footer={
+                      <Button variant="danger" size="sm" aria-label={`Remove ${division.name}`} onClick={() => openRemove(division)}>
+                        Remove
+                      </Button>
+                    }
+                  >
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <BlurInput
                         value={division.name}
                         required
                         ariaLabel={`Division name ${division.name}`}
                         onSave={(next) => rename(division, next)}
-                        className={`${inputClass} mt-0 text-[13px]`}
+                        className={`${inputClass} mt-0 min-w-0 flex-1 text-[13px]`}
                       />
-                    ) : (
-                      <p className="truncate text-[13px] text-ink">{division.name}</p>
-                    )}
-                  </div>
-                  <span className="tnum shrink-0 text-[12px] text-ink-3">{pluralize(memberCount(division.id), "person", "people")}</span>
-                  {canChange ? (
-                    <IconButton label={`Remove ${division.name}`} onClick={() => openRemove(division)}>
-                      <Trash2 size={14} aria-hidden />
-                    </IconButton>
-                  ) : null}
-                </li>
-              ))}
+                      {count}
+                    </div>
+                  </EditRow>
+                ) : (
+                  <li key={division.id} className="border-b border-line py-3 first:pt-0 last:border-b-0 last:pb-0">
+                    {text}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {canChange ? (

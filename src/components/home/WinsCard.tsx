@@ -7,12 +7,12 @@ import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { formatDate } from "../../lib/format.ts";
 import { companyToday, homeCutoff } from "../../lib/wins.ts";
 import { listWins } from "../../services/wins.ts";
 import { WIN_SOURCE_LABELS, type Company } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 export default function WinsCard({ company }: { company: Company }) {
   const companyId = company.id;
@@ -27,15 +27,15 @@ export default function WinsCard({ company }: { company: Company }) {
       actions={<Link to="/wins" className={`text-[13px] font-medium text-link hover:underline ${tapTargetClass}`}>All wins</Link>}
     >
       {state.error && !state.data ? (
-        <div className="p-5"><Notice tone="error">{state.error}</Notice></div>
+        <div className="p-4 sm:p-6"><Notice tone="error">{state.error}</Notice></div>
       ) : !state.data ? (
-        <div className="p-5"><SkeletonRows rows={3} /></div>
+        <div className="p-4 sm:p-6"><SkeletonRows rows={3} /></div>
       ) : state.data.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">{cutoff ? "No recent wins." : "No wins recorded yet."}</p>
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">{cutoff ? "No recent wins." : "No wins recorded yet."}</p>
       ) : (
         <ul className="divide-y divide-line">
           {state.data.map((win) => (
-            <li key={win.id} className="flex items-start justify-between gap-3 px-5 py-2.5">
+            <li key={win.id} className="flex items-start justify-between gap-3 px-4 sm:px-6 py-2.5">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{win.title}</p>
                 <p className="mt-0.5 text-[12.5px] text-ink-2">{formatDate(win.won_on)}</p>

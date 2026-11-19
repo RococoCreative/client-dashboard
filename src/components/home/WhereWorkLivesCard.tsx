@@ -9,8 +9,8 @@ import LinkGroups from "../links/LinkGroups.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
-import type { ExternalLink } from "../../types/database.ts";
 import { tapTargetClass } from "../ui/tap.ts";
+import type { ExternalLink } from "../../types/database.ts";
 
 export default function WhereWorkLivesCard({
   links,

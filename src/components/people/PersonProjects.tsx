@@ -6,16 +6,15 @@
 // keeps the rows, because the scorecard reads the same ones.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import Section from "../ui/Section.tsx";
 import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
+import { tapStretchClass } from "../ui/tap.ts";
 import { assignProject, createProjectAndAssign, unassignProject, updateProjectAssignment } from "../../services/projectAssignments.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Project, ProjectAssignment } from "../../types/database.ts";
-import { tapStretchClass } from "../ui/tap.ts";
 
 // The pulldown value that means "a project not on the list yet".
 const NEW_PROJECT = "new";
@@ -116,14 +115,14 @@ export default function PersonProjects({
       padded={false}
     >
       {assignments.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-ink-2">{firstName} is not on any project yet.</p>
+        <p className="px-4 sm:px-6 py-4 text-sm text-ink-2">{firstName} is not on any project yet.</p>
       ) : (
         <ul className="divide-y divide-line">
           {assignments.map((a) => {
             const project = byId.get(a.project_id);
             const name = project?.name ?? "A project no longer listed";
             return (
-              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-2.5">
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 sm:px-6 py-2.5">
                 <div className="relative min-w-0 flex-1 basis-48 tap:flex tap:min-h-11 tap:flex-col tap:justify-center">
                   {linkProjects && project ? (
                     <Link to={`/production/projects/${project.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
@@ -143,9 +142,9 @@ export default function PersonProjects({
                       onSave={(next) => saveRole(a, next)}
                       className={`${inputClass} mt-0 w-full py-1.5 text-[13px] sm:w-48`}
                     />
-                    <IconButton label={`Unassign ${name}`} onClick={() => void unassign(a)}>
-                      <X size={14} aria-hidden />
-                    </IconButton>
+                    <Button variant="danger" size="sm" aria-label={`Unassign ${name}`} onClick={() => void unassign(a)}>
+                      Unassign
+                    </Button>
                   </>
                 ) : null}
               </li>
@@ -154,7 +153,7 @@ export default function PersonProjects({
         </ul>
       )}
       {canEdit ? (
-        <form onSubmit={(e) => void submit(e)} className="grid gap-3 border-t border-line px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <form onSubmit={(e) => void submit(e)} className="grid gap-3 border-t border-line px-4 sm:px-6 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <div>
             <label htmlFor="assign-project" className={labelClass}>Project</label>
             <select id="assign-project" value={choice} onChange={(e) => setChoice(e.target.value)} className={selectClass}>

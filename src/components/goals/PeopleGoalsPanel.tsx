@@ -13,6 +13,7 @@ import PanelHeader from "../ui/PanelHeader.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { selectClass } from "../ui/forms.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -21,7 +22,6 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { goalOutcome, goalSettled, rankGoals, type GoalOutcome } from "../../lib/gsr/goals.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import { GOAL_KIND_LABELS, type Goal } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 const OUTCOME_LABELS: Record<GoalOutcome, string> = { hit: "Hit", miss: "Missed", open: "In progress" };
 
@@ -82,7 +82,7 @@ export default function PeopleGoalsPanel() {
                   {own.map((goal) => {
                     const result = outcome(goal);
                     return (
-                      <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
+                      <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
                         <div className="min-w-0">
                           <p className="truncate text-sm text-ink">{goal.title}</p>
                           <p className="text-[12px] text-ink-3">

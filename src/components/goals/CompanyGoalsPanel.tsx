@@ -2,7 +2,7 @@
 // month (revenue, closed sales, jobs delivered). They show on everyone's dashboard. Display
 // strings carry the units people say; numerics are optional.
 import { useRef, useState, type FormEvent } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
@@ -14,12 +14,12 @@ import Notice from "../ui/Notice.tsx";
 import PanelHeader from "../ui/PanelHeader.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createCompanyGoal, deleteCompanyGoal, listCompanyGoals, updateCompanyGoal } from "../../services/gsr.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { CompanyGoal } from "../../types/database.ts";
-import { tapTargetClass } from "../ui/tap.ts";
 
 function GoalDialog({ companyId, year, goal, count, onClose, onSaved }: { companyId: string; year: number; goal: CompanyGoal | null; count: number; onClose: () => void; onSaved: (g: CompanyGoal) => void }) {
   const [name, setName] = useState(goal?.name ?? "");
@@ -152,7 +152,7 @@ export default function CompanyGoalsPanel() {
       ) : (
         <ul className="space-y-3">
           {goals.map((goal) => (
-            <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-5 py-4">
+            <li key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 sm:px-6 py-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{goal.name}</p>
                 <p className="tnum mt-0.5 text-[13px] text-ink-2">{goal.current_display || "-"} of {goal.target_display || "-"}</p>
@@ -162,7 +162,7 @@ export default function CompanyGoalsPanel() {
                   <Badge tone={goal.is_hit ? "success" : "neutral"}>{goal.is_hit ? "Hit" : "In progress"}</Badge>
                 </button>
                 <IconButton label="Edit goal" onClick={() => setDialog({ goal })}><Pencil size={14} aria-hidden /></IconButton>
-                <IconButton label="Delete goal" onClick={() => setDeleting(goal)}><Trash2 size={14} aria-hidden /></IconButton>
+                <Button variant="danger" size="sm" aria-label="Delete goal" onClick={() => setDeleting(goal)}>Delete</Button>
               </div>
             </li>
           ))}

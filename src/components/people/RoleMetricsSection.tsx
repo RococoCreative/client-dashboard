@@ -4,26 +4,19 @@
 // save on their own. One Add metric button opens the one add form. Metrics are rows of the role
 // (rule 12), so nothing here knows a company by name.
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import EditRow from "../ui/EditRow.tsx";
-import IconButton from "../ui/IconButton.tsx";
-import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
+import { checkboxClass, compactInputClass, compactSelectClass, inputClass, selectClass } from "../ui/forms.ts";
 import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { createRoleMetric, deleteRoleMetric, updateRoleMetric, type RoleMetricPatch } from "../../services/scorecards.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { METRIC_KIND_LABELS, keysOf, type JobRole, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
-
 const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
-// The shared control classes at a compact size for the dense metric rows: the same look, without
-// the stacked-form top margin, and one step shorter.
-const compact = (cls: string) => `${cls.replace("mt-1.5 ", "").replace("py-2 ", "")} py-1.5 text-[13px]`;
-const smallInput = compact(inputClass);
-const smallSelect = compact(selectClass);
 const toggleLabel = "flex items-center gap-1.5 text-[12.5px] text-ink-2 tap:min-h-11";
 
 // A number typed into a metric field: blank is none, anything else has to read as a number.
@@ -45,18 +38,13 @@ function metricFacts(metric: RoleMetric): string {
 }
 
 // One metric's controls, shown once its pencil is clicked. Every field saves on its own.
-function MetricForm({ metric, onSave, onDelete, onError }: { metric: RoleMetric; onSave: (patch: RoleMetricPatch) => Promise<boolean>; onDelete: () => void; onError: (message: string) => void }) {
+function MetricForm({ metric, onSave, onError }: { metric: RoleMetric; onSave: (patch: RoleMetricPatch) => Promise<boolean>; onError: (message: string) => void }) {
   return (
     <div>
-      <div className="flex items-center gap-2">
-        <BlurInput value={metric.name} required ariaLabel={`Metric name ${metric.name}`} onSave={(next) => onSave({ name: next.trim() })} className={`${smallInput} min-w-0 flex-1 font-medium`} />
-        <IconButton label={`Delete metric ${metric.name}`} onClick={onDelete}>
-          <Trash2 size={14} aria-hidden />
-        </IconButton>
-      </div>
+      <BlurInput value={metric.name} required ariaLabel={`Metric name ${metric.name}`} onSave={(next) => onSave({ name: next.trim() })} className={`${compactInputClass} w-full font-medium`} />
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div>
-          <select aria-label={`Kind for ${metric.name}`} value={metric.kind} onChange={(e) => void onSave({ kind: e.target.value as MetricKind })} className={smallSelect}>
+          <select aria-label={`Kind for ${metric.name}`} value={metric.kind} onChange={(e) => void onSave({ kind: e.target.value as MetricKind })} className={compactSelectClass}>
             {keysOf(METRIC_KIND_LABELS).map((k) => (
               <option key={k} value={k}>{METRIC_KIND_LABELS[k]}</option>
             ))}
@@ -64,7 +52,7 @@ function MetricForm({ metric, onSave, onDelete, onError }: { metric: RoleMetric;
         </div>
         {metric.kind === "rating" ? (
           <div>
-            <select aria-label={`Scale for ${metric.name}`} value={metric.scale_max} onChange={(e) => void onSave({ scale_max: Number(e.target.value) })} className={smallSelect}>
+            <select aria-label={`Scale for ${metric.name}`} value={metric.scale_max} onChange={(e) => void onSave({ scale_max: Number(e.target.value) })} className={compactSelectClass}>
               {SCALES.map((n) => (
                 <option key={n} value={n}>1 to {n}</option>
               ))}
@@ -78,7 +66,7 @@ function MetricForm({ metric, onSave, onDelete, onError }: { metric: RoleMetric;
               value={metric.target === null ? "" : String(metric.target)}
               placeholder="None"
               ariaLabel={`Target for ${metric.name}`}
-              className={`${smallInput} tnum`}
+              className={`${compactInputClass} tnum`}
               onSave={(next) => {
                 const value = parseNumber(next);
                 if (value === undefined) {
@@ -97,7 +85,7 @@ function MetricForm({ metric, onSave, onDelete, onError }: { metric: RoleMetric;
             <BlurInput
               value={String(metric.sort_order)}
               ariaLabel={`Order for ${metric.name}`}
-              className={`${smallInput} tnum`}
+              className={`${compactInputClass} tnum`}
               onSave={(next) => {
                 const value = parseNumber(next);
                 if (value === null || value === undefined || !Number.isInteger(value)) {
@@ -285,8 +273,13 @@ export default function RoleMetricsSection({
                     <p className={metaClass}>{metricFacts(metric)}</p>
                   </>
                 }
+                footer={
+                  <Button variant="danger" size="sm" aria-label={`Delete metric ${metric.name}`} onClick={() => openDelete(metric)}>
+                    Delete
+                  </Button>
+                }
               >
-                <MetricForm metric={metric} onSave={(patch) => save(metric, patch)} onDelete={() => openDelete(metric)} onError={onError} />
+                <MetricForm metric={metric} onSave={(patch) => save(metric, patch)} onError={onError} />
               </EditRow>
             </li>
           ))}

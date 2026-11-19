@@ -23,7 +23,7 @@
 // That rule binds only the goal's own person (0039): their manager edits it like any other.
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Lock, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Lock, Plus } from "lucide-react";
 import ActionSteps from "./ActionSteps.tsx";
 import GoalNotes from "./GoalNotes.tsx";
 import GoalTasks from "./GoalTasks.tsx";
@@ -31,7 +31,6 @@ import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import IconButton from "../ui/IconButton.tsx";
 import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
@@ -152,9 +151,9 @@ function GoalEditor({
           </div>
         </div>
         {canDefine ? (
-          <IconButton label={`Delete ${goal.title}`} onClick={onDelete}>
-            <Trash2 size={14} aria-hidden />
-          </IconButton>
+          <Button variant="danger" size="sm" aria-label={`Delete ${goal.title}`} onClick={onDelete}>
+            Delete
+          </Button>
         ) : null}
       </div>
 
@@ -414,8 +413,9 @@ export default function GoalSettingPanel({
   notes: GoalNote[];
   // Full names by profile id, from the company directory, to name who wrote each note.
   names: ReadonlyMap<string, string>;
-  // The goals the person's job role brings into every month, set once in Settings. Offered
-  // here until each is filed for this month; the template itself is never edited from a review.
+  // The goals the person's job role brings into every month, set once on the role in People,
+  // Roles. Offered here until each is filed for this month; the template itself is never edited
+  // from a review.
   roleGoals?: JobRoleGoal[];
   // How many goals a month requires, from the company's Monthly GSRs pillar; null for a company
   // that does not score its GSRs, which then sees none of the counting.
