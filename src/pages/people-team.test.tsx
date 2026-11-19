@@ -48,6 +48,7 @@ import { ROLE_LABELS } from "../types/database.ts";
 import DivisionsPanel from "../components/people/DivisionsPanel.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
+import PersonPage from "./people/PersonPage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 import TaskPage from "./tasks/TaskPage.tsx";
@@ -175,10 +176,11 @@ describe("People tab for an admin", () => {
     onTestFinished(async () => {
       await profilesService.updateProfile(kai.id, { is_active: true });
     });
-    renderWithHub(<PeoplePage />, rbaAdmin);
+    // Deactivate is on their Setup tab, which stays on them with Reactivate at hand.
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${kai.id}/setup`, pattern: "/people/:profileId/:tab?" });
     await user.click(await screen.findByRole("button", { name: "Deactivate Kai Bennett" }));
     expect(await screen.findByRole("button", { name: "Reactivate Kai Bennett" })).toBeInTheDocument();
-    expect(within(rowOf("Kai Bennett")).getByText("Inactive")).toBeInTheDocument();
+    expect((await profilesService.listCompanyProfiles(RBA.company.id)).find((p) => p.id === kai.id)?.is_active).toBe(false);
   });
 
   it("adds someone already placed in a division and under a manager, and flags someone with none", async () => {
@@ -215,13 +217,13 @@ describe("People tab for an admin", () => {
     const user = userEvent.setup();
     const spy = vi.spyOn(profilesService, "deleteStaffProfile").mockRejectedValueOnce(new Error("That person was not removed. They may have signed in, or they are not yours to remove."));
     onTestFinished(() => spy.mockRestore());
-    renderWithHub(<PeoplePage />, rbaAdmin);
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${kai.id}/setup`, pattern: "/people/:profileId/:tab?" });
     await user.click(await screen.findByRole("button", { name: "Remove Kai Bennett" }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     expect(await within(dialog).findByText(/That person was not removed/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(screen.getByText("Kai Bennett", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kai Bennett" })).toBeInTheDocument();
   });
 });
 

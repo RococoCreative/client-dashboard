@@ -35,6 +35,7 @@ vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import type { HubValue } from "../context/HubContext.tsx";
 import { addBackToCycle, createGoal, createPillar, ensureReview, listPillars, omitFromCycle, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
 import * as companiesService from "../services/companies.ts";
@@ -235,7 +236,7 @@ describe("GSR", () => {
   it("sets an impact score on the profile and the open review reads it", async () => {
     const user = userEvent.setup();
     const jamie = RBA.profiles[1];
-    const profile = renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${jamie.id}`, pattern: "/people/:profileId" });
+    const profile = renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${jamie.id}/reviews`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Jamie Fox" })).toBeInTheDocument();
     const group = await screen.findByRole("radiogroup", { name: "Communication rating" });
     await user.click(within(group).getByRole("radio", { name: "5 of 5" }));
@@ -451,9 +452,11 @@ describe("people", () => {
   });
 
   it("shows one person's history and goals", async () => {
-    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    const user = userEvent.setup();
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}/reviews`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
     expect(await screen.findByText("Review history")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "GSR and goals" }));
     expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
   });
 });
@@ -984,15 +987,20 @@ describe("scored review", () => {
 
 describe("employee profile", () => {
   it("shows compensation with its total, KPIs, and employment details on the person page", async () => {
-    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    const user = userEvent.setup();
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}/setup`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
     expect(await screen.findByText("Total compensation")).toBeInTheDocument();
     expect(screen.getAllByText("$77,760").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Annual for Base salary")).toHaveValue("75000");
-    expect(screen.getByLabelText("KPI 35 new sales journey leads")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit hire date" }));
     expect(screen.getByLabelText("Hire date")).toHaveValue("2026-05-26");
+    await user.click(screen.getByRole("button", { name: "Edit reports to" }));
     expect(screen.getByLabelText("Reports to")).toHaveValue(KLASIK.profiles[0].id);
+    await user.click(screen.getByRole("button", { name: "Edit department" }));
     expect(screen.getByLabelText("Department")).toHaveValue("Production");
+    await user.click(screen.getByRole("link", { name: "Scorecard" }));
+    expect(await screen.findByLabelText("KPI 35 new sales journey leads")).toBeInTheDocument();
   });
 
   it("lists who each person reports to in the people table, and leaves department and hire date to the person page", async () => {
@@ -1064,10 +1072,12 @@ describe("job roles", () => {
   });
 
   it("places a person in a job role and keeps their own figures on the profile", async () => {
-    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}/setup`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Edit job role" }));
     expect(await screen.findByLabelText("Job role")).toHaveValue(KLASIK.jobRoles[0].id);
-    expect(screen.getByLabelText("Target for Revenue managed")).toHaveValue("2000000");
+    await userEvent.click(screen.getByRole("link", { name: "Scorecard" }));
+    expect(await screen.findByLabelText("Target for Revenue managed")).toHaveValue("2000000");
     expect(screen.getByLabelText("Current for Revenue managed")).toHaveValue("640000");
     expect(screen.getByText(/32% of target/)).toBeInTheDocument();
     // The section says where the figures go, which is the role's call.
@@ -1142,7 +1152,7 @@ describe("goals beyond the month", () => {
   });
 
   it("shows an admin the shared part of someone's goals and nothing private", async () => {
-    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}`, pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, admin, { path: `/people/${employeeProfile.id}/gsr`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
     expect(screen.getByText("Action steps and progress notes are private to Sam.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Register for the course")).not.toBeInTheDocument();
@@ -2051,15 +2061,17 @@ describe("roles", () => {
   it("offers Owner only to an owner", async () => {
     // The role is changed on the person page; the roster only reads it.
     const dana = KINGDOM.profiles.find((p) => p.full_name === "Dana Whitfield")!;
-    const route = { path: `/people/${dana.id}`, pattern: "/people/:profileId" };
+    const route = { path: `/people/${dana.id}/setup`, pattern: "/people/:profileId/:tab?" };
     const first = renderWithHub(<PersonPage />, kingdomAdmin, route);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
     expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Admin", "Manager", "Employee"]);
     first.unmount();
     renderWithHub(<PersonPage />, kingdomOwner, route);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
     expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Owner", "Admin", "Manager", "Employee"]);
   });
 
-  it("leaves the row actions for someone ranked above an admin to an owner or Rococo", async () => {
+  it("leaves the actions for someone ranked above an admin to an owner or Rococo", async () => {
     // An owner set up on the roster who has not signed in yet, the state owners usually start in.
     const rosterOwner = {
       ...KINGDOM.profiles[0],
@@ -2076,26 +2088,40 @@ describe("roles", () => {
     // The name in the Person column; the same name also shows as someone's Reports to.
     const rowOf = (name: string) => screen.getByText(name, { selector: "span" }).closest("tr")!;
 
+    // Deactivate and Remove are on the person's Setup tab.
+    const setupOf = (hub: HubValue, id: string) => renderWithHub(<PersonPage />, hub, { path: `/people/${id}/setup`, pattern: "/people/:profileId/:tab?" });
+    const marcus = KINGDOM.profiles.find((p) => p.full_name === "Marcus Lee")!;
+    const dana = KINGDOM.profiles.find((p) => p.full_name === "Dana Whitfield")!;
+
     const first = renderWithHub(<PeoplePage />, kingdomAdmin);
     expect(await screen.findByText("Sample Roster Owner")).toBeInTheDocument();
     expect(rowOf("Sample Roster Owner")).toHaveTextContent("Not invited");
     expect(screen.queryByRole("button", { name: "Send the invitation to Sample Roster Owner" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove Sample Roster Owner" })).not.toBeInTheDocument();
-    expect(within(rowOf("Marcus Lee")).queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
-    // Everyone the admin does not rank below keeps their actions.
-    expect(within(rowOf("Dana Whitfield")).getByRole("button", { name: "Deactivate Dana Whitfield" })).toBeInTheDocument();
     first.unmount();
+    const ownerSetup = setupOf(kingdomAdmin, rosterOwner.id);
+    expect(await screen.findByText("Only an owner or Rococo can deactivate or remove this person.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Sample Roster Owner" })).not.toBeInTheDocument();
+    ownerSetup.unmount();
+    const marcusSetup = setupOf(kingdomAdmin, marcus.id);
+    expect(await screen.findByRole("heading", { name: "Account" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
+    marcusSetup.unmount();
+    // Everyone the admin does not rank below keeps their actions.
+    const danaSetup = setupOf(kingdomAdmin, dana.id);
+    expect(await screen.findByRole("button", { name: "Deactivate Dana Whitfield" })).toBeInTheDocument();
+    danaSetup.unmount();
 
     for (const hub of [kingdomOwner, makeHub("rococo", KINGDOM.company)]) {
       const view = renderWithHub(<PeoplePage />, hub);
       expect(await screen.findByRole("button", { name: "Send the invitation to Sample Roster Owner" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Remove Sample Roster Owner" })).toBeInTheDocument();
       view.unmount();
+      const setup = setupOf(hub, rosterOwner.id);
+      expect(await screen.findByRole("button", { name: "Remove Sample Roster Owner" })).toBeInTheDocument();
+      setup.unmount();
     }
-    const rococoView = renderWithHub(<PeoplePage />, makeHub("rococo", KINGDOM.company));
-    await screen.findByText("Sample Roster Owner");
-    expect(within(rowOf("Marcus Lee")).getByRole("button", { name: "Deactivate Marcus Lee" })).toBeInTheDocument();
-    rococoView.unmount();
+    const rococoSetup = setupOf(makeHub("rococo", KINGDOM.company), marcus.id);
+    expect(await screen.findByRole("button", { name: "Deactivate Marcus Lee" })).toBeInTheDocument();
+    rococoSetup.unmount();
   });
 
   it("explains each role when adding staff", async () => {
@@ -2109,7 +2135,8 @@ describe("roles", () => {
   });
 
   it("keeps an owner's role out of an admin's hands on the person page", async () => {
-    renderWithHub(<PersonPage />, kingdomAdmin, { path: "/people/kingdom-user-1", pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, kingdomAdmin, { path: "/people/kingdom-user-1/setup", pattern: "/people/:profileId/:tab?" });
+    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
     const role = await screen.findByLabelText("Role");
     expect(role).toBeDisabled();
     expect(role).toHaveValue("owner");
@@ -2125,7 +2152,8 @@ describe("roles", () => {
 
   it("leaves Klasik's roster as it was, plus the Manager value", async () => {
     const sam = KLASIK.profiles.find((p) => p.full_name === "Sam Ortega")!;
-    renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}/setup`, pattern: "/people/:profileId/:tab?" });
+    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
     expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Admin", "Manager", "Employee"]);
   });
 });

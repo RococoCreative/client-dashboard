@@ -52,8 +52,9 @@ const rococo = makeHub("rococo", RBA.company);
 const noor = RBA.profiles.find((p) => p.id === "rba-user-3")!;
 const avery = RBA.profiles.find((p) => p.id === "rba-staff-invited")!;
 
-function personPage(hub: HubValue, id = noor.id) {
-  return renderWithHub(<PersonPage />, hub, { path: `/people/${id}`, pattern: "/people/:profileId" });
+// The person page on one of its tabs.
+function personPage(hub: HubValue, id = noor.id, tab = "scorecard") {
+  return renderWithHub(<PersonPage />, hub, { path: `/people/${id}/${tab}`, pattern: "/people/:profileId/:tab?" });
 }
 
 describe("role metrics editor", () => {
@@ -224,7 +225,8 @@ describe("person projects", () => {
 describe("person division", () => {
   it("lets an admin pick the division, without the access toggle", async () => {
     const user = userEvent.setup();
-    personPage(rbaAdmin, avery.id);
+    personPage(rbaAdmin, avery.id, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     const group = await screen.findByRole("group", { name: "Divisions" });
     const south = within(group).getByRole("checkbox", { name: "RBA South" });
     const north = within(group).getByRole("checkbox", { name: "RBA North" });
@@ -241,7 +243,8 @@ describe("person division", () => {
 
   it("gives an owner and Rococo the Can view divisions toggle", async () => {
     const user = userEvent.setup();
-    const { unmount } = personPage(rbaOwner, avery.id);
+    const { unmount } = personPage(rbaOwner, avery.id, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     const toggle = await screen.findByRole("checkbox", { name: "Can view divisions" });
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
@@ -249,15 +252,19 @@ describe("person division", () => {
     await user.click(screen.getByRole("checkbox", { name: "Can view divisions" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Can view divisions" })).not.toBeChecked());
     unmount();
-    personPage(rococo, avery.id);
+    personPage(rococo, avery.id, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     expect(await screen.findByRole("checkbox", { name: "Can view divisions" })).toBeInTheDocument();
   });
 
   it("stays out of the way for a company with no divisions", async () => {
+    const user = userEvent.setup();
     const klasikPerson = KLASIK.profiles[1];
-    personPage(makeHub("owner"), klasikPerson.id);
+    personPage(makeHub("owner"), klasikPerson.id, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit job role" }));
     expect(await screen.findByLabelText("Job role")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("group", { name: "Divisions" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Edit divisions and view access" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Can view divisions" })).not.toBeInTheDocument();
   });
 });

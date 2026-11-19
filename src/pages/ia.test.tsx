@@ -270,23 +270,34 @@ describe("header links from Monthly GSRs and Reviews", () => {
 });
 
 describe("person page", () => {
-  it("reads in one order: scorecard, goals, projects, KPIs, compensation, review history", async () => {
+  // Each tab holds its own sections, in this order. Headings found by name; projects by their count.
+  const holds: Array<[string, string, Array<string | RegExp>]> = [
+    ["Overview", "", ["Details", "This month's GSR", "Tasks"]],
+    ["GSR and goals", "gsr", ["This month's GSR", "This year, next year and the BHAG"]],
+    ["Scorecard", "scorecard", [/^On \d+ projects?$|^Projects$/, "Personal KPIs", "Financial figures"]],
+    ["Reviews", "reviews", ["Deliverables", "Review history"]],
+    ["Setup", "setup", ["Details", "Role and divisions", "Account", "Compensation"]],
+  ];
+
+  it("reads as tabs: Overview, GSR and goals, Scorecard, Tasks, Reviews, Setup", async () => {
     const noor = RBA.profiles.find((p) => p.id === "rba-user-3")!;
-    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}`, pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
-    await screen.findByRole("heading", { name: "This year, next year and the BHAG" });
-    const order = ["Details", "This year, next year and the BHAG", "Personal KPIs", "Compensation", "Review history"];
-    await waitFor(() => expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual(expect.arrayContaining(order)));
-    const headings = screen.getAllByRole("heading").map((h) => h.textContent ?? "");
-    const at = (name: string | RegExp) => headings.findIndex((h) => (typeof name === "string" ? h === name : name.test(h)));
-    const projects = at(/^On \d+ projects?$|^Projects$/);
-    expect(at("Details")).toBeLessThan(at("This year, next year and the BHAG"));
-    expect(at("This year, next year and the BHAG")).toBeLessThan(projects);
-    expect(projects).toBeLessThan(at("Personal KPIs"));
-    expect(at("Personal KPIs")).toBeLessThan(at("Compensation"));
-    expect(at("Compensation")).toBeLessThan(at("Review history"));
-    const history = screen.getByRole("heading", { name: "Review history" }).closest("section") as HTMLElement;
-    expect(within(history).getByRole("link", { name: "Review cycles" })).toHaveAttribute("href", "/reviews");
+    const nav = screen.getByRole("navigation", { name: "Person" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "GSR and goals", "Scorecard", "Tasks", "Reviews", "Setup"]);
+  });
+
+  it.each(holds)("holds its sections in order on %s", async (_label, tab, order) => {
+    const noor = RBA.profiles.find((p) => p.id === "rba-user-3")!;
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}${tab ? `/${tab}` : ""}`, pattern: "/people/:profileId/:tab?" });
+    expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
+    const at = (name: string | RegExp) => screen.getAllByRole("heading").map((h) => h.textContent ?? "").findIndex((h) => (typeof name === "string" ? h === name : name.test(h)));
+    await waitFor(() => order.forEach((name) => expect(at(name)).toBeGreaterThan(-1)));
+    order.slice(1).forEach((name, i) => expect(at(order[i])).toBeLessThan(at(name)));
+    if (tab === "reviews") {
+      const history = screen.getByRole("heading", { name: "Review history" }).closest("section") as HTMLElement;
+      expect(within(history).getByRole("link", { name: "Review cycles" })).toHaveAttribute("href", "/reviews");
+    }
   });
 });
 

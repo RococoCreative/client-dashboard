@@ -12,13 +12,11 @@
 // no adding, no invitations (those are admin-only in the database too), no row actions, and the
 // role as plain text.
 //
-// Deactivate is on every row but your own and a Rococo admin's, account or not. An address on one
-// of the company's sign-in domains gets in without any invitation and claims its roster row, so
-// switching the row off is the one thing that keeps a person out before they ever sign in, and it
-// keeps everything set up for them on record, where Remove deletes it. A Rococo admin placed with
-// the company shows on the roster too, but their role and access are Rococo's to manage.
-// Deactivating, inviting and removing someone ranked above you is refused by the database
-// (0033), so those rows offer none of the three.
+// A row carries the invitation actions only: Send invite, Copy link and cancelling an invitation.
+// Deactivate, Reactivate and Remove live on the person's Setup tab, with the same rules. A Rococo
+// admin placed with the company shows on the roster too, but their role and access are Rococo's to
+// manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
+// no invite.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
@@ -39,7 +37,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { listDivisions } from "../../services/divisions.ts";
-import { createStaffProfile, deleteStaffProfile, listCompanyProfiles, updateProfile } from "../../services/profiles.ts";
+import { createStaffProfile, listCompanyProfiles } from "../../services/profiles.ts";
 import { createInvitation, deleteInvitation, inviteLink, listInvitations } from "../../services/invitations.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
@@ -210,20 +208,16 @@ export default function PeoplePage() {
   const teamView = !isAdmin;
   const [adding, setAdding] = useState(false);
   const [cancelling, setCancelling] = useState<{ person: Profile; invitation: Invitation } | null>(null);
-  const [removing, setRemoving] = useState<Profile | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // The cancel and remove dialogs report only their own failure. Sharing `error` with the row
-  // actions meant a dialog could open already showing a role change that failed a minute earlier,
-  // reading as though the cancel or removal had gone wrong before it was confirmed.
+  // The cancel dialog reports only its own failure. Sharing `error` with the row actions meant it
+  // could open already showing a failure from a minute earlier, reading as though the cancel had
+  // gone wrong before it was confirmed.
   const [dialogError, setDialogError] = useState("");
   const [division, setDivision] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
-  // Someone switched off or on from this page stays in the list until the next visit, so the
-  // Reactivate button is still there to undo a slip.
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
 
   const state = useAsync(async () => {
     const [people, invitations, divisions, directory] = await Promise.all([
@@ -279,7 +273,7 @@ export default function PeoplePage() {
   const needle = query.trim().toLowerCase();
   const matches = (person: Profile) =>
     needle === "" || [person.full_name, person.title, person.email].some((field) => (field ?? "").toLowerCase().includes(needle));
-  const shownState = (person: Profile) => person.is_active || showInactive || touched.has(person.id);
+  const shownState = (person: Profile) => person.is_active || showInactive;
   const inactiveCount = people.filter((p) => !p.is_active).length;
   // What the chips count: the people the inactive switch shows, before the search.
   const countable = people.filter(shownState);
@@ -332,17 +326,6 @@ export default function PeoplePage() {
     }
   }
 
-  async function patchPerson(person: Profile, patch: Parameters<typeof updateProfile>[1]) {
-    setError("");
-    try {
-      const next = await updateProfile(person.id, patch);
-      state.setData((prev) => (prev ? { ...prev, people: prev.people.map((p) => (p.id === next.id ? next : p)) } : prev));
-      if (patch.is_active !== undefined) setTouched((prev) => new Set([...prev, person.id]));
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }
-
   async function sendInvite(person: Profile) {
     setError("");
     try {
@@ -371,24 +354,6 @@ export default function PeoplePage() {
       setCancelling(null);
     } catch (err) {
       setDialogError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // deleteStaffProfile throws when nothing went (they signed in meanwhile, or the database refused),
-  // so the dialog stays open on the reason instead of closing as if they were gone.
-  async function handleRemoveStaff() {
-    if (!removing) return;
-    setBusy(true);
-    setDialogError("");
-    try {
-      await deleteStaffProfile(removing.id);
-      const id = removing.id;
-      state.setData((prev) => (prev ? { ...prev, people: prev.people.filter((p) => p.id !== id) } : prev));
-      setRemoving(null);
-    } catch (err) {
-      setDialogError(errorMessage(err, "They were not removed. Try again."));
     } finally {
       setBusy(false);
     }
@@ -537,11 +502,6 @@ export default function PeoplePage() {
                         {teamView ? null : (
                           <td className={`${tdClass} py-2 text-right`}>
                             <span className="flex items-center justify-end gap-1.5">
-                              {!self && !rococo && canChange ? (
-                                <Button variant="ghost" size="sm" aria-label={`${person.is_active ? "Deactivate" : "Reactivate"} ${displayName(person)}`} onClick={() => void patchPerson(person, { is_active: !person.is_active })}>
-                                  {person.is_active ? "Deactivate" : "Reactivate"}
-                                </Button>
-                              ) : null}
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (
@@ -554,17 +514,10 @@ export default function PeoplePage() {
                                   </IconButton>
                                 </>
                               ) : null}
-                              {!account && !invitation && canChange ? (
-                                <>
-                                  {person.is_active ? (
-                                    <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
-                                      <Send size={13} aria-hidden /> Send invite
-                                    </Button>
-                                  ) : null}
-                                  <IconButton label={`Remove ${displayName(person)}`} onClick={() => setRemoving(person)}>
-                                    <Trash2 size={14} aria-hidden />
-                                  </IconButton>
-                                </>
+                              {!account && !invitation && canChange && person.is_active ? (
+                                <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
+                                  <Send size={13} aria-hidden /> Send invite
+                                </Button>
                               ) : null}
                             </span>
                           </td>
@@ -587,7 +540,8 @@ export default function PeoplePage() {
               set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
               invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.
               Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
-              either way they take over the profile set up here rather than starting a second one.
+              either way they take over the profile set up here rather than starting a second one. To deactivate or remove
+              someone, open them and go to Setup.
             </p>
           )}
         </Section>
@@ -615,17 +569,6 @@ export default function PeoplePage() {
           error={dialogError}
           onConfirm={() => void handleCancelInvite()}
           onCancel={() => { setCancelling(null); setDialogError(""); }}
-        />
-      ) : null}
-      {removing ? (
-        <ConfirmDialog
-          title={`Remove ${displayName(removing)} from the team?`}
-          body={`This deletes their profile and everything set up for them, including reviews, ${can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead.`}
-          confirmLabel="Remove"
-          busy={busy}
-          error={dialogError}
-          onConfirm={() => void handleRemoveStaff()}
-          onCancel={() => { setRemoving(null); setDialogError(""); }}
         />
       ) : null}
     </>

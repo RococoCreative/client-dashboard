@@ -75,8 +75,9 @@ const rococo = makeHub("rococo", null);
 const sam = KLASIK.profiles[1];
 const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!;
 
-function renderPerson() {
-  return renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+// Sam's person page on a tab: Reviews holds the deliverables unless another is named.
+function renderPerson(tab = "reviews") {
+  return renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}/${tab}`, pattern: "/people/:profileId/:tab?" });
 }
 
 // A call that stays in flight until the test settles it, so a test can act while it runs.
@@ -105,10 +106,11 @@ async function expectClearRestores(user: ReturnType<typeof userEvent.setup>, lab
 describe("name boxes that cannot be emptied", () => {
   it("puts back a cleared figure, KPI or pay line name on the person page", async () => {
     const user = userEvent.setup();
-    renderPerson();
+    renderPerson("scorecard");
     expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
     await expectClearRestores(user, "Figure Revenue managed", "Revenue managed");
     await expectClearRestores(user, "KPI $2M in newly closed sales", "$2M in newly closed sales");
+    await user.click(screen.getByRole("link", { name: "Setup" }));
     await expectClearRestores(user, "Line Base salary", "Base salary");
   });
 

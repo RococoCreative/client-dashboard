@@ -60,7 +60,9 @@ import { SETTINGS_TABS, settingsTabsFor } from "./settings/settingsTabs.ts";
 const kingdom = KINGDOM.company.id;
 const adminHub = makeHub("admin", KINGDOM.company);
 const ownerHub = makeHub("owner", KINGDOM.company);
-const person = { path: "/people/kingdom-user-1", pattern: "/people/:profileId" };
+// The person page on one of its tabs: Scorecard holds the financial figures and projects, Setup the pay.
+const personAt = (tab: string) => ({ path: `/people/kingdom-user-1/${tab}`, pattern: "/people/:profileId/:tab?" });
+const person = personAt("scorecard");
 
 describe("an admin without the pay capability", () => {
   function withoutPay() {
@@ -83,8 +85,8 @@ describe("an admin without the pay capability", () => {
 
   it("shows no Annual compensation figure and no compensation table", async () => {
     withoutPay();
-    renderWithHub(<PersonPage />, adminHub, person);
-    await screen.findByRole("heading", { name: "Financial figures" });
+    renderWithHub(<PersonPage />, adminHub, personAt("setup"));
+    await screen.findByRole("heading", { name: "Role and divisions" });
     expect(screen.queryByText("Annual compensation")).toBeNull();
     expect(screen.queryByText("Not recorded")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Compensation" })).toBeNull();
@@ -115,7 +117,7 @@ it("an owner still sees compensation", async () => {
   setMockCapabilities(kingdom, { pay: "owner" });
   const compensation = vi.spyOn(employeesService, "listCompensation");
   onTestFinished(() => compensation.mockRestore());
-  renderWithHub(<PersonPage />, ownerHub, person);
+  renderWithHub(<PersonPage />, ownerHub, personAt("setup"));
   expect(await screen.findByText("Annual compensation")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Compensation" })).toBeInTheDocument();
   expect(compensation).toHaveBeenCalled();

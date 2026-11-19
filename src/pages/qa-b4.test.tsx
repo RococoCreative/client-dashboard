@@ -87,6 +87,7 @@ import { renderWithHub } from "../test/renderWithHub.tsx";
 import { KLASIK, makeHub } from "../test/fixtures.ts";
 import App from "../App.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
+import PersonPage from "./people/PersonPage.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
@@ -99,6 +100,13 @@ const employee = makeHub("employee");
 // changed. A dropped connection comes back with an empty code, because nobody can say.
 const refused = (message: string) => ({ message, code: "23514", details: "", hint: "" });
 const dropped = () => ({ message: "TypeError: Failed to fetch", code: "", details: "", hint: "" });
+
+// A person's Setup tab, where Deactivate, Reactivate and Remove live.
+function renderSetup(id: string) {
+  return renderWithHub(<PersonPage />, admin, { path: `/people/${id}/setup`, pattern: "/people/:profileId/:tab?" });
+}
+const taylor = KLASIK.profiles.find((p) => p.full_name === "Taylor Reed")!;
+const avery = KLASIK.profiles.find((p) => p.full_name === "Avery Cole")!;
 
 function dialog(): HTMLElement {
   return screen.getByRole("dialog");
@@ -124,23 +132,35 @@ describe("holding screen for an account with no company", () => {
 describe("people", () => {
   it("lets an admin deactivate someone who has never signed in, and not themselves", async () => {
     const user = userEvent.setup();
-    renderWithHub(<PeoplePage />, admin);
     // Taylor Reed is on the roster with no account and no invitation, on a company domain: the
     // domain alone lets them sign in, so switching them off is the only way to keep them out.
-    const deactivate = await screen.findByRole("button", { name: "Deactivate Taylor Reed" });
-    expect(screen.getByRole("button", { name: "Deactivate Avery Cole" })).toBeInTheDocument();
+    const own = renderSetup(admin.profile.id);
+    expect(await screen.findByText(/This is you/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Deactivate Jordan Vale/ })).not.toBeInTheDocument();
+    own.unmount();
+    const averySetup = renderSetup(avery.id);
+    expect(await screen.findByRole("button", { name: "Deactivate Avery Cole" })).toBeInTheDocument();
+    averySetup.unmount();
 
-    await user.click(deactivate);
-    const reactivate = await screen.findByRole("button", { name: "Reactivate Taylor Reed" });
-    const row = reactivate.closest("tr") as HTMLElement;
+    const setup = renderSetup(taylor.id);
+    await user.click(await screen.findByRole("button", { name: "Deactivate Taylor Reed" }));
+    expect(await screen.findByRole("button", { name: "Reactivate Taylor Reed" })).toBeInTheDocument();
+    setup.unmount();
+
+    const roster = renderWithHub(<PeoplePage />, admin);
+    await user.click(await screen.findByRole("checkbox", { name: /Show inactive/ }));
+    const row = screen.getByText("Taylor Reed", { selector: "span" }).closest("tr") as HTMLElement;
     expect(within(row).getByText("Inactive")).toBeInTheDocument();
     // Inviting someone who is switched off would only land them on the inactive screen.
     expect(within(row).queryByRole("button", { name: /Send the invitation/ })).not.toBeInTheDocument();
+    roster.unmount();
 
-    await user.click(reactivate);
+    const again = renderSetup(taylor.id);
+    await user.click(await screen.findByRole("button", { name: "Reactivate Taylor Reed" }));
     expect(await screen.findByRole("button", { name: "Deactivate Taylor Reed" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send the invitation to Taylor Reed" })).toBeInTheDocument();
+    again.unmount();
+    renderWithHub(<PeoplePage />, admin);
+    expect(await screen.findByRole("button", { name: "Send the invitation to Taylor Reed" })).toBeInTheDocument();
   });
 
   it("leaves a Rococo admin's role and access alone", async () => {
@@ -155,14 +175,19 @@ describe("people", () => {
       },
     ];
     try {
-      renderWithHub(<PeoplePage />, admin);
+      const roster = renderWithHub(<PeoplePage />, admin);
       const name = await screen.findByText("Robin Account");
       const row = name.closest("tr") as HTMLElement;
       expect(within(row).queryByRole("combobox")).not.toBeInTheDocument();
-      expect(within(row).queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
       expect(within(row).getByText("Rococo Creative")).toBeInTheDocument();
-      // Everyone else keeps their controls.
-      expect(screen.getByRole("button", { name: "Deactivate Taylor Reed" })).toBeInTheDocument();
+      roster.unmount();
+      // Their page has no Setup, so no account actions; everyone else keeps their controls.
+      const rococoSetup = renderSetup("rococo-on-klasik");
+      expect(await screen.findByRole("heading", { name: "Robin Account" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
+      rococoSetup.unmount();
+      renderSetup(taylor.id);
+      expect(await screen.findByRole("button", { name: "Deactivate Taylor Reed" })).toBeInTheDocument();
     } finally {
       ctl.state.extraProfiles = [];
     }
@@ -177,8 +202,12 @@ describe("people", () => {
     expect(dialog()).toHaveTextContent(/deactivate/i);
     expect(dialog()).not.toHaveTextContent(/link stops working/);
     await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+  });
 
-    await user.click(screen.getByRole("button", { name: "Remove Taylor Reed" }));
+  it("says on Setup what removing someone really does", async () => {
+    const user = userEvent.setup();
+    renderSetup(taylor.id);
+    await user.click(await screen.findByRole("button", { name: "Remove Taylor Reed" }));
     // Removing deletes the reviews, goals, KPIs and pay set up for them.
     expect(dialog()).toHaveTextContent(/reviews/);
     expect(dialog()).toHaveTextContent(/goals/);
@@ -188,20 +217,23 @@ describe("people", () => {
 
   it("opens a confirm dialog clean after an unrelated failure, and shows its own", async () => {
     const user = userEvent.setup();
-    renderWithHub(<PeoplePage />, admin);
+    const setup = renderSetup(taylor.id);
     ctl.failures.set("updateProfile", new Error("The change did not save."));
     await user.click(await screen.findByRole("button", { name: "Deactivate Taylor Reed" }));
     expect(await screen.findByText("The change did not save.")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Cancel the invitation for Avery Cole" }));
+    await user.click(screen.getByRole("button", { name: "Remove Taylor Reed" }));
     expect(within(dialog()).queryByText("The change did not save.")).not.toBeInTheDocument();
+    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    setup.unmount();
 
+    renderWithHub(<PeoplePage />, admin);
+    await user.click(await screen.findByRole("button", { name: "Cancel the invitation for Avery Cole" }));
     ctl.failures.set("deleteInvitation", new Error("The invitation could not be cancelled."));
     await user.click(within(dialog()).getByRole("button", { name: "Cancel invitation" }));
     expect(await within(dialog()).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
     await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
 
-    await user.click(screen.getByRole("button", { name: "Remove Taylor Reed" }));
+    await user.click(screen.getByRole("button", { name: "Cancel the invitation for Avery Cole" }));
     expect(within(dialog()).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
     await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
   });

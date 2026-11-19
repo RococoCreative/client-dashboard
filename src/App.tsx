@@ -497,7 +497,9 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="people/roles" element={<AdminOnly><RolesPage /></AdminOnly>} />
             <Route path="people/roles/:roleId" element={<AdminOnly><RolesPage /></AdminOnly>} />
             <Route path="people/divisions" element={<AdminOnly><DivisionsPage /></AdminOnly>} />
-            <Route path="people/:profileId" element={<LeadOnly><PersonPage /></LeadOnly>} />
+            {/* A person: Overview at their own address, each other tab one segment below it. One
+                route with an optional segment, so moving between tabs keeps the page and its load. */}
+            <Route path="people/:profileId/:tab?" element={<LeadOnly><PersonPage /></LeadOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
