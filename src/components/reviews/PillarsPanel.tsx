@@ -1,8 +1,8 @@
 // How this company scores people, for Reviews, Setup: pillars, their weights and scoring type, the
 // criteria a rating pillar rates, and on a Monthly GSRs pillar how many goals each GSR requires,
-// shown as text with a link to where it is set (GSRs, Setup). The pillars are a short list, one line each (number, name, scoring type, weight); one
-// opens at a time and shows its fields as text until a pencil opens them. Name, weight and the
-// rest still save on blur. Weights should total 100; the panel shows the running total and the
+// shown as text with a link to where it is set (GSRs, Setup). The pillars are a short list, one
+// line each (number, name, scoring type, weight); one opens at a time and shows its fields as
+// text until a pencil opens them. Name, weight and the rest still save on blur. Weights should total 100; the panel shows the running total and the
 // scoring engine normalizes either way. The monthly focus topics are planned in GSRs, Setup, which
 // is where the GSR pillar's note points.
 import { useState, type ReactNode } from "react";
@@ -56,7 +56,7 @@ function OpenPillar({
   index,
   count,
   criteria,
-  busy,
+  addingCriterion,
   onPatch,
   onMove,
   onDelete,
@@ -68,7 +68,7 @@ function OpenPillar({
   index: number;
   count: number;
   criteria: GsrCriterion[];
-  busy: boolean;
+  addingCriterion: boolean;
   onPatch: (patch: PillarPatch) => Promise<boolean>;
   onMove: (direction: -1 | 1) => void;
   onDelete: () => void;
@@ -77,6 +77,14 @@ function OpenPillar({
   onDeleteCriterion: (criterion: GsrCriterion) => void;
 }) {
   const [editing, setEditing] = useState<PillarField | null>(null);
+  // The scale row only exists on a rating pillar. When Scoring moves away from Rating while the
+  // scale was open, it closes, so switching back shows the scale as text rather than mid-edit.
+  // Adjusted while rendering, on the change itself, rather than in an effect.
+  const [seenScoring, setSeenScoring] = useState(pillar.scoring_type);
+  if (seenScoring !== pillar.scoring_type) {
+    setSeenScoring(pillar.scoring_type);
+    if (pillar.scoring_type !== "rating" && editing === "scale") setEditing(null);
+  }
   // A weight outside 0 to 100 is refused where it was typed, and the box shows the stored weight.
   // The message stays until that box is used again, and focus clears it. Without that it sat under
   // a valid number: a box left at the stored weight never saves (BlurInput), so nothing else did.
@@ -193,7 +201,7 @@ function OpenPillar({
         </p>
       ) : null}
       {pillar.scoring_type === "rating" ? (
-        <PillarCriteria pillar={pillar} criteria={criteria} busy={busy} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
+        <PillarCriteria pillar={pillar} criteria={criteria} adding={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
       ) : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4">
@@ -255,7 +263,10 @@ export default function PillarsPanel() {
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState("");
   // An add that is still waiting on the server takes no second click, or a double click files two.
-  const [adding, setAdding] = useState(false);
+  // Pillars and criteria each have their own flag: the two writes touch different rows and
+  // different sort orders, so one being in flight never needs to hold the other.
+  const [addingPillar, setAddingPillar] = useState(false);
+  const [addingCriterion, setAddingCriterion] = useState(false);
 
   const state = useAsync(async () => {
     const [pillars, criteria] = await Promise.all([listPillars(companyId, true), listCriteria(companyId, true)]);
@@ -291,8 +302,8 @@ export default function PillarsPanel() {
   }
 
   async function addPillar() {
-    if (adding) return;
-    setAdding(true);
+    if (addingPillar) return;
+    setAddingPillar(true);
     const created = { current: null as GsrPillar | null };
     await run(async () => {
       created.current = await createPillar({
@@ -307,7 +318,7 @@ export default function PillarsPanel() {
     });
     // The new pillar opens, ready to be named.
     if (created.current) setOpenId(created.current.id);
-    setAdding(false);
+    setAddingPillar(false);
   }
 
   async function move(pillar: GsrPillar, direction: -1 | 1) {
@@ -380,8 +391,8 @@ export default function PillarsPanel() {
 
   // True when the criterion was filed, false once the panel shows why not.
   async function addCriterion(pillar: GsrPillar, name: string): Promise<boolean> {
-    if (adding) return false;
-    setAdding(true);
+    if (addingCriterion) return false;
+    setAddingCriterion(true);
     const filed = await run(async () => {
       const created = await createCriterion({
         pillar_id: pillar.id,
@@ -391,7 +402,7 @@ export default function PillarsPanel() {
       });
       setCriteria((list) => [...list, created]);
     });
-    setAdding(false);
+    setAddingCriterion(false);
     return filed;
   }
 
@@ -423,7 +434,7 @@ export default function PillarsPanel() {
         actions={
           <>
             <Badge tone={total === 100 ? "success" : "warning"}>Weights total {formatNumber(total)}%</Badge>
-            <Button size="sm" disabled={adding} onClick={() => void addPillar()}><Plus size={14} aria-hidden /> Add pillar</Button>
+            <Button size="sm" disabled={addingPillar} onClick={() => void addPillar()}><Plus size={14} aria-hidden /> Add pillar</Button>
           </>
         }
       />
@@ -451,7 +462,7 @@ export default function PillarsPanel() {
                       index={index}
                       count={sorted.length}
                       criteria={criteria.filter((c) => c.pillar_id === pillar.id).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))}
-                      busy={adding}
+                      addingCriterion={addingCriterion}
                       onPatch={(patch) => patchPillar(pillar, patch)}
                       onMove={(direction) => void move(pillar, direction)}
                       onDelete={() => openDeletePillar(pillar)}

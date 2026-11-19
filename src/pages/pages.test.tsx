@@ -524,7 +524,8 @@ describe("admin", () => {
   it("shows company settings with the managed theme and domains", async () => {
     renderWithHub(<SettingsPage tab="company" />, admin);
     expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(screen.getAllByText("Klasik Construction").length).toBeGreaterThan(1);
+    // The Company card reads the name as the value under its Name label.
+    expect(screen.getByText("Name", { selector: "dt" }).nextElementSibling).toHaveTextContent("Klasik Construction");
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
 

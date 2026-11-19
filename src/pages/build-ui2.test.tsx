@@ -296,8 +296,21 @@ describe("Scorecards report", () => {
     expect(screen.queryByRole("link", { name: "Noor Haddad" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Avery Cole" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).filter((h) => options.includes(h.textContent))).toHaveLength(1);
+    // The other role's block is gone with its column headings, not only its heading.
+    expect(screen.queryByRole("heading", { name: "Project Manager" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /Job cost: gross profit/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Daily logs/ })).toBeInTheDocument();
     await user.selectOptions(select, "All roles");
     expect(screen.getByRole("link", { name: "Noor Haddad" })).toBeInTheDocument();
+  });
+
+  it("hides the role select when only one role has people in view", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ScorecardsPage />, rbaAdmin);
+    await screen.findByLabelText("Job role");
+    await user.click(within(screen.getByRole("group", { name: "Division" })).getByRole("button", { name: "RBA North" }));
+    expect(screen.queryByLabelText("Job role")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Manager" })).toBeInTheDocument();
   });
 
   it("leaves out a role that has metrics but nobody in view, and falls back to all roles when the chosen one empties", async () => {

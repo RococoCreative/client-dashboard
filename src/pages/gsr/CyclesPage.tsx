@@ -1,7 +1,8 @@
 // The cycles list behind two sidebar entries: GSRs (monthly Goal Setting Reviews) and Reviews
 // (every scored cadence), one component keyed on the section. Progress per cycle, the team score
-// where a cycle carries one, the Cycles and Setup tabs and the door to company goals on the Reviews side, the Periods and Setup tabs and the door to review settings on the GSR side, and the
-// new-cycle form offering only the cadences that belong to the section. A new month starts
+// where a cycle carries one, the Cycles and Setup tabs and the door to company goals on the
+// Reviews side, the Periods and Setup tabs and the door to review settings on the GSR side, and
+// the new-cycle form offering only the cadences that belong to the section. A new month starts
 // with that month's topic from the focus topic calendar, which lives on GSRs, Setup. The period
 // math (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";

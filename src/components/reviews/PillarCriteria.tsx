@@ -15,12 +15,12 @@ import type { GsrCriterion, GsrPillar } from "../../types/database.ts";
 type CriterionPatch = Partial<Pick<GsrCriterion, "name" | "description" | "is_active">>;
 
 // The one add form, opened by Add criterion.
-function AddCriterionForm({ pillar, busy, onAdd, onCancel }: { pillar: GsrPillar; busy: boolean; onAdd: (name: string) => void; onCancel: () => void }) {
+function AddCriterionForm({ pillar, saving, onAdd, onCancel }: { pillar: GsrPillar; saving: boolean; onAdd: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   function submit(event: FormEvent) {
     event.preventDefault();
     const text = name.trim();
-    if (!text || busy) return;
+    if (!text || saving) return;
     setName("");
     onAdd(text);
   }
@@ -35,7 +35,7 @@ function AddCriterionForm({ pillar, busy, onAdd, onCancel }: { pillar: GsrPillar
         aria-label={`New criterion for ${pillar.name}`}
         className={`${inputClass} mt-0 min-w-0 flex-1 basis-56`}
       />
-      <Button type="submit" variant="secondary" size="sm" disabled={!name.trim() || busy}>
+      <Button type="submit" variant="secondary" size="sm" disabled={!name.trim() || saving}>
         <Plus size={13} aria-hidden /> Add criterion
       </Button>
       <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -48,14 +48,14 @@ function AddCriterionForm({ pillar, busy, onAdd, onCancel }: { pillar: GsrPillar
 export default function PillarCriteria({
   pillar,
   criteria,
-  busy,
+  adding: savingAdd,
   onAdd,
   onPatch,
   onDelete,
 }: {
   pillar: GsrPillar;
   criteria: GsrCriterion[];
-  busy: boolean;
+  adding: boolean;
   onAdd: (name: string) => Promise<boolean>;
   onPatch: (criterion: GsrCriterion, patch: CriterionPatch) => Promise<boolean>;
   onDelete: (criterion: GsrCriterion) => void;
@@ -78,7 +78,7 @@ export default function PillarCriteria({
           </Button>
         )}
       </div>
-      {adding ? <AddCriterionForm pillar={pillar} busy={busy} onAdd={(name) => void add(name)} onCancel={() => setAdding(false)} /> : null}
+      {adding ? <AddCriterionForm pillar={pillar} saving={savingAdd} onAdd={(name) => void add(name)} onCancel={() => setAdding(false)} /> : null}
       {criteria.length === 0 ? (
         <p className={`${secondaryClass} mt-3`}>Add at least one criterion or reviewers will have nothing to rate.</p>
       ) : (

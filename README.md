@@ -461,7 +461,8 @@ goals with their action steps and notes, the focus topic, and no pillar scores; 
 has a Monthly GSRs pillar, the month's score shows as it builds and an admin locks it in. Reviews
 (`/reviews`) are the quarterly, annual and custom cycles: the scored review with the employee
 snapshot, deliverables, yearly goals and feedback. Reviews has two tabs, Cycles and Setup; both
-page headers link to Goals, and Monthly GSRs links to review settings (Reviews > Setup). Employees see their own as My GSR, My Reviews and My Goals.
+page headers link to Goals, and Monthly GSRs links to review settings (Reviews > Setup).
+Employees see their own as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 

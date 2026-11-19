@@ -302,12 +302,19 @@ describe("retiring a job role", () => {
 
 describe("deliverable categories", () => {
   const sales = KLASIK.deliverableCategories.find((c) => c.name === "BD & Sales")!;
+  // Categories read as text; their pencil opens the row with its name box, order and actions.
+  async function openCategory(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(await screen.findByRole("button", { name: `Edit category ${name}` }));
+  }
 
   it("lists the company's categories in settings, renames one, and never to blank", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
     expect(await screen.findByRole("heading", { name: "Deliverable categories" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Category name BD & Sales")).not.toBeInTheDocument();
+    await openCategory(user, "BD & Sales");
     await expectClearRestores(user, "Category name BD & Sales", "BD & Sales");
+    await openCategory(user, "Production");
     const production = screen.getByLabelText("Category name Production");
     await user.clear(production);
     await user.type(production, "Producton");
@@ -323,18 +330,20 @@ describe("deliverable categories", () => {
   it("reorders categories", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await screen.findByLabelText("Category name Production & QA");
-    const order = () => screen.getAllByLabelText(/^Category name /).map((el) => (el as HTMLInputElement).value);
-    expect(order()).toEqual(["BD & Sales", "Production & QA"]);
+    await openCategory(user, "Production & QA");
+    await openCategory(user, "BD & Sales");
+    const boxes = () => screen.getAllByLabelText(/^Category name /).map((el) => (el as HTMLInputElement).value);
+    expect(boxes()).toEqual(["BD & Sales", "Production & QA"]);
     expect(screen.getByRole("button", { name: "Move BD & Sales up" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Move Production & QA up" }));
-    await waitFor(() => expect(order()).toEqual(["Production & QA", "BD & Sales"]));
+    await waitFor(() => expect(boxes()).toEqual(["Production & QA", "BD & Sales"]));
   });
 
   it("retires a category: settings mark it, and the person page stops offering it", async () => {
     const user = userEvent.setup();
     const settings = renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    const row = (await screen.findByLabelText("Category name BD & Sales")).closest("li") as HTMLElement;
+    await openCategory(user, "BD & Sales");
+    const row = screen.getByLabelText("Category name BD & Sales").closest("li") as HTMLElement;
     await user.click(within(row).getByRole("button", { name: "Retire" }));
     expect(await within(row).findByText("Retired")).toBeInTheDocument();
     settings.unmount();
@@ -363,7 +372,7 @@ describe("deliverable categories", () => {
   it("deletes a category: its headings move to Uncategorized and keep their tasks", async () => {
     const user = userEvent.setup();
     const settings = renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await screen.findByLabelText("Category name Production & QA");
+    await openCategory(user, "Production & QA");
     await user.click(screen.getByRole("button", { name: "Delete Production & QA" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("move to Uncategorized");
@@ -382,7 +391,7 @@ describe("deliverable categories", () => {
   it("waits for a category delete already sent, and opens the next dialog without its failure", async () => {
     const user = userEvent.setup();
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await screen.findByLabelText("Category name BD & Sales");
+    await openCategory(user, "BD & Sales");
     await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
     const dialog = screen.getByRole("dialog");
     const call = pending();
@@ -407,7 +416,8 @@ describe("deliverable categories", () => {
     const user = userEvent.setup();
     await createDeliverableCategory({ company_id: KLASIK.company.id, name: "Estimating", sort_order: 9 });
     renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
-    await screen.findByLabelText("Category name Estimating");
+    await openCategory(user, "Estimating");
+    await openCategory(user, "BD & Sales");
     await user.click(screen.getByRole("button", { name: "Delete BD & Sales" }));
     const dialog = screen.getByRole("dialog");
     const call = pending();

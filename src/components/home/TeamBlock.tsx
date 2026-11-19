@@ -101,10 +101,11 @@ export default function TeamBlock({
 
   const reviews = state.data?.reviews ?? [];
   const roster = cycle ? new Set(cycleRoster(reports, reviews, cycle.id, [...omissions]).map((p) => p.id)) : null;
+  // The reviews are the ones listCycleReviews asked for this cycle, so a person's row needs no second cycle check.
   const standingOf = (person: Profile): Standing => {
     if (!cycle || !roster) return { kind: "no_cycle" };
     if (!roster.has(person.id)) return { kind: "omitted" };
-    return { kind: "review", review: reviews.find((r) => r.employee_id === person.id && r.cycle_id === cycle.id) ?? null };
+    return { kind: "review", review: reviews.find((r) => r.employee_id === person.id) ?? null };
   };
   const description = `${reports.length} direct ${reports.length === 1 ? "report" : "reports"}${cycle ? ` · GSR status for ${cycle.name}` : " · No GSR month open, so no status yet"}`;
   return (

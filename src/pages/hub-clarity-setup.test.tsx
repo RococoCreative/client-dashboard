@@ -2,11 +2,13 @@
 // time, setup fields that read as text until their pencil, criteria as read-first rows with one Add
 // form, the pillar actions at the foot of the open pillar, Settings without a Reviews tab, and the
 // three old addresses landing on Setup through the real router.
-// GSRs, Setup: the tab row, the calendar and goal count, and the old address. Projects, Setup: the tab row on Projects for an admin, the standard milestones panel on its own
-// route, Settings without a Production tab, and the old address redirecting.
+// GSRs, Setup: the tab row, the calendar and goal count, and the old address. Projects, Setup: the
+// tab row on Projects for an admin (the Projects tab only for someone who can open Projects), the
+// standard milestones panel on its own route, Settings without a Production tab, and the old
+// address redirecting.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -39,7 +41,8 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
 import App from "../App.tsx";
-import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import { resetMockCapabilities, setMockCapabilities } from "../test/mocks/capabilities.ts";
 import { createPillar, listPillars } from "../services/gsr.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
@@ -165,6 +168,41 @@ describe("pillars on Setup", () => {
     await waitFor(() => expect(rowOf("Deliverables")).toHaveTextContent(/^1/));
   });
 
+  it("closes the scale row when Scoring moves off Rating, so switching back shows it as text", async () => {
+    const user = userEvent.setup();
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Character & Values"));
+    await user.click(screen.getByRole("button", { name: "Edit scale" }));
+    expect(screen.getByLabelText("Scale (1 to)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit scoring" }));
+    await user.selectOptions(screen.getByLabelText("Scoring"), "Target vs actual");
+    await waitFor(() => expect(screen.queryByLabelText("Scale (1 to)")).not.toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("Scoring"), "Rated criteria");
+    // The scale is back, read first: its pencil is offered and its select is not open.
+    expect(await screen.findByRole("button", { name: "Edit scale" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Scale (1 to)")).not.toBeInTheDocument();
+  });
+
+  it("lets a criterion add run without disabling Add pillar", async () => {
+    const user = userEvent.setup();
+    const gate = { release: () => {} };
+    const { createCriterion } = await import("../services/gsr.ts");
+    const spy = vi.spyOn(await import("../services/gsr.ts"), "createCriterion").mockImplementationOnce(
+      (input) => new Promise((resolve) => { gate.release = () => resolve(createCriterion(input)); }),
+    );
+    onTestFinished(() => spy.mockRestore());
+    openSetup();
+    await screen.findByText("Weights total 100%");
+    await user.click(rowOf("Character & Values"));
+    await user.click(screen.getByRole("button", { name: "Add criterion" }));
+    await user.type(screen.getByLabelText("New criterion for Character & Values"), "Reliability");
+    await user.click(screen.getByRole("button", { name: "Add criterion" }));
+    expect(screen.getByRole("button", { name: "Add pillar" })).toBeEnabled();
+    gate.release();
+    expect(await screen.findByText("Reliability")).toBeInTheDocument();
+  });
+
   it("reads criteria as text, with one Add criterion form behind its button", async () => {
     const user = userEvent.setup();
     openSetup();
@@ -233,6 +271,14 @@ describe("Projects tabs", () => {
     renderWithHub(<ProductionPage />, kingdomEmployee, projectsAt);
     await screen.findByRole("heading", { level: 1, name: "Production" });
     expect(screen.queryByRole("navigation", { name: "Projects" })).not.toBeInTheDocument();
+  });
+
+  it("leaves the Projects tab off Setup for an admin who cannot open Projects", async () => {
+    setMockCapabilities(KINGDOM.company.id, { production_view: "owner" });
+    onTestFinished(() => resetMockCapabilities());
+    renderWithHub(<ProductionSetupPage />, kingdomAdmin, { path: "/production/setup", pattern: "/production/setup" });
+    const nav = await screen.findByRole("navigation", { name: "Projects" });
+    expect(linksOf(nav)).toEqual([["Setup", "/production/setup"]]);
   });
 
   it("renders the standard milestones on Setup with the tab row, Setup current", async () => {
@@ -311,6 +357,15 @@ describe("GSRs, Setup", () => {
     expect(await screen.findByLabelText("Theme for October 2026")).toHaveValue("Core value: Ownership");
     const nav = screen.getByRole("navigation", { name: "GSRs" });
     expect(within(nav).getByRole("link", { name: "Setup" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("treats a company whose only Monthly GSRs pillar is inactive as not scoring GSRs", async () => {
+    await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 0, scoring_type: "gsr_goals", required_goals: 3, sort_order: 9, is_active: false });
+    openGsrSetup(makeHub("admin", RBA.company));
+    expect(await screen.findByText("GSRs are not scored here yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/goals each GSR requires/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Goals each GSR requires" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Focus topic calendar" })).toBeInTheDocument();
   });
 
   it("reads the stored goal count as text, and saves a change through updatePillar", async () => {

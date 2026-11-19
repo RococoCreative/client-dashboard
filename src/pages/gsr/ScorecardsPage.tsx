@@ -41,6 +41,12 @@ function verdict(result: MetricResult): string {
   return result.hit === null ? "" : result.hit ? ", hit" : ", missed";
 }
 
+// The role cell's own look: the column header style with the quiet caps turned off, because it
+// holds the role name and a people count rather than a column label. Written out in full instead
+// of layered over thClass, so no rule here depends on which stylesheet entry comes last.
+const roleHeadClass =
+  "border-b border-line px-3 py-2 text-left align-bottom text-[11px] font-normal normal-case tracking-normal text-ink-3";
+
 // One role's block inside the shared table: a role heading with its people count, then that role's
 // metric column headings and its people. Each block is its own table so a screen reader reads the
 // right column headings for every cell. Below md the rows become stacked cards, each metric a label
@@ -68,7 +74,7 @@ function RoleBlock({
         <table className={`${tableClass} max-md:block md:min-w-[36rem]`}>
           <thead className="bg-surface-2 max-md:block">
             <tr className="max-md:block">
-              <th scope="col" className={`${thClass} font-normal normal-case tracking-normal text-left align-bottom md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
+              <th scope="col" className={`${roleHeadClass} md:sticky md:left-0 md:z-10 md:min-w-[11rem] bg-surface-2 max-md:block max-md:border-b-0 max-md:px-4`}>
                 <span className="sr-only">Person, </span>
                 <h2 className={`${itemTitleClass} font-display normal-case tracking-normal`}>{title}</h2>
                 <span className={`block normal-case tracking-normal ${metaClass}`}>{pluralize(people.length, "person", "people")}</span>

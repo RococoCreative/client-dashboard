@@ -58,6 +58,22 @@ describe("Settings Company, read first", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("shows the logo as an image named for the company when one is set", async () => {
+    const withLogo = makeHub("admin", { ...KLASIK.company, logo_url: "https://example.com/klasik-logo.png" });
+    renderWithHub(<SettingsPage tab="company" />, withLogo, at("company"));
+    await screen.findByRole("heading", { name: "Company" });
+    const logo = companyCard().getByRole("img", { name: "Klasik Construction logo" });
+    expect(logo).toHaveAttribute("src", "https://example.com/klasik-logo.png");
+    expect(companyCard().queryByText("No logo yet.")).not.toBeInTheDocument();
+  });
+
+  it("says there is no logo yet when none is set", async () => {
+    renderWithHub(<SettingsPage tab="company" />, admin, at("company"));
+    await screen.findByRole("heading", { name: "Company" });
+    expect(companyCard().getByText("No logo yet.")).toBeInTheDocument();
+    expect(companyCard().queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("opens the form on Edit, saves, and returns to text", async () => {
     const user = userEvent.setup();
     const { getCompany, updateCompany } = await import("../services/companies.ts");
