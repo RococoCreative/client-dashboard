@@ -49,6 +49,7 @@ import { AUDIT_EVENTS, COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/
 import AppLayout from "../components/AppLayout.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
+import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
 import CyclePage from "./gsr/CyclePage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
@@ -193,7 +194,7 @@ describe("GSR", () => {
     renderWithHub(<CyclesPage section="reviews" />, admin);
     expect(await screen.findByText(overlappingCycle.name)).toBeInTheDocument();
     expect(screen.queryByText(currentCycle.name)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Review settings/ })).toHaveAttribute("href", "/settings/reviews");
+    expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("href", "/reviews/setup");
     expect(screen.getByRole("link", { name: /Company goals/ })).toHaveAttribute("href", "/goals/company");
   });
 
@@ -353,11 +354,13 @@ describe("GSR", () => {
     await waitFor(() => expect(screen.getByLabelText("Category")).not.toHaveValue(`new:${starter}`));
   });
 
-  it("shows pillars, weights, and criteria in settings", async () => {
-    renderWithHub(<SettingsPage tab="reviews" />, admin);
+  it("shows pillars, weights, and criteria in review setup", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
     expect(await screen.findByText("Weights total 100%")).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Deliverables")).toBeInTheDocument();
-    expect(await screen.findByDisplayValue("Curiosity")).toBeInTheDocument();
+    expect(await screen.findByText("Deliverables")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Character & Values/ }));
+    expect(await screen.findByText("Curiosity")).toBeInTheDocument();
   });
 
   it("lists company goals for the year", async () => {
@@ -368,7 +371,9 @@ describe("GSR", () => {
 
   it("shows an employee their review history and goals", async () => {
     renderWithHub(<MyReviewsPage />, rbaEmployee);
-    expect(await screen.findByRole("heading", { name: "My reviews" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeInTheDocument();
+    // The sidebar already lists the My pages for an employee, so no tab row repeats them.
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(await screen.findByText("All reviews")).toBeInTheDocument();
     // RBA's scored quarters are listed; a monthly GSR never is, whatever it carries.
     expect((await screen.findAllByText(RBA.cycles[0].name)).length).toBeGreaterThan(0);
@@ -377,17 +382,29 @@ describe("GSR", () => {
   it("opens the employee's own Goal Setting Review for the live month", async () => {
     renderWithHub(<MyGsrPage />, employee);
     // Sam's September GSR is in progress, so the month renders in place: last month read back,
-    // this month's goals, no back link (the tabs are the way around).
+    // this month's goals, no back link (the sidebar is the way around).
     expect(await screen.findByText("Goals for this month")).toBeInTheDocument();
     expect(screen.getByText("Last month at a glance")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "My GSR" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /My GSR/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Personal KPIs 2026")).not.toBeInTheDocument();
   });
 
+  it("keeps the GSR, Reviews, Goals tab row for an admin, whose sidebar lists only My GSR", async () => {
+    renderWithHub(<MyReviewsPage />, admin);
+    expect(await screen.findByRole("heading", { level: 1, name: "My Reviews" })).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "GSR" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Reviews" })).toBeInTheDocument();
+    expect(within(tabs).getByRole("link", { name: "Goals" })).toBeInTheDocument();
+  });
+
   it("keeps My Goals to the year's goals", async () => {
     renderWithHub(<MyGoalsPage />, employee);
-    expect(await screen.findByRole("heading", { name: "My goals" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "My Goals" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(await screen.findByText("Get the OSHA 30 certification")).toBeInTheDocument();
     // A month goal is the GSR's, so it is neither listed nor editable here.
     expect(screen.queryByText("Run the weekly client update without prompting")).not.toBeInTheDocument();
@@ -506,7 +523,9 @@ describe("library", () => {
 describe("admin", () => {
   it("shows company settings with the managed theme and domains", async () => {
     renderWithHub(<SettingsPage tab="company" />, admin);
-    expect(await screen.findByDisplayValue("Klasik Construction")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();
+    // The Company card reads the name as the value under its Name label.
+    expect(screen.getByText("Name", { selector: "dt" }).nextElementSibling).toHaveTextContent("Klasik Construction");
     expect(await screen.findByText("beklasik.com")).toBeInTheDocument();
   });
 
@@ -518,6 +537,7 @@ describe("admin", () => {
       await updateCompany(companyId, { time_zone: "America/New_York" });
     });
     renderWithHub(<SettingsPage tab="company" />, admin);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
     const field = await screen.findByLabelText("Time zone");
     expect(field).toHaveValue("America/New_York");
     expect(screen.getByText("Used for due dates on repeating tasks.")).toBeInTheDocument();
@@ -664,7 +684,7 @@ describe("navigation and modules", () => {
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual(["Home", "Sales & Finance", "People", "Resources", "More"]);
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Home", "Financials", "Marketing", "People", "Goals", "Monthly GSRs", "Reviews", "Scorecards", "SOPs", "Files & media", "My GSR", "Settings",
+      "Home", "Financials", "Marketing", "People", "Goals", "GSRs", "Reviews", "Scorecards", "SOPs", "Files & media", "My GSR", "Settings",
     ]);
   });
 
@@ -1199,9 +1219,13 @@ describe("monthly GSRs, scored", () => {
     rbaPillarId = (await createPillar({ company_id: RBA.company.id, name: "Monthly GSRs", weight: 20, scoring_type: "gsr_goals", required_goals: 2, sort_order: 4 })).id;
   });
 
-  it("offers the mandatory count in settings and says how the pillar scores", async () => {
-    renderWithHub(<SettingsPage tab="reviews" />, admin);
-    expect(await screen.findByLabelText("Mandatory a month")).toHaveValue("2");
+  it("shows the goal count as text in the pillar and says how the pillar scores", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ReviewsSetupPage />, admin, { path: "/reviews/setup", pattern: "/reviews/setup" });
+    await user.click(await screen.findByRole("button", { name: /Monthly GSRs/ }));
+    expect(screen.getByText("2 goals each")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Change on GSRs, Setup" })).toHaveAttribute("href", "/gsr/setup");
+    expect(screen.queryByLabelText("Goals each GSR requires")).not.toBeInTheDocument();
     expect(screen.getByText(/Scored from the Goal Setting Reviews inside each review's period/)).toBeInTheDocument();
   });
 

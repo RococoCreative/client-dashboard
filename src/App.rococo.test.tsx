@@ -126,11 +126,11 @@ describe("routes land the same with modules on", () => {
   const companies: Array<[string, CompanyBundle]> = [["klasik", KLASIK], ["kingdom", KINGDOM]];
 
   const adminSelf = [
-    "/", "/gsr", "/reviews", "/goals/company", "/goals/focus", "/goals/people", "/scorecards",
+    "/", "/gsr", "/reviews", "/goals/company", "/goals/people", "/scorecards", "/gsr/setup",
     "/gsr/cycles/:cycle", "/reviews/cycles/:cycle2", "/gsr/reviews/:review", "/reviews/:review",
     "/my/gsr", "/my/reviews", "/my/goals", "/people", "/people/roles/:firstRole", "/people/divisions", "/people/:person", "/sops/new",
     "/sops/:sop", "/sops/:sop/edit", "/resources/sops", "/resources/files", "/financials", "/marketing",
-    "/settings/company", "/settings/reviews", "/settings/connections",
+    "/settings/company", "/reviews/setup", "/settings/connections",
   ];
   // Every address that moved in the reorganization lands on the tab that holds it now.
   const adminCases: Array<[string, string | null]> = [
@@ -140,8 +140,10 @@ describe("routes land the same with modules on", () => {
     ["/people/roles", "/people/roles/:firstRole"],
     ["/settings/roles", "/people/roles/:firstRole"],
     ["/goals/roles", "/people/roles/:firstRole"],
-    ["/reviews/settings", "/settings/reviews"],
-    ["/gsr/settings", "/settings/reviews"],
+    ["/goals/focus", "/gsr/setup"],
+    ["/reviews/settings", "/reviews/setup"],
+    ["/gsr/settings", "/reviews/setup"],
+    ["/settings/reviews", "/reviews/setup"],
     ["/reviews/company-goals", "/goals/company"],
     ["/gsr/company-goals", "/goals/company"],
     ["/settings", "/settings/company"],
@@ -160,6 +162,9 @@ describe("routes land the same with modules on", () => {
     ["/people", "/"],
     ["/settings", "/"],
     ["/settings/reviews", "/"],
+    ["/reviews/setup", "/"],
+    ["/gsr/setup", "/"],
+    ["/goals/focus", "/"],
     ["/reviews/settings", "/"],
     ["/sops", "/resources/sops"],
     ["/resources", "/resources/sops"],

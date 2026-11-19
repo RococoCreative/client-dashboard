@@ -11,6 +11,7 @@ export default function PageHeader({
   actions,
   backTo,
   backLabel,
+  as: Heading = "h1",
 }: {
   eyebrow?: string;
   title: string;
@@ -18,6 +19,8 @@ export default function PageHeader({
   actions?: ReactNode;
   backTo?: string;
   backLabel?: string;
+  // A page that embeds another page's header under its own keeps one h1 by passing "h2" here.
+  as?: "h1" | "h2";
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -31,7 +34,7 @@ export default function PageHeader({
           </Link>
         ) : null}
         {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <h1 className="mt-1 font-display text-3xl tracking-display text-heading">{title}</h1>
+        <Heading className="mt-1 font-display text-3xl tracking-display text-heading">{title}</Heading>
         {description ? <p className="mt-1.5 max-w-2xl text-sm text-ink-2">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

@@ -1,7 +1,7 @@
-// An employee's own Goal Setting Review for their current period, under their own sidebar entry
-// and tabs. The period follows their rhythm (0046): a week, two weeks, a month or a quarter. The
-// review itself is ReviewPage's GSR branch, mounted here with the id as a prop rather than reached
-// by URL, so the sidebar and the tabs stay on My GSR while they work it.
+// A person's own Goal Setting Review for their current period, titled My GSR. The period follows
+// their rhythm (0046): a week, two weeks, a month or a quarter. The review itself is ReviewPage's
+// GSR branch, mounted here with the id as a prop rather than reached by URL, so the sidebar (and an
+// admin's tabs) stay on My GSR while they work it.
 //
 // A GSR period opens itself: when nobody has opened the person's current period yet, "Start my
 // GSR" opens it (ensureGsrCycle, an insert any member may make, 0046) and then their review in it.
@@ -16,14 +16,14 @@ import { PencilLine } from "lucide-react";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
-import Tabs from "../../components/ui/Tabs.tsx";
+import PageHeader from "../../components/ui/PageHeader.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { ensureGsrCycle, ensureReview, listCycleOmissions, listCycles, listEmployeeReviews } from "../../services/gsr.ts";
 import { gsrCycleInPlayFor, gsrPeriodCopy, gsrPeriodFor, omittedCycleIdsFor, rhythmOf, runsGsrs } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { MY_TABS } from "./myTabs.ts";
+import MyTabs from "./MyTabs.tsx";
 import ReviewPage from "./ReviewPage.tsx";
 
 export default function MyGsrPage() {
@@ -72,7 +72,8 @@ export default function MyGsrPage() {
 
   return (
     <>
-      <Tabs items={MY_TABS} />
+      <PageHeader title="My GSR" />
+      <MyTabs />
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {!state.data && !state.error ? (

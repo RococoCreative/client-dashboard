@@ -10,7 +10,6 @@ import ScoreBar from "../../components/ui/ScoreBar.tsx";
 import ScoreRing from "../../components/ui/ScoreRing.tsx";
 import { bandClass } from "../../components/ui/bandClass.ts";
 import Section from "../../components/ui/Section.tsx";
-import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
@@ -22,7 +21,7 @@ import { pillarLeftOut, pillarsForReview, signedOffBarDetail } from "../../lib/g
 import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
-import { MY_TABS } from "./myTabs.ts";
+import MyTabs from "./MyTabs.tsx";
 
 export default function MyReviewsPage() {
   const { company, profile } = useHub();
@@ -56,8 +55,8 @@ export default function MyReviewsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Quarterly and annual" title="My reviews" description="Your scores and feedback, review by review." />
-      <Tabs items={MY_TABS} />
+      <PageHeader eyebrow="Quarterly and annual" title="My Reviews" description="Your scores and feedback, review by review." />
+      <MyTabs />
 
       {rows.length === 0 ? (
         <EmptyState eyebrow="Reviews" title="No reviews yet" body="Your first review appears here once an admin opens a review cycle and starts it." />

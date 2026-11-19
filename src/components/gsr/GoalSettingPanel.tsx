@@ -659,7 +659,7 @@ export default function GoalSettingPanel({
             <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
               No focus topic for {cycle.name} yet.{" "}
               <Link to={cyclePath(cycle)} className="text-link hover:underline">Set one on the {copy.noun}</Link>, or plan the year in{" "}
-              <Link to="/goals/focus" className="text-link hover:underline">Goals, Monthly focus</Link>.
+              <Link to="/gsr/setup" className="text-link hover:underline">GSRs, Setup</Link>.
             </p>
           ) : null}
           {canEdit && pendingRoleGoals.length > 0 ? (

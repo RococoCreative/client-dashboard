@@ -105,7 +105,7 @@ export default function PersonReviews({
                   </div>
                   {own.length === 0 ? (
                     <p className="mt-2 text-[12.5px] text-ink-3">
-                      No criteria yet. Admins add them per pillar in <Link to="/settings/reviews" className="text-link hover:underline">Settings, Reviews</Link>.
+                      No criteria yet. Admins add them per pillar in <Link to="/reviews/setup" className="text-link hover:underline">Reviews, Setup</Link>.
                     </p>
                   ) : (
                     <ul className="divide-y divide-line">
@@ -173,7 +173,7 @@ export default function PersonReviews({
             {rows.length === 0 ? (
               isAdmin ? (
                 <p className="p-4 text-sm text-ink-2 sm:p-6">
-                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-link hover:underline">Reviews</Link> or <Link to="/gsr" className="text-link hover:underline">Monthly GSRs</Link>, and everyone on the roster gets one.
+                  No reviews yet. An admin opens a cycle in <Link to="/reviews" className="text-link hover:underline">Reviews</Link> or <Link to="/gsr" className="text-link hover:underline">GSRs</Link>, and everyone on the roster gets one.
                 </p>
               ) : (
                 <p className="p-4 text-sm text-ink-2 sm:p-6">No reviews yet. They show here once an admin opens a cycle.</p>

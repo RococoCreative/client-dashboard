@@ -342,8 +342,8 @@ trigger keeps the status in step with the completed date: a date completes it, a
 sends both, the date wins; marking complete with no date takes today in the company's time zone;
 reopening clears the date. The badge reads Not started, In progress, or Complete with its date.
 
-A company's standard milestones are its own list, set by its admins in Settings > Production (the
-tab shows only with the `production` module on; 0044). Each project created afterwards, including
+A company's standard milestones are its own list, set by its admins in Projects > Setup (the
+Setup tab shows only with the `production` module on; 0044). Each project created afterwards, including
 projects the system creates, gets a copy of the list in order. Projects that already exist are
 untouched, and later edits to the list do not reach back into a project. With no list, new
 projects start with no milestones, as before.
@@ -371,7 +371,7 @@ name. A starter
 becomes a real category row the first moment a heading is filed under it, so nothing is created
 speculatively and a company can still name its categories anything. Every heading carries the
 same pulldown, which is how one is refiled and the only way out of Uncategorized. An admin
-corrects the categories themselves in Settings > Reviews, Deliverable categories: rename, reorder, retire
+corrects the categories themselves in Reviews > Setup, Deliverable categories: rename, reorder, retire
 (no longer offered for new headings; the ones already filed keep it) or delete (its headings
 move to Uncategorized and keep their tasks and ratings).
 
@@ -448,23 +448,28 @@ Three pages are hubs with a route per tab, so a link can land on the right one:
   the year and their BHAG.
 - **Settings** (`/settings`, lands on Company): `/settings/company` name, logo, theme, time zone and
   sign-in domains; `/settings/roles` job roles with their dashboard modules and scorecard metrics, and
-  divisions; `/settings/reviews` pillars and weights, criteria, the Monthly GSRs rule and
-  deliverable categories; `/settings/connections` connections and data sources.
+  divisions; `/settings/connections` connections and data sources. Review setup (pillars and
+  weights, criteria, the Monthly GSRs rule and deliverable categories) lives under Reviews, at
+  `/reviews/setup`.
   `/settings/connections/:companyId` is the OAuth return path, which lands on the Connections tab
   with the outcome.
 - **Resources** (`/resources`, lands on SOPs): `/resources/sops`, `/resources/files`,
   `/resources/links`. An SOP keeps its own address at `/sops/:id`.
 
-Old addresses redirect: `/reviews/settings` and `/gsr/settings` to `/settings/reviews`;
+Old addresses redirect: `/settings/reviews`, `/reviews/settings` and `/gsr/settings` to `/reviews/setup`;
 `/reviews/company-goals` and `/gsr/company-goals` to `/goals/company`; `/settings` to
 `/settings/company`; `/sops` and `/resources` to `/resources/sops`.
 
-Monthly GSRs (`/gsr`) are the monthly Goal Setting Reviews: last month at a glance, this month's
-goals with their action steps and notes, the focus topic, and no pillar scores; where the company
-has a Monthly GSRs pillar, the month's score shows as it builds and an admin locks it in. Reviews
+GSRs (`/gsr`) are the Goal Setting Reviews, one period at each person's rhythm (weekly, every two
+weeks, monthly or quarterly, 0046): last period at a glance, this period's goals with their action
+steps and notes, the focus topic of the month the period starts in, and no pillar scores; where the
+company has a Monthly GSRs pillar, the period's score shows as it builds and an admin locks it in.
+GSRs has two tabs, Periods (`/gsr`, grouped by rhythm when a company runs more than one) and Setup
+(`/gsr/setup`, the focus topic calendar and how many goals each GSR requires). Reviews
 (`/reviews`) are the quarterly, annual and custom cycles: the scored review with the employee
-snapshot, deliverables, yearly goals and feedback. Both page headers link to Goals and to
-Settings > Reviews. Employees see their own as My GSR, My Reviews and My Goals.
+snapshot, deliverables, yearly goals and feedback. Reviews has two tabs, Cycles and Setup; both
+page headers link to Goals, and GSRs links to review settings (Reviews > Setup).
+Employees see their own as My GSR, My Reviews and My Goals.
 
 ## Monthly Goal Setting Reviews
 
@@ -904,7 +909,7 @@ migrations are in; the app and function running today never read the new columns
 4. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
    source runs on its lowest day only.
 5. In the app, set each company's display settings on Rococo > Companies, add standard milestones
-   in Settings > Production, and set sync days and weekdays-only staleness on each source.
+   in Projects > Setup, and set sync days and weekdays-only staleness on each source.
 6. Record the app deploy and the `connections` redeploy in What is applied live (`0042` to `0045`
    are already recorded there).
 

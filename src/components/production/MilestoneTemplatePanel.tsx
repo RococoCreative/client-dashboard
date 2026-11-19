@@ -1,4 +1,4 @@
-// The company's standard milestones, for an admin in Settings > Production: the milestones and
+// The company's standard milestones, for an admin in Projects > Setup: the milestones and
 // letters every new project starts with, in order. The database copies the live rows onto a
 // project when it is created (0044), so a change here reaches projects created from now on and
 // never the ones that already exist. Rows are renamed in place, marked as a milestone or a letter,

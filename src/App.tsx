@@ -45,8 +45,11 @@ import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
+import GsrSetupPage from "./pages/gsr/GsrSetupPage.tsx";
+import ReviewsSetupPage from "./pages/gsr/ReviewsSetupPage.tsx";
 import SettingsPage from "./pages/settings/SettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
+import ProductionSetupPage from "./pages/production/ProductionSetupPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
 import WinsPage from "./pages/WinsPage.tsx";
 import SalesFinancePage from "./pages/salesFinance/SalesFinancePage.tsx";
@@ -125,11 +128,11 @@ function WithCompany({ children }: { children: ReactNode }) {
   return company ? <>{children}</> : <RedirectTo path="/rococo" />;
 }
 
-// Settings tabs follow the company's permissions and modules: a tab this person may not open sends them to the
+// Settings tabs follow the company's permissions: a tab this person may not open sends them to the
 // first one they may, and /settings itself lands there. A person with no tab at all goes Home.
 function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children: ReactNode }) {
-  const { can, company } = useHub();
-  const allowed = settingsTabsFor(can, company);
+  const { can } = useHub();
+  const allowed = settingsTabsFor(can);
   if (tab === null || !allowed.some((t) => t.key === tab)) return allowed.length > 0 ? <RedirectTo path={allowed[0].to} /> : <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -465,11 +468,13 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="tasks" element={<ModuleOnly module="tasks"><TasksPage tab="mine" /></ModuleOnly>} />
             <Route path="tasks/everyone" element={<LeadOnly><ModuleOnly module="tasks"><TasksPage tab="everyone" /></ModuleOnly></LeadOnly>} />
             <Route path="tasks/:taskId" element={<ModuleOnly module="tasks"><TaskRoute /></ModuleOnly>} />
-            {/* Two sections keyed on cadence: Monthly GSRs (monthly) and Reviews (every scored
-                cadence). A cycle and a review are reachable under either prefix so old links keep
+            {/* Two sections keyed on a cycle's kind (0046): GSRs (periods at every rhythm) and Reviews
+                (every scored cadence). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
             <Route path="gsr" element={<WithCompany>{isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />}</WithCompany>} />
             <Route path="reviews" element={<WithCompany>{isAdmin ? <CyclesPage section="reviews" /> : <RedirectTo path="/my/reviews" />}</WithCompany>} />
+            <Route path="gsr/setup" element={<AdminOnly><GsrSetupPage /></AdminOnly>} />
+            <Route path="reviews/setup" element={<AdminOnly><ReviewsSetupPage /></AdminOnly>} />
             {/* Goals: one page, a route per tab, landing on Company. Employees keep My Goals. */}
             <Route path="goals" element={<WithCompany>{isAdmin ? <RedirectTo path="/goals/company" /> : <RedirectTo path="/my/goals" />}</WithCompany>} />
             {GOALS_TABS.map((t) => (
@@ -481,8 +486,11 @@ function SignedIn({ session }: { session: Session }) {
             {/* Where these used to live. Old bookmarks and links land on the tab that holds them now. */}
             <Route path="settings/roles" element={<RedirectTo path="/people/roles" />} />
             <Route path="goals/roles" element={<RedirectTo path="/people/roles" />} />
-            <Route path="reviews/settings" element={<RedirectTo path="/settings/reviews" />} />
-            <Route path="gsr/settings" element={<RedirectTo path="/settings/reviews" />} />
+            <Route path="goals/focus" element={<RedirectTo path="/gsr/setup" />} />
+            <Route path="reviews/settings" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="gsr/settings" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="settings/reviews" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="settings/production" element={<RedirectTo path="/production/setup" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
@@ -501,6 +509,7 @@ function SignedIn({ session }: { session: Session }) {
                 route with an optional segment, so moving between tabs keeps the page and its load. */}
             <Route path="people/:profileId/:tab?" element={<LeadOnly><PersonPage /></LeadOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
+            <Route path="production/setup" element={<AdminOnly><ModuleOnly module="production"><ProductionSetupPage /></ModuleOnly></AdminOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
                 keeps its own address under /sops. */}

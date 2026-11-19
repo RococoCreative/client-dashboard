@@ -1,7 +1,8 @@
 // GSR rhythms (0046) on the screens: a person on a weekly or two-week rhythm works their own period
 // from My GSR, opening it when nobody has; a manager sets the rhythm of someone they lead and locks
 // their weekly GSR in; the New GSR period form computes a week's dates; and a quarterly review's
-// GSR line averages the weeks locked inside it. Each test reads the in-memory data layer the way
+// GSR line averages the weeks locked inside it; Home reads each person's own period, for the
+// person and in a manager's team block. Each test reads the in-memory data layer the way
 // the page does.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -41,6 +42,8 @@ import * as profilesService from "../services/profiles.ts";
 import { createPillar, deletePillar, ensureGsrCycle, ensureReview, getReview, listCycles, listEmployeeReviews, updateReview } from "../services/gsr.ts";
 import { RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import TeamBlock from "../components/home/TeamBlock.tsx";
+import DashboardPage from "./DashboardPage.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import MyGsrPage from "./gsr/MyGsrPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
@@ -252,5 +255,35 @@ describe("a quarterly review of someone on a weekly rhythm", () => {
     // September's monthly GSR is not Morgan's rhythm, so it is not one of his periods.
     expect(screen.queryByText("September 2026")).not.toBeInTheDocument();
     expect(screen.getByText(/70% across 2 locked-in weeks/)).toBeInTheDocument();
+  });
+});
+
+describe("Home at a weekly rhythm", () => {
+  it("heads a weekly person's GSR card with their week, never the month", async () => {
+    renderWithHub(<DashboardPage />, { ...rbaEmployee, profile: morgan });
+    expect(await screen.findByRole("heading", { name: week.name })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "September 2026" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^(Open|Start) my GSR$/ })).toBeInTheDocument();
+  });
+
+  it("reads a weekly report's status from their week in a manager's team block", async () => {
+    const people = RBA.profiles.map((p) => (p.id === rowan.id ? { ...p, gsr_cadence: "weekly" as const } : p));
+    renderWithHub(<TeamBlock companyId={RBA.company.id} viewer={harper} people={people} cycles={RBA.cycles} omissions={[]} />, rbaManager);
+    const block = (await screen.findByRole("heading", { name: "Your team" })).closest("section") as HTMLElement;
+    expect(await within(block).findByText(new RegExp(`GSR status for ${week.name}`))).toBeInTheDocument();
+    expect(within(block).queryByText(/September 2026/)).not.toBeInTheDocument();
+    const row = within(block).getByRole("link", { name: "Rowan Ellis" }).closest("li") as HTMLElement;
+    expect(within(row).getByText("Not started")).toBeInTheDocument();
+  });
+
+  it("names each report's own period when the team runs on different rhythms", async () => {
+    // Morgan (weekly) reporting to Harper beside Rowan (monthly), for this render only.
+    const people = RBA.profiles.map((p) => (p.id === morgan.id ? { ...p, reports_to: harper.id } : p));
+    renderWithHub(<TeamBlock companyId={RBA.company.id} viewer={harper} people={people} cycles={RBA.cycles} omissions={[]} />, rbaManager);
+    const block = (await screen.findByRole("heading", { name: "Your team" })).closest("section") as HTMLElement;
+    expect(await within(block).findByText(/GSR status for each person's current period/)).toBeInTheDocument();
+    const rowOf = (name: string) => within(block).getByRole("link", { name }).closest("li") as HTMLElement;
+    expect(within(rowOf("Morgan Reyes")).getByText(week.name)).toBeInTheDocument();
+    expect(within(rowOf("Rowan Ellis")).getByText("September 2026")).toBeInTheDocument();
   });
 });

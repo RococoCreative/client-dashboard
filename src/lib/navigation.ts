@@ -64,7 +64,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production", capability: "production_view" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
-  { id: "gsr", to: "/gsr", label: "Monthly GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
+  { id: "gsr", to: "/gsr", label: "GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
   { id: "reviews", to: "/reviews", label: "Reviews", icon: ClipboardCheck, audience: "admin", group: "people_hr" },
   { id: "scorecards", to: "/scorecards", label: "Scorecards", icon: Gauge, audience: "admin", group: "people_hr" },
   { id: "my-gsr-employee", to: "/my/gsr", label: "My GSR", icon: CalendarCheck, audience: "employee", group: "people_hr" },
@@ -126,6 +126,14 @@ export function navFor(company: Company, isAdmin: boolean, isRococo: boolean, is
     if (inGroup.length > 0) sections.push({ group, heading, items: inGroup });
   }
   return { kind: "grouped", sections };
+}
+
+// Whether a sidebar already lists a person's own reviews and goals pages. The My pages keep their
+// GSR | Reviews | Goals tab row only when it does not (an admin's sidebar has just My GSR).
+export function sidebarListsMyPages(layout: NavLayout): boolean {
+  if (layout.kind === "flat") return false;
+  const lists = (to: string) => layout.sections.some((section) => section.items.some((item) => item.to === to));
+  return lists("/my/reviews") && lists("/my/goals");
 }
 
 // Whether an item is the one to mark for a path, beyond what its own link matches.

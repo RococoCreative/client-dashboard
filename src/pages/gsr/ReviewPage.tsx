@@ -637,6 +637,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   return (
     <>
       <PageHeader
+        as={embedded ? "h2" : "h1"}
         backTo={back?.to}
         backLabel={back?.label}
         eyebrow={`${gsrPeriod ? "Goal Setting Review · " : ""}${cycle.name} · ${formatPeriod(cycle.period_start, cycle.period_end)}`}
