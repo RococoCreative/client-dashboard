@@ -17,6 +17,12 @@
 // admin placed with the company shows on the roster too, but their role and access are Rococo's to
 // manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
 // no invite.
+//
+// Below lg the table stacks into compact, even rows: the name and title with the status badge on
+// the same line, then division, reports to (labelled) and role on one quiet line that wraps, then
+// the invitation actions for a person who has them. It is the same table underneath, with explicit
+// table roles and each cell's column name (data-label) so a screen reader still reads rows and
+// columns.
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Search, Send, Trash2, UserPlus } from "lucide-react";
@@ -54,6 +60,7 @@ import {
   viewerDivisions,
 } from "../../lib/people.ts";
 import { ROLE_LABELS, type CompanyDivision, type DirectoryEntry, type Invitation, type Profile, type Role } from "../../types/database.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 // What each role opens up, shown under the Role select when adding someone.
 const ROLE_HINTS: Record<Role, string> = {
@@ -67,6 +74,15 @@ const ROLE_HINTS: Record<Role, string> = {
 const ALL = "all";
 const EVERY = "every";
 const NONE = "none";
+
+// The stacked roster row is one wrapping flex line. Order puts the name and status first; the row's
+// ::after is a zero-height full-width item that breaks the line; the facts follow, then the actions.
+const STACKED_ROW =
+  "max-lg:flex max-lg:flex-wrap max-lg:items-center max-lg:gap-x-4 max-lg:border-b max-lg:border-line max-lg:px-4 max-lg:py-1.5 max-lg:last:border-b-0 " +
+  "max-lg:after:order-3 max-lg:after:basis-full";
+const STACKED_RESET = "max-lg:border-b-0 max-lg:p-0";
+// A fact on the quiet line: no label of its own except Reports to, which names itself.
+const STACKED_FACT = `${STACKED_RESET} max-lg:order-4 max-lg:flex max-lg:items-center max-lg:text-[13px]`;
 
 function AddStaffDialog({
   companyId,
@@ -157,7 +173,7 @@ function AddStaffDialog({
                 <legend className={labelClass}>Division (optional)</legend>
                 <div className="mt-2 space-y-1.5">
                   {divisions.map((d) => (
-                    <label key={d.id} className="flex items-center gap-2 text-sm text-ink">
+                    <label key={d.id} className="flex items-center gap-2 text-sm text-ink tap:min-h-11">
                       <input type="checkbox" className={checkboxClass} checked={divisionIds.includes(d.id)} onChange={(e) => toggleDivision(d.id, e.target.checked)} />
                       {d.name}
                     </label>
@@ -389,7 +405,7 @@ export default function PeoplePage() {
             className={`${inputClass} mt-0 py-1.5 pl-8 text-[13px]`}
           />
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-[13px] text-ink-2">
+        <label className="flex shrink-0 items-center gap-2 text-[13px] text-ink-2 tap:min-h-11">
           <input type="checkbox" className={checkboxClass} checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           Show inactive
           <span className="tnum text-ink-3">({inactiveCount})</span>
@@ -404,7 +420,7 @@ export default function PeoplePage() {
         tab="roster"
         actions={
           teamView ? (
-            <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:text-accent-hover">
+            <Link to={`/people/${profile.id}`} className={`text-sm font-medium text-link hover:underline ${tapTargetClass}`}>
               Your profile and team
             </Link>
           ) : (
@@ -435,19 +451,19 @@ export default function PeoplePage() {
               ) : null}
             </div>
           ) : (
-            <div className="relative overflow-x-auto">
-              <table className={tableClass}>
-                <thead>
-                  <tr>
-                    <th className={thClass}>Person</th>
-                    {hasDivisions ? <th className={thClass}>Division</th> : null}
-                    <th className={thClass}>Reports to</th>
-                    <th className={thClass}>Role</th>
-                    <th className={thClass}>Status</th>
-                    {teamView ? null : <th className={thClass}><span className="sr-only">Actions</span></th>}
+            <div className="relative lg:overflow-x-auto">
+              <table role="table" className={`${tableClass} max-lg:block`}>
+                <thead role="rowgroup" className="max-lg:sr-only">
+                  <tr role="row">
+                    <th role="columnheader" className={thClass}>Person</th>
+                    {hasDivisions ? <th role="columnheader" className={thClass}>Division</th> : null}
+                    <th role="columnheader" className={thClass}>Reports to</th>
+                    <th role="columnheader" className={thClass}>Role</th>
+                    <th role="columnheader" className={thClass}>Status</th>
+                    {teamView ? null : <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup" className="max-lg:block">
                   {shown.map((person) => {
                     const self = person.id === profile.id;
                     const rococo = person.is_rococo_admin;
@@ -457,9 +473,13 @@ export default function PeoplePage() {
                     const placed = divisionLabel(person.division_ids, divisions);
                     const manager = person.reports_to ? byId.get(person.reports_to) : undefined;
                     return (
-                      <tr key={person.id} className={`hover:bg-surface-2/60 ${person.is_active ? "" : "opacity-60"}`}>
-                        <td className={`${tdClass} py-2`}>
-                          <Link to={`/people/${person.id}`} className="flex items-center gap-2.5">
+                      <tr
+                        key={person.id}
+                        role="row"
+                        className={`hover:bg-surface-2/60 ${STACKED_ROW} ${person.is_active ? "" : "opacity-60"}`}
+                      >
+                        <td role="cell" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-1 max-lg:min-w-0 max-lg:flex-1`}>
+                          <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
                             <Avatar person={person} size={26} />
                             <span className="min-w-0">
                               <span className="block truncate text-sm text-ink">{displayName(person)}{self ? " (you)" : ""}</span>
@@ -468,25 +488,29 @@ export default function PeoplePage() {
                           </Link>
                         </td>
                         {hasDivisions ? (
-                          <td className={`${tdClass} py-2 text-[13px]`}>
+                          <td role="cell" data-label="Division" className={`${tdClass} py-2 text-[13px] ${STACKED_FACT}`}>
                             {placed === "No division" && !rococo ? <Badge tone="warning">No division</Badge> : <span className="text-ink-2">{rococo ? "-" : placed}</span>}
                           </td>
                         ) : null}
-                        <td className={`${tdClass} py-2 text-[13px] text-ink-2`}>
+                        <td
+                          role="cell"
+                          data-label="Reports to"
+                          className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
+                        >
                           {manager ? (
-                            <Link to={`/people/${manager.id}`} className="hover:text-link">{displayName(manager)}</Link>
+                            <Link to={`/people/${manager.id}`} className="hover:text-link tap:inline-flex tap:min-h-11 tap:items-center">{displayName(manager)}</Link>
                           ) : (
                             managerName(person)
                           )}
                         </td>
-                        <td className={`${tdClass} py-2`}>
+                        <td role="cell" data-label="Role" className={`${tdClass} py-2 ${STACKED_FACT}`}>
                           {rococo ? (
                             <Badge>Rococo Creative</Badge>
                           ) : (
                             <span className="text-[13px] text-ink-2">{ROLE_LABELS[person.role]}</span>
                           )}
                         </td>
-                        <td className={`${tdClass} py-2`}>
+                        <td role="cell" data-label="Status" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-2 max-lg:shrink-0`}>
                           {!person.is_active ? (
                             <Badge tone="neutral">Inactive</Badge>
                           ) : account ? (
@@ -500,8 +524,8 @@ export default function PeoplePage() {
                           )}
                         </td>
                         {teamView ? null : (
-                          <td className={`${tdClass} py-2 text-right`}>
-                            <span className="flex items-center justify-end gap-1.5">
+                          <td role="cell" className={`${tdClass} py-2 text-right ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
+                            <span className="flex items-center justify-end gap-1.5 max-lg:flex-wrap max-lg:justify-start max-lg:not-empty:mb-1">
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (
@@ -515,7 +539,7 @@ export default function PeoplePage() {
                                 </>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (
-                                <Button size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
+                                <Button variant="secondary" size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
                                   <Send size={13} aria-hidden /> Send invite
                                 </Button>
                               ) : null}

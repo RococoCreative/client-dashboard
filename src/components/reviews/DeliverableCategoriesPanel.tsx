@@ -32,7 +32,7 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
   const [busy, setBusy] = useState(false);
   // The rows whose pencil is open. Several can be open at once; each closes with its own Done.
   const [openIds, setOpenIds] = useState<string[]>([]);
-  const setOpen = (id: string, open: boolean) => setOpenIds((ids) => (open ? [...ids, id] : ids.filter((x) => x !== id)));
+  const setOpen = (id: string, open: boolean) => setOpenIds((ids) => (open ? (ids.includes(id) ? ids : [...ids, id]) : ids.filter((x) => x !== id)));
   // The delete dialog reports only its own failure, never an inline save's or an earlier
   // dialog's, so its error is cleared whenever it opens. A delete already sent cannot be called
   // back, so the dialog waits for the answer rather than closing on Cancel mid-flight.
@@ -117,20 +117,24 @@ export default function DeliverableCategoriesPanel({ companyId }: { companyId: s
     }
   }
 
+  // With rows to show, the list sits directly under the header rule and the body drops its top padding.
+  const listed = Boolean(state.data) && categories.length > 0;
+
   return (
     <Section
       eyebrow="People"
       title="Deliverable categories"
       description="The groups a person's deliverable headings are filed under. A category is added the first time someone files a heading under it; correct its name, order or use here. A retired category is no longer offered for new headings, and the headings already in it stay."
+      flush={listed}
     >
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={3} /> : null}
-      {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
+      {error ? <Notice tone="error" className={`mb-4 ${listed ? "mt-4 sm:mt-6" : ""}`}>{error}</Notice> : null}
       {state.data ? (
         categories.length === 0 ? (
           <p className="text-sm text-ink-2">No categories yet. One is added the first time a heading is filed under it on a person's deliverables.</p>
         ) : (
-          <ul className="-mt-4 sm:-mt-6">
+          <ul>
             {categories.map((category, index) => (
               <li key={category.id} className={category.is_active ? "" : "opacity-70"}>
                 <EditRow

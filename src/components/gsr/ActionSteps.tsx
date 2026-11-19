@@ -11,7 +11,7 @@ import { useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import Button from "../ui/Button.tsx";
 import IconButton from "../ui/IconButton.tsx";
-import { checkboxClass, inputClass } from "../ui/forms.ts";
+import { checkboxClass, checkboxHitClass, inputClass } from "../ui/forms.ts";
 import type { ActionStep } from "../../types/database.ts";
 
 export default function ActionSteps({
@@ -58,21 +58,23 @@ export default function ActionSteps({
       ) : (
         <ul className="mt-1.5 space-y-1.5">
           {shown.map((step, index) => (
-            <li key={index} className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={step.done}
-                disabled={!canTick}
-                aria-label={step.text}
-                onChange={(e) => {
-                  const done = e.target.checked;
-                  change((current) => current.map((s, i) => (i === index ? { ...s, done } : s)));
-                }}
-                className={`${checkboxClass} mt-1`}
-              />
+            <li key={index} className="flex items-start gap-2 tap:items-center">
+              <label className={`${checkboxHitClass} mt-1 tap:mt-0`}>
+                <input
+                  type="checkbox"
+                  checked={step.done}
+                  disabled={!canTick}
+                  aria-label={step.text}
+                  onChange={(e) => {
+                    const done = e.target.checked;
+                    change((current) => current.map((s, i) => (i === index ? { ...s, done } : s)));
+                  }}
+                  className={checkboxClass}
+                />
+              </label>
               <span className={`flex-1 text-[13px] ${step.done ? "text-ink-3 line-through" : "text-ink"}`}>{step.text}</span>
               {canEdit ? (
-                <IconButton label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))} className="-my-1.5">
+                <IconButton label={`Remove step: ${step.text}`} onClick={() => change((current) => current.filter((_, i) => i !== index))} className="-my-1.5 tap:my-0">
                   <X size={13} aria-hidden />
                 </IconButton>
               ) : null}

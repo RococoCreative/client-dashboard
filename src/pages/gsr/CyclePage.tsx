@@ -18,6 +18,7 @@ import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Field from "../../components/ui/Field.tsx";
+import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -67,6 +68,22 @@ import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type Cadence, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
+import { tapTargetClass } from "../../components/ui/tap.ts";
+
+// The team table runs edge to edge in its card, so its first and last cells take the card's own
+// padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
+const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
+
+// Below md the team table stacks into compact, even rows: the name with the status badge on its
+// line, then, for a row with at least one score, each score with its label beside it (the column's
+// name from data-label) two to a line, then the row's actions. A row with no scores shows no score
+// line at all. It is the same table underneath, with explicit table roles, the column headers kept
+// for screen readers and each cell's data-label, so a screen reader still reads rows and columns.
+const STACKED_SCORE =
+  "max-md:flex max-md:items-start max-md:justify-between max-md:gap-2 max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left " +
+  "max-md:before:min-w-0 max-md:before:text-[12.5px] max-md:before:text-ink-3 max-md:before:content-[attr(data-label)]";
+// A score cell on a row with no scores: the table keeps it from md, a phone leaves it out.
+const STACKED_NO_SCORE = "max-md:hidden";
 
 // A GSR period is canonical (0046), here as in the New GSR period form: the start snaps to the
 // first day of the period of its rhythm that holds the picked day, and the end follows it. A
@@ -278,7 +295,11 @@ export default function CyclePage() {
     // with; until then its ratings live on the person and its rows are not the whole picture. A
     // month never has one: its number is the GSR score locked in on it.
     const result = review ? scoreOfRecord(review, cycle, pillars, own) : null;
-    return { person, review, result };
+    // Whether the row has any number to show; a phone leaves the score line off a row without one.
+    const scored =
+      (columns.pillarScores && result !== null && (result.overall !== null || result.pillars.some((p) => p.score !== null))) ||
+      (columns.gsrScore && review !== null && monthLocked(review));
+    return { person, review, result, scored };
   });
   // Counted over the same rows the table shows, so the fraction on top and the list below
   // never disagree about who is in this cycle.
@@ -372,7 +393,10 @@ export default function CyclePage() {
         actions={
           canRunCycle ? (
             <>
-              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> Edit</Button>
+              {/* The name, dates and theme read in the header above; the pencil opens them as one form. */}
+              <IconButton label="Edit cycle" onClick={() => setEditing(true)}>
+                <Pencil size={15} aria-hidden />
+              </IconButton>
               {open ? (
                 <Button variant="secondary" size="sm" onClick={() => { setCloseError(""); setClosing(true); }} disabled={busy}>
                   <Lock size={14} aria-hidden /> Close cycle
@@ -406,7 +430,7 @@ export default function CyclePage() {
         </Notice>
       ) : null}
 
-      <div className={`grid gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : ""}`}>
         <Stat label="People" value={team.length} hint={omitted.length > 0 ? `${omitted.length} omitted from this cycle` : undefined} />
         <Stat
           label={gsr ? "GSRs complete" : "Reviews complete"}
@@ -424,7 +448,7 @@ export default function CyclePage() {
         title="Reviews"
         actions={
           missing.length > 0 && open ? (
-            <Button size="sm" variant="secondary" onClick={() => void startAll()} disabled={busy}>
+            <Button size="sm" onClick={() => void startAll()} disabled={busy}>
               <UsersRound size={14} aria-hidden /> Start all {missing.length} reviews
             </Button>
           ) : null
@@ -432,36 +456,36 @@ export default function CyclePage() {
         padded={false}
       >
         {team.length === 0 && omitted.length > 0 ? (
-          <p className="p-5 text-sm text-ink-2">Everyone is omitted from this cycle. Add someone back below.</p>
+          <p className="p-4 text-sm text-ink-2 sm:p-6">Everyone is omitted from this cycle. Add someone back below.</p>
         ) : team.length === 0 ? (
           // An account is never a precondition: the roster is what a cycle covers, and people are
           // added to it with or without an invitation.
-          <p className="p-5 text-sm text-ink-2">
+          <p className="p-4 text-sm text-ink-2 sm:p-6">
             Nobody on the roster yet. Add the team in <Link to="/people" className="text-link hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
-          <div className="relative overflow-x-auto">
-            <table className={tableClass}>
-              <thead>
-                <tr>
-                  <th className={thClass}>Person</th>
-                  <th className={thClass}>Status</th>
+          <div className="relative md:overflow-x-auto">
+            <table role="table" className={`${tableClass} max-md:block`}>
+              <thead role="rowgroup" className="max-md:sr-only">
+                <tr role="row" className={edgeCells}>
+                  <th role="columnheader" className={thClass}>Person</th>
+                  <th role="columnheader" className={thClass}>Status</th>
                   {columns.pillarScores ? (
                     <>
                       {pillars.map((p) => (
-                        <th key={p.id} className={`${thClass} text-right`}>{p.name}</th>
+                        <th key={p.id} role="columnheader" className={`${thClass} text-right`}>{p.name}</th>
                       ))}
-                      <th className={`${thClass} text-right`}>Overall</th>
+                      <th role="columnheader" className={`${thClass} text-right`}>Overall</th>
                     </>
                   ) : null}
-                  {columns.gsrScore ? <th className={`${thClass} text-right`}>GSR score</th> : null}
-                  <th className={thClass}></th>
+                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right`}>GSR score</th> : null}
+                  <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map(({ person, review, result }) => (
-                  <tr key={person.id} className="hover:bg-surface-2/60">
-                    <td className={tdClass}>
+              <tbody role="rowgroup" className="max-md:block">
+                {rows.map(({ person, review, result, scored }) => (
+                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:relative max-md:border-b max-md:border-line max-md:px-4 max-md:py-2.5 max-md:last:border-b-0`}>
+                    <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">
@@ -473,7 +497,7 @@ export default function CyclePage() {
                         </div>
                       </div>
                     </td>
-                    <td className={tdClass}>
+                    <td role="cell" data-label="Status" className={`${tdClass} max-md:absolute max-md:top-2.5 max-md:right-4 max-md:flex max-md:h-[38px] max-md:items-center max-md:border-b-0 max-md:!p-0`}>
                       <Badge tone={review ? REVIEW_STATUS_TONE[review.status] : "neutral"}>
                         {review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}
                       </Badge>
@@ -483,18 +507,18 @@ export default function CyclePage() {
                         {pillars.map((p) => {
                           const pillar = result?.pillars.find((x) => x.pillarId === p.id);
                           return (
-                            <td key={p.id} className={`${tdClass} tnum text-right text-ink-2`}>
+                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                               {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
                             </td>
                           );
                         })}
-                        <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>
+                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                           {result ? result.overall : "-"}
                         </td>
                       </>
                     ) : null}
                     {columns.gsrScore ? (
-                      <td className={`${tdClass} tnum text-right`}>
+                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${scored ? STACKED_SCORE : STACKED_NO_SCORE}`}>
                         {review && monthLocked(review) ? (
                           <span className="font-medium text-ink">{review.gsr_score}%</span>
                         ) : (
@@ -502,10 +526,10 @@ export default function CyclePage() {
                         )}
                       </td>
                     ) : null}
-                    <td className={`${tdClass} text-right`}>
-                      <div className="flex items-center justify-end gap-3">
+                    <td role="cell" className={`${tdClass} text-right max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0`}>
+                      <div className="flex items-center justify-end gap-3 whitespace-nowrap max-md:justify-start">
                         {review ? (
-                          <Link to={reviewPath(review.id, cycle)} className="text-[13px] text-link hover:underline">Open</Link>
+                          <Link to={reviewPath(review.id, cycle)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link>
                         ) : open ? (
                           <Button variant="link" onClick={() => void openReview(person.id)} disabled={busy}>
                             Start review
@@ -546,7 +570,7 @@ export default function CyclePage() {
             {omitted.map(({ person, omission, review }) => {
               const by = omission.omitted_by ? (directory.find((d) => d.id === omission.omitted_by)?.full_name?.trim() || null) : null;
               return (
-                <li key={person.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <li key={person.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar person={person} size={28} />
                     <div className="min-w-0">

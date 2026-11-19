@@ -15,6 +15,7 @@ import { inputClass, labelClass, selectClass } from "../ui/forms.ts";
 import { assignProject, createProjectAndAssign, unassignProject, updateProjectAssignment } from "../../services/projectAssignments.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { Project, ProjectAssignment } from "../../types/database.ts";
+import { tapStretchClass } from "../ui/tap.ts";
 
 // The pulldown value that means "a project not on the list yet".
 const NEW_PROJECT = "new";
@@ -123,9 +124,9 @@ export default function PersonProjects({
             const name = project?.name ?? "A project no longer listed";
             return (
               <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-2.5">
-                <div className="min-w-0 flex-1 basis-48">
+                <div className="relative min-w-0 flex-1 basis-48 tap:flex tap:min-h-11 tap:flex-col tap:justify-center">
                   {linkProjects && project ? (
-                    <Link to={`/production/projects/${project.id}`} className="block truncate text-sm text-ink hover:text-link">
+                    <Link to={`/production/projects/${project.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
                       {name}
                     </Link>
                   ) : (

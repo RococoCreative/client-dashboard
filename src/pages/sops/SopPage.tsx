@@ -2,18 +2,20 @@
 // history (any version can be read; none can be edited). Admins publish, archive, edit
 // (which appends a version), attach files, and delete from here.
 import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Markdown from "react-markdown";
 import { Archive, Download, Eye, EyeOff, Paperclip, Pencil, Trash2, Upload } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import IconButton from "../../components/ui/IconButton.tsx";
+import IconLink from "../../components/ui/IconLink.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { SOP_STATUS_TONE } from "../../components/status.ts";
+import { metaClass, secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
@@ -170,7 +172,9 @@ export default function SopPage() {
         actions={
           isAdmin ? (
             <>
-              <Link to={`/sops/${sop.id}/edit`}><Button variant="secondary" size="sm"><Pencil size={14} aria-hidden /> Edit</Button></Link>
+              <IconLink to={`/sops/${sop.id}/edit`} label="Edit SOP">
+                <Pencil size={15} aria-hidden />
+              </IconLink>
               {sop.status === "published" ? (
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => void setStatus("draft")}><EyeOff size={14} aria-hidden /> Unpublish</Button>
               ) : (
@@ -186,7 +190,7 @@ export default function SopPage() {
       />
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {sop.summary ? <p className="mb-6 max-w-3xl text-sm leading-relaxed text-ink-2">{sop.summary}</p> : null}
+      {sop.summary ? <p className={`mb-6 max-w-3xl ${secondaryClass}`}>{sop.summary}</p> : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -220,19 +224,21 @@ export default function SopPage() {
             }
           >
             {attachments.length === 0 ? (
-              <p className="text-sm text-ink-3">No files attached.</p>
+              <p className={metaClass}>No files attached.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {attachments.map((a) => (
                   <li key={a.id} className="flex items-center justify-between gap-2 py-2">
-                    <Button variant="row" onClick={() => void openAttachment(a)}>
+                    <Button variant="row" onClick={() => void openAttachment(a)} title={a.file_name}>
                       <Paperclip size={14} className="shrink-0 text-ink-3" aria-hidden />
                       <span className="truncate">{a.file_name}</span>
-                      <span className="shrink-0 text-[11px] text-ink-3">{formatBytes(a.size_bytes)}</span>
+                      <span className={`shrink-0 ${metaClass}`}>{formatBytes(a.size_bytes)}</span>
                     </Button>
-                    <div className="flex shrink-0 items-center">
-                      <IconButton label="Download" onClick={() => void openAttachment(a)}><Download size={14} aria-hidden /></IconButton>
-                      {isAdmin ? <IconButton label="Remove attachment" onClick={() => setRemovingAttachment(a)}><Trash2 size={14} aria-hidden /></IconButton> : null}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <IconButton label={`Download ${a.file_name}`} onClick={() => void openAttachment(a)}><Download size={15} aria-hidden /></IconButton>
+                      {isAdmin ? (
+                        <Button variant="ghost" size="sm" aria-label={`Remove ${a.file_name}`} onClick={() => setRemovingAttachment(a)}>Remove</Button>
+                      ) : null}
                     </div>
                   </li>
                 ))}
@@ -247,13 +253,13 @@ export default function SopPage() {
                     variant="row"
                     aria-pressed={shown?.version === v.version}
                     onClick={() => setSelectedVersion(v.version === sop.current_version ? null : v.version)}
-                    className="justify-between px-5 py-3"
+                    className="justify-between px-4 py-3 sm:px-6"
                   >
                     <span className="min-w-0">
                       <span className="tnum block">Version {v.version}{v.version === sop.current_version ? " (current)" : ""}</span>
-                      <span className="block truncate text-[12px] text-ink-2">{v.change_note ?? "No change note"}</span>
+                      <span className={`block truncate ${metaClass}`}>{v.change_note ?? "No change note"}</span>
                     </span>
-                    <span className="shrink-0 text-[11px] text-ink-3">{formatDateTime(v.created_at)}</span>
+                    <span className={`shrink-0 ${metaClass}`}>{formatDateTime(v.created_at)}</span>
                   </Button>
                 </li>
               ))}

@@ -531,6 +531,9 @@ function SignedIn({ session }: { session: Session }) {
             {SETTINGS_TABS.map((t) => (
               <Route key={t.key} path={t.to.slice(1)} element={<AdminOnly><SettingsTabOnly tab={t.key}><SettingsPage tab={t.key} /></SettingsTabOnly></AdminOnly>} />
             ))}
+            {/* One data source on the Connections tab, behind exactly the tab's own gates. Two segments past
+                connections, so it never reads as the connection return path. */}
+            <Route path="settings/connections/sources/:sourceId" element={<AdminOnly><SettingsTabOnly tab="connections"><SettingsPage tab="connections" /></SettingsTabOnly></AdminOnly>} />
             <Route path="settings/connections/:companyId" element={<ConnectionReturn />} />
             <Route path="rococo" element={<RococoOnly><PortfolioPage /></RococoOnly>} />
             <Route path="rococo/companies" element={<RococoOnly><CompaniesPage /></RococoOnly>} />

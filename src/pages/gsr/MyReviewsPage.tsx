@@ -1,6 +1,6 @@
 // An employee's own scored reviews: the latest with its score and feedback, and every past one
-// in one table. Monthly GSRs are not reviews and live on the GSR tab; the year's goals on the
-// Goals tab. Admins get the same view of themselves.
+// in one table. GSRs, at any rhythm, are not reviews and live on My GSR; the year's goals on
+// My Goals. Admins get the same view of themselves.
 import { Link } from "react-router-dom";
 import Badge from "../../components/ui/Badge.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
@@ -22,6 +22,7 @@ import { reviewPath } from "../../lib/gsr/cycles.ts";
 import { formatNumber, formatPeriod } from "../../lib/format.ts";
 import { PREVIOUS_STATUS_LABELS, REVIEW_STATUS_LABELS } from "../../types/database.ts";
 import MyTabs from "./MyTabs.tsx";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 
 export default function MyReviewsPage() {
   const { company, profile } = useHub();
@@ -63,7 +64,7 @@ export default function MyReviewsPage() {
       ) : (
         <div className="space-y-6">
           {featured ? (
-            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : `/gsr/reviews/${featured.review.id}`} className="text-[13px] text-link hover:underline">Open full review</Link>}>
+            <Section eyebrow={featured.result ? "Latest scored review" : "Latest"} title={featured.cycle?.name ?? "Review"} description={featured.cycle ? formatPeriod(featured.cycle.period_start, featured.cycle.period_end) : undefined} actions={<Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle) : `/gsr/reviews/${featured.review.id}`} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open full review</Link>}>
               <div className="grid gap-6 md:grid-cols-3">
                 <div className="flex items-center gap-4">
                   <ScoreRing score={featured.result?.overall ?? null} size={96} label="Overall" />
@@ -108,7 +109,7 @@ export default function MyReviewsPage() {
                       <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                       <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                       <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className="text-[13px] text-link hover:underline">Open</Link></td>
+                      <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle) : `/gsr/reviews/${review.id}`} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link></td>
                     </tr>
                   ))}
                 </tbody>

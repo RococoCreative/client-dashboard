@@ -10,6 +10,7 @@
 // The back link returns to the screen the task was opened from when that screen said where it is
 // (a person's page), and to Tasks otherwise.
 import { useState, type ReactNode } from "react";
+import { Pencil } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import StepList from "../../components/tasks/StepList.tsx";
 import TaskForm from "../../components/tasks/TaskForm.tsx";
@@ -18,11 +19,13 @@ import { sendAssignmentEmail } from "../../components/tasks/assignmentEmail.ts";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
+import IconButton from "../../components/ui/IconButton.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { labelClass } from "../../components/ui/forms.ts";
+import { secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
@@ -179,7 +182,11 @@ export default function TaskPage() {
       {canAct && done && !locked ? (
         <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act(() => reopenTask(task.id))}>Reopen</Button>
       ) : null}
-      {canEdit ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => setEditing(true)}>Edit</Button> : null}
+      {canEdit ? (
+        <IconButton label="Edit task" disabled={busy} onClick={() => setEditing(true)}>
+          <Pencil size={15} aria-hidden />
+        </IconButton>
+      ) : null}
       {canDelete ? <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleting(true)}>Delete</Button> : null}
     </>
   );
@@ -192,7 +199,7 @@ export default function TaskPage() {
       {locked ? (
         <Notice className="mb-4">
           <span>This one is done. The next one is already open.</span>{" "}
-          <Link to={`/tasks/${task.next_task_id}`} className="font-medium underline">Open the next one</Link>
+          <Link to={`/tasks/${task.next_task_id}`} className="text-link font-medium hover:underline">Open the next one</Link>
         </Notice>
       ) : null}
 
@@ -207,7 +214,7 @@ export default function TaskPage() {
         </Section>
 
         <Section eyebrow="Details" title={done ? "Done" : "Open"}>
-          {task.description ? <p className="mb-4 whitespace-pre-line text-sm leading-relaxed text-ink-2">{task.description}</p> : null}
+          {task.description ? <p className={`mb-4 whitespace-pre-line ${secondaryClass}`}>{task.description}</p> : null}
           <dl className="space-y-3">
             <Detail label="Assignee">{assigneeName ?? "Unassigned"}</Detail>
             {/* A creator missing from the company's directory is a Rococo admin who stepped in to assign it. */}

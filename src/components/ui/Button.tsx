@@ -1,6 +1,9 @@
 // The one button. Quiet, compact, 150ms color transitions, a single focus ring, and every
 // color a theme token so the same component reads right on all four tenant palettes.
 //
+// Under a finger or at phone width (the tap variant) every variant is at least 44px tall, so a
+// thumb can hit it; with a mouse the sizes stay compact.
+//
 // Two text-only variants cover the controls that read as words rather than boxes, so no page
 // invents its own: `link` is an action written as text in the accent ("Start review", "Use a
 // different email"), and `row` is a row or a title that opens what it names (a file, a version,
@@ -13,7 +16,7 @@ type Size = "sm" | "md";
 
 const MOTION = "transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50";
 
-const BOXED = "inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap";
+const BOXED = "inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap tap:min-h-11";
 
 const SIZES: Record<Size, string> = {
   sm: "px-2.5 py-1.5 text-[12.5px]",
@@ -32,9 +35,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: "border border-line bg-surface text-danger hover:border-danger hover:bg-danger/5",
   // The one loud destructive treatment, reserved for the final confirm step.
   "danger-solid": "bg-danger text-bg hover:bg-danger/90",
-  link: "inline-flex items-center gap-1.5 text-link hover:underline",
+  link: "inline-flex items-center gap-1.5 text-link hover:underline tap:min-h-11",
   // Full width and left aligned, free to wrap or truncate. aria-pressed marks the one on screen.
-  row: "flex w-full min-w-0 items-center gap-2 text-left text-ink hover:text-accent aria-pressed:bg-surface-2/60",
+  row: "flex w-full min-w-0 items-center gap-2 text-left text-ink hover:text-accent aria-pressed:bg-surface-2/60 tap:min-h-11",
 };
 
 export default function Button({

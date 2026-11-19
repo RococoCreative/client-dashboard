@@ -2,9 +2,12 @@
 // is called, where it goes, what it is for, its category (which also repeats it on that section's
 // page), who sees it, its order, and whether it is a public share view that may be embedded. Links are rows the company keeps (rule 12). The checks here only save
 // a round trip with a plain message; the database checks are the real guard, and who sees a link
-// is enforced by RLS on its audience, never by a screen. Every change saves on its own.
+// is enforced by RLS on its audience, never by a screen. Each link reads as text first; its pencil
+// opens the fields in place, one link at a time, with Remove beside Done. Every change saves on its
+// own.
 import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
@@ -14,6 +17,7 @@ import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass } from "../ui/forms.ts";
+import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { LINK_GROUPS, LINK_GROUP_LABELS, groupLinks } from "../../lib/links.ts";
@@ -35,12 +39,41 @@ function Caption({ children }: { children: string }) {
   return <span className={labelClass} aria-hidden>{children}</span>;
 }
 
+
+// A link as text: its label, what it is for, where it goes, and who sees it.
+function LinkSummary({ link, onEdit }: { link: ExternalLink; onEdit: () => void }) {
+  return (
+    <li className="flex items-start justify-between gap-3 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={`min-w-0 [overflow-wrap:anywhere] ${itemTitleClass}`}>{link.label}</span>
+          <Badge tone="neutral">{LINK_AUDIENCE_LABELS[link.audience]}</Badge>
+          {link.embed_is_public ? <Badge tone="accent">Public embed</Badge> : null}
+        </div>
+        {link.destination_note ? <p className={`mt-0.5 ${secondaryClass}`}>{link.destination_note}</p> : null}
+        <p className={`mt-0.5 truncate ${metaClass}`} title={link.url}>
+          {link.url}
+          <span className="px-1.5" aria-hidden>·</span>
+          {LINK_PROVIDER_LABELS[link.provider]}
+          <span className="px-1.5" aria-hidden>·</span>
+          <span className="tnum">Order {link.sort_order}</span>
+        </p>
+      </div>
+      <IconButton label={`Edit ${link.label}`} onClick={onEdit}>
+        <Pencil size={15} aria-hidden />
+      </IconButton>
+    </li>
+  );
+}
+
 function LinkRow({
   link,
   onSaved,
   onError,
   onRemove,
+  onDone,
 }: {
+  onDone: () => void;
   link: ExternalLink;
   onSaved: (link: ExternalLink) => void;
   onError: (message: string) => void;
@@ -89,7 +122,7 @@ function LinkRow({
 
   const noEmbed = !link.embed_url;
   return (
-    <li className="rounded-md border border-line p-3">
+    <li className="py-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <Caption>Label</Caption>
@@ -135,7 +168,7 @@ function LinkRow({
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
           {/* aria-disabled rather than disabled, so a click explains why instead of doing nothing. */}
-          <label className={`flex items-center gap-2 text-[13px] text-ink ${noEmbed ? "opacity-60" : ""}`}>
+          <label className={`flex items-center gap-2 text-[13px] text-ink ${noEmbed ? "opacity-60" : ""} tap:min-h-11`}>
             <input
               type="checkbox"
               className={checkboxClass}
@@ -148,9 +181,10 @@ function LinkRow({
           </label>
           <p className={`${helpClass} mt-1`}>Only for a view the board owner has shared publicly. Anyone with that link can see what it shows, including data hidden from the view.</p>
         </div>
-        <IconButton label={`Remove ${link.label}`} onClick={onRemove}>
-          <Trash2 size={14} aria-hidden />
-        </IconButton>
+      </div>
+      <div className="mt-3 flex flex-wrap justify-between gap-2">
+        <Button variant="danger" size="sm" aria-label={`Remove ${link.label}`} onClick={onRemove}>Remove</Button>
+        <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
       </div>
     </li>
   );
@@ -223,6 +257,8 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
   const [removing, setRemoving] = useState<ExternalLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState("");
+  // One link open at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const links = state.data ?? [];
 
@@ -253,6 +289,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
       const id = removing.id;
       await deleteExternalLink(id);
       state.setData((prev) => (prev ? prev.filter((l) => l.id !== id) : prev));
+      setOpenId((open) => (open === id ? null : open));
       setRemoving(null);
     } catch (err) {
       setDialogError(errorMessage(err));
@@ -275,14 +312,17 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
       {state.data ? (
         <>
           {groups.length === 0 ? (
-            <p className="text-sm text-ink-2">No links yet. Add the programs the team works in below, with a line on what each is for.</p>
+            <p className={secondaryClass}>No links yet. Add the programs the team works in below, with a line on what each is for.</p>
           ) : (
             <div className="space-y-5">
               {groups.map((g) => (
                 <div key={g.group}>
-                  <p className="eyebrow">{LINK_GROUP_LABELS[g.group]}</p>
-                  <ul className="mt-2 space-y-2">
-                    {g.links.map((link) => (
+                  <p className={eyebrowLabelClass}>{LINK_GROUP_LABELS[g.group]}</p>
+                  <ul className="mt-1 divide-y divide-line">
+                    {g.links.map((link) =>
+                      openId !== link.id ? (
+                        <LinkSummary key={link.id} link={link} onEdit={() => setOpenId(link.id)} />
+                      ) : (
                       <LinkRow
                         key={link.id}
                         link={link}
@@ -292,8 +332,10 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
                           setDialogError("");
                           setRemoving(link);
                         }}
+                        onDone={() => setOpenId(null)}
                       />
-                    ))}
+                      ),
+                    )}
                   </ul>
                 </div>
               ))}

@@ -21,6 +21,7 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { goalOutcome, goalSettled, rankGoals, type GoalOutcome } from "../../lib/gsr/goals.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
 import { GOAL_KIND_LABELS, type Goal } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 const OUTCOME_LABELS: Record<GoalOutcome, string> = { hit: "Hit", miss: "Missed", open: "In progress" };
 
@@ -76,7 +77,7 @@ export default function PeopleGoalsPanel() {
           <p className="text-sm text-ink-2">{shown.length === 0 ? `No goals filed for ${year} yet.` : `${hit} of ${pluralize(shown.length, "goal")} for ${year} hit so far.`}</p>
           {roster.map(({ person, goals: own }) =>
             own.length === 0 ? null : (
-              <Section key={person.id} eyebrow={person.title ?? ""} title={displayName(person)} padded={false} actions={<Link to={`/people/${person.id}`} className="text-[13px] text-link hover:underline">Open profile</Link>}>
+              <Section key={person.id} eyebrow={person.title ?? ""} title={displayName(person)} padded={false} actions={<Link to={`/people/${person.id}`} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open profile</Link>}>
                 <ul className="divide-y divide-line">
                   {own.map((goal) => {
                     const result = outcome(goal);

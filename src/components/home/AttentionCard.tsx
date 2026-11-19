@@ -20,6 +20,7 @@ import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSyncSources } from "../../services/sync.ts";
 import type { Company } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function AttentionCard({ company }: { company: Company }) {
   const { profile } = useHub();
@@ -55,7 +56,7 @@ export default function AttentionCard({ company }: { company: Company }) {
                 <p className="text-sm font-medium text-ink">{item.title}</p>
                 <p className="mt-0.5 text-[13px] leading-relaxed text-ink-2">{item.detail}</p>
               </div>
-              <Link to={item.to} aria-label={`Open: ${item.title}`} className="mt-0.5 shrink-0 text-[13px] font-medium text-link hover:underline">
+              <Link to={item.to} aria-label={`Open: ${item.title}`} className={`mt-0.5 shrink-0 text-[13px] font-medium text-link hover:underline ${tapTargetClass}`}>
                 Open
               </Link>
             </li>

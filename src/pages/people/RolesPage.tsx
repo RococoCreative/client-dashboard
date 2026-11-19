@@ -11,6 +11,7 @@ import ListDetail, { type ListDetailItem } from "../../components/ui/ListDetail.
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
+import useIsWide from "../../components/ui/useIsWide.ts";
 import { inputClass } from "../../components/ui/forms.ts";
 import { secondaryClass, sectionTitleClass } from "../../components/ui/type.ts";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
@@ -28,12 +29,6 @@ import type { JobRole } from "../../types/database.ts";
 const BASE = "/people/roles";
 // The group retired roles sit under; the list labels it with how many of them are showing.
 const RETIRED = "retired";
-
-// The list and detail sit side by side from lg up (ListDetail); only there does the bare address
-// open a role. Without matchMedia (a test DOM) the screen counts as wide.
-function isWide(): boolean {
-  return typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches;
-}
 
 // The one add form for a role, in a dialog so it is never an always-open row.
 function AddRoleDialog({ companyId, nextOrder, onAdded, onClose }: { companyId: string; nextOrder: number; onAdded: (role: JobRole) => void; onClose: () => void }) {
@@ -76,6 +71,8 @@ export default function RolesPage() {
   const companyId = company!.id;
   const { roleId } = useParams();
   const navigate = useNavigate();
+  // The list and detail sit side by side from lg up (ListDetail); only there does the bare address open a role.
+  const wide = useIsWide();
   const state = useAsync(async () => {
     const [roles, goals, people] = await Promise.all([listJobRoles(companyId, true), listJobRoleGoals(companyId), listCompanyProfiles(companyId)]);
     return { roles, goals, people };
@@ -101,8 +98,8 @@ export default function RolesPage() {
   const firstRole = roles.find((r) => r.is_active) ?? roles[0];
   const firstId = state.data && !roleId ? firstRole?.id : undefined;
   useEffect(() => {
-    if (firstId && isWide()) navigate(`${BASE}/${firstId}`, { replace: true });
-  }, [firstId, navigate]);
+    if (firstId && wide) navigate(`${BASE}/${firstId}`, { replace: true });
+  }, [firstId, wide, navigate]);
 
   const header = <PeopleHeader tab="roles" />;
   if (state.error && !state.data) {
@@ -142,6 +139,7 @@ export default function RolesPage() {
         selectedId={roleId ?? null}
         hrefFor={(id) => `${BASE}/${id}`}
         backHref={BASE}
+        backLabel="Roles"
         countLabel={pluralize(roles.length, "role")}
         searchLabel={roles.length > 0 ? "Search roles" : undefined}
         groupLabel={(_group, shown) => `Retired roles (${shown})`}

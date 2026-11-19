@@ -192,7 +192,7 @@ function OpenPillar({
         "status",
         "Edit status",
         <Fact label="Status">{pillar.is_active ? "Active, counts toward the score" : "Inactive, left out of the score"}</Fact>,
-        <label className="flex items-center gap-2 text-sm text-ink">
+        <label className="flex items-center gap-2 text-sm text-ink tap:min-h-11">
           <input type="checkbox" checked={pillar.is_active} onChange={(e) => void onPatch({ is_active: e.target.checked })} className={checkboxClass} /> Active (counts toward the score)
         </label>,
       )}
@@ -204,7 +204,7 @@ function OpenPillar({
         </p>
       ) : null}
       {pillar.scoring_type === "rating" ? (
-        <PillarCriteria pillar={pillar} criteria={criteria} adding={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
+        <PillarCriteria pillar={pillar} criteria={criteria} addingCriterion={addingCriterion} onAdd={onAddCriterion} onPatch={onPatchCriterion} onDelete={onDeleteCriterion} />
       ) : null}
 
       {/* The foot draws its own hairline only after text that has none (the GSR note, or the empty

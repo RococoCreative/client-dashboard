@@ -44,8 +44,7 @@ import { cyclePath, cycleSettled, cycleYear, gsrPeriodCopy, upperFirst, type Gsr
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
 import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
 type GoalPatch = Parameters<typeof updateGoal>[1];
 type NotesUpdate = (update: (notes: GoalNote[]) => GoalNote[]) => void;

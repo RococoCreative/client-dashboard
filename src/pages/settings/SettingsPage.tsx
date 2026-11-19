@@ -2,13 +2,14 @@
 //   Company: name, logo and time zone, plus the theme and sign-in domains, which Rococo manages
 //     (they decide who can sign in), so they read only here.
 //   Connections: the company's own connections to outside systems and, with the module, its data
-//     sources. Links to outside tools live in Resources > Links, which this tab points to.
+//     sources, which past three each have an address under /settings/connections/sources. Links to
+//     outside tools live in Resources > Links, which this tab points to.
 //   Activity: this company's own change log, for whoever the company lets read it.
 // Company and Activity show only to people the company's permissions allow. Below the tabs, a
 // signpost card lists where the rest of setup moved, so it shows whichever tab an admin lands on.
 // What shows is the company's data and modules (rule 12), never its name.
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
 import Field from "../../components/ui/Field.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -173,13 +174,17 @@ function CompanyTab({ company }: { company: Company }) {
   );
 }
 
+// Data sources run the full width below the connections, so once they are a list the list and the
+// open source have room to sit side by side. A source's address at a company without the module
+// goes back to the tab itself.
 function ConnectionsTab({ company }: { company: Company }) {
   const dataSources = hasModule(company, "data_sources");
+  const { sourceId } = useParams();
+  if (sourceId && !dataSources) return <Navigate to="/settings/connections" replace />;
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
+      <div className="lg:col-span-2">
         <ConnectionsPanel companyId={company.id} providers={dataSources ? GOOGLE_ROW_PROVIDERS : undefined} />
-        {dataSources ? <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} /> : null}
       </div>
       {hasModule(company, "external_links") ? (
         <Section eyebrow="Where the work lives" title="Links to outside tools">
@@ -190,6 +195,11 @@ function ConnectionsTab({ company }: { company: Company }) {
             <Button variant="secondary" size="sm">Open Links</Button>
           </Link>
         </Section>
+      ) : null}
+      {dataSources ? (
+        <div className="lg:col-span-3">
+          <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} />
+        </div>
       ) : null}
     </div>
   );

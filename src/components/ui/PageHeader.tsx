@@ -1,5 +1,6 @@
 // Page title block: optional back link, eyebrow, display title, one-line description, and
-// the page's primary actions on the right.
+// the page's primary actions on the right. The back link is 44px tall under a finger or at
+// phone width, so a thumb can hit it.
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -28,7 +29,7 @@ export default function PageHeader({
         {backTo ? (
           <Link
             to={backTo}
-            className="mb-3 inline-flex items-center gap-1 text-[12px] text-ink-2 transition-colors duration-150 hover:text-ink"
+            className="mb-3 inline-flex items-center gap-1 text-[12px] text-ink-2 transition-colors duration-150 hover:text-ink tap:mb-1 tap:min-h-11"
           >
             <ArrowLeft size={13} aria-hidden /> {backLabel ?? "Back"}
           </Link>

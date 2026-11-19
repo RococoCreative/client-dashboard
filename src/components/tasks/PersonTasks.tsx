@@ -25,6 +25,7 @@ import { displayName, todayIso } from "../../lib/format.ts";
 import { isDone, sortTasks } from "../../lib/tasks.ts";
 import { listTasks } from "../../services/tasks.ts";
 import type { Profile, TaskWithSteps } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 // How many finished tasks the page keeps in view. The Tasks page has the rest.
 const RECENT_DONE = 5;
@@ -101,7 +102,7 @@ export default function PersonTasks({
     add || moreHref ? (
       <>
         {moreHref ? (
-          <Link to={moreHref} className="text-link text-[13px] font-medium hover:underline">
+          <Link to={moreHref} className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>
             All tasks
           </Link>
         ) : null}

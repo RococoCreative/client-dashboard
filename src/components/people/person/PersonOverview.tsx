@@ -26,6 +26,7 @@ import { formatDate, pluralize } from "../../../lib/format.ts";
 import { divisionLabel, formatTenure, ledBy } from "../../../lib/people.ts";
 import { ROLE_LABELS, type Goal } from "../../../types/database.ts";
 import { reportsTo, type PersonTabProps } from "../../../pages/people/personTabs.ts";
+import { tapTargetClass } from "../../ui/tap.ts";
 
 // One label and its value in the details strip. A value that is a control names it with htmlFor.
 function Detail({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {
@@ -69,14 +70,14 @@ export default function PersonOverview({ companyId, data, person, patch }: Perso
       <Section
         eyebrow="Profile"
         title="Details"
-        actions={isAdmin ? <Link to={`/people/${person.id}/setup`} className="text-link text-[13px] font-medium hover:underline">Edit in Setup</Link> : undefined}
+        actions={isAdmin ? <Link to={`/people/${person.id}/setup`} className={`text-link text-[13px] font-medium hover:underline ${tapTargetClass}`}>Edit in Setup</Link> : undefined}
       >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Detail label="Email">{person.email}</Detail>
           <Detail label="Hired">{person.hire_date ? `${formatDate(person.hire_date)}${tenure ? ` · ${tenure}` : ""}` : "Not set"}</Detail>
           <Detail label="Job role">
             {jobRole && roleName ? (
-              isAdmin ? <Link to={`/people/roles/${jobRole.id}`} className="text-link hover:underline">{roleName}</Link> : roleName
+              isAdmin ? <Link to={`/people/roles/${jobRole.id}`} className={`text-link hover:underline ${tapTargetClass}`}>{roleName}</Link> : roleName
             ) : (
               "Not set"
             )}
@@ -104,7 +105,7 @@ export default function PersonOverview({ companyId, data, person, patch }: Perso
           ) : null}
           {rococo ? null : <PersonTeam companyId={companyId} person={person} people={people} self={self} isAdmin={isAdmin} />}
         </div>
-        <div className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <div className="grid grid-cols-2 content-start gap-3 sm:gap-4 lg:grid-cols-1">
           <Stat label="Latest score" value={<span className={bandClass(latestScored?.result?.overall ?? null)}>{latestScored?.result?.overall ?? "-"}</span>} hint={latestScored?.cycle?.name ?? "Not scored yet"} />
           <Stat label="Average" value={average ?? "-"} hint={pluralize(rows.length, "review")} />
         </div>

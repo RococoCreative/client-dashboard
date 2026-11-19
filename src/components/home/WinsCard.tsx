@@ -12,6 +12,7 @@ import { formatDate } from "../../lib/format.ts";
 import { companyToday, homeCutoff } from "../../lib/wins.ts";
 import { listWins } from "../../services/wins.ts";
 import { WIN_SOURCE_LABELS, type Company } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 export default function WinsCard({ company }: { company: Company }) {
   const companyId = company.id;
@@ -23,7 +24,7 @@ export default function WinsCard({ company }: { company: Company }) {
       eyebrow="Wins"
       title="Recent wins"
       padded={false}
-      actions={<Link to="/wins" className="text-[13px] font-medium text-link hover:underline">All wins</Link>}
+      actions={<Link to="/wins" className={`text-[13px] font-medium text-link hover:underline ${tapTargetClass}`}>All wins</Link>}
     >
       {state.error && !state.data ? (
         <div className="p-5"><Notice tone="error">{state.error}</Notice></div>

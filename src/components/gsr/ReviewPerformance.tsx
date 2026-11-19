@@ -18,8 +18,7 @@ import { errorMessage } from "../../lib/errors.ts";
 import { enqueueWrite } from "../../lib/writeQueue.ts";
 import { displayName, moneyProblem, parseDate, parseMoney, pluralize } from "../../lib/format.ts";
 import type { MetricEntry, Profile, Project, ProjectAssignment, RoleMetric } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
 type EntriesUpdate = (update: (entries: MetricEntry[]) => MetricEntry[]) => void;
 
@@ -50,7 +49,7 @@ function YearToDate({ metric, ytd }: { metric: RoleMetric; ytd: YtdResult }) {
     <div className="w-24 text-right">
       <p className={eyebrowClass}>Year to date</p>
       <p className="tnum mt-0.5 text-sm text-ink">{formatMetricValue(metric, ytd.value)}</p>
-      {ytd.hit === null ? null : <p className={`text-[11.5px] ${ytd.hit ? "text-success" : "text-warning"}`}>{ytd.hit ? "On target" : "Off target"}</p>}
+      {ytd.hit === null ? null : <p className={`text-[12px] ${ytd.hit ? "text-success" : "text-warning"}`}>{ytd.hit ? "On target" : "Off target"}</p>}
     </div>
   );
 }

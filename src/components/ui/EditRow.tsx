@@ -35,8 +35,12 @@ export default function EditRow({
   }
   return (
     <div className="flex items-start justify-between gap-3 border-b border-line py-3">
-      <div className="min-w-0 flex-1">{display}</div>
-      <IconButton label={editLabel} onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+      {/* At least the pencil's height with its content centred, so a one-line display lines up
+          with the pencil beside it instead of sitting above it. */}
+      <div className="min-w-0 flex-1 tap:flex tap:min-h-11 tap:items-center">
+        <div className="w-full min-w-0">{display}</div>
+      </div>
+      <IconButton label={editLabel} onClick={onEdit}>
         <Pencil size={15} aria-hidden="true" />
       </IconButton>
     </div>

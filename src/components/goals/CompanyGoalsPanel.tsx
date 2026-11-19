@@ -19,6 +19,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { createCompanyGoal, deleteCompanyGoal, listCompanyGoals, updateCompanyGoal } from "../../services/gsr.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { CompanyGoal } from "../../types/database.ts";
+import { tapTargetClass } from "../ui/tap.ts";
 
 function GoalDialog({ companyId, year, goal, count, onClose, onSaved }: { companyId: string; year: number; goal: CompanyGoal | null; count: number; onClose: () => void; onSaved: (g: CompanyGoal) => void }) {
   const [name, setName] = useState(goal?.name ?? "");
@@ -60,7 +61,7 @@ function GoalDialog({ companyId, year, goal, count, onClose, onSaved }: { compan
               <input id="cg-current" type="text" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="$6.2M" className={inputClass} />
             </Field>
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink">
+          <label className="flex items-center gap-2 text-sm text-ink tap:min-h-11">
             <input type="checkbox" checked={isHit} onChange={(e) => setIsHit(e.target.checked)} className={checkboxClass} /> Goal hit
           </label>
           {error ? <Notice tone="error">{error}</Notice> : null}
@@ -157,7 +158,7 @@ export default function CompanyGoalsPanel() {
                 <p className="tnum mt-0.5 text-[13px] text-ink-2">{goal.current_display || "-"} of {goal.target_display || "-"}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void toggleHit(goal)} aria-label={goal.is_hit ? "Mark not hit" : "Mark hit"}>
+                <button type="button" onClick={() => void toggleHit(goal)} aria-label={goal.is_hit ? "Mark not hit" : "Mark hit"} className={tapTargetClass}>
                   <Badge tone={goal.is_hit ? "success" : "neutral"}>{goal.is_hit ? "Hit" : "In progress"}</Badge>
                 </button>
                 <IconButton label="Edit goal" onClick={() => setDialog({ goal })}><Pencil size={14} aria-hidden /></IconButton>

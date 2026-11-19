@@ -10,6 +10,7 @@ export default function Section({
   children,
   className = "",
   padded = true,
+  flush = false,
 }: {
   title?: string;
   eyebrow?: string;
@@ -18,6 +19,9 @@ export default function Section({
   children: ReactNode;
   className?: string;
   padded?: boolean;
+  // Pads the body on the sides and bottom but not the top, so a list can sit directly under the
+  // header rule. Off by default; ignored when the body is not padded.
+  flush?: boolean;
 }) {
   const hasHeader = Boolean(title || eyebrow || actions);
   return (
@@ -32,7 +36,7 @@ export default function Section({
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
       )}
-      <div className={padded ? "p-4 sm:p-6" : ""}>{children}</div>
+      <div className={padded ? (flush ? "p-4 pt-0 sm:p-6 sm:pt-0" : "p-4 sm:p-6") : ""}>{children}</div>
     </section>
   );
 }

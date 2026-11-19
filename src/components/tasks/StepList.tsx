@@ -2,16 +2,20 @@
 // also adds, renames, moves and removes them. Every change goes to the database and comes back as
 // the whole task re-read, because a tick can complete the task or reopen it, so the page always
 // shows what the database decided. A finished copy whose next one is open is locked: its steps
-// read as they were left.
+// read as they were left. A step's title reads as text first: ticking and the arrows stay on the
+// row, and the pencil opens the title in place with Remove beside Done, one step at a time.
 import { useState } from "react";
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil } from "lucide-react";
 import BlurInput from "../ui/BlurInput.tsx";
+import Button from "../ui/Button.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import Notice from "../ui/Notice.tsx";
-import { checkboxClass, inputClass } from "../ui/forms.ts";
+import { checkboxClass, checkboxHitClass, inputClass } from "../ui/forms.ts";
+import { metaClass } from "../ui/type.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { addStep, moveStep, removeStep, renameStep, setStepDone } from "../../services/tasks.ts";
 import type { TaskStep, TaskWithSteps } from "../../types/database.ts";
+
 
 function StepRow({
   step,
@@ -20,6 +24,9 @@ function StepRow({
   canTick,
   canEdit,
   busy,
+  editing,
+  onEdit,
+  onDone,
   run,
 }: {
   step: TaskStep;
@@ -28,34 +35,50 @@ function StepRow({
   canTick: boolean;
   canEdit: boolean;
   busy: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
   run: (change: () => Promise<TaskWithSteps>) => Promise<boolean>;
 }) {
   const { id, title } = step;
   const done = step.done_at !== null;
+  const open = canEdit && editing;
   return (
-    <li className="flex items-center gap-3 px-5 py-2.5">
-      <input
-        type="checkbox"
-        aria-label={title}
-        className={checkboxClass}
-        checked={done}
-        disabled={!canTick || busy}
-        onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
-      />
-      {canEdit ? (
-        <>
+    <li className="px-4 py-2 sm:px-6">
+      <div className="flex min-h-11 items-center gap-3 sm:min-h-9">
+        <label className={checkboxHitClass}>
+          <input
+            type="checkbox"
+            aria-label={title}
+            className={checkboxClass}
+            checked={done}
+            disabled={!canTick || busy}
+            onChange={(e) => void run(() => setStepDone(id, e.target.checked))}
+          />
+        </label>
+        {open ? (
           <div className="min-w-0 flex-1">
             <BlurInput value={title} required ariaLabel={`Rename ${title}`} onSave={(next) => run(() => renameStep(id, next.trim()))} className={`${inputClass} mt-0 py-1.5`} />
           </div>
+        ) : (
+          <span className={`min-w-0 flex-1 text-sm [overflow-wrap:anywhere] ${done ? "text-ink-2 line-through" : "text-ink"}`}>{title}</span>
+        )}
+        {canEdit ? (
           <div className="flex shrink-0 items-center">
             <IconButton label={`Move ${title} up`} disabled={first || busy} onClick={() => void run(() => moveStep(id, "up"))}><ArrowUp size={14} aria-hidden /></IconButton>
             <IconButton label={`Move ${title} down`} disabled={last || busy} onClick={() => void run(() => moveStep(id, "down"))}><ArrowDown size={14} aria-hidden /></IconButton>
-            <IconButton label={`Remove ${title}`} disabled={busy} onClick={() => void run(() => removeStep(id))}><X size={14} aria-hidden /></IconButton>
+            {open ? null : (
+              <IconButton label={`Edit ${title}`} onClick={onEdit}><Pencil size={15} aria-hidden /></IconButton>
+            )}
           </div>
-        </>
-      ) : (
-        <span className={`min-w-0 flex-1 text-sm ${done ? "text-ink-2 line-through" : "text-ink"}`}>{title}</span>
-      )}
+        ) : null}
+      </div>
+      {open ? (
+        <div className="mt-2 flex flex-wrap justify-between gap-2">
+          <Button variant="danger" size="sm" aria-label={`Remove ${title}`} disabled={busy} onClick={() => void run(() => removeStep(id))}>Remove</Button>
+          <Button variant="secondary" size="sm" onClick={onDone}>Done</Button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -78,6 +101,8 @@ export default function StepList({
   const [error, setError] = useState("");
   // A new key clears the add field once its step is on the list.
   const [added, setAdded] = useState(0);
+  // One step open for editing at a time.
+  const [openId, setOpenId] = useState<string | null>(null);
   const editable = canEdit && !locked;
 
   // True when the change landed, false once the list shows why not, so a rename that failed never
@@ -86,7 +111,10 @@ export default function StepList({
     setBusy(true);
     setError("");
     try {
-      onChange(await change());
+      const next = await change();
+      onChange(next);
+      // A step that left the list (removed) is let go of, so it can never come back already open.
+      setOpenId((open) => (open !== null && next.steps.some((s) => s.id === open) ? open : null));
       return true;
     } catch (err) {
       setError(errorMessage(err, "That step did not save. Try again."));
@@ -118,19 +146,22 @@ export default function StepList({
               canTick={canTick && !locked}
               canEdit={editable}
               busy={busy}
+              editing={openId === step.id}
+              onEdit={() => setOpenId(step.id)}
+              onDone={() => setOpenId(null)}
               run={run}
             />
           ))}
         </ul>
       ) : (
-        <p className="px-5 py-3 text-[13px] text-ink-2">No steps yet.</p>
+        <p className={`px-4 py-3 sm:px-6 ${metaClass}`}>No steps yet.</p>
       )}
       {editable ? (
-        <div className="border-t border-line px-5 py-3">
+        <div className="border-t border-line px-4 py-3 sm:px-6">
           <BlurInput key={added} value="" ariaLabel="Add a step" placeholder="Add a step" disabled={busy} onSave={add} className={`${inputClass} mt-0`} />
         </div>
       ) : null}
-      {error ? <Notice tone="error" className="mx-5 my-3">{error}</Notice> : null}
+      {error ? <Notice tone="error" className="mx-4 my-3 sm:mx-6">{error}</Notice> : null}
     </div>
   );
 }

@@ -34,7 +34,10 @@ describe("ProgressSlider", () => {
     await act(async () => {});
     expect(slider).toHaveValue("40");
     expect(slider).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Not saved. The completion went back to what is stored.")).toBeInTheDocument();
+    const note = screen.getByText("Not saved");
+    expect(note).toBeVisible();
+    expect(note).not.toHaveClass("sr-only");
+    expect(slider).toHaveAttribute("aria-describedby", note.id);
   });
 
   it("rolls back when the save rejects", async () => {
@@ -55,6 +58,33 @@ describe("ProgressSlider", () => {
     await act(async () => {});
     expect(commit).toHaveBeenCalledTimes(2);
     expect(slider).toHaveValue("70");
+    expect(slider).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("clears Not saved after a later successful save", async () => {
+    const commit = vi.fn<(next: number, set: (v: number) => void) => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockImplementationOnce(async (next, set) => { set(next); return true; });
+    render(<Harness onCommit={commit} />);
+    drag(70);
+    await act(async () => {});
+    expect(screen.getByText("Not saved")).toBeVisible();
+    const slider = drag(70);
+    await act(async () => {});
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(slider).not.toHaveAttribute("aria-invalid");
+    expect(slider).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("clears Not saved when the thumb returns to the stored value", async () => {
+    render(<Harness onCommit={async () => false} />);
+    const slider = drag(70);
+    await act(async () => {});
+    expect(screen.getByText("Not saved")).toBeVisible();
+    fireEvent.change(slider, { target: { value: "55" } });
+    expect(screen.getByText("Not saved")).toBeVisible();
+    fireEvent.change(slider, { target: { value: "40" } });
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
     expect(slider).not.toHaveAttribute("aria-invalid");
   });
 
