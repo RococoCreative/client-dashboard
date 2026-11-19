@@ -56,6 +56,7 @@ import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
 import SopEditPage from "./sops/SopEditPage.tsx";
 import ResourcesPage from "./resources/ResourcesPage.tsx";
@@ -1039,16 +1040,16 @@ describe("sign-off", () => {
 
 describe("job roles", () => {
   it("manages job roles and their modules in settings, and lists the goals each one brings", async () => {
-    renderWithHub(<SettingsPage tab="roles" />, admin);
-    expect(await screen.findByText("Job roles")).toBeInTheDocument();
+    renderWithHub(<RolesPage />, admin);
+    expect(await screen.findByRole("heading", { name: "Job roles" })).toBeInTheDocument();
     // Klasik's one role so far, with the module it carries and the goal it brings, which is edited
-    // in Goals > By role and linked from the card.
+    // on People > Roles and linked from the card.
     expect(await screen.findByLabelText("Name for Production Manager")).toHaveValue("Production Manager");
     expect(screen.getByLabelText(/^Financial figures .* for Production Manager$/)).toBeChecked();
     const card = screen.getByLabelText("Name for Production Manager").closest("li") as HTMLElement;
     expect(within(card).getByText("Walk every active site once a week")).toBeInTheDocument();
     expect(within(card).queryByLabelText("Role goal Walk every active site once a week")).not.toBeInTheDocument();
-    expect(within(card).getByRole("link", { name: "Edit in Goals, By role" })).toHaveAttribute("href", `/goals/roles#role-goals-${KLASIK.jobRoles[0].id}`);
+    expect(within(card).getByRole("link", { name: "Edit in Goals, By role" })).toHaveAttribute("href", `/people/roles#role-goals-${KLASIK.jobRoles[0].id}`);
     await userEvent.type(screen.getByLabelText("Add a job role"), "Estimator");
     await userEvent.click(screen.getByRole("button", { name: "Add role" }));
     expect(await screen.findByLabelText("Name for Estimator")).toHaveValue("Estimator");
@@ -2042,16 +2043,14 @@ describe("roles", () => {
   });
 
   it("offers Owner only to an owner", async () => {
-    const first = renderWithHub(<PeoplePage />, kingdomAdmin);
-    const dana = await screen.findByLabelText("Role for Dana Whitfield");
-    expect(optionsOf(dana)).toEqual(["Admin", "Manager", "Employee"]);
-    const marcus = screen.getByLabelText("Role for Marcus Lee");
-    expect(marcus).toBeDisabled();
-    expect(marcus).toHaveDisplayValue("Owner");
-    expect(marcus).toHaveAttribute("title", "Only an owner or Rococo can change this person's role.");
+    // The role is changed on the person page; the roster only reads it.
+    const dana = KINGDOM.profiles.find((p) => p.full_name === "Dana Whitfield")!;
+    const route = { path: `/people/${dana.id}`, pattern: "/people/:profileId" };
+    const first = renderWithHub(<PersonPage />, kingdomAdmin, route);
+    expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Admin", "Manager", "Employee"]);
     first.unmount();
-    renderWithHub(<PeoplePage />, kingdomOwner);
-    expect(optionsOf(await screen.findByLabelText("Role for Dana Whitfield"))).toEqual(["Owner", "Admin", "Manager", "Employee"]);
+    renderWithHub(<PersonPage />, kingdomOwner, route);
+    expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Owner", "Admin", "Manager", "Employee"]);
   });
 
   it("leaves the row actions for someone ranked above an admin to an owner or Rococo", async () => {
@@ -2119,8 +2118,9 @@ describe("roles", () => {
   });
 
   it("leaves Klasik's roster as it was, plus the Manager value", async () => {
-    renderWithHub(<PeoplePage />, admin);
-    expect(optionsOf(await screen.findByLabelText("Role for Sam Ortega"))).toEqual(["Admin", "Manager", "Employee"]);
+    const sam = KLASIK.profiles.find((p) => p.full_name === "Sam Ortega")!;
+    renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+    expect(optionsOf(await screen.findByLabelText("Role"))).toEqual(["Admin", "Manager", "Employee"]);
   });
 });
 

@@ -162,7 +162,7 @@ describe("people", () => {
       expect(within(row).queryByRole("button", { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument();
       expect(within(row).getByText("Rococo Creative")).toBeInTheDocument();
       // Everyone else keeps their controls.
-      expect(screen.getByRole("combobox", { name: "Role for Taylor Reed" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Deactivate Taylor Reed" })).toBeInTheDocument();
     } finally {
       ctl.state.extraProfiles = [];
     }
@@ -189,12 +189,12 @@ describe("people", () => {
   it("opens a confirm dialog clean after an unrelated failure, and shows its own", async () => {
     const user = userEvent.setup();
     renderWithHub(<PeoplePage />, admin);
-    ctl.failures.set("updateProfile", new Error("The role did not save."));
-    await user.selectOptions(await screen.findByRole("combobox", { name: "Role for Taylor Reed" }), "admin");
-    expect(await screen.findByText("The role did not save.")).toBeInTheDocument();
+    ctl.failures.set("updateProfile", new Error("The change did not save."));
+    await user.click(await screen.findByRole("button", { name: "Deactivate Taylor Reed" }));
+    expect(await screen.findByText("The change did not save.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel the invitation for Avery Cole" }));
-    expect(within(dialog()).queryByText("The role did not save.")).not.toBeInTheDocument();
+    expect(within(dialog()).queryByText("The change did not save.")).not.toBeInTheDocument();
 
     ctl.failures.set("deleteInvitation", new Error("The invitation could not be cancelled."));
     await user.click(within(dialog()).getByRole("button", { name: "Cancel invitation" }));

@@ -44,6 +44,7 @@ import { deleteJobRole } from "../services/jobRoles.ts";
 import { makeHub } from "../test/fixtures.ts";
 import GoalsPage from "./gsr/GoalsPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 
 const admin = makeHub("admin");
 
@@ -58,10 +59,10 @@ function pending() {
 
 const dropped = "The connection dropped. Check your signal and try again.";
 
-// Settings > Roles with a second job role beside the seeded Production Manager. The mock keeps
+// People > Roles with a second job role beside the seeded Production Manager. The mock keeps
 // what a test adds for the rest of the file, so each test names its own.
 async function renderRolesWith(user: ReturnType<typeof userEvent.setup>, name: string) {
-  renderWithHub(<SettingsPage tab="roles" />, admin);
+  renderWithHub(<RolesPage />, admin);
   await screen.findByLabelText("Name for Production Manager");
   await user.type(screen.getByLabelText("Add a job role"), name);
   await user.click(screen.getByRole("button", { name: "Add role" }));

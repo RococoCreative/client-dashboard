@@ -185,12 +185,12 @@ describe("standard milestones in Settings", () => {
   const titles = () => screen.getAllByLabelText(/^Title of /).map((el) => (el as HTMLInputElement).value);
 
   it("Settings shows a Production tab only when the company has the production module", async () => {
-    const view = renderWithHub(<SettingsPage tab="roles" />, kingdomAdmin, { path: "/settings/roles", pattern: "/settings/roles" });
+    const view = renderWithHub(<SettingsPage tab="company" />, kingdomAdmin, { path: "/settings/company", pattern: "/settings/company" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Company", "Roles", "Reviews", "Production", "Connections"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Company", "Reviews", "Production", "Connections"]);
     view.unmount();
 
-    const klasik = renderWithHub(<SettingsPage tab="roles" />, makeHub("admin", KLASIK.company), { path: "/settings/roles", pattern: "/settings/roles" });
+    const klasik = renderWithHub(<SettingsPage tab="company" />, makeHub("admin", KLASIK.company), { path: "/settings/company", pattern: "/settings/company" });
     const klasikNav = await screen.findByRole("navigation", { name: "Settings" });
     expect(within(klasikNav).queryByRole("link", { name: "Production" })).toBeNull();
     klasik.unmount();

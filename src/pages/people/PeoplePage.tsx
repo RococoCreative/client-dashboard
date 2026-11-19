@@ -31,7 +31,7 @@ import Field from "../../components/ui/Field.tsx";
 import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
-import PageHeader from "../../components/ui/PageHeader.tsx";
+import PeopleHeader from "../../components/people/PeopleHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { checkboxClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
@@ -435,14 +435,8 @@ export default function PeoplePage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow={company!.name}
-        title={teamView ? "Your team" : "People"}
-        description={
-          teamView
-            ? "The people who report to you, and their teams. Open someone for their profile, goals and tasks."
-            : "Everyone on the team. Set someone up in full before you invite them; the invitation is the last step, not the first."
-        }
+      <PeopleHeader
+        tab="roster"
         actions={
           teamView ? (
             <Link to={`/people/${profile.id}`} className="text-sm font-medium text-link hover:text-accent-hover">
@@ -523,21 +517,8 @@ export default function PeoplePage() {
                         <td className={`${tdClass} py-2`}>
                           {rococo ? (
                             <Badge>Rococo Creative</Badge>
-                          ) : teamView ? (
-                            <span className="text-[13px] text-ink-2">{ROLE_LABELS[person.role]}</span>
                           ) : (
-                            <select
-                              value={person.role}
-                              disabled={self || !canChange}
-                              aria-label={`Role for ${displayName(person)}`}
-                              title={!canChange && !self ? "Only an owner or Rococo can change this person's role." : undefined}
-                              onChange={(e) => void patchPerson(person, { role: e.target.value as Role })}
-                              className={`${selectClass} mt-0 w-auto py-1 text-[12px]`}
-                            >
-                              {(canChange ? grantableRoles(profile) : [person.role]).map((r) => (
-                                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                              ))}
-                            </select>
+                            <span className="text-[13px] text-ink-2">{ROLE_LABELS[person.role]}</span>
                           )}
                         </td>
                         <td className={`${tdClass} py-2`}>

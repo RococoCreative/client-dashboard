@@ -38,6 +38,8 @@ import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
 import PeoplePage from "./pages/people/PeoplePage.tsx";
 import PersonPage from "./pages/people/PersonPage.tsx";
+import DivisionsPage from "./pages/people/DivisionsPage.tsx";
+import RolesPage from "./pages/people/RolesPage.tsx";
 import SopPage from "./pages/sops/SopPage.tsx";
 import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
@@ -477,6 +479,8 @@ function SignedIn({ session }: { session: Session }) {
                 marks one item for it, not Reviews as well. */}
             <Route path="scorecards" element={<AdminOnly><ScorecardsPage /></AdminOnly>} />
             {/* Where these used to live. Old bookmarks and links land on the tab that holds them now. */}
+            <Route path="settings/roles" element={<RedirectTo path="/people/roles" />} />
+            <Route path="goals/roles" element={<RedirectTo path="/people/roles" />} />
             <Route path="reviews/settings" element={<RedirectTo path="/settings/reviews" />} />
             <Route path="gsr/settings" element={<RedirectTo path="/settings/reviews" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
@@ -490,6 +494,9 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="my/reviews" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyReviewsPage /></WithCompany>} />
             <Route path="my/goals" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGoalsPage /></WithCompany>} />
             <Route path="people" element={<LeadOnly><PeoplePage /></LeadOnly>} />
+            <Route path="people/roles" element={<AdminOnly><RolesPage /></AdminOnly>} />
+            <Route path="people/roles/:roleId" element={<AdminOnly><RolesPage /></AdminOnly>} />
+            <Route path="people/divisions" element={<AdminOnly><DivisionsPage /></AdminOnly>} />
             <Route path="people/:profileId" element={<LeadOnly><PersonPage /></LeadOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />

@@ -146,7 +146,7 @@ export default function RoleGoalsPanel({ companyId }: { companyId: string }) {
       title="Role goals"
       description="The goals a job role brings into every month's Goal Setting Review for the people in it. In the month, Add role goals files them for the person in one click. Roles are set up in Settings, Roles."
       actions={
-        <Link to="/settings/roles">
+        <Link to="/people/roles">
           <Button variant="secondary" size="sm">Job roles</Button>
         </Link>
       }
@@ -183,7 +183,7 @@ export default function RoleGoalsPanel({ companyId }: { companyId: string }) {
           title="No job roles yet"
           body="Role goals belong to a job role. An admin adds the company's job roles in Settings, Roles, then sets each role's goals here."
           action={
-            <Link to="/settings/roles">
+            <Link to="/people/roles">
               <Button>Add job roles</Button>
             </Link>
           }

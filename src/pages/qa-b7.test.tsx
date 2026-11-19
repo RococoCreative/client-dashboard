@@ -64,11 +64,11 @@ import { deleteCriterion, deletePillar, updatePillar } from "../services/gsr.ts"
 import { removeCompanyFiles } from "../services/storage.ts";
 import { disconnectConnection } from "../services/connections.ts";
 import { KLASIK, makeHub } from "../test/fixtures.ts";
-import GoalsPage from "./gsr/GoalsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 
 const admin = makeHub("admin");
 const rococo = makeHub("rococo", null);
@@ -112,15 +112,15 @@ describe("name boxes that cannot be emptied", () => {
     await expectClearRestores(user, "Line Base salary", "Base salary");
   });
 
-  it("puts back a cleared job role name in Settings > Roles", async () => {
+  it("puts back a cleared job role name on People > Roles", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, admin);
+    renderWithHub(<RolesPage />, admin);
     await expectClearRestores(user, "Name for Production Manager", "Production Manager");
   });
 
-  it("puts back a cleared role goal in Goals > By role", async () => {
+  it("puts back a cleared role goal on People > Roles", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GoalsPage tab="roles" />, admin);
+    renderWithHub(<RolesPage />, admin);
     await expectClearRestores(user, "Role goal Walk every active site once a week", "Walk every active site once a week");
   });
 
@@ -270,7 +270,7 @@ describe("deleting a pillar or criterion", () => {
 describe("retiring a job role", () => {
   it("says what retiring does, on the panel and on a retired role", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, admin);
+    renderWithHub(<RolesPage />, admin);
     expect(await screen.findByText(/Retiring a role keeps it on record/)).toBeInTheDocument();
     const card = (await screen.findByLabelText("Name for Production Manager")).closest("li") as HTMLElement;
     await user.click(within(card).getByRole("button", { name: "Retire" }));

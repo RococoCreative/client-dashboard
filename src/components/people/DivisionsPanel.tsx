@@ -1,4 +1,4 @@
-// The company's divisions, for an admin in Company Settings: the parts it splits into for
+// The company's divisions, for an admin on People, Divisions: the parts it splits into for
 // reporting, such as two regions or two offices. Each is a company row (rule 12), added, renamed
 // on blur and removed here; a person's divisions are set on their person page. Divisions decide
 // who sees whom (0038), so only a full-scope admin (an owner, Rococo, or an admin who sees every

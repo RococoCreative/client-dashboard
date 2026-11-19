@@ -256,7 +256,7 @@ export default function ScorecardsPage() {
           eyebrow="Scorecards"
           title="No scorecard metrics yet"
           body="An admin adds the metrics each job role is scored on in Settings, Roles. Then each person's monthly results are entered on their profile, and they gather here."
-          action={<Link to="/settings/roles"><Button variant="secondary">Open Settings, Roles</Button></Link>}
+          action={<Link to="/people/roles"><Button variant="secondary">Open Settings, Roles</Button></Link>}
         />
       ) : !results.data && !results.error ? (
         <SkeletonRows rows={6} />

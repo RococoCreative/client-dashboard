@@ -44,7 +44,8 @@ import { KINGDOM, RBA, makeHub } from "../test/fixtures.ts";
 import type { HubValue } from "../context/HubContext.tsx";
 import { LeadOnly } from "../App.tsx";
 import AttentionCard from "../components/home/AttentionCard.tsx";
-import DivisionsPanel from "../components/settings/DivisionsPanel.tsx";
+import { ROLE_LABELS } from "../types/database.ts";
+import DivisionsPanel from "../components/people/DivisionsPanel.tsx";
 import DashboardPage from "./DashboardPage.tsx";
 import PeoplePage from "./people/PeoplePage.tsx";
 import ProjectPage from "./production/ProjectPage.tsx";
@@ -102,7 +103,8 @@ describe("People tab for an admin", () => {
     expect(within(rowOf("Kai Bennett")).getByText("RBA North")).toBeInTheDocument();
     expect(within(rowOf("Kai Bennett")).getByText("Not invited")).toBeInTheDocument();
     expect(within(rowOf("Alex Morgan (you)")).getByText("Nobody")).toBeInTheDocument();
-    expect(within(rowOf("Kai Bennett")).getByRole("combobox", { name: "Role for Kai Bennett" })).toBeInTheDocument();
+    expect(within(rowOf("Kai Bennett")).getByText(ROLE_LABELS[kai.role])).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^Role for / })).not.toBeInTheDocument();
   });
 
   it("narrows to one division, to Both, and to No division", async () => {

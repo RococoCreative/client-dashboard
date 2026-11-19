@@ -263,7 +263,7 @@ export default function PersonScorecard({
       {roleName ?? "This role"} has no scorecard metrics yet.
       {canEdit ? (
         <>
-          {" "}Admins add a role's metrics in <Link to="/settings/roles" className="text-link hover:underline">Settings, Roles</Link>.
+          {" "}Admins add a role's metrics in <Link to="/people/roles" className="text-link hover:underline">Settings, Roles</Link>.
         </>
       ) : null}
     </p>

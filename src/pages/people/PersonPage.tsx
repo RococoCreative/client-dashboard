@@ -690,7 +690,7 @@ export default function PersonPage() {
                   </select>
                   {jobRoles.length === 0 ? (
                     <p className="mt-1 text-[12px] text-ink-3">
-                      No job roles yet. Admins add them in <Link to="/settings/roles" className="text-link hover:underline">Settings, Roles</Link>.
+                      No job roles yet. Admins add them in <Link to="/people/roles" className="text-link hover:underline">Settings, Roles</Link>.
                     </p>
                   ) : null}
                   {roleRetired && jobRole ? (

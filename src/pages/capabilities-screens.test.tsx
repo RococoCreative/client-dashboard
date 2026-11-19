@@ -130,31 +130,31 @@ describe("an admin without company_settings", () => {
 
   it("has no Company tab", async () => {
     setMockCapabilities(kingdom, { company_settings: "owner" });
-    renderWithHub(<SettingsPage tab="roles" />, adminHub, { path: "/settings/roles", pattern: "/settings/roles" });
+    renderWithHub(<SettingsPage tab="reviews" />, adminHub, { path: "/settings/reviews", pattern: "/settings/reviews" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Roles", "Reviews", "Production", "Connections"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Reviews", "Production", "Connections"]);
     expect(within(nav).queryByRole("link", { name: "Company" })).toBeNull();
-    expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["roles", "reviews", "production", "connections"]);
+    expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["reviews", "production", "connections"]);
   });
 
-  it("lands on Roles from /settings", async () => {
+  it("lands on Reviews from /settings", async () => {
     signInThrough("/settings");
-    await waitFor(() => expect(window.location.pathname).toBe("/settings/roles"));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/reviews"));
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 
-  it("is sent to Roles from /settings/company", async () => {
+  it("is sent to Reviews from /settings/company", async () => {
     signInThrough("/settings/company");
-    await waitFor(() => expect(window.location.pathname).toBe("/settings/roles"));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/reviews"));
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Company" })).toBeNull();
   });
 });
 
-it("lists six tabs in all, an admin by default gets five with Company first, and Rococo stepped in gets all six", () => {
-  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
-  expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections"]);
-  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can, KINGDOM.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
+it("lists five tabs in all, an admin by default gets four with Company first, and Rococo stepped in gets all five", () => {
+  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "reviews", "production", "connections", "activity"]);
+  expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["company", "reviews", "production", "connections"]);
+  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can, KINGDOM.company).map((t) => t.key)).toEqual(["company", "reviews", "production", "connections", "activity"]);
 });
 
 describe("the company Activity tab", () => {
@@ -212,7 +212,7 @@ describe("the company Activity tab", () => {
 
   it("an admin without audit_log has no Activity tab and /settings/activity sends them to their first tab", async () => {
     const hub = makeHub("admin", KINGDOM.company);
-    renderWithHub(<SettingsPage tab="roles" />, hub, { path: "/settings/roles", pattern: "/settings/roles" });
+    renderWithHub(<SettingsPage tab="reviews" />, hub, { path: "/settings/reviews", pattern: "/settings/reviews" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
     expect(within(nav).queryByRole("link", { name: "Activity" })).toBeNull();
     window.history.pushState({}, "", "/settings/activity?persona=admin&company=kingdom");
