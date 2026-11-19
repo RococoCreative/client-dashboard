@@ -89,7 +89,7 @@ function RecentSops({ sops }: { sops: Sop[] }) {
       {sops.map((sop) => (
         <li key={sop.id} className="flex items-center justify-between gap-3 py-2.5">
           <div className="min-w-0">
-            <Link to={`/sops/${sop.id}`} className="block truncate text-sm text-ink hover:text-accent">
+            <Link to={`/sops/${sop.id}`} className="block truncate text-sm text-ink hover:text-link">
               {sop.title}
             </Link>
             <p className="text-[12px] text-ink-3">
@@ -779,7 +779,7 @@ function EmployeeDashboard() {
               <div className="min-w-0 text-sm">
                 <Badge tone={REVIEW_STATUS_TONE[featured.review.status]}>{REVIEW_STATUS_LABELS[featured.review.status]}</Badge>
                 <p className="mt-2 text-ink-2">{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : ""}</p>
-                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-accent hover:underline">
+                <Link to={featured.cycle ? reviewPath(featured.review.id, featured.cycle.cadence) : "/my/reviews"} className="mt-2 inline-block text-link hover:underline">
                   View review
                 </Link>
               </div>

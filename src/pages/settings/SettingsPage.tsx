@@ -1,7 +1,6 @@
 // Settings, for a company admin: one page, one tab per area, each tab its own route.
 //   Company: name, logo and time zone, plus the theme and sign-in domains, which Rococo manages
 //     (they decide who can sign in), so they read only here.
-//   Roles: the company's job roles (dashboard modules and scorecard metrics) and its divisions.
 //   Reviews: pillars, weights and criteria, the Monthly GSRs rule, and deliverable categories.
 //   Production: the standard milestones every new project starts with, for a company with the
 //     production module.
@@ -22,8 +21,6 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import ConnectionsPanel from "../../components/settings/ConnectionsPanel.tsx";
 import DataSourcesPanel from "../../components/settings/DataSourcesPanel.tsx";
 import DeliverableCategoriesPanel from "../../components/settings/DeliverableCategoriesPanel.tsx";
-import DivisionsPanel from "../../components/settings/DivisionsPanel.tsx";
-import JobRolesPanel from "../../components/settings/JobRolesPanel.tsx";
 import MilestoneTemplatePanel from "../../components/settings/MilestoneTemplatePanel.tsx";
 import PillarsPanel from "../../components/settings/PillarsPanel.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
@@ -47,7 +44,6 @@ function timeZones(): string[] {
 
 const DESCRIPTIONS: Record<SettingsTab, string> = {
   company: "How the company appears in the hub and who can sign in.",
-  roles: "The jobs people do here, what each role sees and is scored on, and the divisions the company reports by.",
   reviews: "How people are reviewed: the pillars and their weights, the criteria rated, the Monthly GSRs rule, and the categories deliverables are filed under.",
   production: "The milestones and letters every new project starts with.",
   connections: "The company's own accounts in outside systems, and the sources the hub reads from them.",
@@ -132,6 +128,9 @@ function CompanyTab({ company }: { company: Company }) {
         </dl>
         {!isRococo ? <p className="mt-4 text-[12px] text-ink-3">To change the theme or domains, ask Rococo Creative.</p> : null}
       </Section>
+      <p className="text-[13px] text-ink-2 lg:col-span-3">
+        Job roles and divisions are under People: <Link to="/people/roles" className="text-link hover:underline">Roles</Link> and <Link to="/people/divisions" className="text-link hover:underline">Divisions</Link>.
+      </p>
     </div>
   );
 }
@@ -166,12 +165,6 @@ export default function SettingsPage({ tab }: { tab: SettingsTab }) {
       <PageHeader eyebrow={current.name} title="Settings" description={DESCRIPTIONS[tab]} />
       <Tabs items={settingsTabsFor(can, current)} label="Settings" />
       {tab === "company" ? <CompanyTab company={current} /> : null}
-      {tab === "roles" ? (
-        <div className="space-y-6">
-          <JobRolesPanel companyId={current.id} />
-          <DivisionsPanel companyId={current.id} />
-        </div>
-      ) : null}
       {tab === "reviews" ? (
         <div className="space-y-6">
           <PillarsPanel />

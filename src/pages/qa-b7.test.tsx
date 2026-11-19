@@ -64,19 +64,20 @@ import { deleteCriterion, deletePillar, updatePillar } from "../services/gsr.ts"
 import { removeCompanyFiles } from "../services/storage.ts";
 import { disconnectConnection } from "../services/connections.ts";
 import { KLASIK, makeHub } from "../test/fixtures.ts";
-import GoalsPage from "./gsr/GoalsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
+import RolesPage from "./people/RolesPage.tsx";
 
 const admin = makeHub("admin");
 const rococo = makeHub("rococo", null);
 const sam = KLASIK.profiles[1];
 const inProgressReview = KLASIK.reviews.find((r) => r.status === "in_progress")!;
 
-function renderPerson() {
-  return renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+// Sam's person page on a tab: Reviews holds the deliverables unless another is named.
+function renderPerson(tab = "reviews") {
+  return renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}/${tab}`, pattern: "/people/:profileId/:tab?" });
 }
 
 // A call that stays in flight until the test settles it, so a test can act while it runs.
@@ -105,22 +106,25 @@ async function expectClearRestores(user: ReturnType<typeof userEvent.setup>, lab
 describe("name boxes that cannot be emptied", () => {
   it("puts back a cleared figure, KPI or pay line name on the person page", async () => {
     const user = userEvent.setup();
-    renderPerson();
+    renderPerson("scorecard");
     expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
     await expectClearRestores(user, "Figure Revenue managed", "Revenue managed");
     await expectClearRestores(user, "KPI $2M in newly closed sales", "$2M in newly closed sales");
+    await user.click(screen.getByRole("link", { name: "Setup" }));
     await expectClearRestores(user, "Line Base salary", "Base salary");
   });
 
-  it("puts back a cleared job role name in Settings > Roles", async () => {
+  it("puts back a cleared job role name on People > Roles", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, admin);
+    renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    await user.click(await screen.findByRole("button", { name: "Rename role" }));
     await expectClearRestores(user, "Name for Production Manager", "Production Manager");
   });
 
-  it("puts back a cleared role goal in Goals > By role", async () => {
+  it("puts back a cleared role goal on People > Roles", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GoalsPage tab="roles" />, admin);
+    renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    await user.click(await screen.findByRole("button", { name: "Edit role goal Walk every active site once a week" }));
     await expectClearRestores(user, "Role goal Walk every active site once a week", "Walk every active site once a week");
   });
 
@@ -268,16 +272,18 @@ describe("deleting a pillar or criterion", () => {
 });
 
 describe("retiring a job role", () => {
-  it("says what retiring does, on the panel and on a retired role", async () => {
+  it("says what retiring does, on the role and in the list", async () => {
     const user = userEvent.setup();
-    renderWithHub(<SettingsPage tab="roles" />, admin);
-    expect(await screen.findByText(/Retiring a role keeps it on record/)).toBeInTheDocument();
-    const card = (await screen.findByLabelText("Name for Production Manager")).closest("li") as HTMLElement;
-    await user.click(within(card).getByRole("button", { name: "Retire" }));
-    expect(await within(card).findByText("Retired")).toBeInTheDocument();
-    expect(card).toHaveTextContent("no longer adds its dashboard modules or its role goals");
-    await user.click(within(card).getByRole("button", { name: "Restore" }));
-    await waitFor(() => expect(within(card).queryByText("Retired")).not.toBeInTheDocument());
+    renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    await screen.findByRole("heading", { level: 2, name: "Production Manager" });
+    expect(screen.getByText(/Retiring a role keeps it on record/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retire" }));
+    expect(await screen.findByText("Retired", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText(/no longer adds its dashboard modules or its role goals/)).toBeInTheDocument();
+    expect(screen.getByText("Retired roles (1)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await waitFor(() => expect(screen.queryByText("Retired", { selector: "span" })).not.toBeInTheDocument());
+    expect(screen.queryByText("Retired roles (1)")).not.toBeInTheDocument();
   });
 });
 

@@ -19,7 +19,7 @@ export default function WhereWorkLivesCard({ companyId, isAdmin, className = "" 
       title="Where the work lives"
       className={className}
       actions={
-        <Link to="/resources/links" className="text-[13px] font-medium text-accent hover:underline">
+        <Link to="/resources/links" className="text-[13px] font-medium text-link hover:underline">
           {isAdmin ? "Manage links" : "All links"}
         </Link>
       }
@@ -31,7 +31,7 @@ export default function WhereWorkLivesCard({ companyId, isAdmin, className = "" 
           {isAdmin ? (
             <>
               No links yet. Add the programs the team works in, such as Monday boards, in{" "}
-              <Link to="/resources/links" className="text-accent hover:underline">Resources, Links</Link>, and they show here for everyone.
+              <Link to="/resources/links" className="text-link hover:underline">Resources, Links</Link>, and they show here for everyone.
             </>
           ) : (
             "No links yet. Your admins add the programs the team works in, and they show here."

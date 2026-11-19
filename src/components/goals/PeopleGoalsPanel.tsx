@@ -76,7 +76,7 @@ export default function PeopleGoalsPanel() {
           <p className="text-sm text-ink-2">{shown.length === 0 ? `No goals filed for ${year} yet.` : `${hit} of ${pluralize(shown.length, "goal")} for ${year} hit so far.`}</p>
           {roster.map(({ person, goals: own }) =>
             own.length === 0 ? null : (
-              <Section key={person.id} eyebrow={person.title ?? ""} title={displayName(person)} padded={false} actions={<Link to={`/people/${person.id}`} className="text-[13px] text-accent hover:underline">Open profile</Link>}>
+              <Section key={person.id} eyebrow={person.title ?? ""} title={displayName(person)} padded={false} actions={<Link to={`/people/${person.id}`} className="text-[13px] text-link hover:underline">Open profile</Link>}>
                 <ul className="divide-y divide-line">
                   {own.map((goal) => {
                     const result = outcome(goal);

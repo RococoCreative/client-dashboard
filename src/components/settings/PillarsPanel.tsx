@@ -313,7 +313,7 @@ export default function PillarsPanel() {
               {pillar.scoring_type === "gsr_goals" ? (
                 <p className="mt-5 border-t border-line pt-4 text-[13px] leading-relaxed text-ink-2">
                   Scored from the Goal Setting Reviews inside each review's period. A month carries {pluralize(pillar.required_goals, "mandatory GSR")}, the focus topic's GSR first and then role and professional goals, and adds up the completion of all its goals up to {pillar.required_goals * 100}%: a stretch goal adds to the total and never lowers it. A month counts once an admin marks its GSR complete, which locks its score in. The months are written into the review as one line item when it is marked complete. Each month's focus topic is planned in{" "}
-                  <Link to="/goals/focus" className="text-accent hover:underline">Goals, Monthly focus</Link>.
+                  <Link to="/goals/focus" className="text-link hover:underline">Goals, Monthly focus</Link>.
                 </p>
               ) : null}
               {pillar.scoring_type === "rating" ? (

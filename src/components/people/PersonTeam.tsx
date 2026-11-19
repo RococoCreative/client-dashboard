@@ -63,7 +63,7 @@ function TeamRow({ node, divisions, depth }: { node: Node; divisions: readonly C
       <div className="flex items-center gap-3 border-b border-line py-2" style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}>
         <Avatar person={person} size={24} />
         <div className="min-w-0 flex-1">
-          <Link to={`/people/${person.id}`} className="text-sm font-medium text-ink hover:text-accent">
+          <Link to={`/people/${person.id}`} className="text-sm font-medium text-ink hover:text-link">
             {displayName(person)}
           </Link>
           <p className="truncate text-[12px] text-ink-3">

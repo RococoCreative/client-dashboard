@@ -126,8 +126,9 @@ function spyList() {
   onTestFinished(() => spy.mockRestore());
   return spy;
 }
-function renderPerson(id: string, hub: HubValue) {
-  return renderWithHub(<PersonPage />, hub, { path: `/people/${id}`, pattern: "/people/:profileId" });
+// The person page on a tab, their Tasks unless another is named.
+function renderPerson(id: string, hub: HubValue, tab: string | null = "tasks") {
+  return renderWithHub(<PersonPage />, hub, { path: tab ? `/people/${id}/${tab}` : `/people/${id}`, pattern: "/people/:profileId/:tab?" });
 }
 // A campaign's card on the Marketing board, found by its name.
 function cardOf(name: string): HTMLElement {
@@ -583,8 +584,9 @@ describe("tasks: on a campaign and on a person", () => {
 
   it("shows no Tasks section on a person page for a company without the module, and asks for no tasks", async () => {
     const list = spyList();
-    renderPerson(KLASIK.profiles[1].id, makeHub("admin", KLASIK.company));
-    await screen.findByRole("heading", { name: "Personal KPIs" });
+    renderPerson(KLASIK.profiles[1].id, makeHub("admin", KLASIK.company), null);
+    await screen.findByRole("heading", { name: "Details" });
+    expect(screen.queryByRole("link", { name: "Tasks" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Tasks" })).not.toBeInTheDocument();
     expect(screen.queryByText("No open tasks.")).not.toBeInTheDocument();
     expect(list).not.toHaveBeenCalled();

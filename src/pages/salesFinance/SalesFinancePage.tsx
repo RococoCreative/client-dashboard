@@ -43,12 +43,12 @@ export default function SalesFinancePage() {
       <p className="mt-4 text-[12.5px] text-ink-2">
         {company!.manual_financials ? (
           <>
-            The manual <Link to="/financials" className="text-accent hover:underline">Financials</Link> and{" "}
-            <Link to="/marketing" className="text-accent hover:underline">Marketing</Link> pages sit in this section too.
+            The manual <Link to="/financials" className="text-link hover:underline">Financials</Link> and{" "}
+            <Link to="/marketing" className="text-link hover:underline">Marketing</Link> pages sit in this section too.
           </>
         ) : (
           <>
-            The <Link to="/marketing" className="text-accent hover:underline">Marketing</Link> page sits in this section too.
+            The <Link to="/marketing" className="text-link hover:underline">Marketing</Link> page sits in this section too.
           </>
         )}
       </p>

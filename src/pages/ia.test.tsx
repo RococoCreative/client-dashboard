@@ -47,6 +47,7 @@ import ResourcesPage from "./resources/ResourcesPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import { GOALS_TABS } from "./gsr/goalsTabs.ts";
 import { SETTINGS_TABS } from "./settings/settingsTabs.ts";
+import RolesPage from "./people/RolesPage.tsx";
 
 const admin = makeHub("admin");
 const rbaAdmin = makeHub("admin", RBA.company);
@@ -64,10 +65,9 @@ function tabsOf(name: string) {
 }
 
 describe("Goals hub", () => {
-  it("has a route per tab, in the order Company, By role, Monthly focus, People", () => {
+  it("has a route per tab, in the order Company, Monthly focus, People", () => {
     expect(GOALS_TABS.map((t) => [t.label, t.to])).toEqual([
       ["Company", "/goals/company"],
-      ["By role", "/goals/roles"],
       ["Monthly focus", "/goals/focus"],
       ["People", "/goals/people"],
     ]);
@@ -77,46 +77,50 @@ describe("Goals hub", () => {
     renderWithHub(<GoalsPage tab="company" />, admin, { path: "/goals/company", pattern: "/goals/company" });
     expect(screen.getByRole("heading", { level: 1, name: "Goals" })).toBeInTheDocument();
     expect(tabsOf("Goals")).toEqual({
-      labels: ["Company", "By role", "Monthly focus", "People"],
+      labels: ["Company", "Monthly focus", "People"],
       current: ["Company"],
-      hrefs: ["/goals/company", "/goals/roles", "/goals/focus", "/goals/people"],
+      hrefs: ["/goals/company", "/goals/focus", "/goals/people"],
     });
     expect(await screen.findByRole("heading", { name: "Company goals 2026" })).toBeInTheDocument();
     expect(await screen.findByText("Gross margin")).toBeInTheDocument();
   });
 
-  it("edits each job role's goals on By role, the ones Add role goals files into a month", async () => {
+  it("edits each job role's goals on People, Roles, the ones Add role goals files into a month", async () => {
     const user = userEvent.setup();
-    renderWithHub(<GoalsPage tab="roles" />, admin, { path: "/goals/roles", pattern: "/goals/roles" });
-    expect(tabsOf("Goals").current).toEqual(["By role"]);
+    renderWithHub(<RolesPage />, admin, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    expect(tabsOf("People").current).toEqual(["Roles"]);
     const role = KLASIK.jobRoles[0];
-    expect(await screen.findByLabelText("Role goal Walk every active site once a week")).toHaveValue("Walk every active site once a week");
-    const card = screen.getByRole("heading", { name: role.name }).closest("section") as HTMLElement;
-    expect(card.parentElement).toHaveAttribute("id", `role-goals-${role.id}`);
+    expect(await screen.findByRole("heading", { level: 2, name: role.name })).toBeInTheDocument();
+    const card = screen.getByRole("heading", { name: "Role goals" }).closest("section") as HTMLElement;
+    await user.click(within(card).getByRole("button", { name: "Edit role goal Walk every active site once a week" }));
+    expect(within(card).getByLabelText("Role goal Walk every active site once a week")).toHaveValue("Walk every active site once a week");
+    await user.click(within(card).getByRole("button", { name: "Done" }));
 
+    await user.click(within(card).getByRole("button", { name: /Add role goal/ }));
     await user.type(within(card).getByLabelText(`Add a goal for ${role.name}`), "Close every punch list in five days");
     await user.click(within(card).getByRole("button", { name: /Add role goal/ }));
-    expect(await within(card).findByLabelText("Role goal Close every punch list in five days")).toBeInTheDocument();
+    expect(await within(card).findByText("Close every punch list in five days")).toBeInTheDocument();
     expect((await listJobRoleGoals(KLASIK.company.id, role.id)).map((g) => g.title)).toContain("Close every punch list in five days");
 
+    await user.click(within(card).getByRole("button", { name: "Edit role goal Close every punch list in five days" }));
     await user.click(within(card).getByRole("button", { name: "Remove role goal Close every punch list in five days" }));
-    await waitFor(() => expect(within(card).queryByLabelText("Role goal Close every punch list in five days")).not.toBeInTheDocument());
-    expect(screen.getByRole("link", { name: "Job roles" })).toHaveAttribute("href", "/settings/roles");
+    await waitFor(() => expect(within(card).queryByText("Close every punch list in five days")).not.toBeInTheDocument());
   });
 
   it("says a role with no goals yet what goes there", async () => {
-    renderWithHub(<GoalsPage tab="roles" />, rbaAdmin, { path: "/goals/roles", pattern: "/goals/roles" });
-    const card = (await screen.findByRole("heading", { name: "Project Manager" })).closest("section") as HTMLElement;
+    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles/rba-role-pm", pattern: "/people/roles/:roleId?" });
+    await screen.findByRole("heading", { level: 2, name: "Project Manager" });
+    const card = screen.getByRole("heading", { name: "Role goals" }).closest("section") as HTMLElement;
     expect(within(card).getByText(/No role goals yet\. Add the goals everyone in Project Manager works on every month/)).toBeInTheDocument();
-    expect(within(card).getByText("1 person in this role")).toBeInTheDocument();
+    const list = screen.getByRole("region", { name: "Job roles" });
+    expect(within(list).getByRole("link", { name: /Project Manager/ })).toHaveTextContent("1 person");
   });
 
-  it("points a company with no job roles to Settings > Roles", async () => {
+  it("tells a company with no job roles so on People, Roles", async () => {
     const empty = makeHub("admin", { ...KLASIK.company, id: "co-without-roles" });
-    renderWithHub(<GoalsPage tab="roles" />, empty, { path: "/goals/roles", pattern: "/goals/roles" });
-    expect(await screen.findByRole("heading", { name: "No job roles yet" })).toBeInTheDocument();
-    expect(screen.getByText(/An admin adds the company's job roles in Settings, Roles/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add job roles" })).toHaveAttribute("href", "/settings/roles");
+    renderWithHub(<RolesPage />, empty, { path: "/people/roles", pattern: "/people/roles/:roleId?" });
+    expect(await screen.findByText(/No job roles yet\. Add one, then put people in it/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add role" })).toBeInTheDocument();
   });
 
   it("plans the focus topics on Monthly focus", async () => {
@@ -135,10 +139,9 @@ describe("Goals hub", () => {
 });
 
 describe("Settings hub", () => {
-  it("has a route per tab, in the order Company, Roles, Reviews, Production, Connections, Activity", () => {
+  it("has a route per tab, in the order Company, Reviews, Production, Connections, Activity", () => {
     expect(SETTINGS_TABS.map((t) => [t.label, t.to])).toEqual([
       ["Company", "/settings/company"],
-      ["Roles", "/settings/roles"],
       ["Reviews", "/settings/reviews"],
       ["Production", "/settings/production"],
       ["Connections", "/settings/connections"],
@@ -155,14 +158,14 @@ describe("Settings hub", () => {
     expect(screen.queryByRole("heading", { name: "Job roles" })).not.toBeInTheDocument();
   });
 
-  it("keeps job roles, their scorecard metrics and the divisions on Roles", async () => {
-    renderWithHub(<SettingsPage tab="roles" />, rbaAdmin, { path: "/settings/roles", pattern: "/settings/roles" });
-    expect(tabsOf("Settings").current).toEqual(["Roles"]);
-    expect(await screen.findByRole("heading", { name: "Job roles" })).toBeInTheDocument();
-    expect(await screen.findAllByLabelText("Metric name Optimization rate")).toHaveLength(2);
-    expect(await screen.findByRole("heading", { name: "Divisions" })).toBeInTheDocument();
-    const pm = (await screen.findByLabelText("Name for Project Manager")).closest("li") as HTMLElement;
-    expect(within(pm).getByRole("link", { name: "Add in Goals, By role" })).toHaveAttribute("href", "/goals/roles#role-goals-rba-role-pm");
+  it("keeps job roles and their scorecard metrics on People, Roles", async () => {
+    renderWithHub(<RolesPage />, rbaAdmin, { path: "/people/roles/rba-role-pm", pattern: "/people/roles/:roleId?" });
+    expect(tabsOf("People").current).toEqual(["Roles"]);
+    expect(await screen.findByRole("region", { name: "Job roles" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Project Manager" })).toBeInTheDocument();
+    const metrics = screen.getByRole("heading", { name: "Scorecard metrics" }).closest("section") as HTMLElement;
+    expect(await within(metrics).findByText("Optimization rate")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Role goals" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Pillars and weights" })).not.toBeInTheDocument();
   });
 
@@ -267,31 +270,42 @@ describe("header links from Monthly GSRs and Reviews", () => {
 });
 
 describe("person page", () => {
-  it("reads in one order: scorecard, goals, projects, KPIs, compensation, review history", async () => {
+  // Each tab holds its own sections, in this order. Headings found by name; projects by their count.
+  const holds: Array<[string, string, Array<string | RegExp>]> = [
+    ["Overview", "", ["Details", "This month's GSR", "Tasks"]],
+    ["GSR and goals", "gsr", ["This month's GSR", "This year, next year and the BHAG"]],
+    ["Scorecard", "scorecard", [/^On \d+ projects?$|^Projects$/, "Personal KPIs", "Financial figures"]],
+    ["Reviews", "reviews", ["Deliverables", "Review history"]],
+    ["Setup", "setup", ["Details", "Role and divisions", "Account", "Compensation"]],
+  ];
+
+  it("reads as tabs: Overview, GSR and goals, Scorecard, Tasks, Reviews, Setup", async () => {
     const noor = RBA.profiles.find((p) => p.id === "rba-user-3")!;
-    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}`, pattern: "/people/:profileId" });
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}`, pattern: "/people/:profileId/:tab?" });
     expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
-    await screen.findByRole("heading", { name: "This year, next year and the BHAG" });
-    const order = ["Details", "This year, next year and the BHAG", "Personal KPIs", "Compensation", "Review history"];
-    await waitFor(() => expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual(expect.arrayContaining(order)));
-    const headings = screen.getAllByRole("heading").map((h) => h.textContent ?? "");
-    const at = (name: string | RegExp) => headings.findIndex((h) => (typeof name === "string" ? h === name : name.test(h)));
-    const projects = at(/^On \d+ projects?$|^Projects$/);
-    expect(at("Details")).toBeLessThan(at("This year, next year and the BHAG"));
-    expect(at("This year, next year and the BHAG")).toBeLessThan(projects);
-    expect(projects).toBeLessThan(at("Personal KPIs"));
-    expect(at("Personal KPIs")).toBeLessThan(at("Compensation"));
-    expect(at("Compensation")).toBeLessThan(at("Review history"));
-    const history = screen.getByRole("heading", { name: "Review history" }).closest("section") as HTMLElement;
-    expect(within(history).getByRole("link", { name: "Review cycles" })).toHaveAttribute("href", "/reviews");
+    const nav = screen.getByRole("navigation", { name: "Person" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Overview", "GSR and goals", "Scorecard", "Tasks", "Reviews", "Setup"]);
+  });
+
+  it.each(holds)("holds its sections in order on %s", async (_label, tab, order) => {
+    const noor = RBA.profiles.find((p) => p.id === "rba-user-3")!;
+    renderWithHub(<PersonPage />, rbaAdmin, { path: `/people/${noor.id}${tab ? `/${tab}` : ""}`, pattern: "/people/:profileId/:tab?" });
+    expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
+    const at = (name: string | RegExp) => screen.getAllByRole("heading").map((h) => h.textContent ?? "").findIndex((h) => (typeof name === "string" ? h === name : name.test(h)));
+    await waitFor(() => order.forEach((name) => expect(at(name)).toBeGreaterThan(-1)));
+    order.slice(1).forEach((name, i) => expect(at(order[i])).toBeLessThan(at(name)));
+    if (tab === "reviews") {
+      const history = screen.getByRole("heading", { name: "Review history" }).closest("section") as HTMLElement;
+      expect(within(history).getByRole("link", { name: "Review cycles" })).toHaveAttribute("href", "/reviews");
+    }
   });
 });
 
 describe("empty states point to where a thing is set", () => {
-  it("sends the Scorecards report to Settings > Roles when no role has metrics", async () => {
+  it("sends the Scorecards report to People > Roles when no role has metrics", async () => {
     renderWithHub(<ScorecardsPage />, admin, { path: "/scorecards", pattern: "/scorecards" });
     expect(await screen.findByRole("heading", { name: "No scorecard metrics yet" })).toBeInTheDocument();
-    expect(screen.getByText(/An admin adds the metrics each job role is scored on in Settings, Roles/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Settings, Roles" })).toHaveAttribute("href", "/settings/roles");
+    expect(screen.getByText(/An admin adds the metrics each job role is scored on in People, Roles/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open People, Roles" })).toHaveAttribute("href", "/people/roles");
   });
 });

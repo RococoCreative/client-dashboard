@@ -6,6 +6,7 @@
 // what it changes.
 import { fireEvent, screen, within } from "@testing-library/react";
 import { useState, type ComponentProps } from "react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 // The review page hands the deliverables panel a callback and reads the year's figure from it.
@@ -67,7 +68,7 @@ const FIXTURE_NOW = new Date("2026-09-15T12:00:00.000Z");
 const q3 = RBA.cycles[0];
 const jamie = RBA.profiles[1];
 const sectionFor = async (name: string) => (await screen.findByRole("heading", { name })).closest("section") as HTMLElement;
-const personAt = (id: string) => ({ path: `/people/${id}`, pattern: "/people/:profileId" });
+const personAt = (id: string, tab?: string) => ({ path: tab ? `/people/${id}/${tab}` : `/people/${id}`, pattern: "/people/:profileId/:tab?" });
 
 describe("the quarter's GSR line", () => {
   it("stays on the dashboard and the person page while a month covers today and the quarter is still open", async () => {
@@ -81,7 +82,8 @@ describe("the quarter's GSR line", () => {
       expect(await screen.findByText(`Monthly GSRs, ${q3.name}`)).toBeInTheDocument();
       dash.unmount();
 
-      renderWithHub(<PersonPage />, rbaAdmin, personAt(jamie.id));
+      // On the person page it sits with the impact score, on Reviews.
+      renderWithHub(<PersonPage />, rbaAdmin, personAt(jamie.id, "reviews"));
       expect(await screen.findByRole("heading", { name: "Jamie Fox" })).toBeInTheDocument();
       expect(await screen.findByText(`Monthly GSRs, ${q3.name}`)).toBeInTheDocument();
     } finally {
@@ -112,16 +114,21 @@ describe("a Rococo admin's person page", () => {
     const riley = KLASIK.profiles[2];
     await updateProfile(riley.id, { is_rococo_admin: true });
     try {
-      const rococoRow = renderWithHub(<PersonPage />, admin, personAt(riley.id));
+      // On Setup, where the hub role is changed for everyone else: it reads Rococo Creative, with
+      // no Role select and no account actions.
+      const rococoRow = renderWithHub(<PersonPage />, admin, personAt(riley.id, "setup"));
       expect(await screen.findByRole("heading", { name: "Riley Park" })).toBeInTheDocument();
+      expect(await screen.findByText("Rococo Creative")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit role" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Role")).not.toBeInTheDocument();
-      expect(screen.getByText("Rococo Creative")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Deactivate|Reactivate|Remove/ })).not.toBeInTheDocument();
       rococoRow.unmount();
     } finally {
       await updateProfile(riley.id, { is_rococo_admin: false });
     }
-    // Everyone else keeps it.
-    renderWithHub(<PersonPage />, admin, personAt(riley.id));
+    // Everyone else keeps it, on Setup.
+    renderWithHub(<PersonPage />, admin, personAt(riley.id, "setup"));
+    await userEvent.click(await screen.findByRole("button", { name: "Edit role" }));
     expect(await screen.findByLabelText("Role")).toBeEnabled();
     expect(screen.queryByText("Rococo Creative")).not.toBeInTheDocument();
   });

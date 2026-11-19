@@ -39,6 +39,7 @@
    * Semantic values are text-safe on their theme's surfaces. */
   --color-accent: var(--t-accent);
   --color-accent-hover: var(--t-accent-hover);
+  --color-link: var(--t-link);
   --color-on-accent: var(--t-on-accent);
   --color-highlight: var(--t-highlight);
   --color-success: var(--t-success);
@@ -79,9 +80,10 @@
   --t-line-strong: #d8d2c7;
   --t-ink: #1f1f1f;
   --t-ink-2: #6b6660;
-  --t-ink-3: #8a857d;
+  --t-ink-3: #736e67;
   --t-heading: #39443c;
   --t-accent: #39443c;
+  --t-link: #39443c;
   --t-accent-hover: #2e3630;
   --t-on-accent: #fdfdfd;
   --t-highlight: #d6b563;
@@ -112,9 +114,10 @@
   --t-line-strong: #303030;
   --t-ink: #f5f5f5;
   --t-ink-2: #9a9a9a;
-  --t-ink-3: #6e6e6e;
+  --t-ink-3: #7e7e7e;
   --t-heading: #f5f5f5;
   --t-accent: #bb7958;
+  --t-link: #bb7958;
   --t-accent-hover: #c98b6c;
   --t-on-accent: #0d0d0d;
   --t-highlight: #bb7958;
@@ -146,9 +149,10 @@
   --t-line-strong: #ddd5c5;
   --t-ink: #242829;
   --t-ink-2: #5e615f;
-  --t-ink-3: #948f85;
+  --t-ink-3: #777268;
   --t-heading: #242829;
   --t-accent: #a76539;
+  --t-link: #a26237;
   --t-accent-hover: #8a5530;
   --t-on-accent: #ffffff;
   --t-highlight: #86a5a8;
@@ -182,9 +186,10 @@
   --t-line-strong: #4a4945;
   --t-ink: #fffcf7;
   --t-ink-2: #a6a5a1;
-  --t-ink-3: #7e7d79;
+  --t-ink-3: #8d8c88;
   --t-heading: #fffcf7;
   --t-accent: #1c6ef4;
+  --t-link: #488af6;
   --t-accent-hover: #5a96f7;
   --t-on-accent: #fffcf7;
   --t-highlight: #5a96f7;
@@ -273,7 +278,7 @@
   --tw-prose-body: var(--t-ink);
   --tw-prose-headings: var(--t-heading);
   --tw-prose-lead: var(--t-ink-2);
-  --tw-prose-links: var(--t-accent);
+  --tw-prose-links: var(--t-link);
   --tw-prose-bold: var(--t-ink);
   --tw-prose-counters: var(--t-ink-3);
   --tw-prose-bullets: var(--t-ink-3);

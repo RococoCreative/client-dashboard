@@ -210,12 +210,15 @@ describe("job role modules", () => {
   it("marks a retired role on the person page and does not claim its module is on the dashboard", async () => {
     await updateJobRole(role.id, { is_active: false });
     try {
-      const person = renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}`, pattern: "/people/:profileId" });
+      const person = renderWithHub(<PersonPage />, admin, { path: `/people/${sam.id}/setup`, pattern: "/people/:profileId/:tab?" });
       expect(await screen.findByRole("heading", { name: "Sam Ortega" })).toBeInTheDocument();
-      expect(await screen.findByLabelText("Job role")).toHaveValue(role.id);
+      // Setup says the role is retired; Scorecard says its figures are off the dashboard.
       expect(screen.getByText(/is retired, so it no longer puts its modules on their dashboard/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Edit job role" }));
+      expect(await screen.findByLabelText("Job role")).toHaveValue(role.id);
+      await userEvent.click(screen.getByRole("link", { name: "Scorecard" }));
+      expect(await screen.findByText(/Not on their dashboard: .* is retired/)).toBeInTheDocument();
       expect(screen.queryByText(/On their dashboard, because/)).not.toBeInTheDocument();
-      expect(screen.getByText(/Not on their dashboard: .* is retired/)).toBeInTheDocument();
       person.unmount();
 
       // And the dashboard agrees: a retired role adds nothing.

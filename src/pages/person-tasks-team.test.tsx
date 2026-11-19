@@ -74,13 +74,14 @@ function ReviewStub() {
   return <div>review {reviewId}</div>;
 }
 
-// The person page with the GSR review route beside it, so starting a GSR can land somewhere.
-function renderPerson(id: string, hub: HubValue) {
+// The person page, on a tab when one is named, with the GSR review route beside it, so starting a
+// GSR can land somewhere.
+function renderPerson(id: string, hub: HubValue, tab?: string) {
   return render(
     <HubContext value={hub}>
-      <MemoryRouter initialEntries={[`/people/${id}`]}>
+      <MemoryRouter initialEntries={[tab ? `/people/${id}/${tab}` : `/people/${id}`]}>
         <Routes>
-          <Route path="/people/:profileId" element={<PersonPage />} />
+          <Route path="/people/:profileId/:tab?" element={<PersonPage />} />
           <Route path="/gsr/reviews/:reviewId" element={<ReviewStub />} />
           <Route path="*" element={<div>elsewhere</div>} />
         </Routes>
@@ -107,29 +108,34 @@ describe("the person page for a manager", () => {
       compensation.mockRestore();
       financials.mockRestore();
     });
+    const user = userEvent.setup();
     renderPerson(rowan.id, rbaManager);
     expect(await screen.findByRole("heading", { name: "Rowan Ellis" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Compensation" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Financial figures" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Annual compensation")).not.toBeInTheDocument();
-    expect(compensation).not.toHaveBeenCalled();
-    expect(financials).not.toHaveBeenCalled();
-    // Profile fields read as text.
+    // No Setup tab, and profile fields read as text on Overview.
+    expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Reports to" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Role" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Crew Lead").length).toBeGreaterThan(0);
     expect(await screen.findByText("Both")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Divisions" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Scorecard" }));
+    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Compensation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Financial figures" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Annual compensation")).not.toBeInTheDocument();
+    expect(compensation).not.toHaveBeenCalled();
+    expect(financials).not.toHaveBeenCalled();
     // Ratings read only: no radio buttons to click.
+    await user.click(screen.getByRole("link", { name: "Reviews" }));
+    expect(await screen.findByRole("heading", { name: "Review history" })).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: /of 5/ })).not.toBeInTheDocument();
   });
 
   it("adds a task for someone they lead, and the task is there after a reload", async () => {
     onlySees(team);
     const user = userEvent.setup();
-    const first = renderPerson(rowan.id, rbaManager);
+    const first = renderPerson(rowan.id, rbaManager, "tasks");
     await user.click(await screen.findByRole("button", { name: "Add task" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByLabelText("Assignee")).not.toBeInTheDocument();
@@ -142,7 +148,7 @@ describe("the person page for a manager", () => {
     expect(within(list).getByRole("link", { name: /Check the scaffold tags/ })).toHaveAttribute("href", expect.stringMatching(/^\/tasks\//));
     first.unmount();
 
-    renderPerson(rowan.id, rbaManager);
+    renderPerson(rowan.id, rbaManager, "tasks");
     const again = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
     expect(within(again).getByText("Check the scaffold tags")).toBeInTheDocument();
   });
@@ -168,7 +174,7 @@ describe("the person page for a manager", () => {
     const notify = vi.spyOn(tasksService, "notifyAssignment");
     onTestFinished(() => notify.mockRestore());
     const user = userEvent.setup();
-    renderPerson(kai.id, rbaManager);
+    renderPerson(kai.id, rbaManager, "tasks");
     await user.click(await screen.findByRole("button", { name: "Add task" }));
     const dialog = screen.getByRole("dialog");
     await user.type(within(dialog).getByLabelText("Title"), "Read the safety binder");
@@ -182,7 +188,8 @@ describe("the person page for a manager", () => {
 describe("the person page for an admin", () => {
   it("places someone in divisions with checkboxes, ticking both for Both", async () => {
     const user = userEvent.setup();
-    renderPerson(rowan.id, rbaAdmin);
+    renderPerson(rowan.id, rbaAdmin, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     const group = await screen.findByRole("group", { name: "Divisions" });
     expect(within(group).getByRole("checkbox", { name: "RBA South" })).toBeChecked();
     expect(within(group).getByRole("checkbox", { name: "RBA North" })).toBeChecked();
@@ -199,7 +206,8 @@ describe("the person page for an admin", () => {
   it("keeps a division the admin cannot view ticked and locked", async () => {
     await profilesService.updateProfile(rowan.id, { division_ids: ["rba-division-south", "rba-division-north"] });
     const southOnly: HubValue = { ...rbaAdmin, profile: { ...rbaAdmin.profile, view_all_divisions: false, view_division_ids: ["rba-division-south"] } };
-    renderPerson(rowan.id, southOnly);
+    renderPerson(rowan.id, southOnly, "setup");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     const group = await screen.findByRole("group", { name: "Divisions" });
     expect(within(group).getByRole("checkbox", { name: "RBA North" })).toBeDisabled();
     expect(within(group).getByRole("checkbox", { name: "RBA North" })).toBeChecked();
@@ -208,13 +216,15 @@ describe("the person page for an admin", () => {
 
   it("gives only an owner the view access editor, on a manager's row", async () => {
     const user = userEvent.setup();
-    const asAdmin = renderPerson(harper.id, rbaAdmin);
+    const asAdmin = renderPerson(harper.id, rbaAdmin, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     await screen.findByRole("group", { name: "Divisions" });
     expect(screen.queryByRole("group", { name: "Can view" })).not.toBeInTheDocument();
     expect(screen.getByText(/Only an owner or Rococo can change that\./)).toBeInTheDocument();
     asAdmin.unmount();
 
-    renderPerson(harper.id, rbaOwner);
+    renderPerson(harper.id, rbaOwner, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit divisions and view access" }));
     const access = await screen.findByRole("group", { name: "Can view" });
     expect(within(access).getByRole("radio", { name: "None" })).toBeChecked();
     await user.click(within(access).getByRole("radio", { name: "Chosen divisions" }));
@@ -230,7 +240,8 @@ describe("the person page for an admin", () => {
 
   it("names a manager who is inactive in Reports to, and warns when the manager is an employee", async () => {
     const user = userEvent.setup();
-    renderPerson(kai.id, rbaAdmin);
+    renderPerson(kai.id, rbaAdmin, "setup");
+    await user.click(await screen.findByRole("button", { name: "Edit reports to" }));
     const picker = await screen.findByRole("combobox", { name: "Reports to" });
     expect(picker).toHaveValue(rowan.id);
     expect(screen.getByText("They will not see this person until they are a manager.")).toBeInTheDocument();
@@ -247,7 +258,8 @@ describe("Reports to on the person page", () => {
     onTestFinished(async () => {
       await profilesService.updateProfile(rowan.id, { is_active: true });
     });
-    renderPerson(kai.id, rbaAdmin);
+    renderPerson(kai.id, rbaAdmin, "setup");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit reports to" }));
     const picker = await screen.findByRole("combobox", { name: "Reports to" });
     expect(picker).toHaveValue(rowan.id);
     expect(within(picker).getByRole("option", { name: "Rowan Ellis (inactive)" })).toBeInTheDocument();
@@ -256,11 +268,44 @@ describe("Reports to on the person page", () => {
   it("names a manager the viewer cannot see from the directory", async () => {
     // An admin who sees Kai but not Rowan, Kai's manager.
     onlySees([rbaAdmin.profile.id, kai.id]);
-    renderPerson(kai.id, rbaAdmin);
+    renderPerson(kai.id, rbaAdmin, "setup");
+    await userEvent.click(await screen.findByRole("button", { name: "Edit reports to" }));
     const picker = await screen.findByRole("combobox", { name: "Reports to" });
     expect(picker).toHaveValue(rowan.id);
     expect(within(picker).getByRole("option", { name: "Rowan Ellis" })).toBeInTheDocument();
     expect(screen.getByText("Reports to Rowan Ellis")).toBeInTheDocument();
+  });
+});
+
+describe("going back from a task on the person page", () => {
+  function renderFrom(path: string) {
+    return render(
+      <HubContext value={rbaManager}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/people/:profileId/:tab?" element={<PersonPage />} />
+            <Route path="/tasks/:taskId" element={<TaskPage />} />
+          </Routes>
+        </MemoryRouter>
+      </HubContext>,
+    );
+  }
+
+  it("returns to the Tasks tab from a task opened there, and to Overview from the short list", async () => {
+    await tasksService.createTask({ company_id: RBA.company.id, title: "Walk the site before the pour", assignee_id: rowan.id });
+    onlySees(team);
+    const fromTab = renderFrom(`/people/${rowan.id}/tasks`);
+    const tabList = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
+    fireEvent.click(within(tabList).getByRole("link", { name: /Walk the site before the pour/ }));
+    expect(await screen.findByRole("heading", { name: "Walk the site before the pour" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}/tasks`);
+    fromTab.unmount();
+
+    renderFrom(`/people/${rowan.id}`);
+    const overviewList = await screen.findByRole("list", { name: "Open tasks for Rowan Ellis" });
+    fireEvent.click(within(overviewList).getByRole("link", { name: /Walk the site before the pour/ }));
+    expect(await screen.findByRole("heading", { name: "Walk the site before the pour" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Rowan Ellis/ })).toHaveAttribute("href", `/people/${rowan.id}`);
   });
 });
 
@@ -274,7 +319,7 @@ describe("a task on a GSR goal", () => {
       <HubContext value={rbaManager}>
         <MemoryRouter initialEntries={[`/people/${rowan.id}`]}>
           <Routes>
-            <Route path="/people/:profileId" element={<PersonPage />} />
+            <Route path="/people/:profileId/:tab?" element={<PersonPage />} />
             <Route path="/tasks/:taskId" element={<TaskPage />} />
           </Routes>
         </MemoryRouter>
@@ -411,9 +456,11 @@ describe("a manager over a manager", () => {
     rowanManages();
     renderPerson(rowan.id, rbaManager);
     expect(await screen.findByRole("heading", { name: "Rowan Ellis" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tasks" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add task" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "This month's GSR" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Scorecard" }));
+    expect(await screen.findByRole("heading", { name: "Personal KPIs" })).toBeInTheDocument();
   });
 });
 
@@ -423,8 +470,11 @@ describe("copy on a team member's page", () => {
     // An admin set it, as the database stamps it (the mock hands back its stored row).
     const goal = await createGoal({ company_id: RBA.company.id, employee_id: rowan.id, title: "Earn the site lead ticket", kind: "professional", scope: "year", year: 2026 });
     Object.assign(goal, { created_by: rbaAdmin.profile.id });
-    renderPerson(rowan.id, rbaManager);
+    renderPerson(rowan.id, rbaManager, "gsr");
     expect(await screen.findByText("Earn the site lead ticket")).toBeInTheDocument();
+    expect(screen.queryByText(/your manager/i)).not.toBeInTheDocument();
+    // Their deliverables sit on Reviews.
+    await userEvent.click(screen.getByRole("link", { name: "Reviews" }));
     expect(await screen.findByText("An admin sets these up with them.")).toBeInTheDocument();
     expect(screen.queryByText(/your manager/i)).not.toBeInTheDocument();
   });
