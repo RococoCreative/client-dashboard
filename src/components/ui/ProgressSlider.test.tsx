@@ -61,6 +61,33 @@ describe("ProgressSlider", () => {
     expect(slider).not.toHaveAttribute("aria-invalid");
   });
 
+  it("clears Not saved after a later successful save", async () => {
+    const commit = vi.fn<(next: number, set: (v: number) => void) => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockImplementationOnce(async (next, set) => { set(next); return true; });
+    render(<Harness onCommit={commit} />);
+    drag(70);
+    await act(async () => {});
+    expect(screen.getByText("Not saved")).toBeVisible();
+    const slider = drag(70);
+    await act(async () => {});
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(slider).not.toHaveAttribute("aria-invalid");
+    expect(slider).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("clears Not saved when the thumb returns to the stored value", async () => {
+    render(<Harness onCommit={async () => false} />);
+    const slider = drag(70);
+    await act(async () => {});
+    expect(screen.getByText("Not saved")).toBeVisible();
+    fireEvent.change(slider, { target: { value: "55" } });
+    expect(screen.getByText("Not saved")).toBeVisible();
+    fireEvent.change(slider, { target: { value: "40" } });
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(slider).not.toHaveAttribute("aria-invalid");
+  });
+
   it("never pulls the thumb back for an older failure once a newer save is out", async () => {
     let failFirst: (ok: boolean) => void = () => undefined;
     const commit = vi.fn<(next: number, set: (v: number) => void) => Promise<boolean>>()

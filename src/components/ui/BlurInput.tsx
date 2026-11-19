@@ -19,9 +19,11 @@
 // stored value is back in the box. One live region carries every state: visible for a failure,
 // visually hidden for saving and saved, and the field points at it while a failure stands.
 //
-// The field sits in a block wrapper so the words can sit under it. The wrapper takes over the
-// sizing classes a caller put on the field (flex-1, min-w-0, a width) so a field in a flex row or
-// a table cell keeps the width it had, and the words add height only, never width.
+// The field sits in a column wrapper, which makes it a block-level child with no baseline gap
+// under it, so the words can sit under it and the wrapper adds no height at rest. The wrapper
+// takes over the sizing classes a caller put on the field (flex-1, min-w-0, a width) and its
+// margins so a field in a flex row or a table cell keeps the width it had, and the words add
+// height only, never width.
 import { useEffect, useId, useRef, useState } from "react";
 import { inputClass, textareaClass } from "./forms.ts";
 
@@ -46,11 +48,17 @@ const STATE_TEXT: Record<SaveState, string> = {
 };
 
 // The classes that decide how wide a field is or how it behaves as a flex or grid child. Plain
-// widths, responsive widths and w-full are matched; fractions and percentages stay on the field alone,
-// where they keep resolving against the wrapper.
-const SIZING = /^(?:[a-z0-9]+:)*(?:flex-(?:1|auto|initial|none)|grow(?:-\d+)?|shrink(?:-\d+)?|basis-\S+|min-w-\S+|max-w-\S+|w-(?!\d+\/|\[\d+%\])\S+|self-\S+|col-span-\S+|ml-auto|mr-auto)$/;
-function wrapperClasses(className: string | undefined) {
-  return (className ?? "").split(/\s+/).filter((c) => SIZING.test(c)).join(" ");
+// widths, responsive widths and w-full are matched; fractions and percentages stay on the field
+// alone, where they keep resolving against the wrapper.
+const SIZING = /^(?:[a-z0-9]+:)*(?:flex-(?:1|auto|initial|none)|grow(?:-\d+)?|shrink(?:-\d+)?|basis-\S+|min-w-\S+|max-w-\S+|w-(?!\d+\/|\[\d+%\])\S+|self-\S+|col-span-\S+)$/;
+// Margins move to the wrapper, so they stay outside the field and the wrapper adds nothing to them.
+const MARGIN = /^(?:[a-z0-9]+:)*-?m[trblxyse]?-\S+$/;
+function splitClasses(className: string | undefined) {
+  const all = (className ?? "").split(/\s+/).filter(Boolean);
+  return {
+    wrapper: all.filter((c) => SIZING.test(c) || MARGIN.test(c)).join(" "),
+    field: all.filter((c) => !MARGIN.test(c)).join(" "),
+  };
 }
 
 // How long the saved mark stays before the field goes quiet again.
@@ -141,7 +149,8 @@ export default function BlurInput({
   };
 
   const noteId = useId();
-  const classes = (className ?? (multiline ? textareaClass : inputClass)) + STATE_RING[state];
+  const split = splitClasses(className ?? (multiline ? textareaClass : inputClass));
+  const classes = split.field + STATE_RING[state];
   const failed = state === "failed";
   const status = (
     <span
@@ -155,7 +164,7 @@ export default function BlurInput({
   const invalid = failed ? true : undefined;
   const describedBy = failed ? noteId : undefined;
   const title = failed ? "Not saved" : undefined;
-  const wrap = `block${wrapperClasses(className) ? " " + wrapperClasses(className) : ""}`;
+  const wrap = `flex flex-col${split.wrapper ? " " + split.wrapper : ""}`;
   // Typing the stored text back in leaves nothing pending, so a standing failure goes with it.
   const edit = (next: string) => {
     setDraft(next);

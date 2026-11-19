@@ -84,7 +84,8 @@ describe("BlurInput", () => {
     render(<BlurInput ariaLabel="Name" value="Old" onSave={() => Promise.resolve(false)} className="mt-0 min-w-0 flex-1 sm:w-48" />);
     const box = screen.getByLabelText("Name");
     expect(box.parentElement).toHaveClass("min-w-0", "flex-1", "sm:w-48");
-    expect(box.parentElement).not.toHaveClass("mt-0");
+    expect(box.parentElement).toHaveClass("mt-0");
+    expect(box).not.toHaveClass("mt-0");
   });
 
   it("does not call onSave when nothing changed", () => {

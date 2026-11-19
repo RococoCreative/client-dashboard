@@ -5,8 +5,8 @@
 // onCommit may return the save's promise. When the save fails (the promise rejects or resolves
 // false, or onCommit returns false) the thumb goes back to the stored value, so the slider never
 // shows a completion the database did not take, and "Not saved" is said in words under the
-// slider, the same words and style a BlurInput uses, and announced through the same live region. A caller that
-// returns nothing keeps the old behaviour: the slider waits for the value prop.
+// slider, the same words and style a BlurInput uses, and announced through the same live region.
+// A caller that returns nothing keeps the old behaviour: the slider waits for the value prop.
 import { useEffect, useId, useRef, useState } from "react";
 import { Check } from "lucide-react";
 
@@ -93,7 +93,10 @@ export default function ProgressSlider({
           data-save-state={failed ? "failed" : undefined}
           onChange={(e) => {
             sent.current = null;
-            setDraft(Number(e.target.value));
+            const next = Number(e.target.value);
+            setDraft(next);
+            // Back on the stored value means nothing is pending, so a standing failure goes.
+            if (failed && next === value) setFailed(false);
           }}
           onPointerUp={commit}
           onKeyUp={commit}
