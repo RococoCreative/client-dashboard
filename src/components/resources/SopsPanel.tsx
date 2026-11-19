@@ -87,7 +87,7 @@ export default function SopsPanel() {
                         <Link to={`/sops/${sop.id}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 transition-colors duration-150 hover:bg-surface-2/60">
                           <div className="min-w-0">
                             <p className={`truncate ${itemTitleClass}`} title={sop.title}>{sop.title}</p>
-                            {sop.summary ? <p className={`mt-0.5 truncate ${secondaryClass}`} title={sop.summary}>{sop.summary}</p> : null}
+                            {sop.summary ? <p className={`mt-0.5 line-clamp-2 sm:truncate ${secondaryClass}`} title={sop.summary}>{sop.summary}</p> : null}
                           </div>
                           <div className={`flex items-center gap-3 ${metaClass}`}>
                             {isAdmin ? <Badge tone={SOP_STATUS_TONE[sop.status]}>{SOP_STATUS_LABELS[sop.status]}</Badge> : null}

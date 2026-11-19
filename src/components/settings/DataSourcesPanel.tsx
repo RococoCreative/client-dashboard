@@ -321,7 +321,7 @@ function SourceEditor({
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
                 {mappedKeys.map((key) => (
-                  <label key={key} className="inline-flex items-center gap-2 font-mono text-[12.5px] text-ink tap:min-h-11">
+                  <label key={key} className="inline-flex items-center gap-2 font-mono text-[12.5px] text-ink tap:min-h-11 tap:min-w-11">
                     <input type="checkbox" checked={draft.record_key.includes(key)} onChange={(e) => toggleKey(key, e.target.checked)} className={checkboxClass} />
                     {key}
                   </label>

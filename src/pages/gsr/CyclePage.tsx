@@ -72,6 +72,13 @@ import { tapTargetClass } from "../../components/ui/tap.ts";
 // padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
 const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
+// Below md the team table stacks: each person is a block with their name, then the status and each
+// score as labelled cells two to a line (the column's name from data-label), then the row's actions. It is the
+// same table underneath, with explicit table roles so a screen reader still reads rows and columns.
+const STACKED_CELL =
+  "max-md:flex max-md:items-center max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:!px-0 max-md:py-1 max-md:text-left " +
+  "max-md:before:text-[12.5px] max-md:before:text-ink-3 max-md:before:content-[attr(data-label)]";
+
 // A month is a calendar month, here as in the New month form: the start snaps to the first and
 // the end follows it. Other cadences keep the dates the admin types.
 function monthOf(date: string): { start: string; end: string } {
@@ -412,7 +419,7 @@ export default function CyclePage() {
         </Notice>
       ) : null}
 
-      <div className={`grid gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${columns.pillarScores ? "sm:grid-cols-3" : ""}`}>
         <Stat label="People" value={team.length} hint={omitted.length > 0 ? `${omitted.length} omitted from this cycle` : undefined} />
         <Stat
           label={gsr ? "GSRs complete" : "Reviews complete"}
@@ -446,28 +453,28 @@ export default function CyclePage() {
             Nobody on the roster yet. Add the team in <Link to="/people" className="text-link hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
-          <div className="relative overflow-x-auto">
-            <table className={tableClass}>
-              <thead>
-                <tr className={edgeCells}>
-                  <th className={thClass}>Person</th>
-                  <th className={thClass}>Status</th>
+          <div className="relative md:overflow-x-auto">
+            <table role="table" className={`${tableClass} max-md:block`}>
+              <thead role="rowgroup" className="max-md:sr-only">
+                <tr role="row" className={edgeCells}>
+                  <th role="columnheader" className={thClass}>Person</th>
+                  <th role="columnheader" className={thClass}>Status</th>
                   {columns.pillarScores ? (
                     <>
                       {pillars.map((p) => (
-                        <th key={p.id} className={`${thClass} text-right`}>{p.name}</th>
+                        <th key={p.id} role="columnheader" className={`${thClass} text-right`}>{p.name}</th>
                       ))}
-                      <th className={`${thClass} text-right`}>Overall</th>
+                      <th role="columnheader" className={`${thClass} text-right`}>Overall</th>
                     </>
                   ) : null}
-                  {columns.gsrScore ? <th className={`${thClass} text-right`}>GSR score</th> : null}
-                  <th className={thClass}></th>
+                  {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right`}>GSR score</th> : null}
+                  <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup" className="max-md:block">
                 {rows.map(({ person, review, result }) => (
-                  <tr key={person.id} className={`${edgeCells} hover:bg-surface-2/60`}>
-                    <td className={tdClass}>
+                  <tr key={person.id} role="row" className={`${edgeCells} hover:bg-surface-2/60 max-md:grid max-md:grid-cols-2 max-md:gap-x-6 max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0`}>
+                    <td role="cell" className={`${tdClass} max-md:col-span-2 max-md:block max-md:border-b-0 max-md:!p-0 max-md:pb-1`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
                         <div className="min-w-0">
@@ -479,7 +486,7 @@ export default function CyclePage() {
                         </div>
                       </div>
                     </td>
-                    <td className={tdClass}>
+                    <td role="cell" data-label="Status" className={`${tdClass} ${STACKED_CELL}`}>
                       <Badge tone={review ? REVIEW_STATUS_TONE[review.status] : "neutral"}>
                         {review ? REVIEW_STATUS_LABELS[review.status] : "Not started"}
                       </Badge>
@@ -489,18 +496,18 @@ export default function CyclePage() {
                         {pillars.map((p) => {
                           const pillar = result?.pillars.find((x) => x.pillarId === p.id);
                           return (
-                            <td key={p.id} className={`${tdClass} tnum text-right text-ink-2`}>
+                            <td key={p.id} role="cell" data-label={p.name} className={`${tdClass} tnum text-right text-ink-2 ${STACKED_CELL}`}>
                               {pillar?.score === null || pillar?.score === undefined ? "-" : Math.round(pillar.score)}
                             </td>
                           );
                         })}
-                        <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>
+                        <td role="cell" data-label="Overall" className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)} ${STACKED_CELL}`}>
                           {result ? result.overall : "-"}
                         </td>
                       </>
                     ) : null}
                     {columns.gsrScore ? (
-                      <td className={`${tdClass} tnum text-right`}>
+                      <td role="cell" data-label="GSR score" className={`${tdClass} tnum text-right ${STACKED_CELL}`}>
                         {review && monthLocked(review) ? (
                           <span className="font-medium text-ink">{review.gsr_score}%</span>
                         ) : (
@@ -508,8 +515,8 @@ export default function CyclePage() {
                         )}
                       </td>
                     ) : null}
-                    <td className={`${tdClass} text-right`}>
-                      <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                    <td role="cell" className={`${tdClass} text-right max-md:col-span-2 max-md:block max-md:border-b-0 max-md:!p-0 max-md:pt-1`}>
+                      <div className="flex items-center justify-end gap-3 whitespace-nowrap max-md:justify-start">
                         {review ? (
                           <Link to={reviewPath(review.id, cycle.cadence)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link>
                         ) : open ? (

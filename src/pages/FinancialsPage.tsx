@@ -357,7 +357,7 @@ export default function FinancialsPage() {
         />
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <Stat label={`Revenue · ${periodLabel(latest!.period_type, latest!.period_start)}`} value={formatMoney(latest!.revenue)} hint={SOURCE_HINT[latest!.source]} />
             <Stat label="Gross margin" value={formatPercent(latestDerived!.grossMargin, 1)} hint={`${formatMoney(latestDerived!.grossProfit)} gross profit`} />
             <Stat label="Net profit" value={<span className={latestDerived!.net >= 0 ? "text-success" : "text-danger"}>{formatMoney(latestDerived!.net)}</span>} hint={`${formatPercent(latestDerived!.netMargin, 1)} net margin`} />

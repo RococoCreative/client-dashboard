@@ -119,8 +119,8 @@ function RoleBlock({
                           className="inline-block max-md:text-right"
                           aria-label={`${name}, ${m.name}, ${monthLabel(month)}: ${result.value === null ? "" : formatMetricValue(m, result.value)}${verdict(result)}; year to date ${year2date.value === null ? "" : formatMetricValue(m, year2date.value)}${verdict(year2date)}`}
                         >
-                          <span className={`tnum block text-[13px] font-medium ${toneOf(result)}`}>{formatMetricValue(m, result.value)}</span>
-                          <span className="tnum block text-[11px] text-ink-3">
+                          <span className={`tnum block text-[13px] font-medium max-md:inline ${toneOf(result)}`}>{formatMetricValue(m, result.value)}</span>
+                          <span className="tnum block text-[11px] text-ink-3 max-md:ml-2 max-md:inline">
                             YTD <span className={year2date.value === null ? "" : toneOf(year2date)}>{formatMetricValue(m, year2date.value)}</span>
                           </span>
                         </span>

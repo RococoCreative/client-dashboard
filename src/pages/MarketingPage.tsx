@@ -303,7 +303,7 @@ export default function MarketingPage() {
         <EmptyState eyebrow="Marketing" title="No campaigns yet" body="Add what is running or planned so leadership sees the whole board at a glance." action={<Button variant="secondary" onClick={() => setDialog({ campaign: null })}>New campaign</Button>} />
       ) : (
         <>
-          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             <Stat label="Live campaigns" value={live.length} hint={`${campaigns.filter((c) => c.status === "planned").length} planned`} />
             <Stat
               label="Live budget"

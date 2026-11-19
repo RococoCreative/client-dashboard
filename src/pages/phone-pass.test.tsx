@@ -43,6 +43,7 @@ import PeoplePage from "./people/PeoplePage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
+import CyclePage from "./gsr/CyclePage.tsx";
 
 const rbaAdmin = makeHub("admin", RBA.company);
 const rbaManager = makeHub("manager", RBA.company);
@@ -101,6 +102,23 @@ describe("tables that stack on a phone keep their roles", () => {
     for (const tr of table.querySelectorAll("tr")) expect(tr).toHaveAttribute("role", "row");
     for (const th of table.querySelectorAll("thead th")) expect(th).toHaveAttribute("role", "columnheader");
     for (const td of table.querySelectorAll("tbody td")) expect(td).toHaveAttribute("role", "cell");
+  });
+});
+
+describe("a cycle's team table at phone width", () => {
+  it("keeps table roles and labels each score and the status for its stacked rows", async () => {
+    const scored = RBA.cycles[0];
+    renderWithHub(<CyclePage />, rbaAdmin, { path: `/reviews/cycles/${scored.id}`, pattern: "/reviews/cycles/:cycleId" });
+    const table = await screen.findByRole("table");
+    expect(table).toHaveAttribute("role", "table");
+    for (const group of table.querySelectorAll("thead, tbody")) expect(group).toHaveAttribute("role", "rowgroup");
+    for (const tr of table.querySelectorAll("tr")) expect(tr).toHaveAttribute("role", "row");
+    for (const th of table.querySelectorAll("thead th")) expect(th).toHaveAttribute("role", "columnheader");
+    const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
+    const row = within(table).getByText("Jamie Fox").closest("tr") as HTMLElement;
+    for (const td of row.querySelectorAll("td")) expect(td).toHaveAttribute("role", "cell");
+    // Every column between the person and the actions names itself on the stacked row.
+    expect([...row.querySelectorAll("td[data-label]")].map((td) => td.getAttribute("data-label"))).toEqual(headers.slice(1, -1));
   });
 });
 

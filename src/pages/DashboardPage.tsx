@@ -363,7 +363,7 @@ function AdminDashboard() {
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -474,7 +474,7 @@ function AdminDashboard() {
         {cycleCards}
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
         <Stat label={limited ? "People in your divisions" : "People"} value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
         <Stat
           label="GSRs complete"

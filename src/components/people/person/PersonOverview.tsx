@@ -91,7 +91,7 @@ export default function PersonOverview({ companyId, data, person }: PersonTabPro
           ) : null}
           {rococo ? null : <PersonTeam companyId={companyId} person={person} people={people} self={self} isAdmin={isAdmin} />}
         </div>
-        <div className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <div className="grid grid-cols-2 content-start gap-3 sm:gap-4 lg:grid-cols-1">
           <Stat label="Latest score" value={<span className={bandClass(latestScored?.result?.overall ?? null)}>{latestScored?.result?.overall ?? "-"}</span>} hint={latestScored?.cycle?.name ?? "Not scored yet"} />
           <Stat label="Average" value={average ?? "-"} hint={pluralize(rows.length, "review")} />
         </div>

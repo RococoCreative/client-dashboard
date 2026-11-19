@@ -289,7 +289,7 @@ export default function PortfolioPage() {
         <EmptyState eyebrow="Portfolio" title="No companies yet" body="Create the first company, set its theme and sign-in domain, and invite its owner." action={<Button variant="secondary" onClick={() => setCreating(true)}>New company</Button>} />
       ) : (
         <>
-          <div className="mb-6 grid gap-4 sm:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
             <Stat label="Companies" value={companies.length} hint={pluralize(totals.attention, "needs attention", "need attention")} />
             <Stat label="People" value={totals.people} hint={totals.notSignedIn > 0 ? `Active people, ${totals.notSignedIn} not signed in yet` : "Active people across the hub"} />
             <Stat label="Open cycles" value={totals.openCycles} hint={`of ${companies.length} companies`} />

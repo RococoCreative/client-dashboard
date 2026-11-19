@@ -4,7 +4,7 @@
 // month's reviews are complete. Shared by the dashboard and the Scorecards report; the figures
 // arrive worked out (compare.ts, over lib/scorecard.ts), so this only lays them out. Someone who
 // works in more than one division counts in each, so when the groups add up to more than the
-// whole the strip says why.
+// whole the strip says why. On a phone a division's name and its average share one line.
 import { formatMetricValue } from "../../lib/scorecard.ts";
 import { COMBINED, type CompareRow } from "../scorecards/compare.ts";
 
@@ -36,8 +36,10 @@ export default function DivisionCompare({ rows, monthLabel, active }: { rows: re
           const gap = gapLine(o.averageGap);
           return (
             <li key={row.key || "combined"} aria-label={row.label} className={`px-4 py-3 ${active === row.key ? "bg-accent/5" : ""}`}>
-              <p className={`text-[12px] font-medium ${active === row.key ? "text-accent" : "text-ink-2"}`}>{row.label}</p>
-              <p className="tnum mt-1 text-xl font-medium text-heading">{formatMetricValue(PERCENT, o.average)}</p>
+              <div className="flex items-baseline justify-between gap-3 sm:block">
+                <p className={`text-[12px] font-medium ${active === row.key ? "text-accent" : "text-ink-2"}`}>{row.label}</p>
+                <p className="tnum text-xl font-medium text-heading sm:mt-1">{formatMetricValue(PERCENT, o.average)}</p>
+              </div>
               <p className={`tnum text-[12px] ${gap.tone}`}>
                 {gap.text}
                 {o.judged > 0 ? <span className="text-ink-3"> · {o.hits} of {o.judged} hit</span> : null}
