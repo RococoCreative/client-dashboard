@@ -2,6 +2,8 @@
 // time, setup fields that read as text until their pencil, criteria as read-first rows with one Add
 // form, the pillar actions at the foot of the open pillar, Settings without a Reviews tab, and the
 // three old addresses landing on Setup through the real router.
+// Projects, Setup: the tab row on Projects for an admin, the standard milestones panel on its own
+// route, Settings without a Production tab, and the old address redirecting.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,12 +36,15 @@ vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewP
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
+vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milestoneTemplates.ts"));
 
 import App from "../App.tsx";
-import { KLASIK, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import CyclesPage from "./gsr/CyclesPage.tsx";
 import ReviewsSetupPage from "./gsr/ReviewsSetupPage.tsx";
+import ProductionPage from "./production/ProductionPage.tsx";
+import ProductionSetupPage from "./production/ProductionSetupPage.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 
 const admin = makeHub("admin");
@@ -203,5 +208,75 @@ describe("the old addresses", () => {
     render(<App />);
     await waitFor(() => expect(window.location.pathname).toBe("/reviews/setup"));
     expect(await screen.findByRole("heading", { name: "Pillars and weights" })).toBeInTheDocument();
+  });
+});
+
+describe("Projects tabs", () => {
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const projectsAt = { path: "/production", pattern: "/production" };
+  const linksOf = (nav: HTMLElement) => within(nav).getAllByRole("link").map((l) => [l.textContent, l.getAttribute("href")]);
+
+  it("shows Projects and Setup to an admin, Projects current", async () => {
+    renderWithHub(<ProductionPage />, kingdomAdmin, projectsAt);
+    const nav = await screen.findByRole("navigation", { name: "Projects" });
+    expect(linksOf(nav)).toEqual([
+      ["Projects", "/production"],
+      ["Setup", "/production/setup"],
+    ]);
+    expect(within(nav).getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows an employee no tab row", async () => {
+    renderWithHub(<ProductionPage />, kingdomEmployee, projectsAt);
+    await screen.findByRole("heading", { level: 1, name: "Production" });
+    expect(screen.queryByRole("navigation", { name: "Projects" })).not.toBeInTheDocument();
+  });
+
+  it("renders the standard milestones on Setup with the tab row, Setup current", async () => {
+    renderWithHub(<ProductionSetupPage />, kingdomAdmin, { path: "/production/setup", pattern: "/production/setup" });
+    const nav = await screen.findByRole("navigation", { name: "Projects" });
+    expect(within(nav).getByRole("link", { name: "Setup" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: "Standard milestones" })).toBeInTheDocument();
+  });
+});
+
+describe("Settings without a Production tab", () => {
+  it("lists no Production tab, and points a company with the module to Projects, Setup", async () => {
+    renderWithHub(<SettingsPage tab="company" />, makeHub("admin", KINGDOM.company), { path: "/settings/company", pattern: "/settings/company" });
+    const nav = await screen.findByRole("navigation", { name: "Settings" });
+    expect(within(nav).queryByRole("link", { name: "Production" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Projects, Setup" })).toHaveAttribute("href", "/production/setup");
+  });
+
+  it("does not point a company without the module to Projects, Setup", async () => {
+    renderWithHub(<SettingsPage tab="company" />, admin, { path: "/settings/company", pattern: "/settings/company" });
+    await screen.findByRole("navigation", { name: "Settings" });
+    expect(screen.queryByRole("link", { name: "Projects, Setup" })).not.toBeInTheDocument();
+  });
+});
+
+describe("the standard milestones addresses", () => {
+  beforeEach(() => window.history.pushState({}, "", "/"));
+
+  it("sends /settings/production to Projects, Setup", async () => {
+    window.history.pushState({}, "", "/settings/production?persona=admin&company=kingdom");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/production/setup"));
+    expect(await screen.findByRole("heading", { name: "Standard milestones" })).toBeInTheDocument();
+  });
+
+  it("sends an employee from /production/setup Home", async () => {
+    window.history.pushState({}, "", "/production/setup?persona=employee&company=kingdom");
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(screen.queryByRole("heading", { name: "Standard milestones" })).not.toBeInTheDocument();
+  });
+
+  it("sends a company without the module Home", async () => {
+    window.history.pushState({}, "", `/production/setup?persona=admin&company=${KLASIK.company.slug}`);
+    render(<App />);
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(screen.queryByRole("heading", { name: "Standard milestones" })).not.toBeInTheDocument();
   });
 });

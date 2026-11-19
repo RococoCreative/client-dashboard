@@ -140,10 +140,9 @@ describe("Goals hub", () => {
 });
 
 describe("Settings hub", () => {
-  it("has a route per tab, in the order Company, Production, Connections, Activity", () => {
+  it("has a route per tab, in the order Company, Connections, Activity", () => {
     expect(SETTINGS_TABS.map((t) => [t.label, t.to])).toEqual([
       ["Company", "/settings/company"],
-      ["Production", "/settings/production"],
       ["Connections", "/settings/connections"],
       ["Activity", "/settings/activity"],
     ]);

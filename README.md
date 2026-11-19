@@ -338,8 +338,8 @@ trigger keeps the status in step with the completed date: a date completes it, a
 sends both, the date wins; marking complete with no date takes today in the company's time zone;
 reopening clears the date. The badge reads Not started, In progress, or Complete with its date.
 
-A company's standard milestones are its own list, set by its admins in Settings > Production (the
-tab shows only with the `production` module on; 0044). Each project created afterwards, including
+A company's standard milestones are its own list, set by its admins in Projects > Setup (the
+Setup tab shows only with the `production` module on; 0044). Each project created afterwards, including
 projects the system creates, gets a copy of the list in order. Projects that already exist are
 untouched, and later edits to the list do not reach back into a project. With no list, new
 projects start with no milestones, as before.
@@ -901,7 +901,7 @@ migrations are in; the app and function running today never read the new columns
 4. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. Until then a
    source runs on its lowest day only.
 5. In the app, set each company's display settings on Rococo > Companies, add standard milestones
-   in Settings > Production, and set sync days and weekdays-only staleness on each source.
+   in Projects > Setup, and set sync days and weekdays-only staleness on each source.
 6. Record the app deploy and the `connections` redeploy in What is applied live (`0042` to `0045`
    are already recorded there).
 

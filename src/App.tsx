@@ -48,6 +48,7 @@ import MarketingPage from "./pages/MarketingPage.tsx";
 import ReviewsSetupPage from "./pages/gsr/ReviewsSetupPage.tsx";
 import SettingsPage from "./pages/settings/SettingsPage.tsx";
 import ProductionPage from "./pages/production/ProductionPage.tsx";
+import ProductionSetupPage from "./pages/production/ProductionSetupPage.tsx";
 import ProjectPage from "./pages/production/ProjectPage.tsx";
 import WinsPage from "./pages/WinsPage.tsx";
 import SalesFinancePage from "./pages/salesFinance/SalesFinancePage.tsx";
@@ -486,6 +487,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="reviews/settings" element={<RedirectTo path="/reviews/setup" />} />
             <Route path="gsr/settings" element={<RedirectTo path="/reviews/setup" />} />
             <Route path="settings/reviews" element={<RedirectTo path="/reviews/setup" />} />
+            <Route path="settings/production" element={<RedirectTo path="/production/setup" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
@@ -504,6 +506,7 @@ function SignedIn({ session }: { session: Session }) {
                 route with an optional segment, so moving between tabs keeps the page and its load. */}
             <Route path="people/:profileId/:tab?" element={<LeadOnly><PersonPage /></LeadOnly>} />
             <Route path="production" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProductionPage /></CapabilityOnly></ModuleOnly>} />
+            <Route path="production/setup" element={<AdminOnly><ModuleOnly module="production"><ProductionSetupPage /></ModuleOnly></AdminOnly>} />
             <Route path="production/projects/:projectId" element={<ModuleOnly module="production"><CapabilityOnly capability="production_view"><ProjectPage /></CapabilityOnly></ModuleOnly>} />
             {/* Resources: one page, a route per tab, landing on the SOP library. An SOP itself
                 keeps its own address under /sops. */}
