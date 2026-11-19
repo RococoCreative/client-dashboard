@@ -1,10 +1,11 @@
 // The milestone rules the Production pages share, kept pure so they are tested in one place.
-// There is no milestone status: an item is complete when it has a completed-on date (0026).
-// Archived items leave the counts and the next target; letters count like milestones.
+// A milestone is not started, in progress or complete (0043), and the database keeps a complete
+// one dated and an open one undated, so its status alone says whether it is done. Archived items
+// leave the counts and the next target; letters count like milestones.
 import type { ProjectMilestone } from "../types/database.ts";
 
-export function isComplete(m: Pick<ProjectMilestone, "completed_on">): boolean {
-  return m.completed_on !== null;
+export function isComplete(m: Pick<ProjectMilestone, "status">): boolean {
+  return m.status === "complete";
 }
 
 // The order a project's items are read in: sort_order, then oldest first.

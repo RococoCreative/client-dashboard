@@ -274,3 +274,27 @@ describe("the Projects item and the production_view capability", () => {
     expect(labels(navFor(kingdom, false, false, false, lacking("production_view")))).toEqual(labels(navFor(kingdom, false, false, false, all)).filter((l) => l !== "Projects"));
   });
 });
+
+describe("the Financials item and the manual_financials setting", () => {
+  const labels = (layout: NavLayout) => sectionsOf(layout).flatMap((s) => s.items.map((i) => i.label));
+  const off = { ...kingdom, manual_financials: false };
+
+  it("carries the setting", () => {
+    expect(NAV_ITEMS.find((i) => i.id === "financials")?.setting).toBe("manual_financials");
+  });
+
+  it("is hidden for a company with it off, and nothing else moves", () => {
+    expect(labels(navFor(off, true, false, true, all))).not.toContain("Financials");
+    expect(labels(navFor(off, true, false, true, all))).toEqual(labels(navFor(kingdom, true, false, true, all)).filter((l) => l !== "Financials"));
+  });
+
+  it("is shown for a company with it on", () => {
+    expect(labels(navFor(kingdom, true, false, true, all))).toContain("Financials");
+  });
+
+  it("moves the Sales & Finance shortcut off /financials when it is the first page", () => {
+    const klasikOff = { ...klasik, manual_financials: false };
+    expect(sectionShortcuts(navFor(klasik, true, false, true, all)).find((s) => s.group === "sales_finance")?.to).toBe("/financials");
+    expect(sectionShortcuts(navFor(klasikOff, true, false, true, all)).find((s) => s.group === "sales_finance")?.to).toBe("/marketing");
+  });
+});

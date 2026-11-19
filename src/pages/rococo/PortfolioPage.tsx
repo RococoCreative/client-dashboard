@@ -65,7 +65,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     listCompanyReviews(company.id),
     listPillars(company.id),
     listSops(company.id),
-    listSnapshots(company.id),
+    company.manual_financials ? listSnapshots(company.id) : Promise.resolve([] as FinancialSnapshot[]),
     listCampaigns(company.id),
     listInvitations(company.id),
     listCycleOmissions(company.id),
@@ -112,7 +112,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
   else if (pillarTotal !== 100) alerts.push(`Pillar weights total ${formatNumber(pillarTotal)}%`);
   if (pending.length > 0) alerts.push(pluralize(pending.length, "invitation pending", "invitations pending"));
   if (published.length === 0) alerts.push("No published SOPs");
-  if (!latestSnapshot) alerts.push("No financials yet");
+  if (company.manual_financials && !latestSnapshot) alerts.push("No financials yet");
 
   return {
     company,
@@ -186,7 +186,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
         </Button>
       </header>
 
-      <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <dl className={`mt-5 grid grid-cols-2 gap-4 ${company.manual_financials ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         <Signal label="People" value={String(summary.people)} hint={pluralize(summary.admins, "admin")} />
         <Signal
           label={cycles.length > 1 ? "Review cycles" : "Review cycle"}
@@ -198,11 +198,13 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
           }
         />
         <Signal label="SOP library" value={pluralize(summary.publishedSops, "published SOP")} hint={summary.lastSopUpdate ? `Updated ${formatDate(summary.lastSopUpdate)}` : "Nothing yet"} />
-        <Signal
-          label="Financials"
-          value={latestSnapshot ? formatMoney(latestSnapshot.revenue, true) : "-"}
-          hint={latestSnapshot && derived ? `${periodLabel(latestSnapshot.period_type, latestSnapshot.period_start)} · ${formatPercent(derived.netMargin, 1)} net` : "No periods yet"}
-        />
+        {company.manual_financials ? (
+          <Signal
+            label="Financials"
+            value={latestSnapshot ? formatMoney(latestSnapshot.revenue, true) : "-"}
+            hint={latestSnapshot && derived ? `${periodLabel(latestSnapshot.period_type, latestSnapshot.period_start)} · ${formatPercent(derived.netMargin, 1)} net` : "No periods yet"}
+          />
+        ) : null}
         <Signal
           label="Marketing"
           value={pluralize(summary.liveCampaigns, "live campaign")}
@@ -228,7 +230,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
           ["/gsr", "Monthly GSRs"],
           ["/reviews", "Reviews"],
           ["/resources/sops", "Resources"],
-          ["/financials", "Financials"],
+          ...(company.manual_financials ? [["/financials", "Financials"]] : []),
           ["/settings/company", "Settings"],
         ].map(([path, label]) => (
           <Button key={path} variant="ghost" size="sm" onClick={() => onEnter(path)}>

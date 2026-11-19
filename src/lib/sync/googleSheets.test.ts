@@ -80,6 +80,7 @@ function source(config: unknown = sheetsConfig): SyncSourceSpec {
     record_key: [],
     enabled: true,
     sync_weekday: null,
+    sync_weekdays: null,
     sync_time: null,
     sync_timezone: null,
     current_run_id: null,

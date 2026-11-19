@@ -1,5 +1,5 @@
 // Companies tab of the Rococo portfolio: each company's name, theme, logo, the modules it has
-// on, and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
+// on, the display settings (days a win stays on Home, the manual Financials page), and the sign-in domains that decide who can self-serve an account. Convenience over RLS,
 // which already lets Rococo admins do all of this. Deleting a company also tidies what the
 // database cannot reach on its own: the grant each connected provider holds, and the company's
 // stored files.
@@ -26,6 +26,7 @@ import { removeCompanyFiles } from "../../services/storage.ts";
 import { THEMES, THEME_KEYS } from "../../lib/theme.ts";
 import { MODULE_DESCRIPTIONS, MODULE_KEYS, MODULE_LABELS, hasModule, withModule, type ModuleKey } from "../../lib/modules.ts";
 import { normalizeDomain } from "../../lib/email.ts";
+import { MAX_WINS_HOME_DAYS } from "../../lib/wins.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { pluralize } from "../../lib/format.ts";
 import type { Company, ThemeKey } from "../../types/database.ts";
@@ -115,6 +116,19 @@ export default function CompaniesPage() {
       setPendingModules(rest);
     }
     setSavingModules(savingRef.current);
+  }
+
+  // Blank clears the setting; anything else must be a whole number of days from 1 to 3650, the
+  // range the database holds it to (0042). A refusal is said in plain words and nothing is sent.
+  function saveWinsDays(company: Company, next: string): Promise<boolean> | false {
+    const text = next.trim();
+    if (text === "") return patchCompany(company, { wins_home_days: null });
+    const days = /^\d+$/.test(text) ? Number(text) : 0;
+    if (!Number.isSafeInteger(days) || days < 1 || days > MAX_WINS_HOME_DAYS) {
+      setError("Enter a whole number of days between 1 and 3650, or leave it blank.");
+      return false;
+    }
+    return patchCompany(company, { wins_home_days: days });
   }
 
   async function addDomain(company: Company) {
@@ -280,6 +294,24 @@ export default function CompaniesPage() {
                       })}
                     </div>
                     <p className={helpClass}>With no modules on, the company sees the standard hub.</p>
+                  </fieldset>
+                  <fieldset aria-label={`Display settings for ${company.name}`} className="grid gap-4 md:col-span-12 md:grid-cols-12">
+                    <legend className="sr-only">Display settings</legend>
+                    <div className="md:col-span-4">
+                      <label htmlFor={`co-wins-days-${company.id}`} className={labelClass}>Days a win stays on Home</label>
+                      <BlurInput id={`co-wins-days-${company.id}`} type="text" inputMode="numeric" value={company.wins_home_days === null ? "" : String(company.wins_home_days)} onSave={(next) => saveWinsDays(company, next)} />
+                      <p className={helpClass}>Blank means the five newest, with no age limit.</p>
+                    </div>
+                    <div className="flex items-start gap-2 md:col-span-8">
+                      <input
+                        type="checkbox"
+                        id={`co-manual-financials-${company.id}`}
+                        className={`${checkboxClass} mt-0.5`}
+                        checked={company.manual_financials}
+                        onChange={(e) => void patchCompany(company, { manual_financials: e.target.checked })}
+                      />
+                      <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink">Manual Financials page</label>
+                    </div>
                   </fieldset>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>

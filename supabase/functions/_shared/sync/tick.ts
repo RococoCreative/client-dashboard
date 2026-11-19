@@ -2,7 +2,7 @@
 // the Edge Function only reads the rows and runs the plan. A source is started only when it is
 // due, its connection is connected, and its company carries the data sources module: the module
 // is a key in companies.modules, read as data for every company alike (rule 12), so turning it
-// off stops the weekly reads as well as hiding the screens.
+// off stops the scheduled reads as well as hiding the screens.
 import { staleRunCutoff, type SyncStore } from "./runner.ts";
 import { isDue } from "./schedule.ts";
 import type { SyncSourceSpec } from "./types.ts";

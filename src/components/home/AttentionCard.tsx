@@ -34,7 +34,7 @@ export default function AttentionCard({ company }: { company: Company }) {
       listConnections(companyId),
       withSources ? listSyncSources(companyId) : Promise.resolve(undefined),
     ]);
-    const items = attentionItems({ people, cycles, campaigns, connections, sources, now: new Date(), today: todayIso() });
+    const items = attentionItems({ people, cycles, campaigns, connections, sources, now: new Date(), today: todayIso(), companyTimeZone: company.time_zone });
     return limited ? items.map((item) => (item.kind === "not_signed_in" ? { ...item, title: `${item.title}, in your divisions` } : item)) : items;
   }, [companyId, withSources, limited]);
 

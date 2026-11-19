@@ -17,11 +17,13 @@ import { TARGET_MODULE_LABELS, type TargetModule } from "../../types/database.ts
 
 export default function SourcePanel({
   companyId,
+  companyTimeZone,
   targetModule,
   scaffold,
   showRecords = true,
 }: {
   companyId: string;
+  companyTimeZone: string;
   targetModule: TargetModule;
   scaffold: ReactNode;
   showRecords?: boolean;
@@ -51,9 +53,9 @@ export default function SourcePanel({
           key={source.id}
           eyebrow={TARGET_MODULE_LABELS[targetModule]}
           title={source.name}
-          actions={<SyncStateBadge state={syncState(source, connection, now)} />}
+          actions={<SyncStateBadge state={syncState(source, connection, now, companyTimeZone)} />}
         >
-          <FreshnessLine source={source} connection={connection} now={now} />
+          <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
           {showRecords && source.current_run_id !== null ? (
             <div className="mt-4">
               <MappedTable source={source} records={records} />

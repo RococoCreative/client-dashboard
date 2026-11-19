@@ -6,7 +6,7 @@ import { db } from "./supabase.ts";
 import { requireRows } from "../lib/errors.ts";
 
 const PROJECT_COLUMNS = "id, company_id, name, reference, notes, source, source_key, archived_at, created_by, updated_by, created_at, updated_at";
-const MILESTONE_COLUMNS = "id, company_id, project_id, title, description, kind, sort_order, target_date, responsible_profile_id, completed_on, archived_at, created_by, updated_by, created_at, updated_at";
+const MILESTONE_COLUMNS = "id, company_id, project_id, title, description, kind, sort_order, target_date, status, responsible_profile_id, completed_on, archived_at, created_by, updated_by, created_at, updated_at";
 
 export async function listProjects(companyId: string, opts?: { includeArchived?: boolean }): Promise<Project[]> {
   let query = db().from("projects").select(PROJECT_COLUMNS).eq("company_id", companyId);
@@ -68,7 +68,7 @@ export async function createMilestone(input: { project_id: string; title: string
   return data as ProjectMilestone;
 }
 
-export type MilestonePatch = Partial<Pick<ProjectMilestone, "title" | "description" | "kind" | "target_date" | "responsible_profile_id" | "completed_on">>;
+export type MilestonePatch = Partial<Pick<ProjectMilestone, "title" | "description" | "kind" | "target_date" | "responsible_profile_id" | "status" | "completed_on">>;
 export async function updateMilestone(id: string, patch: MilestonePatch): Promise<ProjectMilestone> {
   const { data, error } = await db().from("project_milestones").update(patch).eq("id", id).select(MILESTONE_COLUMNS).single();
   if (error) throw error;

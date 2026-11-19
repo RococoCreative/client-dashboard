@@ -1,7 +1,7 @@
 // Proves the six honest states a data source shows, in precedence order.
 import { describe, expect, it } from "vitest";
 import { STALE_RUN_MINUTES } from "../../../supabase/functions/_shared/sync/runner.ts";
-import { SYNC_STATE_LABELS, ageHours, failureDetail, runCutOff, syncState } from "./state.ts";
+import { SYNC_STATE_LABELS, ageHours, businessHoursBetween, failureDetail, runCutOff, syncState } from "./state.ts";
 import type { SyncSource } from "../../types/database.ts";
 
 const now = new Date("2026-11-09T14:00:00Z");
@@ -96,5 +96,106 @@ describe("SYNC_STATE_LABELS", () => {
       stale: "Stale data",
       synced: "Synced",
     });
+  });
+});
+
+// Weekdays-only staleness. America/New_York is UTC-5 in November (EST) and UTC-4 in March
+// through October (EDT); each instant below is written in UTC from its New York wall time.
+describe("businessHoursBetween", () => {
+  const NY = "America/New_York";
+  const at = (iso: string) => new Date(iso);
+
+  it("counts no hours across a whole weekend", () => {
+    // Fri 17:00 EST -> Mon 07:00 EST: 7 hours of Friday and 7 of Monday.
+    expect(businessHoursBetween(at("2026-11-06T22:00:00Z"), at("2026-11-09T12:00:00Z"), NY)).toBe(14);
+  });
+
+  it("counts every hour between two weekday instants", () => {
+    expect(businessHoursBetween(at("2026-11-10T14:00:00Z"), at("2026-11-11T14:00:00Z"), NY)).toBe(24);
+  });
+
+  it("counts nothing when both ends are inside one weekend", () => {
+    // Sat 10:00 EST -> Sun 20:00 EST.
+    expect(businessHoursBetween(at("2026-11-07T15:00:00Z"), at("2026-11-09T01:00:00Z"), NY)).toBe(0);
+    expect(businessHoursBetween(at("2026-11-07T15:00:00Z"), at("2026-11-07T18:00:00Z"), NY)).toBe(0);
+  });
+
+  it("counts nothing for an empty or reversed span", () => {
+    expect(businessHoursBetween(at("2026-11-10T14:00:00Z"), at("2026-11-10T14:00:00Z"), NY)).toBe(0);
+    expect(businessHoursBetween(at("2026-11-11T14:00:00Z"), at("2026-11-10T14:00:00Z"), NY)).toBe(0);
+  });
+
+  it("judges the weekend in the zone given, not UTC", () => {
+    // Sun 23:00 EST (Mon 04:00 UTC) -> Mon 02:00 EST (Mon 07:00 UTC): 2 weekday hours in New York,
+    // where UTC would call all 3 weekday.
+    expect(businessHoursBetween(at("2026-11-09T04:00:00Z"), at("2026-11-09T07:00:00Z"), NY)).toBe(2);
+    expect(businessHoursBetween(at("2026-11-09T04:00:00Z"), at("2026-11-09T07:00:00Z"), "UTC")).toBe(3);
+  });
+
+  it("counts the real hours across the spring transition (the 23 hour Sunday is a weekend anyway)", () => {
+    // Fri 2026-03-06 20:00 EST -> Mon 2026-03-09 04:00 EDT: 4 hours of Friday and 4 of Monday.
+    expect(businessHoursBetween(at("2026-03-07T01:00:00Z"), at("2026-03-09T08:00:00Z"), NY)).toBe(8);
+    // Mon midnight is 04:00Z after the change; a fixed -5 offset would put it an hour off.
+    expect(businessHoursBetween(at("2026-03-07T12:00:00Z"), at("2026-03-09T16:00:00Z"), NY)).toBe(12);
+  });
+
+  it("counts the real hours across the fall transition (the 25 hour Sunday is a weekend anyway)", () => {
+    // Fri 2026-10-30 20:00 EDT -> Mon 2026-11-02 04:00 EST: 4 hours of Friday and 4 of Monday.
+    expect(businessHoursBetween(at("2026-10-31T00:00:00Z"), at("2026-11-02T09:00:00Z"), NY)).toBe(8);
+    // Mon midnight is 05:00Z after the change.
+    expect(businessHoursBetween(at("2026-10-31T12:00:00Z"), at("2026-11-02T17:00:00Z"), NY)).toBe(12);
+  });
+});
+
+describe("syncState with weekdays only", () => {
+  type Row = Pick<SyncSource, "last_status" | "last_attempt_at" | "last_success_at" | "stale_after_hours" | "stale_business_days" | "sync_timezone">;
+  const row = (patch: Partial<Row> = {}): Row => ({
+    last_status: "succeeded",
+    last_attempt_at: null,
+    last_success_at: "2026-11-06T22:00:00Z", // Fri 17:00 EST
+    stale_after_hours: 48,
+    stale_business_days: true,
+    sync_timezone: "America/New_York",
+    ...patch,
+  });
+  const monday7am = new Date("2026-11-09T12:00:00Z");
+
+  it("is not stale on Monday 07:00 after a Friday 17:00 sync with 48 hours and weekdays only", () => {
+    expect(syncState(row(), connected, monday7am, "America/Chicago")).toBe("synced");
+  });
+
+  it("is stale in the same case with weekdays only off", () => {
+    expect(syncState(row({ stale_business_days: false }), connected, monday7am, "America/New_York")).toBe("stale");
+  });
+
+  it("is stale on Wednesday 18:00 after a Friday 17:00 sync with weekdays only", () => {
+    // 7 + 24 + 24 + 18 = 73 > 48.
+    expect(syncState(row(), connected, new Date("2026-11-11T23:00:00Z"), "America/New_York")).toBe("stale");
+  });
+
+  it("judges the weekend in the source's zone, not UTC", () => {
+    // Synced Sunday 23:00 New York (Monday 04:00 UTC), checked Wednesday 03:00 New York (08:00 UTC).
+    // Weekday hours in New York: 24 + 24 + 3 = 51 (Sunday's last hour is a weekend hour). Read in
+    // UTC the span is Monday 04:00 to Wednesday 08:00, 52 weekday hours. A limit of 51 separates them.
+    const sunday = row({ last_success_at: "2026-11-09T04:00:00Z", stale_after_hours: 51 });
+    const wednesday3am = new Date("2026-11-11T08:00:00Z");
+    expect(syncState(sunday, connected, wednesday3am, "UTC")).toBe("synced");
+    expect(syncState({ ...sunday, sync_timezone: "UTC" }, connected, wednesday3am, "America/New_York")).toBe("stale");
+  });
+
+  it("falls back to the company's zone when the source has no schedule", () => {
+    const unscheduled = row({ sync_timezone: null, last_success_at: "2026-11-09T04:00:00Z", stale_after_hours: 51 });
+    const wednesday3am = new Date("2026-11-11T08:00:00Z");
+    expect(syncState(unscheduled, connected, wednesday3am, "America/New_York")).toBe("synced");
+    expect(syncState(unscheduled, connected, wednesday3am, "UTC")).toBe("stale");
+  });
+
+  it("falls back to elapsed hours for a zone it cannot read", () => {
+    expect(syncState(row({ sync_timezone: "UTC+5" }), connected, monday7am, "America/New_York")).toBe("stale");
+  });
+
+  it("leaves a source with the flag off exactly as before", () => {
+    expect(syncState(row({ stale_business_days: false, last_success_at: hoursAgo(47) }), connected, now, "America/New_York")).toBe("synced");
+    expect(syncState(row({ stale_business_days: false, last_success_at: hoursAgo(49) }), connected, now, "America/New_York")).toBe("stale");
   });
 });

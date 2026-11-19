@@ -9,6 +9,7 @@ import {
   DASHBOARD_MODULE_LABELS,
   LINK_AUDIENCE_LABELS,
   LINK_PROVIDER_LABELS,
+  MILESTONE_KIND_LABELS,
   ROLE_LABELS,
   SCORING_TYPE_LABELS,
   TARGET_MODULE_LABELS,
@@ -42,6 +43,7 @@ export const AUDIT_TABLE_LABELS: Record<string, string> = {
   sync_sources: "Data source",
   external_links: "External link",
   company_capabilities: "Permission",
+  milestone_templates: "Standard milestone",
 };
 
 function fmt(value: unknown): string {
@@ -143,6 +145,9 @@ interface Column {
   kind: Kind;
 }
 
+// A data source's sync days, numbered as the database numbers them (0 = Sunday).
+const WEEKDAY_LABELS: Record<string, string> = { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" };
+
 const COLUMNS: Record<string, Record<string, Column>> = {
   companies: {
     modules: { label: "modules", kind: { labels: MODULE_LABELS } },
@@ -150,6 +155,8 @@ const COLUMNS: Record<string, Record<string, Column>> = {
     theme_key: { label: "theme", kind: "text" },
     name: { label: "name", kind: "text" },
     time_zone: { label: "time zone", kind: "text" },
+    wins_home_days: { label: "days a win stays on Home", kind: "text" },
+    manual_financials: { label: "manual Financials page", kind: "flag" },
   },
   profiles: {
     role: { label: "role", kind: "role" },
@@ -192,10 +199,12 @@ const COLUMNS: Record<string, Record<string, Column>> = {
     config: { label: "settings", kind: "detail" },
     field_map: { label: "field matching", kind: "detail" },
     record_key: { label: "record key", kind: "detail" },
-    sync_weekday: { label: "sync day", kind: { labels: { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" } } },
+    sync_weekday: { label: "sync day", kind: { labels: WEEKDAY_LABELS } },
+    sync_weekdays: { label: "sync days", kind: { labels: WEEKDAY_LABELS } },
     sync_time: { label: "sync time", kind: "text" },
     sync_timezone: { label: "time zone", kind: "text" },
     stale_after_hours: { label: "hours before it reads as stale", kind: "text" },
+    stale_business_days: { label: "counts business days only", kind: "flag" },
     enabled: { label: "on", kind: "flag" },
   },
   external_links: {
@@ -210,6 +219,12 @@ const COLUMNS: Record<string, Record<string, Column>> = {
   company_capabilities: {
     capability: { label: "permission", kind: "capability" },
     min_role: { label: "lowest role", kind: "level" },
+  },
+  milestone_templates: {
+    title: { label: "title", kind: "text" },
+    kind: { label: "kind", kind: { labels: MILESTONE_KIND_LABELS } },
+    sort_order: { label: "position", kind: "text" },
+    archived_at: { label: "removed", kind: "text" },
   },
 };
 

@@ -7,6 +7,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import ExternalLinksList from "../../components/links/ExternalLinksList.tsx";
+import ProductionSync from "../../components/production/ProductionSync.tsx";
 import ScaffoldCard from "../../components/scaffold/ScaffoldCard.tsx";
 import SourcePanel from "../../components/sync/SourcePanel.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -74,9 +75,10 @@ function NewProjectDialog({ companyId, onClose, onCreated }: { companyId: string
 }
 
 export default function ProductionPage() {
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, can } = useHub();
   const companyId = company!.id;
   const [creating, setCreating] = useState(false);
+  const [addedNote, setAddedNote] = useState("");
   const state = useAsync(async () => {
     const [projects, milestones] = await Promise.all([listProjects(companyId), listCompanyMilestones(companyId)]);
     return { projects, milestones };
@@ -103,6 +105,7 @@ export default function ProductionPage() {
     <>
       <PageHeader eyebrow={company!.name} title="Production" description="Projects with their milestones and letters, entered by hand." actions={newProject} />
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
+      {addedNote ? <Notice tone="info" className="mb-4">{addedNote}</Notice> : null}
 
       {!state.data && !state.error ? (
         <SkeletonRows rows={6} />
@@ -147,6 +150,12 @@ export default function ProductionPage() {
 
       {hasModule(company!, "external_links") ? <ExternalLinksList companyId={company!.id} navGroup="production" /> : null}
 
+      {/* Someone who may sync but is not an admin gets Sync now and a last-updated stamp; admins get the
+          full source panel with PM capacity below. */}
+      {!isAdmin && can("sync_run") && hasModule(company!, "data_sources") ? (
+        <ProductionSync companyId={companyId} />
+      ) : null}
+
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <ScaffoldCard
           eyebrow="Production"
@@ -163,7 +172,7 @@ export default function ProductionPage() {
         {/* PM capacity shows its source's state only until the PM mapping slice (S11). Members
             cannot read sources under RLS, so they get the scaffold without a pointless call. */}
         {isAdmin && hasModule(company!, "data_sources") ? (
-          <SourcePanel companyId={company!.id} targetModule="pm_capacity" scaffold={pmCapacity} showRecords={false} />
+          <SourcePanel companyId={company!.id} companyTimeZone={company!.time_zone} targetModule="pm_capacity" scaffold={pmCapacity} showRecords={false} />
         ) : (
           pmCapacity
         )}
@@ -173,9 +182,18 @@ export default function ProductionPage() {
         <NewProjectDialog
           companyId={companyId}
           onClose={() => setCreating(false)}
-          onCreated={(project) => {
-            state.setData((prev) => (prev ? { ...prev, projects: [...prev.projects, project].sort((a, b) => a.name.localeCompare(b.name)) } : prev));
+          onCreated={async (project) => {
             setCreating(false);
+            // Show the project at once, then re-read so its row carries the standard milestones the
+            // database copied onto it (0044). The re-read replaces the list, so it never shows twice.
+            state.setData((prev) => (prev ? { ...prev, projects: [...prev.projects.filter((p) => p.id !== project.id), project].sort((a, b) => a.name.localeCompare(b.name)) } : prev));
+            setAddedNote("");
+            try {
+              const [projects, milestones] = await Promise.all([listProjects(companyId), listCompanyMilestones(companyId)]);
+              state.setData({ projects, milestones });
+            } catch {
+              setAddedNote("The project was added. Reload to see its milestones.");
+            }
           }}
         />
       ) : null}

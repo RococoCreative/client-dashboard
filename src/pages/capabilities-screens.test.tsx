@@ -132,9 +132,9 @@ describe("an admin without company_settings", () => {
     setMockCapabilities(kingdom, { company_settings: "owner" });
     renderWithHub(<SettingsPage tab="roles" />, adminHub, { path: "/settings/roles", pattern: "/settings/roles" });
     const nav = await screen.findByRole("navigation", { name: "Settings" });
-    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Roles", "Reviews", "Connections"]);
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Roles", "Reviews", "Production", "Connections"]);
     expect(within(nav).queryByRole("link", { name: "Company" })).toBeNull();
-    expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["roles", "reviews", "connections"]);
+    expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["roles", "reviews", "production", "connections"]);
   });
 
   it("lands on Roles from /settings", async () => {
@@ -151,10 +151,10 @@ describe("an admin without company_settings", () => {
   });
 });
 
-it("lists five tabs in all, an admin by default gets four with Company first, and Rococo stepped in gets all five", () => {
-  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections", "activity"]);
-  expect(settingsTabsFor(adminHub.can).map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections"]);
-  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can).map((t) => t.key)).toEqual(["company", "roles", "reviews", "connections", "activity"]);
+it("lists six tabs in all, an admin by default gets five with Company first, and Rococo stepped in gets all six", () => {
+  expect(SETTINGS_TABS.map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
+  expect(settingsTabsFor(adminHub.can, adminHub.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections"]);
+  expect(settingsTabsFor(makeHub("rococo", KINGDOM.company).can, KINGDOM.company).map((t) => t.key)).toEqual(["company", "roles", "reviews", "production", "connections", "activity"]);
 });
 
 describe("the company Activity tab", () => {
@@ -262,7 +262,7 @@ describe("wins, milestones and Production follow their capabilities", () => {
     renderWithHub(<WinsPage />, employeeHub, winsRoute);
     expect(await screen.findByText("Sample win 1")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Archive / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
     await user.click(screen.getByRole("button", { name: "New win" }));
     const dialog = screen.getByRole("dialog", { name: "New win" });
     await user.type(within(dialog).getByLabelText("Title"), "Sample win from staff");
@@ -305,7 +305,7 @@ describe("wins, milestones and Production follow their capabilities", () => {
     const done = screen.getByLabelText("Completed on for Sample inspection");
     fireEvent.change(done, { target: { value: "2026-09-14" } });
     fireEvent.blur(done);
-    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Complete Sep 14, 2026")).toBeInTheDocument();
   });
 
   it("a manager still cannot rename or archive the project", async () => {

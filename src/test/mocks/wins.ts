@@ -19,9 +19,10 @@ function patchWin(id: string, patch: Partial<Win>): Win {
   return { ...win };
 }
 
-export async function listWins(companyId: string, opts?: { includeArchived?: boolean; limit?: number }): Promise<Win[]> {
+export async function listWins(companyId: string, opts?: { includeArchived?: boolean; limit?: number; wonOnOrAfter?: string; wonBefore?: string }): Promise<Win[]> {
   const rows = wins
     .filter((x) => x.company_id === companyId && (opts?.includeArchived || x.archived_at === null))
+    .filter((x) => (opts?.wonOnOrAfter === undefined || x.won_on >= opts.wonOnOrAfter) && (opts?.wonBefore === undefined || x.won_on < opts.wonBefore))
     .sort(newestFirst)
     .map((x) => ({ ...x }));
   return opts?.limit === undefined ? rows : rows.slice(0, opts.limit);

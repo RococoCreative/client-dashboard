@@ -33,17 +33,17 @@ $$;
 select tests.act_as(tests.id('klasik_admin'));
 select tests.assert_raises(
   $q$update public.companies set modules = '{wins}' where slug = 'klasik'$q$,
-  '%Only Rococo admins can change a company slug, theme or modules.%'
+  '%Only Rococo admins can change a company slug, theme, modules or display settings.%'
 );
 
 -- case: company_admin_cannot_change_slug_or_theme
 select tests.assert_raises(
   $q$update public.companies set theme_key = 'rba' where slug = 'klasik'$q$,
-  '%Only Rococo admins can change a company slug, theme or modules.%'
+  '%Only Rococo admins can change a company slug, theme, modules or display settings.%'
 );
 select tests.assert_raises(
   $q$update public.companies set slug = 'klasik-two' where slug = 'klasik'$q$,
-  '%Only Rococo admins can change a company slug, theme or modules.%'
+  '%Only Rococo admins can change a company slug, theme, modules or display settings.%'
 );
 
 -- case: company_admin_can_still_rename

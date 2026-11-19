@@ -6,10 +6,13 @@ import { db } from "./supabase.ts";
 
 const COLUMNS = "id, company_id, title, description, won_on, project_id, source_type, source_ref, archived_at, created_by, updated_by, created_at, updated_at";
 
-// Newest first: by the date won, then by when it was entered.
-export async function listWins(companyId: string, opts?: { includeArchived?: boolean; limit?: number }): Promise<Win[]> {
+// Newest first: by the date won, then by when it was entered. wonOnOrAfter and wonBefore bound the
+// date won (inclusive and exclusive), which is how Home and the Archive split a company's wins.
+export async function listWins(companyId: string, opts?: { includeArchived?: boolean; limit?: number; wonOnOrAfter?: string; wonBefore?: string }): Promise<Win[]> {
   let query = db().from("wins").select(COLUMNS).eq("company_id", companyId);
   if (!opts?.includeArchived) query = query.is("archived_at", null);
+  if (opts?.wonOnOrAfter !== undefined) query = query.gte("won_on", opts.wonOnOrAfter);
+  if (opts?.wonBefore !== undefined) query = query.lt("won_on", opts.wonBefore);
   query = query.order("won_on", { ascending: false }).order("created_at", { ascending: false });
   if (opts?.limit !== undefined) query = query.limit(opts.limit);
   const { data, error } = await query;

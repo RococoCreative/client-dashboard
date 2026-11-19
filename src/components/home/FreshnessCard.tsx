@@ -23,7 +23,7 @@ const MODULE_PATHS: Record<TargetModule, string> = {
 
 // canViewProduction is the hub's production_view: a source that feeds Production names its page
 // as plain text for someone who may not open it, instead of a link that would bounce them Home.
-export default function FreshnessCard({ companyId, canViewProduction }: { companyId: string; canViewProduction: boolean }) {
+export default function FreshnessCard({ companyId, companyTimeZone, canViewProduction }: { companyId: string; companyTimeZone: string; canViewProduction: boolean }) {
   const state = useAsync(async () => {
     const [sources, connections] = await Promise.all([listSyncSources(companyId), listConnections(companyId)]);
     return sources.filter((source) => source.enabled).map((source) => ({ source, connection: connections.find((c) => c.id === source.connection_id) ?? null }));
@@ -53,10 +53,10 @@ export default function FreshnessCard({ companyId, canViewProduction }: { compan
                   )}
                   <p className="text-[12px] text-ink-3">{TARGET_MODULE_LABELS[source.target_module]}</p>
                 </div>
-                <SyncStateBadge state={syncState(source, connection, now)} />
+                <SyncStateBadge state={syncState(source, connection, now, companyTimeZone)} />
               </div>
               <div className="mt-1">
-                <FreshnessLine source={source} connection={connection} now={now} />
+                <FreshnessLine source={source} connection={connection} now={now} companyTimeZone={companyTimeZone} />
               </div>
             </li>
           ))}

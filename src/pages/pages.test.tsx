@@ -1402,7 +1402,7 @@ describe("production", () => {
     const done = screen.getByLabelText("Completed on for Foundation poured");
     fireEvent.change(done, { target: { value: "2026-09-14" } });
     fireEvent.blur(done);
-    expect(await screen.findByText("Done Sep 14, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Complete Sep 14, 2026")).toBeInTheDocument();
   });
 
   it("adds a letter at the end", async () => {
@@ -1504,7 +1504,7 @@ describe("wins", () => {
     expect(screen.queryByText("Sample win 5")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New win" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Archive / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
   });
 
   it("gives an admin every field to edit in place", async () => {
@@ -1550,13 +1550,13 @@ describe("wins", () => {
     expect(screen.getByLabelText("Description of Sample win 2")).toHaveValue("Closed on the first walkthrough.");
   });
 
-  it("archives a win after confirming", async () => {
+  it("removes a win after confirming", async () => {
     const user = userEvent.setup();
     renderWithHub(<WinsPage />, kingdomAdmin, winsRoute);
-    await user.click(await screen.findByRole("button", { name: "Archive Sample win 7" }));
-    const dialog = screen.getByRole("dialog", { name: "Archive this win?" });
-    expect(within(dialog).getByText("It leaves this list and the Home card. It is kept, not deleted.")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Archive" }));
+    await user.click(await screen.findByRole("button", { name: "Remove Sample win 7" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove this win?" });
+    expect(within(dialog).getByText("It leaves the Wins page and Home for everyone. It is kept in the record, not deleted.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByDisplayValue("Sample win 7")).not.toBeInTheDocument());
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -1619,7 +1619,7 @@ describe("data sources", () => {
   const salesRoute = { path: "/sales-finance", pattern: "/sales-finance" };
 
   it("carries one Kingdom source in each sync state", () => {
-    const states = KINGDOM.syncSources.map((s) => syncState(s, KINGDOM.connections.find((c) => c.id === s.connection_id) ?? null));
+    const states = KINGDOM.syncSources.map((s) => syncState(s, KINGDOM.connections.find((c) => c.id === s.connection_id) ?? null, new Date(), KINGDOM.company.time_zone));
     expect([...states].sort()).toEqual(["awaiting_first_sync", "failed", "not_connected", "stale", "synced", "syncing"]);
   });
 
@@ -1734,6 +1734,36 @@ describe("data sources", () => {
     expect(within(attention).getByText("Sample stale tab: stale data")).toBeInTheDocument();
   });
 
+  it("lets a weekdays-only source skip the weekend on Home, and flags the same source with the flag off", async () => {
+    // The clock is Tuesday 08:00 in New York. Synced Friday 17:00 with a 48 hour limit: 87 hours have
+    // elapsed, 39 of them on weekdays (7 Friday, 24 Monday, 8 Tuesday).
+    const friday5pm = "2026-09-11T21:00:00.000Z";
+    const staleName = "Sample stale tab";
+    const original = syncService.listSyncSources;
+    const withFlag = (flag: boolean) =>
+      vi.spyOn(syncService, "listSyncSources").mockImplementation(async (companyId) => {
+        const sources = await original(companyId);
+        return sources.map((s) => (s.name === staleName ? { ...s, last_success_at: friday5pm, stale_after_hours: 48, stale_business_days: flag, sync_timezone: null } : s));
+      });
+
+    const on = withFlag(true);
+    onTestFinished(() => on.mockRestore());
+    const first = renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Freshness" });
+    const attentionOn = card("Needs attention");
+    expect(await within(attentionOn).findByText("Sample financial tab: sync failed")).toBeInTheDocument();
+    expect(within(attentionOn).queryByText(`${staleName}: stale data`)).not.toBeInTheDocument();
+    expect(within(card("Freshness")).queryByText("Stale data")).not.toBeInTheDocument();
+    first.unmount();
+    on.mockRestore();
+
+    const off = withFlag(false);
+    onTestFinished(() => off.mockRestore());
+    renderWithHub(<DashboardPage />, kingdomAdmin);
+    await screen.findByRole("heading", { name: "Freshness" });
+    expect(await within(card("Needs attention")).findByText(`${staleName}: stale data`)).toBeInTheDocument();
+  });
+
   it("adds nothing to a company without data sources", async () => {
     const spy = vi.spyOn(syncService, "listSyncSources");
     onTestFinished(() => spy.mockRestore());
@@ -1808,6 +1838,28 @@ describe("data sources", () => {
     expect(headerInputs.map((input) => (input as HTMLInputElement).value)).toEqual(["Job", "Contract amount", "Margin", "Signed on"]);
     expect(within(dialog).getByDisplayValue("job")).toBeInTheDocument();
     expect(within(dialog).getByDisplayValue("contract_amount")).toBeInTheDocument();
+  });
+
+  it("schedules a source on a set of days ticked Mon to Sun", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
+    await screen.findByRole("heading", { name: "Data sources" });
+    const panel = card("Data sources");
+    await within(panel).findByText("Sample sales tab");
+    await user.click(within(panel).getByRole("button", { name: "Edit Sample sales tab" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit data source" });
+    const days = within(within(dialog).getByRole("group", { name: "Sync days" }));
+    expect(days.getAllByRole("checkbox").map((box) => box.closest("label")?.textContent)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(days.getAllByRole("checkbox").filter((box) => (box as HTMLInputElement).checked).map((box) => box.closest("label")?.textContent)).toEqual(["Mon"]);
+    for (const day of ["Tue", "Wed", "Thu", "Fri"]) await user.click(days.getByLabelText(day));
+    await user.clear(within(dialog).getByLabelText("Time"));
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(within(dialog).getByText("Pick a time for the sync days.")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Time"), { target: { value: "08:00" } });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const saved = (await syncService.listSyncSources(KINGDOM.company.id)).find((s) => s.name === "Sample sales tab")!;
+    expect([saved.sync_weekdays, saved.sync_weekday, saved.sync_time]).toEqual([[1, 2, 3, 4, 5], 1, "08:00:00"]);
   });
 
   it("keeps Read headers off until the link names a tab", async () => {
