@@ -10,8 +10,7 @@ import KpiList from "../people/KpiList.tsx";
 import { formatDate } from "../../lib/format.ts";
 import { formatTenure } from "../../lib/people.ts";
 import type { CompanyGoal, EmployeeKpi, Profile } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
 function Fact({ label, value }: { label: string; value: string | null }) {
   return (

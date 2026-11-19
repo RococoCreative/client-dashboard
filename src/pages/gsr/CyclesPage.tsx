@@ -7,7 +7,7 @@
 // math (cadence -> dates -> name) and the overlap rule live in lib/gsr/cycles.ts.
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Settings2, Target } from "lucide-react";
+import { ChevronRight, Plus, Settings2, Target } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
@@ -18,6 +18,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, selectClass, textareaClass } from "../../components/ui/forms.ts";
+import { eyebrowLabelClass, secondaryClass, sectionTitleClass } from "../../components/ui/type.ts";
 import { CYCLE_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -316,30 +317,34 @@ export default function CyclesPage({ section }: { section: HubSection }) {
               <li key={cycle.id}>
                 <Link
                   to={cyclePath(cycle)}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-surface px-5 py-4 transition-colors duration-150 hover:border-line-strong"
+                  className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-4 transition-colors duration-150 hover:border-line-strong sm:px-6"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-display text-lg text-heading">{cycle.name}</h2>
-                      <Badge tone={CYCLE_STATUS_TONE[cycle.status]}>{cycle.status === "open" ? "Open" : "Closed"}</Badge>
-                    </div>
-                    <p className="mt-0.5 text-[13px] text-ink-2">
-                      {formatPeriod(cycle.period_start, cycle.period_end)} · {CADENCE_LABELS[cycle.cadence]}
-                      {cycle.theme ? ` · Theme: ${cycle.theme}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-6 text-right">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-label text-ink-3">Reviews</p>
-                      <p className="tnum text-sm text-ink">{progress.complete}/{progress.total} complete</p>
-                    </div>
-                    {gsr ? null : (
-                      <div>
-                        <p className="text-[11px] uppercase tracking-label text-ink-3">Team</p>
-                        <p className="tnum text-sm text-ink">{team ?? "-"}</p>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className={sectionTitleClass}>{cycle.name}</h2>
+                        <Badge tone={CYCLE_STATUS_TONE[cycle.status]}>{cycle.status === "open" ? "Open" : "Closed"}</Badge>
                       </div>
-                    )}
+                      <p className={`mt-0.5 ${secondaryClass}`}>
+                        {formatPeriod(cycle.period_start, cycle.period_end)} · {CADENCE_LABELS[cycle.cadence]}
+                        {cycle.theme ? ` · Theme: ${cycle.theme}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-6 sm:text-right">
+                      <div>
+                        <p className={eyebrowLabelClass}>Reviews</p>
+                        <p className="tnum text-sm text-ink">{progress.complete}/{progress.total} complete</p>
+                      </div>
+                      {gsr ? null : (
+                        <div>
+                          <p className={eyebrowLabelClass}>Team</p>
+                          <p className="tnum text-sm text-ink">{team ?? "-"}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {/* The whole row opens the cycle; the chevron only says so. */}
+                  <ChevronRight size={16} className="shrink-0 text-ink-3" aria-hidden />
                 </Link>
               </li>
             );

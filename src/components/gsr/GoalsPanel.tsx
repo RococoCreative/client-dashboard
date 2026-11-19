@@ -24,6 +24,7 @@ import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
+import { eyebrowLabelClass as eyebrowClass, secondaryClass } from "../ui/type.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -31,8 +32,6 @@ import { createGoal, deleteGoal, listGoalNotes, listGoalPrivate, listGoals, save
 import { GOAL_KIND_ORDER, goalLockedFor, goalOutcome, goalPeriodLabel, goalSettled, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { GOAL_KIND_LABELS, type ActionStep, type Goal, type GoalKind, type GoalNote, type GoalPrivate } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 // The period a goal belongs to, as one select value: "year:2026" or "bhag".
 type Period = Pick<Goal, "scope" | "year">;
@@ -218,7 +217,7 @@ function GoalCard({
           )}
           {canEdit && !setForThem ? (
             <>
-              <IconButton label="Edit goal" onClick={onEdit}><Pencil size={14} aria-hidden /></IconButton>
+              <IconButton label="Edit goal" onClick={onEdit} className="!h-11 !w-11 sm:!h-9 sm:!w-9"><Pencil size={15} aria-hidden /></IconButton>
               <IconButton label="Delete goal" onClick={onDelete}><Trash2 size={14} aria-hidden /></IconButton>
             </>
           ) : null}
@@ -263,12 +262,16 @@ export default function GoalsPanel({
   employeeId,
   canEdit,
   ownerName,
+  quiet = false,
 }: {
   companyId: string;
   employeeId: string;
   canEdit: boolean;
   // The person's first name, for the line that tells anyone else what stays private.
   ownerName?: string;
+  // Set where the panel is one card on a page with its own primary action (a review): New goal is
+  // a quiet button, and no goals yet is one line rather than a large empty block.
+  quiet?: boolean;
 }) {
   const { profile, isAdmin } = useHub();
   // Steps and notes are the owner's alone. The database would hand anyone else no rows, so the
@@ -344,6 +347,11 @@ export default function GoalsPanel({
       {state.error ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? (
         <SkeletonRows rows={4} />
+      ) : goals.length === 0 && quiet ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className={secondaryClass}>No goals for this year or next, and no BHAG, yet.</p>
+          {canEdit ? <Button variant="secondary" size="sm" onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button> : null}
+        </div>
       ) : goals.length === 0 ? (
         <EmptyState
           eyebrow="Goals"
@@ -360,7 +368,7 @@ export default function GoalsPanel({
                   <Lock size={12} aria-hidden /> Action steps and progress notes are private to {ownerName ?? "the person whose goals these are"}.
                 </p>
               ) : <span />}
-              {canEdit ? <Button size="sm" onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button> : null}
+              {canEdit ? <Button variant={quiet ? "secondary" : "primary"} size="sm" onClick={() => setDialog({ goal: null })}><Plus size={14} aria-hidden /> New goal</Button> : null}
             </div>
           ) : null}
           {GOAL_KIND_ORDER.map((kind) => {

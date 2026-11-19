@@ -17,6 +17,7 @@ import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Field from "../../components/ui/Field.tsx";
+import IconButton from "../../components/ui/IconButton.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -65,6 +66,10 @@ import { displayName, formatDate, formatPeriod, parseDate, pluralize } from "../
 import { hasAccount, hasFullScope } from "../../lib/people.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { REVIEW_STATUS_LABELS, type CycleOmission, type Profile, type ReviewCycle } from "../../types/database.ts";
+
+// The team table runs edge to edge in its card, so its first and last cells take the card's own
+// padding (16px on a phone, 24px from sm) rather than the 12px every cell has.
+const edgeCells = "[&>*:first-child]:pl-4 [&>*:last-child]:pr-4 sm:[&>*:first-child]:pl-6 sm:[&>*:last-child]:pr-6";
 
 // A month is a calendar month, here as in the New month form: the start snaps to the first and
 // the end follows it. Other cadences keep the dates the admin types.
@@ -369,7 +374,10 @@ export default function CyclePage() {
         actions={
           canRunCycle ? (
             <>
-              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}><Pencil size={14} aria-hidden /> Edit</Button>
+              {/* The name, dates and theme read in the header above; the pencil opens them as one form. */}
+              <IconButton label="Edit cycle" onClick={() => setEditing(true)} className="!h-11 !w-11 sm:!h-9 sm:!w-9">
+                <Pencil size={15} aria-hidden />
+              </IconButton>
               {open ? (
                 <Button variant="secondary" size="sm" onClick={() => { setCloseError(""); setClosing(true); }} disabled={busy}>
                   <Lock size={14} aria-hidden /> Close cycle
@@ -421,7 +429,7 @@ export default function CyclePage() {
         title="Reviews"
         actions={
           missing.length > 0 && open ? (
-            <Button size="sm" variant="secondary" onClick={() => void startAll()} disabled={busy}>
+            <Button size="sm" onClick={() => void startAll()} disabled={busy}>
               <UsersRound size={14} aria-hidden /> Start all {missing.length} reviews
             </Button>
           ) : null
@@ -429,18 +437,18 @@ export default function CyclePage() {
         padded={false}
       >
         {team.length === 0 && omitted.length > 0 ? (
-          <p className="p-5 text-sm text-ink-2">Everyone is omitted from this cycle. Add someone back below.</p>
+          <p className="p-4 text-sm text-ink-2 sm:p-6">Everyone is omitted from this cycle. Add someone back below.</p>
         ) : team.length === 0 ? (
           // An account is never a precondition: the roster is what a cycle covers, and people are
           // added to it with or without an invitation.
-          <p className="p-5 text-sm text-ink-2">
+          <p className="p-4 text-sm text-ink-2 sm:p-6">
             Nobody on the roster yet. Add the team in <Link to="/people" className="text-link hover:underline">People</Link> and their {gsr ? "GSRs" : "reviews"} appear here.
           </p>
         ) : (
           <div className="relative overflow-x-auto">
             <table className={tableClass}>
               <thead>
-                <tr>
+                <tr className={edgeCells}>
                   <th className={thClass}>Person</th>
                   <th className={thClass}>Status</th>
                   {columns.pillarScores ? (
@@ -457,7 +465,7 @@ export default function CyclePage() {
               </thead>
               <tbody>
                 {rows.map(({ person, review, result }) => (
-                  <tr key={person.id} className="hover:bg-surface-2/60">
+                  <tr key={person.id} className={`${edgeCells} hover:bg-surface-2/60`}>
                     <td className={tdClass}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
@@ -500,7 +508,7 @@ export default function CyclePage() {
                       </td>
                     ) : null}
                     <td className={`${tdClass} text-right`}>
-                      <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center justify-end gap-3 whitespace-nowrap">
                         {review ? (
                           <Link to={reviewPath(review.id, cycle.cadence)} className="text-[13px] text-link hover:underline">Open</Link>
                         ) : open ? (
@@ -543,7 +551,7 @@ export default function CyclePage() {
             {omitted.map(({ person, omission, review }) => {
               const by = omission.omitted_by ? (directory.find((d) => d.id === omission.omitted_by)?.full_name?.trim() || null) : null;
               return (
-                <li key={person.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <li key={person.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar person={person} size={28} />
                     <div className="min-w-0">

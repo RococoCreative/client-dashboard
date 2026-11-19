@@ -19,8 +19,7 @@ import { hasAccount } from "../../lib/people.ts";
 import { isDone } from "../../lib/tasks.ts";
 import { linkTaskToGoal, listTasks } from "../../services/tasks.ts";
 import type { Goal, Profile, TaskWithSteps } from "../../types/database.ts";
-
-const eyebrowClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
+import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
 type TasksUpdate = (update: (tasks: TaskWithSteps[]) => TaskWithSteps[]) => void;
 

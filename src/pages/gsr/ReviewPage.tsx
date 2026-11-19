@@ -51,6 +51,7 @@ import ScoreRing from "../../components/ui/ScoreRing.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass, labelClass, selectClass } from "../../components/ui/forms.ts";
+import { eyebrowLabelClass } from "../../components/ui/type.ts";
 import { PREVIOUS_STATUS_TONE, REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { hasModule } from "../../lib/modules.ts";
@@ -96,7 +97,11 @@ function reviewerFallback(reviewerId: string, viewer: Pick<Profile, "id" | "is_r
 }
 
 // Table headers must stay table-cells: the shared label class sets display:block.
-const miniThClass = "pb-2 text-[11px] font-medium uppercase tracking-label text-ink-3";
+const miniThClass = `pb-2 ${eyebrowLabelClass}`;
+// Below sm the line items stack: the deliverable and its notes take the full width, and target,
+// actual, achieved and remove sit in a row under it, each figure with its column's name above it,
+// so the deliverable's name is never squeezed to a few letters on a phone.
+const stackedCell = "max-sm:p-0 max-sm:before:mb-1 max-sm:before:block max-sm:before:content-[attr(data-label)] max-sm:before:text-[12px] max-sm:before:leading-normal max-sm:before:text-ink-3";
 
 // A Monthly GSRs pillar on a scored review: each Goal Setting Review inside the period, counted at
 // the score an admin locked it in at, and not before; after sign-off, the figure the review was
@@ -727,7 +732,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           className="mb-6"
           description="Goals for this year and next, and the BHAG, tracked on the profile and on every quarterly and annual review."
         >
-          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} ownerName={displayName(employee).split(" ")[0]} />
+          <GoalsPanel companyId={review.company_id} employeeId={review.employee_id} canEdit={isAdmin} ownerName={displayName(employee).split(" ")[0]} quiet />
         </Section>
       ) : null}
 
@@ -945,8 +950,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                         </p>
                       ) : (
                         <div className="relative overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
+                          <table className="w-full text-sm max-sm:block">
+                            <thead className="max-sm:sr-only">
                               <tr className="text-left">
                                 <th className={miniThClass}>Deliverable</th>
                                 <th className={`${miniThClass} text-right`}>Target</th>
@@ -955,27 +960,27 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                                 <th className="pb-2"></th>
                               </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="max-sm:block">
                               {lineItems.map((item) => {
                                 const achieved = lineItemPercent(item);
                                 return (
-                                  <tr key={item.id} className="border-t border-line">
-                                    <td className="py-2 pr-3">
+                                  <tr key={item.id} className="border-t border-line max-sm:flex max-sm:first:border-t-0 max-sm:flex-wrap max-sm:items-start max-sm:gap-x-2 max-sm:py-3">
+                                    <td className="py-2 pr-3 max-sm:basis-full max-sm:p-0 max-sm:pb-2">
                                       <BlurInput value={item.label ?? ""} disabled={!canScore} placeholder="What was the deliverable?" onSave={(next) => saveLineItem(item, { label: next })} className={`${inputClass} mt-0`} />
                                       {canScore || item.notes ? (
                                         <BlurInput value={item.notes ?? ""} disabled={!canScore} placeholder="Notes" onSave={(next) => saveLineItem(item, { notes: next.trim() || null })} className={`${inputClass} mt-1.5 text-[12.5px]`} />
                                       ) : null}
                                     </td>
-                                    <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "target", next)} className={`${inputClass} tnum mt-0 text-right`} />
+                                    <td data-label="Target" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
+                                      <BlurInput type="text" ariaLabel={`Target for ${item.label || "this deliverable"}`} value={item.target === null ? "" : String(item.target)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "target", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
-                                    <td className="w-28 py-2 pr-2 align-top">
-                                      <BlurInput type="text" value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "actual", next)} className={`${inputClass} tnum mt-0 text-right`} />
+                                    <td data-label="Actual" className={`w-28 py-2 pr-2 align-top max-sm:w-auto max-sm:flex-1 ${stackedCell}`}>
+                                      <BlurInput type="text" ariaLabel={`Actual for ${item.label || "this deliverable"}`} value={item.actual === null ? "" : String(item.actual)} disabled={!canScore} placeholder="0" onSave={(next) => saveLineFigure(item, "actual", next)} className={`${inputClass} tnum mt-0 text-right`} />
                                     </td>
-                                    <td className="tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2">
+                                    <td data-label="Achieved" className={`tnum w-20 py-2 text-right align-top leading-[38px] text-ink-2 max-sm:w-16 ${stackedCell}`}>
                                       {achieved === null ? "-" : `${achieved}%`}
                                     </td>
-                                    <td className="w-10 py-2 text-right align-top">
+                                    <td className="w-10 py-2 text-right align-top max-sm:self-end max-sm:p-0">
                                       {canScore ? (
                                         <IconButton label="Remove deliverable" onClick={() => setRemoving(item)}>
                                           <Trash2 size={14} aria-hidden />
