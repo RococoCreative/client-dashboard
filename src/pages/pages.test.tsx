@@ -1166,6 +1166,18 @@ describe("connections", () => {
     expect(screen.getByText("Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect Google Sheets" })).toBeInTheDocument();
   });
+
+  it("shows a connection's error line in the danger colour", async () => {
+    const rows = await connectionsService.listConnections(KLASIK.company.id);
+    const ghl = rows.find((r) => r.provider === "gohighlevel")!;
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(
+      rows.map((r) => (r === ghl ? { ...r, status: "error" as const, last_error: "The provider refused the saved sign-in." } : r)),
+    );
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} />, admin);
+    const line = await screen.findByText("The provider refused the saved sign-in.");
+    expect(line).toHaveClass("text-danger");
+  });
 });
 
 // Last of all, because these file and tick goals the earlier tests read.

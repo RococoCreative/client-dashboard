@@ -207,7 +207,7 @@ function CycleProgress({
               <Link to={cyclePath(cycle)} className={`text-link hover:underline ${tapTargetClass}`}>All {people.length} people</Link>
             </p>
           ) : null}
-          </>
+        </>
       )}
     </Section>
   );

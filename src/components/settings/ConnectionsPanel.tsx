@@ -9,18 +9,18 @@ import Button from "../ui/Button.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
-import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
+import { itemTitleClass, metaClass, metaSizeClass, secondaryClass } from "../ui/type.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection, listConnections, startConnection } from "../../services/connections.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate } from "../../lib/format.ts";
 import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type ConnectionProvider } from "../../types/database.ts";
 
+// The meta line in the danger colour: the size and leading come from the type scale, the colour is named here.
+const DANGER_META = `${metaSizeClass} text-danger`;
+
 // What each provider feeds, in the company's terms. Industry neutral; the figures themselves
 // are the company's own rows.
-// The meta line in the danger colour: the size and leading come from the type scale, the colour is swapped.
-const DANGER_META = metaClass.replace("text-ink-3", "text-danger");
-
 const PROVIDER_BLURBS: Record<ConnectionProvider, string> = {
   gohighlevel: "Closed sales, for the company and for each person, from won opportunities.",
   quickbooks: "Revenue, costs, profit and cash for the company; revenue per person where the books tag it.",
