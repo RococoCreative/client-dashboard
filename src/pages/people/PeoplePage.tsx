@@ -532,7 +532,7 @@ export default function PeoplePage() {
                                       {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
                                     </Button>
                                   ) : null}
-                                  <Button variant="danger" size="sm" aria-label={`Cancel the invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
+                                  <Button variant="danger" size="sm" aria-label={`Cancel invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
                                     Cancel invitation
                                   </Button>
                                 </>

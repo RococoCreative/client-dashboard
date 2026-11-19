@@ -5,13 +5,15 @@
 // in yet is listed like anyone else, marked as such: everything attaches to the person, not an
 // account. Status comes from the review rows alone; nothing here computes a score. Who the month
 // covers is cycleRoster's call, the roster every count of a cycle reads, so a report an admin left
-// out of it reads "Not in this cycle" and never "Not started".
+// out of it reads "Not in this cycle" and never "Not started". The row has no control but the
+// name, so on a phone the name's link stretches over its whole row.
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar.tsx";
 import Badge from "../ui/Badge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { tapStretchClass } from "../ui/tap.ts";
 import { itemTitleClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { REVIEW_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
@@ -33,11 +35,11 @@ function TeamRow({ person, standing, tasks, withTasks }: { person: Profile; stan
   const today = todayIso();
   const overdue = tasks.filter((t) => isOverdue(t, today)).length;
   return (
-    <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <li className="relative flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <Avatar person={person} size={28} />
         <div className="min-w-0">
-          <Link to={`/people/${person.id}`} className={`${itemTitleClass} hover:text-link`}>
+          <Link to={`/people/${person.id}`} className={`${itemTitleClass} hover:text-link ${tapStretchClass}`}>
             {displayName(person)}
           </Link>
           <p className={`truncate ${metaClass}`}>{person.title ?? ROLE_LABELS[person.role]}</p>

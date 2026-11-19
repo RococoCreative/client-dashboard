@@ -7,6 +7,7 @@ import SyncStateBadge from "../sync/SyncStateBadge.tsx";
 import Notice from "../ui/Notice.tsx";
 import Section from "../ui/Section.tsx";
 import SkeletonRows from "../ui/SkeletonRows.tsx";
+import { tapStretchClass } from "../ui/tap.ts";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { syncState } from "../../lib/sync/state.ts";
 import { listConnections } from "../../services/connections.ts";
@@ -45,11 +46,13 @@ export default function FreshnessCard({ companyId, companyTimeZone, canViewProdu
           {state.data.map(({ source, connection }) => (
             <li key={source.id} className="px-4 sm:px-6 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
+                {/* On a phone the name block is a real 44px box and its link covers that block
+                    only, never the freshness line below, which can hold a link of its own. */}
+                <div className="relative min-w-0 tap:flex tap:min-h-11 tap:flex-col tap:justify-center">
                   {source.target_module === "pm_capacity" && !canViewProduction ? (
                     <span className="text-sm font-medium text-ink">{source.name}</span>
                   ) : (
-                    <Link to={MODULE_PATHS[source.target_module]} className="text-sm font-medium text-ink hover:text-link">{source.name}</Link>
+                    <Link to={MODULE_PATHS[source.target_module]} className={`text-sm font-medium text-ink hover:text-link ${tapStretchClass}`}>{source.name}</Link>
                   )}
                   <p className="text-[12px] text-ink-3">{TARGET_MODULE_LABELS[source.target_module]}</p>
                 </div>
