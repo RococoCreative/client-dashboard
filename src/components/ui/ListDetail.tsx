@@ -5,12 +5,13 @@
 // no script measures the screen. With nothing selected the detail is not rendered at any width.
 // An empty list shows nothing of its own, so the page says what an empty list means (its footer);
 // "Nothing matches that." is only for a search that found nothing. Items carrying a group (retired
-// roles) follow the rest under that group's label.
+// roles) follow the rest under that group's label; a page that wants the label to carry the count
+// of the rows shown passes groupLabel, which is given the group and how many of its rows match.
 import { ArrowLeft, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { inputClass } from "./forms.ts";
-import { itemTitleClass, metaClass, secondaryClass } from "./type.ts";
+import { eyebrowLabelClass, itemTitleClass, metaClass, secondaryClass } from "./type.ts";
 
 export interface ListDetailItem {
   id: string;
@@ -24,7 +25,7 @@ const CARD = "rounded-lg border border-line bg-surface p-4 sm:p-6";
 // A muted title swaps the ink for ink-3 rather than stacking both, so which one wins never depends
 // on the order the stylesheet happens to list them in.
 const MUTED_TITLE = itemTitleClass.replace(/(^|\s)text-ink(?=\s|$)/, "$1text-ink-3");
-const GROUP_LABEL = "px-2 pb-1.5 pt-4 text-[11px] font-medium uppercase tracking-label text-ink-3";
+const GROUP_LABEL = `px-2 pb-1.5 pt-4 ${eyebrowLabelClass}`;
 
 export default function ListDetail({
   label,
@@ -34,6 +35,7 @@ export default function ListDetail({
   backHref,
   countLabel,
   searchLabel,
+  groupLabel,
   actions,
   footer,
   children,
@@ -45,6 +47,7 @@ export default function ListDetail({
   backHref: string;
   countLabel: string;
   searchLabel?: string;
+  groupLabel?: (group: string, shownCount: number) => string;
   actions?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
@@ -55,6 +58,7 @@ export default function ListDetail({
   // Ungrouped items first, then each group in the order it first appears.
   const groups = [...new Set(matched.map((item) => item.group ?? ""))].sort((a, b) => Number(a !== "") - Number(b !== ""));
   const shown = groups.flatMap((group) => matched.filter((item) => (item.group ?? "") === group));
+  const groupCount = (group: string) => matched.filter((item) => item.group === group).length;
   const hasSelection = selectedId !== null;
 
   return (
@@ -90,7 +94,7 @@ export default function ListDetail({
               const startsGroup = item.group && item.group !== shown[index - 1]?.group;
               return (
                 <li key={item.id}>
-                  {startsGroup ? <p className={GROUP_LABEL}>{item.group}</p> : null}
+                  {startsGroup ? <p className={GROUP_LABEL}>{groupLabel ? groupLabel(item.group!, groupCount(item.group!)) : item.group}</p> : null}
                   <Link
                     to={hrefFor(item.id)}
                     aria-current={selected ? "true" : undefined}

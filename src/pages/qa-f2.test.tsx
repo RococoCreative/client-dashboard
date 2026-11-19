@@ -1,7 +1,7 @@
-// Follow-up QA round, group F2: dialogs, settings and connections. Each test pins a defect a
-// reviewer reproduced on the merged QA branch: a job role delete whose failure showed up in another
-// dialog, a pillar weight message that stayed under a valid number, a company goals notice
-// that outlived the action it was about, and a "connected" line shown over a row that says it is not.
+// Dialogs, settings and connections. Each test pins a fault a reviewer reproduced: a job role delete
+// whose failure showed up in another dialog, a pillar weight message that stayed under a valid
+// number, a company goals notice that outlived the action it was about, and a "connected" line
+// shown over a row that says it is not.
 //
 // The mocks are the usual in-memory data layer, with the calls these defects get wrong watched so a
 // test can make one fail or hold it in flight.

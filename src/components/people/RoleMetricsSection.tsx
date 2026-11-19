@@ -12,12 +12,11 @@ import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import EditRow from "../ui/EditRow.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
-import { metaClass, secondaryClass } from "../ui/type.ts";
+import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { createRoleMetric, deleteRoleMetric, updateRoleMetric, type RoleMetricPatch } from "../../services/scorecards.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { METRIC_KIND_LABELS, keysOf, type JobRole, type MetricKind, type RoleMetric } from "../../types/database.ts";
 
-const labelClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 const ICON_SIZE = "!h-11 !w-11 sm:!h-9 sm:!w-9";
 
 const SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -245,7 +244,7 @@ export default function RoleMetricsSection({
   return (
     <section aria-labelledby="role-metrics-title" className="mt-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="role-metrics-title" className={labelClass}>Scorecard metrics</h3>
+        <h3 id="role-metrics-title" className={eyebrowLabelClass}>Scorecard metrics</h3>
         {metrics && !adding ? (
           <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
             <Plus size={14} aria-hidden /> Add metric
@@ -280,7 +279,7 @@ export default function RoleMetricsSection({
                 onDone={() => setEditingId(null)}
                 display={
                   <>
-                    <p className="flex flex-wrap items-center gap-2 text-[14px] font-medium text-ink">
+                    <p className={`${bodyClass} flex flex-wrap items-center gap-2 font-medium`}>
                       <span className="break-words">{metric.name}</span>
                       {metric.is_active ? null : <Badge>Retired</Badge>}
                     </p>

@@ -9,12 +9,10 @@ import Button from "../ui/Button.tsx";
 import EditRow from "../ui/EditRow.tsx";
 import IconButton from "../ui/IconButton.tsx";
 import { inputClass } from "../ui/forms.ts";
-import { bodyClass, metaClass, secondaryClass } from "../ui/type.ts";
+import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass } from "../ui/type.ts";
 import { createJobRoleGoal, deleteJobRoleGoal, updateJobRoleGoal } from "../../services/jobRoles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import type { JobRole, JobRoleGoal } from "../../types/database.ts";
-
-const labelClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
 
 // The one add form, opened by Add role goal.
 function AddGoalForm({ role, onAdd, onCancel }: { role: JobRole; onAdd: (title: string) => void; onCancel: () => void }) {
@@ -97,7 +95,7 @@ export default function RoleGoalsSection({
   return (
     <section aria-labelledby="role-goals-title" className="mt-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="role-goals-title" className={labelClass}>Role goals</h3>
+        <h3 id="role-goals-title" className={eyebrowLabelClass}>Role goals</h3>
         {adding ? null : (
           <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
             <Plus size={14} aria-hidden /> Add role goal

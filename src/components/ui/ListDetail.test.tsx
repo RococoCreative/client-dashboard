@@ -107,4 +107,31 @@ describe("ListDetail", () => {
     expect(lead.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(label.compareDocumentPosition(officer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it("labels a group with the count of its rows that match the search", async () => {
+    render(
+      <MemoryRouter>
+        <ListDetail
+          label="Job roles"
+          items={[
+            { id: "a", title: "Site lead" },
+            { id: "b", title: "Site safety officer", group: "retired" },
+            { id: "c", title: "Estimator", group: "retired" },
+          ]}
+          selectedId={null}
+          hrefFor={(id) => `/roles/${id}`}
+          backHref="/roles"
+          countLabel="3 roles"
+          searchLabel="Search roles"
+          groupLabel={(_group, shown) => `Retired roles (${shown})`}
+        >
+          <p>The open role</p>
+        </ListDetail>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Retired roles (2)")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search roles" }), "safety");
+    expect(screen.getByText("Retired roles (1)")).toBeInTheDocument();
+    expect(screen.queryByText("Retired roles (2)")).not.toBeInTheDocument();
+  });
 });

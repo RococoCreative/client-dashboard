@@ -3,7 +3,7 @@
 // land on one. On a wide screen the bare address opens the first active role, so the detail is never
 // empty; on a phone it is the list alone. This page loads, routes and builds the list; the role's
 // sections live in components/people.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import Button from "../../components/ui/Button.tsx";
@@ -14,7 +14,7 @@ import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
 import { secondaryClass, sectionTitleClass } from "../../components/ui/type.ts";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
-import RoleDetail from "../../components/people/RoleDetail.tsx";
+import RoleDetail, { type RoleWrites } from "../../components/people/RoleDetail.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { createJobRole, listJobRoleGoals, listJobRoles } from "../../services/jobRoles.ts";
@@ -26,6 +26,8 @@ import { pluralize } from "../../lib/format.ts";
 import type { JobRole } from "../../types/database.ts";
 
 const BASE = "/people/roles";
+// The group retired roles sit under; the list labels it with how many of them are showing.
+const RETIRED = "retired";
 
 // The list and detail sit side by side from lg up (ListDetail); only there does the bare address
 // open a role. Without matchMedia (a test DOM) the screen counts as wide.
@@ -83,6 +85,17 @@ export default function RolesPage() {
   const metricState = useAsync(() => listRoleMetrics(companyId, true), [companyId]);
   const divisionState = useAsync(() => listDivisions(companyId), [companyId]);
   const [addingRole, setAddingRole] = useState(false);
+  // Each role's write queue, kept here so a role left and opened again picks up the queue its
+  // first visit started, and its writes stay in order.
+  const writesByRole = useRef(new Map<string, RoleWrites>());
+  const writesFor = (id: string) => {
+    let writes = writesByRole.current.get(id);
+    if (!writes) {
+      writes = { queue: Promise.resolve(), pending: null, inFlight: 0 };
+      writesByRole.current.set(id, writes);
+    }
+    return writes;
+  };
 
   const roles = state.data?.roles ?? [];
   const firstRole = roles.find((r) => r.is_active) ?? roles[0];
@@ -111,12 +124,11 @@ export default function RolesPage() {
 
   const { goals, people } = state.data;
   const metrics = metricState.data;
-  const retiredCount = roles.filter((r) => !r.is_active).length;
   const items: ListDetailItem[] = roles.map((role) => {
     const holders = people.filter((p) => p.is_active && p.job_role_id === role.id).length;
     const facts = [pluralize(holders, "person", "people")];
     if (metrics) facts.push(pluralize(metrics.filter((m) => m.job_role_id === role.id && m.is_active).length, "metric"));
-    return { id: role.id, title: role.name, meta: facts.join(" · "), muted: !role.is_active, group: role.is_active ? undefined : `Retired roles (${retiredCount})` };
+    return { id: role.id, title: role.name, meta: facts.join(" · "), muted: !role.is_active, group: role.is_active ? undefined : RETIRED };
   });
   const role = roleId ? roles.find((r) => r.id === roleId) : undefined;
   const setData = state.setData;
@@ -132,6 +144,7 @@ export default function RolesPage() {
         backHref={BASE}
         countLabel={pluralize(roles.length, "role")}
         searchLabel={roles.length > 0 ? "Search roles" : undefined}
+        groupLabel={(_group, shown) => `Retired roles (${shown})`}
         actions={
           <Button variant="secondary" size="sm" onClick={() => setAddingRole(true)}>
             <Plus size={14} aria-hidden /> Add role
@@ -143,6 +156,7 @@ export default function RolesPage() {
           <RoleDetail
             key={role.id}
             role={role}
+            getWrites={() => writesFor(role.id)}
             goals={goals.filter((g) => g.job_role_id === role.id)}
             metrics={metrics}
             metricsError={metricState.error}

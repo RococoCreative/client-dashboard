@@ -3,7 +3,7 @@
 // it brings into every month, and its scorecard metrics, with Retire and Delete at the foot, away
 // from the everyday controls. Setup fields read as text until their pencil. Roles are rows (rule
 // 12), so nothing here knows a company by name.
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
@@ -12,7 +12,7 @@ import ConfirmDialog from "../ui/ConfirmDialog.tsx";
 import EditRow from "../ui/EditRow.tsx";
 import Notice from "../ui/Notice.tsx";
 import { checkboxClass, inputClass, selectClass } from "../ui/forms.ts";
-import { bodyClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
+import { bodyClass, eyebrowLabelClass, metaClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
 import RoleGoalsSection from "./RoleGoalsSection.tsx";
 import RoleMetricsSection from "./RoleMetricsSection.tsx";
 import { deleteJobRole, updateJobRole } from "../../services/jobRoles.ts";
@@ -22,20 +22,20 @@ import { displayName, pluralize } from "../../lib/format.ts";
 import { divisionLabel } from "../../lib/people.ts";
 import { DASHBOARD_MODULE_LABELS, keysOf, type CompanyDivision, type DashboardModule, type JobRole, type JobRoleGoal, type Profile, type RoleMetric } from "../../types/database.ts";
 
-const labelClass = "text-[11px] font-medium uppercase tracking-label text-ink-3";
-
 function Part({ title, children }: { title: string; children: ReactNode }) {
   const id = `role-part-${title.toLowerCase().replace(/\W+/g, "-")}`;
   return (
     <section aria-labelledby={id} className="mt-8">
-      <h3 id={id} className={labelClass}>{title}</h3>
+      <h3 id={id} className={eyebrowLabelClass}>{title}</h3>
       {children}
     </section>
   );
 }
 
 // The people whose job role this is, each linking to their profile, and the select that puts
-// someone else in it. A person without an account yet is a person all the same (rule 5).
+// someone else in it, offered only while the role is active: a retired role lists its holders and
+// takes no more (the person page offers a retired role only to people already in it). A person
+// without an account yet is a person all the same (rule 5).
 function Holders({ role, people, divisions, onPeople, onError }: { role: JobRole; people: Profile[]; divisions: CompanyDivision[]; onPeople: (update: (list: Profile[]) => Profile[]) => void; onError: (message: string) => void }) {
   const [saving, setSaving] = useState(false);
   const byName = (a: Profile, b: Profile) => displayName(a).localeCompare(displayName(b));
@@ -70,7 +70,7 @@ function Holders({ role, people, divisions, onPeople, onError }: { role: JobRole
           ))}
         </ul>
       )}
-      {others.length > 0 ? (
+      {role.is_active && others.length > 0 ? (
         <select aria-label="Put someone in this role" value="" disabled={saving} onChange={(e) => void place(e.target.value)} className={`${selectClass} mt-3 sm:max-w-sm`}>
           <option value="">Put someone in this role</option>
           {others.map((person) => (
@@ -82,8 +82,18 @@ function Holders({ role, people, divisions, onPeople, onError }: { role: JobRole
   );
 }
 
+// The writes in flight on one role, held by the page so they outlive this component: leaving a role
+// and coming back remounts it, and a first write may still be out. queue orders the writes, pending
+// is the module list as ticked while writes are out, inFlight counts them.
+export interface RoleWrites {
+  queue: Promise<unknown>;
+  pending: DashboardModule[] | null;
+  inFlight: number;
+}
+
 export default function RoleDetail({
   role,
+  getWrites,
   goals,
   metrics,
   metricsError,
@@ -96,6 +106,8 @@ export default function RoleDetail({
   onDeleted,
 }: {
   role: JobRole;
+  // This role's writes in flight, from the page. Called from handlers only, never while rendering.
+  getWrites: () => RoleWrites;
   goals: JobRoleGoal[];
   metrics: RoleMetric[] | null;
   metricsError: string;
@@ -118,18 +130,17 @@ export default function RoleDetail({
   const [dialogError, setDialogError] = useState("");
 
   // Every write to the role returns the whole row, so writes to one role queue behind each other:
-  // out of order, an older response would put an older module list or name back on screen.
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  // The module list as the person has ticked it while writes are still out. Each tick builds on
-  // it rather than on the stored list, so two quick ticks never lose the first one.
-  const pendingRef = useRef<DashboardModule[] | null>(null);
-  const inFlight = useRef(0);
+  // out of order, an older response would put an older module list or name back on screen. The
+  // queue and the ticked module list live in the role's RoleWrites, held by the page per role, so they hold
+  // across a switch to another role and back. Each tick builds on the ticked list rather than on
+  // the stored one, so two quick ticks never lose the first.
   const [pendingModules, setPendingModules] = useState<DashboardModule[] | null>(null);
 
   // True when the change landed, false once the page shows why not.
   async function save(patch: Parameters<typeof updateJobRole>[1]): Promise<boolean> {
-    const write = queue.current.catch(() => undefined).then(async () => onRole(await updateJobRole(role.id, patch)));
-    queue.current = write;
+    const writes = getWrites();
+    const write = writes.queue.catch(() => undefined).then(async () => onRole(await updateJobRole(role.id, patch)));
+    writes.queue = write;
     try {
       await write;
       return true;
@@ -139,17 +150,18 @@ export default function RoleDetail({
     }
   }
   async function toggleModule(module: DashboardModule, on: boolean) {
-    const base = pendingRef.current ?? role.dashboard_modules;
+    const writes = getWrites();
+    const base = writes.pending ?? role.dashboard_modules;
     const next = on ? [...new Set([...base, module])] : base.filter((m) => m !== module);
-    pendingRef.current = next;
+    writes.pending = next;
     setPendingModules(next);
-    inFlight.current += 1;
+    writes.inFlight += 1;
     await save({ dashboard_modules: next });
-    inFlight.current -= 1;
+    writes.inFlight -= 1;
     // Once the last write settles the boxes read the role as stored again: the saved list, or the
     // one before it when the write failed and the error is on screen.
-    if (inFlight.current === 0) {
-      pendingRef.current = null;
+    if (writes.inFlight === 0) {
+      writes.pending = null;
       setPendingModules(null);
     }
   }
@@ -187,7 +199,7 @@ export default function RoleDetail({
         {...edit("name")}
         display={
           <>
-            <p className={labelClass}>Job role</p>
+            <p className={eyebrowLabelClass}>Job role</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className={`${sectionTitleClass} min-w-0 break-words`}>{role.name}</h2>
               {role.is_active ? null : <Badge>Retired</Badge>}
@@ -195,7 +207,7 @@ export default function RoleDetail({
           </>
         }
       >
-        <label className={labelClass} htmlFor={`role-name-${role.id}`}>Role name</label>
+        <label className={eyebrowLabelClass} htmlFor={`role-name-${role.id}`}>Role name</label>
         <BlurInput id={`role-name-${role.id}`} value={role.name} required ariaLabel={`Name for ${role.name}`} onSave={(next) => save({ name: next.trim() })} className={`${inputClass} font-medium`} />
       </EditRow>
       {role.is_active ? null : (

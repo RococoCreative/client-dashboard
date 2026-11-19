@@ -1,7 +1,9 @@
 // People, Roles as a list and one open role: the list carries each role's counts and opens the
 // first, each role has its own address, the search narrows the list, setup rows read as text until
 // their pencil, one Add form per section, putting someone in a role, a role id from another company,
-// a company with no roles, the per-role write queue for module ticks, and the admin-only gate.
+// a company with no roles, the per-role write queue for module ticks (also across a switch to
+// another role and back), a retired role taking no more people, the shared busy lock on deletes, and
+// the admin-only gate.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -185,6 +187,83 @@ describe("People, Roles as list and detail", () => {
     });
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.getByText("None")).toBeInTheDocument();
+    spy.mockRestore();
+  });
+  it("keeps two writes in order when the role is left and opened again between them", async () => {
+    const user = userEvent.setup();
+    const original = jobRolesService.updateJobRole;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let calls = 0;
+    const spy = vi.spyOn(jobRolesService, "updateJobRole").mockImplementation(async (id, patch) => {
+      if (++calls === 1) await held;
+      return original(id, patch);
+    });
+    async function rename(name: string) {
+      await user.click(screen.getByRole("button", { name: "Rename role" }));
+      const field = screen.getByLabelText(/^Name for /);
+      await user.clear(field);
+      await user.type(field, name);
+      await user.click(screen.getByRole("button", { name: "Done" }));
+    }
+    openRoles(rbaAdmin, `/people/roles/${pm.id}`);
+    await screen.findByRole("heading", { level: 2, name: "Project Manager" });
+    await rename("PM first");
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    // Away to another role and back: the first write is still out.
+    await user.click(within(list()).getByRole("link", { name: /Site Supervisor/ }));
+    await screen.findByRole("heading", { level: 2, name: "Site Supervisor" });
+    await user.click(within(list()).getByRole("link", { name: /Project Manager/ }));
+    await screen.findByRole("heading", { level: 2, name: "Project Manager" });
+    await rename("PM second");
+    release();
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    expect(spy.mock.calls.map(([, patch]) => patch)).toEqual([{ name: "PM first" }, { name: "PM second" }]);
+    await waitFor(async () => {
+      const stored = (await listJobRoles(RBA.company.id, true)).find((r) => r.id === pm.id)!;
+      expect(stored.name).toBe("PM second");
+    });
+    expect(await screen.findByRole("heading", { level: 2, name: "PM second" })).toBeInTheDocument();
+    spy.mockRestore();
+    // Put the role back as it was, for the tests that follow.
+    await jobRolesService.updateJobRole(pm.id, { name: pm.name });
+  });
+
+  it("offers no one a retired role, though it still lists who holds it", async () => {
+    const user = userEvent.setup();
+    openRoles(rbaAdmin, `/people/roles/${superintendent.id}`);
+    const holders = (await screen.findByRole("heading", { name: "Who holds this role" })).closest("section") as HTMLElement;
+    expect(within(holders).getByLabelText("Put someone in this role")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retire" }));
+    expect(await screen.findByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(within(holders).getByRole("link", { name: "Avery Cole" })).toBeInTheDocument();
+    expect(within(holders).queryByLabelText("Put someone in this role")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(await within(holders).findByLabelText("Put someone in this role")).toBeInTheDocument();
+  });
+
+  it("opens no second dialog from a metric's Delete while the role's delete is running", async () => {
+    const user = userEvent.setup();
+    openRoles(rbaAdmin, `/people/roles/${superintendent.id}`);
+    await user.click(await screen.findByRole("button", { name: "Edit metric Safety compliance" }));
+    const metricDelete = screen.getByRole("button", { name: "Delete metric Safety compliance" });
+    let fail: (err: Error) => void = () => undefined;
+    const spy = vi.spyOn(jobRolesService, "deleteJobRole").mockImplementationOnce(() => new Promise<void>((_, reject) => (fail = reject)));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete role" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    // Focus put on the metric's Delete under the scrim opens nothing while the delete runs.
+    metricDelete.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveTextContent('Delete "Site Superintendent"?');
+
+    fail(new Error("Failed to fetch"));
+    await within(screen.getByRole("dialog")).findByText(/connection dropped/i);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     spy.mockRestore();
   });
 });
