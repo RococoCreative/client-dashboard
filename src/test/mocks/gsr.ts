@@ -20,6 +20,7 @@ import type {
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
+import { mockGsrStatus } from "./gsrOnDemand.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -55,16 +56,32 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 // review starts in one, and a signed-off review stays signed off while it is closed.
 export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cycle first.";
 
+// A goal of a GSR that stands on its own (0047) goes when its GSR is deleted. The GSRs live in
+// mocks/gsrOnDemand.ts, so the goals here let go of any whose GSR is gone before they are read.
+function dropGoalsOfDeletedGsrs(): void {
+  for (let i = goals.length - 1; i >= 0; i--) {
+    const reviewId = goals[i].review_id;
+    if (reviewId !== null && mockGsrStatus(reviewId) === null) goals.splice(i, 1);
+  }
+}
+
+// A done GSR's goals and notes are frozen until it is reopened (0047), with these words.
+const GSR_DONE_GOALS = "This GSR is done. Reopen it to change its goals.";
+const GSR_DONE_NOTES = "This GSR is done. Reopen it to change its notes.";
+const inDoneGsr = (reviewId: string | null | undefined) => reviewId != null && mockGsrStatus(reviewId) === "complete";
+
 // The task link rule of 0039, for the tasks mock: a task may be linked only to a monthly goal of
 // its own assignee in its own company, and only while that month is open, not complete and the
-// person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
-// reaches here.
+// person is not omitted. A goal of a GSR on its own takes a task only while that GSR is open
+// (0047). Returns the refusal, or null when the link is fine. Unlinking never reaches here.
 export function goalLinkProblem(task: { company_id: string; assignee_id: string | null; goal_id: string | null }): string | null {
   if (task.goal_id === null) return null;
+  dropGoalsOfDeletedGsrs();
   const goal = goals.find((g) => g.id === task.goal_id);
   if (!goal || goal.company_id !== task.company_id) return "That goal is not here any more.";
-  if (goal.scope !== "cycle" || goal.cycle_id === null) return "Only a monthly GSR goal can have tasks.";
+  if (goal.scope !== "cycle" || (goal.cycle_id === null && goal.review_id === null)) return "Only a monthly GSR goal can have tasks.";
   if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
+  if (goal.review_id !== null) return inDoneGsr(goal.review_id) ? "That GSR is done, so its goals take no new tasks." : null;
   const cycle = cycles.find((c) => c.id === goal.cycle_id);
   const review = reviews.find((r) => r.cycle_id === goal.cycle_id && r.employee_id === goal.employee_id);
   const omitted = cycleOmissions.some((o) => o.cycle_id === goal.cycle_id && o.employee_id === goal.employee_id);
@@ -213,21 +230,29 @@ export async function deleteScore(id: string): Promise<void> {
 }
 
 export async function listGoals(companyId: string, employeeId?: string): Promise<Goal[]> {
+  dropGoalsOfDeletedGsrs();
   return goals.filter((g) => g.company_id === companyId && (!employeeId || g.employee_id === employeeId));
 }
-export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
+export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; review_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
 export async function createGoal(input: GoalInput): Promise<Goal> {
+  if (inDoneGsr(input.review_id)) throw new Error(GSR_DONE_GOALS);
   const created: Goal = { id: nextId("goal"), is_focus: false, cycle_id: null, review_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
   goals.push(created);
   return created;
 }
 export async function updateGoal(id: string, patch: Partial<Omit<GoalInput, "company_id" | "employee_id">>): Promise<Goal> {
+  if (inDoneGsr(goals.find((g) => g.id === id)?.review_id) || inDoneGsr(patch.review_id)) throw new Error(GSR_DONE_GOALS);
   return patchIn(goals, id, { ...patch, updated_at: now() } as Partial<Goal>);
 }
 export async function deleteGoal(id: string): Promise<void> {
+  if (inDoneGsr(goals.find((g) => g.id === id)?.review_id)) throw new Error(GSR_DONE_GOALS);
   removeFrom(goals, id);
 }
 
+function refuseNoteOfDoneGsr(noteId: string): void {
+  const note = goalNotes.find((n) => n.id === noteId);
+  if (note && inDoneGsr(goals.find((g) => g.id === note.goal_id)?.review_id)) throw new Error(GSR_DONE_NOTES);
+}
 export async function listGoalNotes(companyId: string, employeeId: string): Promise<GoalNote[]> {
   return goalNotes
     .filter((n) => n.company_id === companyId && n.employee_id === employeeId)
@@ -239,6 +264,7 @@ export type GoalNoteInput = { goal_id: string; company_id: string; employee_id: 
 export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
   const goal = goals.find((g) => g.id === input.goal_id);
   if (!goal) throw new Error("That goal does not exist.");
+  if (inDoneGsr(goal.review_id)) throw new Error(GSR_DONE_NOTES);
   const stamp = now();
   const created: GoalNote = { id: nextId("goal-note"), ...input, company_id: goal.company_id, employee_id: goal.employee_id, created_at: stamp, updated_at: stamp };
   goalNotes.push(created);
@@ -247,9 +273,11 @@ export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
 // The suite's clock stands still, so an edit is stamped a second on to read as later than the
 // note it changes, the way it always is in the database.
 export async function updateGoalNote(id: string, body: string): Promise<GoalNote> {
+  refuseNoteOfDoneGsr(id);
   return patchIn(goalNotes, id, { body, updated_at: new Date(Date.now() + 1000).toISOString() });
 }
 export async function deleteGoalNote(id: string): Promise<void> {
+  refuseNoteOfDoneGsr(id);
   removeFrom(goalNotes, id);
 }
 

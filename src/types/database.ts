@@ -398,6 +398,13 @@ export interface Review {
 // A GSR that stands on its own: a review row with no cycle and a start day.
 export type Gsr = Omit<Review, "cycle_id" | "started_on"> & { cycle_id: null; started_on: string };
 
+// A row of the view gsr_last_started (0047): the day each person's last GSR began.
+export interface GsrLastStarted {
+  company_id: string;
+  employee_id: string;
+  last_started_on: string;
+}
+
 export interface ReviewScore {
   id: string;
   review_id: string;

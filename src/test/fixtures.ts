@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, Gsr, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -11,6 +11,7 @@ import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
 import { meets } from "../lib/capabilities.ts";
 import { mockCapabilityMap } from "./mocks/capabilities.ts";
 import { applyDenseLoad } from "./denseLoad.ts";
+import { applyOnDemandDemo } from "./onDemandDemo.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -280,6 +281,9 @@ export interface CompanyBundle {
   criteria: GsrCriterion[];
   cycles: ReviewCycle[];
   reviews: Review[];
+  // 0047. GSRs that stand on their own, with no cycle: empty in every fixture, since every company
+  // here is on periods. Tests seed them with seedMockGsr; the demo adds some with ?gsr=on_demand.
+  gsrs: Gsr[];
   scores: ReviewScore[];
   impactScores: ImpactScore[];
   jobRoles: JobRole[];
@@ -1454,7 +1458,7 @@ function build(company: Company): CompanyBundle {
     reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
   }
 
-  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
+  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, gsrs: [], scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -1464,6 +1468,13 @@ const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
 if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("load") === "dense") {
   const rba = BUNDLES.find((b) => b.company.slug === "rba");
   if (rba) applyDenseLoad(rba);
+}
+
+// RBA on GSRs on demand, for visual checks (npm run demo, with ?gsr=on_demand in the address). Read
+// after the dense load, so the two can be on together. Tests never set it.
+if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("gsr") === "on_demand") {
+  const rba = BUNDLES.find((b) => b.company.slug === "rba");
+  if (rba) applyOnDemandDemo(rba);
 }
 
 const ROCOCO: Profile = {
