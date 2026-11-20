@@ -1484,65 +1484,104 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 -- sets it by hand only to put a move back, as below. No signed-in account can run the
 -- conversion, its trigger, or read the copy.
 --
--- Putting a move back, by hand. Paste these into the SQL editor as one transaction, with the
--- company's slug in place of rba (it is named twice). Only where each row lives is put back:
--- anything changed after the move (a GSR marked done or reopened, a goal edited) stays as it is
--- now. A GSR started on demand after the move has no month to go back to, so an admin deletes it
--- (and its goals) first; while one is there, step 1 stops the put-back and nothing changes. The
--- statements between the two marker lines are what supabase/tests/0047_gsr_conversion.test.sql
--- runs, read from this file.
+-- Putting a move back, by hand. Take the lines between the two marker lines below, drop the
+-- leading '--   ' from each, put the company's slug in place of rba on the line that names it,
+-- and run the result in the SQL editor. It is one statement: it puts the company back from its
+-- latest copy, or stops at step 1 having changed nothing, saying what it found. Only where each
+-- row lives is put back: anything changed since the move (a goal's completion, a converted GSR
+-- marked done or reopened) goes back as it is now, and the month takes it as a month review.
+-- Step 1 stops it when it would delete or strand something made after the move: a GSR started
+-- on demand (an admin deletes it first), a goal added to one of the move's GSRs, or a GSR the
+-- move made that was changed, scored or given a project note since. A person moved to another
+-- company since their month also stops it: guard_review_cycle, inherit_goal_company or
+-- stamp_cycle_omission refuses their row, and the whole statement rolls back, changing nothing.
+-- supabase/tests/0047_gsr_conversion.test.sql runs exactly these lines, read from this file.
 --
---   begin;
 -- put back: from here
---   select set_config('hub.gsr_conversion', '1', true);
---   create temp table put_back on commit drop as
---     select b.* from private.gsr_conversion_backup b
---      where b.company_id = (select c.id from public.companies c where c.slug = 'rba')
---        and b.converted_at = (select max(m.converted_at) from private.gsr_conversion_backup m
---                               where m.company_id = b.company_id);
---   -- 1. Stop if a GSR with no cycle is not one the move made.
---   do $$ begin
+--   do $put_back$
+--   declare
+--     v_company uuid := (select c.id from public.companies c where c.slug = 'rba');
+--     v_goals   integer;
+--     v_changed integer;
+--     v_scores  integer;
+--     v_notes   integer;
+--   begin
+--     if v_company is null then
+--       raise exception 'No company has that slug. Nothing was changed.';
+--     end if;
+--     perform set_config('hub.gsr_conversion', '1', true);
+--     create temp table put_back on commit drop as
+--       select b.* from private.gsr_conversion_backup b
+--        where b.company_id = v_company
+--          and b.converted_at = (select max(m.converted_at) from private.gsr_conversion_backup m
+--                                 where m.company_id = v_company);
+--     -- 1. Stop, having changed nothing, if this would delete or strand anything made since.
 --     if exists (select 1 from public.reviews r
---                 where r.company_id = (select p.company_id from put_back p limit 1)
---                   and r.cycle_id is null
+--                 where r.company_id = v_company and r.cycle_id is null
 --                   and r.id not in (select (p.payload->>'id')::uuid from put_back p
 --                                     where p.what in ('review_cycle', 'created_gsr'))) then
---       raise exception 'A GSR was started on demand after the move. Delete it first. Nothing was changed.';
+--       raise exception using errcode = 'check_violation',
+--         message = 'A GSR was started on demand after the move. Delete it first. '
+--                   || 'Nothing was changed.';
 --     end if;
---   end $$;
---   -- 2. The months as they were, open until step 7 so their reviews can come back.
---   insert into public.review_cycles
---   select x.* from put_back p,
---          jsonb_populate_record(null::public.review_cycles, p.payload || '{"status": "open"}') x
---    where p.what = 'cycle';
---   -- 3. Each converted review back in its month, with no dates.
---   update public.reviews r set cycle_id = x.cycle_id, started_on = null, done_on = null
---     from put_back p, jsonb_populate_record(null::public.reviews, p.payload) x
---    where p.what = 'review_cycle' and r.id = x.id;
---   -- 4. Each moved goal back in its month, off its GSR.
---   update public.goals g set review_id = null, cycle_id = x.cycle_id
---     from put_back p, jsonb_populate_record(null::public.goals, p.payload) x
---    where p.what = 'goal_cycle' and g.id = x.id;
---   -- 5. The GSRs the move made, which now hold no goal.
---   delete from public.reviews r using put_back p
---    where p.what = 'created_gsr' and r.id = (p.payload->>'id')::uuid;
---   -- 6. The left-out rows, then who left them out, when and why, which the insert stamps afresh.
---   insert into public.cycle_omissions
---   select x.* from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
---    where p.what = 'omission';
---   update public.cycle_omissions o
---      set reason = x.reason, omitted_by = x.omitted_by, created_at = x.created_at
---     from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
---    where p.what = 'omission' and o.cycle_id = x.cycle_id and o.employee_id = x.employee_id;
---   -- 7. Each month's status as it was.
---   update public.review_cycles c set status = x.status
---     from put_back p, jsonb_populate_record(null::public.review_cycles, p.payload) x
---    where p.what = 'cycle' and c.id = x.id;
---   -- 8. Back to periods, and the flag down.
---   update public.companies set gsr_mode = 'periods' where slug = 'rba';
---   select set_config('hub.gsr_conversion', '', true);
+--     select count(*) into v_goals
+--       from public.goals g
+--      where g.review_id in (select (p.payload->>'id')::uuid from put_back p
+--                             where p.what in ('review_cycle', 'created_gsr'))
+--        and g.id not in (select (p.payload->>'id')::uuid from put_back p
+--                          where p.what = 'goal_cycle');
+--     select count(*) into v_changed
+--       from put_back p join public.reviews r on r.id = (p.payload->>'id')::uuid
+--      where p.what = 'created_gsr'
+--        and (to_jsonb(r) - 'updated_at') is distinct from (p.payload - 'updated_at');
+--     select count(*) into v_scores
+--       from put_back p join public.review_scores s on s.review_id = (p.payload->>'id')::uuid
+--      where p.what = 'created_gsr';
+--     select count(*) into v_notes
+--       from put_back p
+--       join public.review_project_notes n on n.review_id = (p.payload->>'id')::uuid
+--      where p.what = 'created_gsr';
+--     if v_goals + v_changed + v_scores + v_notes > 0 then
+--       raise exception using errcode = 'check_violation', message = format(
+--         'This move cannot be put back as things stand. Goals added to its GSRs since: %s. '
+--         || 'GSRs it made that changed since: %s. Score rows on GSRs it made: %s. '
+--         || 'Project notes on GSRs it made: %s. Remove or keep them by hand first. '
+--         || 'Nothing was changed.', v_goals, v_changed, v_scores, v_notes);
+--     end if;
+--     -- 2. The months as they were, open until step 7 so their reviews can come back.
+--     insert into public.review_cycles
+--     select x.* from put_back p,
+--            jsonb_populate_record(null::public.review_cycles, p.payload || '{"status": "open"}') x
+--      where p.what = 'cycle';
+--     -- 3. Each converted review back in its month, with no dates.
+--     update public.reviews r set cycle_id = x.cycle_id, started_on = null, done_on = null
+--       from put_back p, jsonb_populate_record(null::public.reviews, p.payload) x
+--      where p.what = 'review_cycle' and r.id = x.id;
+--     -- 4. Each moved goal back in its month, off its GSR.
+--     update public.goals g set review_id = null, cycle_id = x.cycle_id
+--       from put_back p, jsonb_populate_record(null::public.goals, p.payload) x
+--      where p.what = 'goal_cycle' and g.id = x.id;
+--     -- 5. The GSRs the move made, which step 1 found holding nothing new.
+--     delete from public.reviews r using put_back p
+--      where p.what = 'created_gsr' and r.id = (p.payload->>'id')::uuid;
+--     -- 6. The left-out rows, then who left them out, when and why, which the insert stamps.
+--     insert into public.cycle_omissions
+--     select x.* from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
+--      where p.what = 'omission';
+--     update public.cycle_omissions o
+--        set reason = x.reason, omitted_by = x.omitted_by, created_at = x.created_at
+--       from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
+--      where p.what = 'omission' and o.cycle_id = x.cycle_id and o.employee_id = x.employee_id;
+--     -- 7. Each month's status as it was.
+--     update public.review_cycles c set status = x.status
+--       from put_back p, jsonb_populate_record(null::public.review_cycles, p.payload) x
+--      where p.what = 'cycle' and c.id = x.id;
+--     -- 8. Back to periods, and the flag down.
+--     update public.companies set gsr_mode = 'periods' where id = v_company;
+--     perform set_config('hub.gsr_conversion', '', true);
+--   end
+--   $put_back$;
 -- put back: to here
---   commit;
 
 create table if not exists private.gsr_conversion_backup (
   id           bigint generated always as identity primary key,

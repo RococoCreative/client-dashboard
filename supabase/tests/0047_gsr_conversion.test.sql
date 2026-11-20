@@ -841,9 +841,11 @@ rollback to savepoint before_any_move;
 -- =======================================================================================
 -- case: the_backup_puts_a_move_back_by_hand
 -- rba shaped like its own live data (run 2), plus a goal set for o1 before they were left out, so
--- the move also makes a GSR, and a note on e1's goal. After the move, the put-back statements
--- written above private.gsr_conversion_backup in 0047 are read from the migration and run as
--- they stand, so the comment and this case cannot drift apart.
+-- the move also makes a GSR, and a note on e1's goal. After the move, the put-back written above
+-- private.gsr_conversion_backup in 0047 is read from the migration (the lines between its marker
+-- lines, without their '--   ') and run as it stands, so the comment and this case cannot drift
+-- apart. First the four ways it must stop having changed nothing, each undone before the next,
+-- then the put-back itself with edits made since the move.
 \set put_back_sql `cd "$(git rev-parse --show-toplevel)" && sed -n '/^-- put back: from here$/,/^-- put back: to here$/p' supabase/migrations/0047_gsr_on_demand.sql | sed -e '1d' -e '$d' -e 's/^--   //'`
 insert into public.review_cycles (company_id, name, cadence, period_start, period_end) values
   (tests.company('rba'), 'Sample rba August 47c', 'monthly', '2026-08-01', '2026-08-31'),
@@ -855,14 +857,18 @@ insert into public.goals (company_id, employee_id, cycle_id, scope, kind, title,
   (tests.company('rba'), tests.id('c_e1'), tests.id('r_aug'), 'cycle', 'role', 'Sample aug e1 47c', true),
   (tests.company('rba'), tests.id('c_e2'), tests.id('r_aug'), 'cycle', 'professional', 'Sample aug e2 47c', false),
   (tests.company('rba'), tests.id('c_o1'), tests.id('r_aug'), 'cycle', 'personal', 'Sample aug o1 47c', false);
-insert into tests.fixture (name, id) select 'g_aug_e1', id from public.goals where title = 'Sample aug e1 47c';
+insert into tests.fixture (name, id)
+select case title when 'Sample aug e1 47c' then 'g_aug_e1' else 'g_aug_e2' end, id
+  from public.goals where title in ('Sample aug e1 47c', 'Sample aug e2 47c');
 insert into public.goal_notes (goal_id, body) values (tests.id('g_aug_e1'), 'Sample aug note 47c');
 insert into public.reviews (cycle_id, company_id, employee_id, status, completed_at, gsr_score) values
   (tests.id('r_aug'), tests.company('rba'), tests.id('c_e1'), 'complete', '2026-09-03 15:00+00', 75),
   (tests.id('r_aug'), tests.company('rba'), tests.id('c_e2'), 'in_progress', null, null),
   (tests.id('r_q3'), tests.company('rba'), tests.id('c_e1'), 'not_started', null, null);
 insert into tests.fixture (name, id)
-select 'rv_q3_e1', id from public.reviews where cycle_id = tests.id('r_q3');
+select case when cycle_id = tests.id('r_q3') then 'rv_q3_e1' else 'rv_aug_e2' end, id
+  from public.reviews
+ where cycle_id = tests.id('r_q3') or (cycle_id = tests.id('r_aug') and employee_id = tests.id('c_e2'));
 insert into public.review_scores (review_id, pillar_id, label, target, actual, sort_order)
 select tests.id('rv_q3_e1'), p.id, 'Sample line ' || p.name, 100, 75, 0
   from public.gsr_pillars p
@@ -875,6 +881,23 @@ insert into public.cycle_omissions (cycle_id, employee_id, reason) values
   (tests.id('r_aug'), tests.id('c_o1'), 'Sample reason 47c'),
   (tests.id('r_aug'), tests.id('c_o2'), null);
 update public.review_cycles set status = 'closed' where id = tests.id('r_aug');
+insert into public.projects (company_id, name) values (tests.company('rba'), 'Sample project 47c');
+
+-- Every row of a company's six review tables as it is now, every column, with its physical place,
+-- so even an update that changes no value shows.
+create function tests.rows_now(p_company uuid)
+returns table (tbl text, body jsonb)
+language sql
+stable
+as $$
+  select 'review_cycles', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.review_cycles t where t.company_id = p_company
+  union all select 'reviews', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.reviews t where t.company_id = p_company
+  union all select 'review_scores', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.review_scores t where t.company_id = p_company
+  union all select 'goals', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.goals t where t.company_id = p_company
+  union all select 'goal_notes', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.goal_notes t where t.company_id = p_company
+  union all select 'cycle_omissions', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.cycle_omissions t where t.company_id = p_company
+  union all select 'review_project_notes', to_jsonb(t) || jsonb_build_object('ctid', t.ctid::text) from public.review_project_notes t where t.company_id = p_company
+$$;
 
 create temp table fp_before as select * from tests.fingerprint();
 create temp table b_rows as
@@ -891,6 +914,95 @@ select tests.assert(
   and (select count(*) = 1 from private.gsr_conversion_backup where what = 'created_gsr'),
   'put_back: the move did not happen as this case expects'
 );
+insert into tests.fixture (name, id)
+select 'gsr_o1', id from public.reviews where employee_id = tests.id('c_o1') and cycle_id is null;
+
+-- case: the_put_back_stops_for_a_goal_added_to_a_gsr_the_move_made
+savepoint put_back_case;
+select tests.act_as(tests.id('c_admin'));
+insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+values (tests.company('rba'), tests.id('c_o1'), tests.id('gsr_o1'), 'cycle', 'role', 'Sample after the move 47c');
+reset role; select set_config('request.jwt.claims', '', true);
+create temp table s_before as select * from tests.rows_now(tests.company('rba'));
+select tests.assert_raises(:'put_back_sql',
+  'This move cannot be put back as things stand. Goals added to its GSRs since: 1. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 0.%Nothing was changed.');
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
+                  union all (select * from tests.rows_now(tests.company('rba')) except all select * from s_before))
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_stops: a goal added to a GSR the move made did not stop it with nothing changed'
+);
+rollback to savepoint put_back_case;
+
+-- case: the_put_back_stops_for_a_goal_added_to_a_converted_gsr
+select tests.act_as(tests.id('c_admin'));
+insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+values (tests.company('rba'), tests.id('c_e2'), tests.id('rv_aug_e2'), 'cycle', 'role', 'Sample after the move 47c');
+reset role; select set_config('request.jwt.claims', '', true);
+create temp table s_before as select * from tests.rows_now(tests.company('rba'));
+select tests.assert_raises(:'put_back_sql',
+  'This move cannot be put back as things stand. Goals added to its GSRs since: 1. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 0.%Nothing was changed.');
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
+                  union all (select * from tests.rows_now(tests.company('rba')) except all select * from s_before))
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_stops: a goal added to a converted GSR did not stop it with nothing changed'
+);
+rollback to savepoint put_back_case;
+
+-- case: the_put_back_stops_for_a_gsr_the_move_made_marked_done
+-- o1 carries a rating, so marking the GSR done freezes it into a score row.
+insert into public.impact_scores (company_id, employee_id, pillar_id, criterion_id, rating)
+select tests.company('rba'), tests.id('c_o1'), c.pillar_id, c.id, 3
+  from public.gsr_criteria c join public.gsr_pillars p on p.id = c.pillar_id
+ where p.company_id = tests.company('rba') and p.scoring_type = 'rating' and p.is_active and c.is_active
+ order by c.id limit 1;
+select tests.act_as(tests.id('c_admin'));
+update public.reviews set status = 'complete', completed_at = now(), gsr_score = 40, reviewer_id = tests.id('c_admin')
+ where id = tests.id('gsr_o1');
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select count(*) = 1 from public.review_scores where review_id = tests.id('gsr_o1')),
+  'put_back_stops: marking the GSR done froze no rating'
+);
+create temp table s_before as select * from tests.rows_now(tests.company('rba'));
+select tests.assert_raises(:'put_back_sql',
+  'This move cannot be put back as things stand. Goals added to its GSRs since: 0. GSRs it made that changed since: 1. Score rows on GSRs it made: 1. Project notes on GSRs it made: 0.%Nothing was changed.');
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
+                  union all (select * from tests.rows_now(tests.company('rba')) except all select * from s_before))
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_stops: a GSR the move made, marked done since, did not stop it with nothing changed'
+);
+rollback to savepoint put_back_case;
+
+-- case: the_put_back_stops_for_a_project_note_on_a_gsr_the_move_made
+select tests.act_as(tests.id('c_admin'));
+insert into public.review_project_notes (review_id, project_id, note)
+select tests.id('gsr_o1'), id, 'Sample project note 47c' from public.projects where name = 'Sample project 47c';
+reset role; select set_config('request.jwt.claims', '', true);
+create temp table s_before as select * from tests.rows_now(tests.company('rba'));
+select tests.assert_raises(:'put_back_sql',
+  'This move cannot be put back as things stand. Goals added to its GSRs since: 0. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 1.%Nothing was changed.');
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
+                  union all (select * from tests.rows_now(tests.company('rba')) except all select * from s_before))
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_stops: a project note on a GSR the move made did not stop it with nothing changed'
+);
+rollback to savepoint put_back_case;
+
+-- The put-back itself, after two edits it keeps: a moved goal's completion changed, and the
+-- converted open GSR marked done.
+select tests.act_as(tests.id('c_admin'));
+update public.goals set progress = 60 where id = tests.id('g_aug_e2');
+update public.reviews set status = 'complete', completed_at = now(), gsr_score = 50, reviewer_id = tests.id('c_admin')
+ where id = tests.id('rv_aug_e2');
+reset role; select set_config('request.jwt.claims', '', true);
 
 :put_back_sql
 
@@ -907,12 +1019,26 @@ union all select 'review_scores', to_jsonb(t) - 'updated_at' from public.review_
 union all select 'goals', to_jsonb(t) - 'updated_at' from public.goals t where t.company_id = tests.company('rba')
 union all select 'goal_notes', to_jsonb(t) - 'updated_at' from public.goal_notes t where t.company_id = tests.company('rba')
 union all select 'cycle_omissions', to_jsonb(t) from public.cycle_omissions t where t.company_id = tests.company('rba');
+-- Every row is what it was before the move, but the two edited since.
 select tests.assert(
-  not exists ((select * from b_rows except all select * from a_rows)
+  not exists ((select * from b_rows where not (row->>'id' in (tests.id('g_aug_e2')::text, tests.id('rv_aug_e2')::text))
+               except all
+               select * from a_rows where not (row->>'id' in (tests.id('g_aug_e2')::text, tests.id('rv_aug_e2')::text)))
               union all
-              (select * from a_rows except all select * from b_rows))
-  and (select count(*) = 13 from b_rows),
+              (select * from a_rows where not (row->>'id' in (tests.id('g_aug_e2')::text, tests.id('rv_aug_e2')::text))
+               except all
+               select * from b_rows where not (row->>'id' in (tests.id('g_aug_e2')::text, tests.id('rv_aug_e2')::text))))
+  and (select count(*) = 13 from b_rows) and (select count(*) = 13 from a_rows),
   'put_back: a row of rba is not what it was before the move'
+);
+-- And those two went back as they are now, in their month, which takes them as a month's.
+select tests.assert(
+  (select cycle_id = tests.id('r_aug') and review_id is null and progress = 60
+     from public.goals where id = tests.id('g_aug_e2'))
+  and (select cycle_id = tests.id('r_aug') and started_on is null and done_on is null
+              and status = 'complete' and gsr_score = 50 and completed_at is not null
+     from public.reviews where id = tests.id('rv_aug_e2')),
+  'put_back: an edit made since the move did not go back with its row'
 );
 select tests.assert(
   not exists (
@@ -926,11 +1052,19 @@ select tests.assert(
   ),
   'put_back: a fingerprint of klasik or kingdom changed'
 );
--- The monthly rules hold again: the closed month refuses its goals, and nobody starts a GSR.
+-- The monthly rules hold again: the closed month refuses its goals, a reopen of the review done
+-- since waits for the month, and nobody starts a GSR.
 select tests.assert_raises(
   format($q$update public.goals set progress = 10 where id = %L$q$, tests.id('g_aug_e1')),
   'This review cycle is closed. Reopen it to change its goals.'
 );
+select tests.act_as(tests.id('c_admin'));
+select tests.assert_raises(
+  format($q$update public.reviews set status = 'in_progress', completed_at = null where id = %L$q$,
+         tests.id('rv_aug_e2')),
+  'This review cycle is closed. Reopen the cycle first.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
 select tests.act_as(tests.id('c_e5'));
 select tests.assert_raises(
   format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
