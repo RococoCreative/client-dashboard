@@ -10,6 +10,7 @@ function goal(over: Partial<Goal>): Goal {
     company_id: "c",
     employee_id: "e",
     cycle_id: "cycle-1",
+    review_id: null,
     kind: "professional",
     is_focus: false,
     title: "Ship it",

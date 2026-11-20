@@ -19,10 +19,10 @@ const EARLIER = "2026-08-04T15:30:00.000Z";
 const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
   // RBA has the task tracker on and nothing else.
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -535,6 +535,8 @@ function build(company: Company): CompanyBundle {
       pillar_snapshot: i === 1 ? signedOffWith : null,
       gsr_score: null,
       support_discussion: null,
+      started_on: null,
+      done_on: null,
       created_at: NOW,
       updated_at: NOW,
     };
@@ -743,6 +745,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Run the weekly client update without prompting",
@@ -768,6 +771,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Get the OSHA 30 certification",
@@ -789,6 +793,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "personal",
           is_focus: false,
           title: "Coach the kids' fall soccer season",
@@ -810,6 +815,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Close out the punch list within five days",
@@ -834,6 +840,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Send the Friday client update every week",
@@ -858,6 +865,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "role",
           is_focus: false,
           title: "Finish OSHA modules 1 to 10",
@@ -883,6 +891,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
+          review_id: null,
           kind: "professional",
           is_focus: true,
           title: "Core value: Integrity",
@@ -907,6 +916,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: true,
           title: "Safety documentation",
@@ -931,6 +941,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Lead a project from bid to closeout",

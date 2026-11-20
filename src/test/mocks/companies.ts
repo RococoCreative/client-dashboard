@@ -34,7 +34,7 @@ export async function getCompany(id: string): Promise<Company> {
 
 export async function createCompany(input: { slug: string; name: string; theme_key: ThemeKey }): Promise<Company> {
   const now = new Date().toISOString();
-  const created: Company = { id: `co-${input.slug}`, logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: now, updated_at: now, ...input };
+  const created: Company = { id: `co-${input.slug}`, logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: now, updated_at: now, ...input };
   companies.push(created);
   return created;
 }

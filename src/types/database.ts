@@ -50,6 +50,8 @@ export interface Company {
   wins_home_days: number | null;
   // Whether the company keeps the manual Financials page (0042); true is today's behaviour. Rococo-only.
   manual_financials: boolean;
+  // How the company runs its Goal Setting Reviews (0047): inside review cycles, or on their own with no cycle.
+  gsr_mode: GsrMode;
   created_at: string;
   updated_at: string;
 }
@@ -338,7 +340,9 @@ export interface GsrCriterion {
 
 export type Cadence = "monthly" | "quarterly" | "annual" | "custom";
 // The rhythms a person's Goal Setting Review can run at (profiles.gsr_cadence, 0046).
-export type GsrCadence = "weekly" | "biweekly" | "monthly" | "quarterly";
+export type GsrCadence = "none" | "daily" | "weekly" | "biweekly" | "monthly" | "quarterly";
+// Whether a company's GSRs sit inside review cycles or stand on their own (companies.gsr_mode, 0047).
+export type GsrMode = "periods" | "on_demand";
 // What a cycle is for: a Goal Setting Review period or a scored review (review_cycles.kind, 0046).
 export type CycleKind = "gsr" | "review";
 export type CycleStatus = "open" | "closed";
@@ -383,9 +387,16 @@ export interface Review {
   // The opening discussion of a monthly review: "What would help you do your job better?". The
   // person and their admins write it while the review is open; sign-off freezes it (0035).
   support_discussion: string | null;
+  // Stamped by the database (0047): the day a GSR that stands on its own began and the day it was
+  // marked done. Null on a cycle review.
+  started_on: string | null;
+  done_on: string | null;
   created_at: string;
   updated_at: string;
 }
+
+// A GSR that stands on its own: a review row with no cycle and a start day.
+export type Gsr = Omit<Review, "cycle_id" | "started_on"> & { cycle_id: null; started_on: string };
 
 export interface ReviewScore {
   id: string;
@@ -420,6 +431,8 @@ export interface Goal {
   company_id: string;
   employee_id: string;
   cycle_id: string | null;
+  // The GSR a goal belongs to when the company runs GSRs on demand (0047); null otherwise.
+  review_id: string | null;
   kind: GoalKind;
   // The month's focus topic GSR: the person's #1 GSR, inspired by the cycle's focus topic, always
   // a role or professional goal, at most one a month (0023).
