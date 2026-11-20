@@ -129,8 +129,11 @@ begin
   elsif new.gsr_mode is not distinct from old.gsr_mode then
     return new;
   end if;
+  -- An update is judged by the company it is (old.slug), so a statement that also changes the
+  -- slug cannot name its way in; an insert has only the new row's slug.
   if new.gsr_mode = 'on_demand'
-     and current_setting('hub.gsr_on_demand_for', true) is distinct from new.slug then
+     and current_setting('hub.gsr_on_demand_for', true) is distinct from
+         (case when tg_op = 'INSERT' then new.slug else old.slug end) then
     raise exception 'Name the company this change is for: set hub.gsr_on_demand_for to its slug in the same transaction.'
       using errcode = 'check_violation';
   end if;

@@ -29,11 +29,12 @@ end;
 $$;
 grant execute on function tests.rows_of(text) to authenticated;
 
--- Setup, as system. g_e1 reports to g_mgr.
+-- Setup, as system. g_e1 reports to g_mgr; nobody leads g_e2 but the admins.
 select tests.create_person('g_owner', tests.company('rba'), 'owner');
 select tests.create_person('g_admin', tests.company('rba'), 'admin');
 select tests.create_person('g_mgr', tests.company('rba'), 'manager');
 select tests.create_person('g_e1', tests.company('rba'));
+select tests.create_person('g_e2', tests.company('rba'));
 select tests.create_person('g_rococo', null, 'employee', true);
 update public.profiles set view_all_divisions = true where id in (tests.id('g_owner'), tests.id('g_admin'));
 update public.profiles set reports_to = tests.id('g_mgr') where id = tests.id('g_e1');
@@ -84,6 +85,12 @@ select tests.assert_raises(
 select set_config('hub.gsr_on_demand_for', 'rba', true);
 select tests.assert_raises(
   $q$update public.companies set gsr_mode = 'on_demand'$q$,
+  'Name the company this change is for: set hub.gsr_on_demand_for to its slug in the same transaction.'
+);
+-- A move is judged by the company it is, not the slug the same statement gives it.
+select set_config('hub.gsr_on_demand_for', 'klasik-two', true);
+select tests.assert_raises(
+  format($q$update public.companies set slug = 'klasik-two', gsr_mode = 'on_demand' where id = %L$q$, tests.company('klasik')),
   'Name the company this change is for: set hub.gsr_on_demand_for to its slug in the same transaction.'
 );
 select set_config('hub.gsr_on_demand_for', '', true);
@@ -166,6 +173,15 @@ reset role; select set_config('request.jwt.claims', '', true);
 select tests.assert(
   (select cadence = 'custom' and kind = 'review' from public.review_cycles where name = 'Sample odd month 47'),
   'kind_follows: the kind did not follow the cadence'
+);
+-- A kind sent with the row is overwritten from the cadence.
+select tests.act_as(tests.id('g_admin'));
+insert into public.review_cycles (company_id, name, kind, cadence, period_start, period_end)
+values (tests.company('rba'), 'Sample year 47', 'gsr', 'annual', '2031-01-01', '2031-12-31');
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select kind = 'review' from public.review_cycles where name = 'Sample year 47'),
+  'kind_follows: a kind sent with an annual cycle was kept'
 );
 
 -- case: weekly_cycles_are_gone
@@ -254,8 +270,23 @@ select tests.assert_raises(
   format($q$update public.profiles set gsr_cadence = 'biweekly', phone = '555-0147' where id = %L$q$, tests.id('g_e1')),
   'A manager can change only the GSR rhythm of the people they lead.'
 );
+select tests.assert_raises(
+  format($q$update public.profiles set reports_to = null where id = %L$q$, tests.id('g_e1')),
+  'A manager can change only the GSR rhythm of the people they lead.'
+);
+select tests.assert(
+  tests.rows_of(format($q$update public.profiles set gsr_cadence = 'weekly' where id = %L$q$, tests.id('g_e2'))) = 0,
+  'on_demand_manager: a manager set the rhythm of someone they do not lead'
+);
+select tests.assert_raises(
+  format($q$update public.profiles set gsr_cadence = 'weekly' where id = %L$q$, tests.id('g_mgr')),
+  'Only admins can change employment details.'
+);
 reset role; select set_config('request.jwt.claims', '', true);
 select tests.assert(
-  (select gsr_cadence = 'weekly' and title is distinct from 'Sample title 47' from public.profiles where id = tests.id('g_e1')),
-  'on_demand_manager: the rhythm did not land, or another column moved'
+  (select gsr_cadence = 'weekly' and title is distinct from 'Sample title 47' and reports_to = tests.id('g_mgr')
+     from public.profiles where id = tests.id('g_e1'))
+  and (select gsr_cadence = 'monthly' from public.profiles where id = tests.id('g_e2'))
+  and (select gsr_cadence = 'monthly' from public.profiles where id = tests.id('g_mgr')),
+  'on_demand_manager: the rhythm did not land, or another column or person moved'
 );
