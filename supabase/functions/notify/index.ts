@@ -7,8 +7,10 @@
 //
 // The invitation email. After an admin creates an invitation on the People page, or presses Email
 // again on one still waiting, the app calls this function; it sends the invited address one plain
-// email with a link to the sign-in screen, pre-filled with that address. There is no claim: an
-// admin may send it again, and an invitation already accepted is never sent.
+// email with a link to the sign-in screen, pre-filled with that address. It goes only to one plain
+// address, never for an invitation already accepted or for a person who is inactive, and at most
+// once in 10 minutes per invitation: the send is claimed on invitations.last_emailed_at (0048),
+// which no signed-in writer can touch, and the claim is put back if the send fails.
 //
 // Routes, each deployed with the gateway's JWT check on, and each answering { error } with a
 // non-2xx status when something stops it:
@@ -45,6 +47,10 @@ const APP_URL = (Deno.env.get("APP_URL") ?? "").trim();
 
 const NOT_SET_UP = "Task emails are not set up yet.";
 const EMAILS_NOT_SET_UP = "Emails are not set up yet.";
+const RESEND_PAUSE_MS = 10 * 60 * 1000;
+// One plain address, the same pattern 0048 holds invitations.email to: no display name, no angle
+// brackets, no second address, and a domain of letters, digits and hyphens.
+const PLAIN_ADDRESS = /^[^\s@<>,;:"()[\]\\]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const CORS = {
@@ -203,7 +209,7 @@ async function handleInvitation(req: Request, invitationIdValue: unknown): Promi
   const { asUser, caller } = await signedInCaller(req);
 
   // The invitation, read as the caller: if they cannot see it, nothing is sent.
-  const { data: invitation } = await asUser.from("invitations").select("id, company_id, email, accepted_at").eq("id", invitationId).maybeSingle();
+  const { data: invitation } = await asUser.from("invitations").select("id, company_id, email, profile_id, accepted_at, last_emailed_at").eq("id", invitationId).maybeSingle();
   if (!invitation) throw new HttpError(404, "That invitation was not found.");
 
   // Inviting is an admin's: an owner or admin of the invitation's company, or a Rococo admin.
@@ -216,16 +222,52 @@ async function handleInvitation(req: Request, invitationIdValue: unknown): Promi
   if (invitation.accepted_at) return json(200, { sent: false, reason: "They have already signed in." });
 
   // Stored lowercased already (0001); lowercased again so the link always matches the login screen.
+  // Only ever one plain address: anything else in the column is never handed to the mail service.
   const email = String(invitation.email).trim().toLowerCase();
+  if (!PLAIN_ADDRESS.test(email)) return json(200, { sent: false, reason: "That address cannot be emailed." });
+
+  // A person switched off is not invited in. The roster row is the invitation's own, or the
+  // unclaimed one at its address in its company, the same row signing in would claim.
+  const admin = service();
+  const personQuery = admin.from("profiles").select("is_active").eq("company_id", invitation.company_id);
+  const { data: person, error: personError } = await (invitation.profile_id
+    ? personQuery.eq("id", invitation.profile_id)
+    : personQuery.is("user_id", null).eq("email", email)
+  ).limit(1).maybeSingle();
+  if (personError) {
+    console.error("notify person read failed", personError.code);
+    throw new HttpError(500, "Something went wrong on our side.");
+  }
+  if (person && person.is_active !== true) return json(200, { sent: false, reason: "They are inactive." });
 
   const base = appUrl();
   if (!RESEND_API_KEY || !TASKS_FROM_EMAIL || !base) throw new HttpError(503, EMAILS_NOT_SET_UP);
 
-  const { data: company, error: companyError } = await service().from("companies").select("name, slug").eq("id", invitation.company_id).maybeSingle();
+  const { data: company, error: companyError } = await admin.from("companies").select("name, slug").eq("id", invitation.company_id).maybeSingle();
   if (companyError || !company) {
     if (companyError) console.error("notify company read failed", companyError.code);
     throw new HttpError(500, "Something went wrong on our side.");
   }
+
+  // The claim, in one statement: only one call in 10 minutes can move last_emailed_at, and only
+  // while the invitation is still waiting.
+  const previous = (invitation.last_emailed_at as string | null) ?? null;
+  const cutoff = new Date(Date.now() - RESEND_PAUSE_MS).toISOString();
+  const { data: claimed, error: claimError } = await admin
+    .from("invitations")
+    .update({ last_emailed_at: new Date().toISOString() })
+    .eq("id", invitation.id)
+    .is("accepted_at", null)
+    .or(`last_emailed_at.is.null,last_emailed_at.lt."${cutoff}"`)
+    .select("last_emailed_at");
+  if (claimError) {
+    console.error("notify invitation claim failed", claimError.code);
+    throw new HttpError(500, "Something went wrong on our side.");
+  }
+  if (!claimed || claimed.length === 0) {
+    return json(200, { sent: false, reason: "An invitation email went to them in the last 10 minutes. Try again later." });
+  }
+  const ours = claimed[0].last_emailed_at as string;
 
   // The email: who invited them, the company, the address to sign in with, and the link. The link
   // is built from APP_URL and the invitation row only.
@@ -260,7 +302,12 @@ async function handleInvitation(req: Request, invitationIdValue: unknown): Promi
   } catch {
     console.error("notify invitation send did not reach the email service");
   }
-  if (!accepted) throw new HttpError(502, "The email service did not accept the message.");
+  // Not sent: put the old value back, but only if the claim is still ours, so the next press can try.
+  if (!accepted) {
+    const { error: releaseError } = await admin.from("invitations").update({ last_emailed_at: previous }).eq("id", invitation.id).eq("last_emailed_at", ours);
+    if (releaseError) console.error("notify invitation release failed", releaseError.code);
+    throw new HttpError(502, "The email service did not accept the message.");
+  }
   return json(200, { sent: true });
 }
 

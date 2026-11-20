@@ -278,6 +278,9 @@ export interface Invitation {
   invited_by: string | null;
   created_at: string;
   accepted_at: string | null;
+  // When the invitation email last went out (0048). Only the notify function writes it, and it
+  // sends again only once this is more than 10 minutes old.
+  last_emailed_at: string | null;
 }
 
 // GSR ---------------------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import { appOrigin } from "../lib/appUrl.ts";
 import { invokeFunction } from "./invoke.ts";
 import type { Invitation, Role } from "../types/database.ts";
 
-const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at";
+const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at, last_emailed_at";
 
 export async function listInvitations(companyId: string): Promise<Invitation[]> {
   const { data, error } = await db()
@@ -70,9 +70,10 @@ export async function deleteInvitation(id: string): Promise<void> {
   requireRows(data);
 }
 
-// Asks the notify function to email the invitation. It decides who may have it sent and refuses an
-// invitation already accepted, answering { sent: false, reason }; anything that stops the send
-// throws with the function's own line. Pressing it again resends: there is no claim to spend.
+// Asks the notify function to email the invitation. It decides who may have it sent, and refuses
+// an invitation already accepted, an address that is not one plain address, an inactive person, or
+// a second email within 10 minutes, answering { sent: false, reason }; anything that stops the send
+// throws with the function's own line. Pressing it again after the pause resends.
 export async function emailInvitation(invitationId: string): Promise<{ sent: boolean; reason?: string }> {
   return invokeFunction<{ sent: boolean; reason?: string }>("notify", { invitation_id: invitationId });
 }

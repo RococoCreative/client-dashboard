@@ -1,7 +1,8 @@
 // Pins that the invitations mock tells the same story as the service: one invitation per address
 // per company, a spent (accepted) one cleared to make way for a new one, one still waiting refused
 // with words that point at it, and a delete that finds nothing read as a refusal. Its invitation
-// email answers the way the notify function does: sent, declined with a reason, or a thrown line.
+// email answers the way the notify function does: sent, declined with a reason, or a thrown line,
+// and a second email to one invitation within 10 minutes is declined.
 import { describe, expect, it } from "vitest";
 import { createInvitation, deleteInvitation, emailInvitation, invitationEmailCalls, listInvitations, setMockInvitationEmail } from "./invitations.ts";
 
@@ -33,12 +34,29 @@ describe("invitations mock", () => {
 
   it("records each invitation email and answers sent, a reason, or a failure as told", async () => {
     const invitation = await createInvitation({ company_id: company, email: "mail@example.com", role: "employee" });
-    expect(await emailInvitation(invitation.id)).toEqual({ sent: true });
+    // Sent last: a send starts the 10 minute pause, which would decline the other two.
     setMockInvitationEmail({ kind: "reason", reason: "They have already signed in." });
     expect(await emailInvitation(invitation.id)).toEqual({ sent: false, reason: "They have already signed in." });
     setMockInvitationEmail({ kind: "fail", message: "Emails are not set up yet." });
     await expect(emailInvitation(invitation.id)).rejects.toThrow("Emails are not set up yet.");
+    setMockInvitationEmail({ kind: "sent" });
+    expect(await emailInvitation(invitation.id)).toEqual({ sent: true });
     expect(invitationEmailCalls).toEqual([invitation.id, invitation.id, invitation.id]);
     await expect(emailInvitation("no-such-invitation")).rejects.toThrow("That invitation was not found.");
+  });
+
+  it("declines a second email within 10 minutes, and a failed send does not start the pause", async () => {
+    const invitation = await createInvitation({ company_id: company, email: "paced@example.com", role: "employee" });
+    setMockInvitationEmail({ kind: "fail", message: "The email service did not accept the message." });
+    await expect(emailInvitation(invitation.id)).rejects.toThrow("The email service did not accept the message.");
+    expect(invitation.last_emailed_at).toBeNull();
+    setMockInvitationEmail({ kind: "sent" });
+    expect(await emailInvitation(invitation.id)).toEqual({ sent: true });
+    expect(invitation.last_emailed_at).not.toBeNull();
+    expect(await emailInvitation(invitation.id)).toEqual({
+      sent: false,
+      reason: "An invitation email went to them in the last 10 minutes. Try again later.",
+    });
+    expect((await listInvitations(company)).some((i) => i.id === invitation.id)).toBe(true);
   });
 });

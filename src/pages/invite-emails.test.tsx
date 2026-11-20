@@ -1,8 +1,8 @@
 // Send invite now emails the invitation through the notify function, and a waiting invitation can
 // be emailed again. These pin the four outcomes an admin can meet on the roster: the email went,
 // the email failed (the invitation still stands and its link is copied), the function declined with
-// a reason, and Email again on an invitation made earlier. They also pin that Email again sits
-// exactly where Copy link does. The email itself is the mock's: nothing here touches the network.
+// a reason, and Email again on an invitation made earlier, including a second press inside the 10
+// minute pause. They also pin that Email again sits exactly where Copy link does. The email itself is the mock's: nothing here touches the network.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -102,6 +102,24 @@ describe("Email again", () => {
       await screen.findByText("The invitation is ready but the email did not go out: Emails are not set up yet. Its link is copied, so you can send it yourself."),
     ).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe(`http://localhost/?email=${encodeURIComponent(averyInvitation.email)}&company=rba`);
+  });
+
+  it("is paced: a second press within 10 minutes says so, and the invitation stands", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, rbaAdmin, { path: "/people", pattern: "/people" });
+    const row = await rowOf("Avery Cole");
+    const again = within(row).getByRole("button", { name: "Email the invitation to Avery Cole again" });
+    await user.click(again);
+    expect(await screen.findByText(`Invitation emailed to ${averyInvitation.email}.`)).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Email the invitation to Avery Cole again" }));
+    expect(
+      await screen.findByText(
+        "The invitation is ready but the email did not go out: An invitation email went to them in the last 10 minutes. Try again later. Its link is copied, so you can send it yourself.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(row).getByText("Invited")).toBeInTheDocument();
+    expect(await pendingFor(averyInvitation.email)).toHaveLength(1);
+    expect(invitationEmailCalls).toEqual([averyInvitation.id, averyInvitation.id]);
   });
 
   it("is offered on exactly the rows that offer Copy link", async () => {

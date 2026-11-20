@@ -145,8 +145,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   set up yet." until all three are set. Live is version 4 (2026-11-18), the task email only: it
   sends only for the task's creator, an owner or admin, or Rococo. The version in this repo also
   sends the invitation email and is not deployed yet; until it is, Send invite on the People
-  page reports that the email did not go out and copies the link instead. Redeploy it with
-  `supabase functions deploy notify` (JWT check on, no new secrets) and record the version here.
+  page reports that the email did not go out and copies the link instead. It needs `0048` first.
+  Redeploy it with `supabase functions deploy notify` (JWT check on, no new secrets) after
+  applying `0048` and before merging the app, and record the version here.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
   (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
@@ -184,8 +185,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `0046`. If any of them is ever pasted again after `0047`, paste `0047` straight after it.
   `0046` matters most: pasted again on its own it puts members opening cycles, the rhythm
   trigger and whole-month dates back on every company.
+- **Written, not applied yet:** `0048_invitation_emails`. It holds `invitations.email` to one
+  plain address and adds `invitations.last_emailed_at`, the invitation email's 10 minute pace,
+  which no signed-in writer can set or change. Every live invitation row already matches the
+  address check. It does not depend on `0047`. The order: apply `0048`, then deploy `notify`, then
+  merge the app (the app and the function both read `last_emailed_at`).
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Next free number:** `0048`.
+- **Next free number:** `0049`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -871,12 +877,17 @@ Saving a task never depends on the email.
 presses Email again on a waiting one. The function reads the invitation on the caller's own JWT,
 so row level security decides whether they may see it (404 "That invitation was not found."
 otherwise). Only an owner or admin of the invitation's company, or a Rococo admin, can have it
-sent; anyone else gets `{ sent: false, reason }`, as does an invitation already accepted ("They
-have already signed in."). The email comes from the company's name at `TASKS_FROM_EMAIL`, says who
-invited them, the address to sign in with, and links to
+sent; anyone else gets `{ sent: false, reason }`. So does an invitation already accepted ("They
+have already signed in."), an address that is not one plain address ("That address cannot be
+emailed."), and a person who is inactive ("They are inactive."). It sends at most once in 10
+minutes per invitation: it claims the send in one update of `invitations.last_emailed_at` (0048),
+which no signed-in writer can change, and a second press inside the pause gets "An invitation
+email went to them in the last 10 minutes. Try again later." The email comes from the company's
+name at `TASKS_FROM_EMAIL`, says who invited them, the address to sign in with, and links to
 `{APP_URL}/?email={address}&company={slug}`, built from `APP_URL` and the invitation row only.
-There is no claim: pressing Email again resends. If Resend does not accept the message the answer
-is a 502, and the page keeps the invitation, copies its link, and says the email did not go out.
+Pressing Email again after the pause resends. If Resend does not accept the message, the claim is
+put back (only if it is still this send's) and the answer is a 502; the page keeps the
+invitation, copies its link, and says the email did not go out.
 Until the three secrets are set it answers "Emails are not set up yet."
 
 It is the only place the Resend key lives. It needs these secrets (Dashboard, Edge Functions,
@@ -892,8 +903,9 @@ Secrets):
 Until all three are set, the task email answers "Task emails are not set up yet." and claims
 nothing. A task that is already complete is never announced, and a send that Resend does not
 answer within ten seconds counts as a failed send, for either email. The invitation email needs
-no new secrets, but the function must be redeployed for it to go out. Deploy with the gateway's
-JWT check on: `supabase functions deploy notify`.
+no new secrets, but it needs `0048` applied and the function redeployed before it goes out: apply
+`0048`, then deploy `notify`, then merge the app. Deploy with the gateway's JWT check on:
+`supabase functions deploy notify`.
 
 ## Data sources and Google setup
 

@@ -1,7 +1,9 @@
 // In-memory stand-in for services/invitations.ts, same exports, so page tests and `npm run demo`
 // run against seeded invitation rows and never touch the network. The invitation email is
 // recorded, not sent: emailInvitation answers { sent: true } unless a test tells it to fail or to
-// answer with a reason (setMockInvitationEmail), and every call lands in invitationEmailCalls.
+// answer with a reason (setMockInvitationEmail), and every call lands in invitationEmailCalls. Like
+// the notify function it refuses an accepted invitation, and a second email to one invitation
+// within 10 minutes, stamping last_emailed_at only when an email goes.
 import type { Invitation, Role } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
@@ -33,6 +35,7 @@ export async function createInvitation(input: { company_id: string; email: strin
     invited_by: null,
     created_at: new Date().toISOString(),
     accepted_at: null,
+    last_emailed_at: null,
   };
   invitations.unshift(created);
   return created;
@@ -53,16 +56,26 @@ export function setMockInvitationEmail(outcome: EmailOutcome): void {
   emailOutcome = outcome;
 }
 
+// Also forgets every send time, so the 10 minute pause never carries from one test to the next.
 export function resetMockInvitationEmail(): void {
   emailOutcome = { kind: "sent" };
   invitationEmailCalls.length = 0;
+  for (const invitation of invitations) invitation.last_emailed_at = null;
 }
+
+const RESEND_PAUSE_MS = 10 * 60 * 1000;
 
 export async function emailInvitation(invitationId: string): Promise<{ sent: boolean; reason?: string }> {
   invitationEmailCalls.push(invitationId);
-  if (!invitations.some((i) => i.id === invitationId)) throw new Error("That invitation was not found.");
+  const invitation = invitations.find((i) => i.id === invitationId);
+  if (!invitation) throw new Error("That invitation was not found.");
+  if (invitation.accepted_at) return { sent: false, reason: "They have already signed in." };
+  if (invitation.last_emailed_at && Date.now() - new Date(invitation.last_emailed_at).getTime() < RESEND_PAUSE_MS) {
+    return { sent: false, reason: "An invitation email went to them in the last 10 minutes. Try again later." };
+  }
   if (emailOutcome.kind === "fail") throw new Error(emailOutcome.message);
   if (emailOutcome.kind === "reason") return { sent: false, reason: emailOutcome.reason };
+  invitation.last_emailed_at = new Date().toISOString();
   return { sent: true };
 }
 
