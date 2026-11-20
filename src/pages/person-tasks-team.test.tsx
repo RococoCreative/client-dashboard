@@ -44,6 +44,7 @@ import * as profilesService from "../services/profiles.ts";
 import * as employeesService from "../services/employees.ts";
 import * as tasksService from "../services/tasks.ts";
 import { createGoal, ensureReview } from "../services/gsr.ts";
+import { seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
 import { RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import TaskForm from "../components/tasks/TaskForm.tsx";
@@ -337,6 +338,20 @@ describe("a task on a GSR goal", () => {
     expect(within(screen.getByRole("dialog")).getByLabelText(/Assignee/)).toBeDisabled();
     expect(within(screen.getByRole("dialog")).getByText("Linked to Run the Friday toolbox talk")).toBeInTheDocument();
     expect(task.goal_id).toBe(goal.id);
+  });
+});
+
+describe("a task on a goal of a GSR on demand", () => {
+  it("links to its GSR in the place a month's goal links to its month", async () => {
+    const onDemand = { ...RBA.company, gsr_mode: "on_demand" as const };
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const gsr = seedMockGsr({ company_id: RBA.company.id, employee_id: rowan.id, started_on: "2026-09-14", status: "in_progress" });
+    const goal = await createGoal({ company_id: RBA.company.id, employee_id: rowan.id, review_id: gsr.id, cycle_id: null, scope: "cycle", title: "Walk every site on Fridays", kind: "role" });
+    const task = await tasksService.createTask({ company_id: RBA.company.id, title: "Book the Friday walks", assignee_id: rowan.id, goal_id: goal.id });
+    onlySees(team);
+    renderTask(task.id, { ...rbaManager, company: onDemand });
+    expect(await screen.findByText(/On Rowan Ellis's GSR goal: Walk every site on Fridays/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the GSR" })).toHaveAttribute("href", `/gsr/reviews/${gsr.id}`);
   });
 });
 
