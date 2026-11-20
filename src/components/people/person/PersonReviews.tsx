@@ -14,6 +14,7 @@ import { bandClass } from "../../ui/bandClass.ts";
 import { edgeCellsClass, inputClass, tableClass, tdClass, thClass } from "../../ui/forms.ts";
 import { tapTargetClass } from "../../ui/tap.ts";
 import GsrQuarterLine from "../../gsr/GsrQuarterLine.tsx";
+import GsrPeriodLine from "../../gsr/onDemand/GsrPeriodLine.tsx";
 import DeliverablesPanel from "../DeliverablesPanel.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
 import { useHub } from "../../../context/HubContext.tsx";
@@ -21,34 +22,9 @@ import { scoreProfile } from "../../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../../lib/gsr/history.ts";
 import { reviewPath, scoredCycleInPlay } from "../../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../../lib/gsr/goals.ts";
-import { scoreGsrsInPeriod } from "../../../lib/gsr/onDemand.ts";
-import { lineItemPercent } from "../../../lib/gsr/scoring.ts";
-import { formatPeriod, pluralize } from "../../../lib/format.ts";
-import { useAsync } from "../../../hooks/useAsync.ts";
-import { listPersonGsrs } from "../../../services/gsrOnDemand.ts";
-import { REVIEW_STATUS_LABELS, type ReviewCycle } from "../../../types/database.ts";
+import { formatPeriod } from "../../../lib/format.ts";
+import { REVIEW_STATUS_LABELS } from "../../../types/database.ts";
 import type { PersonTabProps } from "../../../pages/people/personTabs.ts";
-
-// For a company on demand: where the person's GSRs done inside the open scored review's period
-// stand, the figure that review signs off (scoreGsrsInPeriod). A GSR still open is never applied.
-function GsrPeriodLine({ companyId, personId, cycle }: { companyId: string; personId: string; cycle: ReviewCycle }) {
-  const state = useAsync(() => listPersonGsrs(companyId, personId), [companyId, personId]);
-  if (!state.data) return null;
-  const figure = scoreGsrsInPeriod(cycle, state.data);
-  const counted = figure.gsrs.filter((g) => g.counted).length;
-  const percent = lineItemPercent(figure);
-  return (
-    <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-3 text-sm">
-      <div className="min-w-0">
-        <p className="text-ink-2">GSRs, {cycle.name}</p>
-        <p className="text-[12px] text-ink-3">
-          {counted === 0 ? "Counts once a GSR is marked done." : `${pluralize(counted, "GSR")} done so far; written into the review when it is signed off.`}
-        </p>
-      </div>
-      <span className="tnum text-ink">{percent === null ? "-" : `${percent}%`}</span>
-    </div>
-  );
-}
 
 export default function PersonReviews({
   companyId,

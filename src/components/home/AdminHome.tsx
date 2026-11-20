@@ -7,6 +7,11 @@
 // two divisions counts in each; an admin who sees only some divisions gets chips for those alone,
 // and the company-wide tiles say they cover the people in your divisions. With no links yet, the
 // links card gives way to one line at the end of the page.
+//
+// In a company whose GSRs are on demand (companies.gsr_mode, 0047) there are no GSR months: the GSR
+// month card and the GSRs complete tile give way to GsrWeekCard (this week's GSRs and who is overdue
+// one), no GSR month's reviews are read, and the scored review cards and tiles stay as they are. A
+// company on periods reads exactly what it always has.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
@@ -20,6 +25,7 @@ import ShortcutsCard from "./ShortcutsCard.tsx";
 import WinsCard from "./WinsCard.tsx";
 import WhereWorkLivesCard from "./WhereWorkLivesCard.tsx";
 import NoLinksLine from "./NoLinksLine.tsx";
+import GsrWeekCard from "./GsrWeekCard.tsx";
 import DivisionCompare from "../people/DivisionCompare.tsx";
 import DivisionSwitch from "../people/DivisionSwitch.tsx";
 import { COMBINED, divisionCompareRows, latestResultMonth, monthCycle, peopleInScope } from "../scorecards/compare.ts";
@@ -79,7 +85,8 @@ export default function AdminHome() {
     // runs inside a quarterly scored review, so both are live) and any open cycle whose period
     // has ended but which nobody has closed yet. Reading fewer is how a finished review goes
     // missing from this page.
-    const live = cyclesInPlay(cycles);
+    // A company on demand has no GSR months, so only its scored cycles are live here.
+    const live = onDemand ? cyclesInPlay(cycles).filter((c) => sectionOf(c.cadence) !== "gsr") : cyclesInPlay(cycles);
     let reviews: Review[] = [];
     let scores: ReviewScore[] = [];
     if (live.length > 0) {
@@ -87,7 +94,7 @@ export default function AdminHome() {
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
     return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
-  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year]);
+  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year, onDemand]);
 
   // The division split, read only for someone allowed to see it, and only past the divisions
   // themselves when the company has some. Null means the combined picture alone.
@@ -189,7 +196,7 @@ export default function AdminHome() {
         eyebrow="Goal Setting and Review"
         title="Review cycles"
         actions={
-          <Link to="/gsr">
+          <Link to={onDemand ? "/reviews" : "/gsr"}>
             <Button size="sm">Start a cycle</Button>
           </Link>
         }
@@ -226,16 +233,19 @@ export default function AdminHome() {
           none of its calls is made) and every open cycle, then the tiles, then the rest. */}
       <div className="space-y-6">
         {hasModule(company, "switchboard") ? <AttentionCard company={company!} /> : null}
+        {onDemand ? <GsrWeekCard companyId={companyId} /> : null}
         {cycleCards}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+      <div className={`mt-6 grid grid-cols-2 gap-3 sm:gap-4 ${onDemand ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         <Stat label={limited ? "People in your divisions" : "People"} value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
-        <Stat
-          label="GSRs complete"
-          value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
-          hint={gsrs.cycles.length > 0 ? gsrs.cycles.join(" · ") : "No month open"}
-        />
+        {onDemand ? null : (
+          <Stat
+            label="GSRs complete"
+            value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
+            hint={gsrs.cycles.length > 0 ? gsrs.cycles.join(" · ") : "No month open"}
+          />
+        )}
         <Stat
           label="Reviews complete"
           value={scoredCycles.cycles.length > 0 ? `${scoredCycles.complete}/${scoredCycles.total}` : "-"}
