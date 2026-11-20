@@ -443,6 +443,7 @@ select tests.assert(
   and (select count(*) = 3 from private.gsr_conversion_backup where company_id = tests.company('rba') and what = 'omission')
   and (select count(*) = 11 from private.gsr_conversion_backup where company_id = tests.company('rba') and what = 'review_cycle')
   and (select count(*) = 12 from private.gsr_conversion_backup where company_id = tests.company('rba') and what = 'goal_cycle')
+  and (select count(*) = 2 from private.gsr_conversion_backup where company_id = tests.company('rba') and what = 'created_gsr')
   and not exists (select 1 from private.gsr_conversion_backup where company_id <> tests.company('rba')),
   'backup: not one row for each removed or re-pointed row'
 );
@@ -485,6 +486,18 @@ select tests.assert(
      except select payload from private.gsr_conversion_backup where what = 'goal_cycle')
   ),
   'backup: the goal rows are not the moved goals as they were'
+);
+select tests.assert(
+  not exists (
+    (select payload from private.gsr_conversion_backup where what = 'created_gsr'
+     except select to_jsonb(r) from public.reviews r
+             where r.company_id = tests.company('rba') and not exists (select 1 from b_reviews b where b.id = r.id))
+    union all
+    (select to_jsonb(r) from public.reviews r
+      where r.company_id = tests.company('rba') and not exists (select 1 from b_reviews b where b.id = r.id)
+     except select payload from private.gsr_conversion_backup where what = 'created_gsr')
+  ),
+  'backup: the created_gsr rows are not the GSRs the move made, whole'
 );
 -- Rebuilt from the backup alone: every cycle and left-out row, and the cycle of each review and
 -- goal, read back through the row types.
@@ -774,3 +787,154 @@ select tests.assert(
      from public.reviews where id = tests.id('rv_run_e1')),
   'done_no_time: a GSR complete with no completion time in a running month is not dated today'
 );
+
+rollback to savepoint before_any_move;
+
+-- =======================================================================================
+-- Run 5: a day already taken
+-- =======================================================================================
+-- case: a_day_already_taken_refuses_the_move_in_plain_words
+-- kingdom moves first, so g_e1's November month there becomes a GSR started November 1. A Rococo
+-- admin then moves g_e1 to rba, which gives them a review in its own November month. Moving rba
+-- would date that one November 1 too, and a person has one GSR a day: the move is refused in
+-- plain words and nothing changes.
+select set_config('hub.gsr_on_demand_for', 'kingdom', true);
+update public.companies set gsr_mode = 'on_demand' where slug = 'kingdom';
+select set_config('hub.gsr_on_demand_for', '', true);
+select tests.act_as(tests.id('c_rococo'));
+update public.profiles set company_id = tests.company('rba') where id = tests.id('c_g_e1');
+reset role; select set_config('request.jwt.claims', '', true);
+insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+values (tests.company('rba'), 'Sample rba November taken 47c', 'monthly', '2026-11-01', '2026-11-30');
+insert into public.reviews (cycle_id, company_id, employee_id)
+select id, tests.company('rba'), tests.id('c_g_e1') from public.review_cycles where name = 'Sample rba November taken 47c';
+select tests.assert(
+  exists (select 1 from public.reviews where employee_id = tests.id('c_g_e1') and cycle_id is null
+            and started_on = '2026-11-01' and company_id = tests.company('kingdom')),
+  'day_taken: setup did not leave g_e1 a kingdom GSR started November 1'
+);
+create temp table fp_before as select * from tests.fingerprint();
+create temp table h_before as
+select tests.full_hash(tests.company('rba')) as rba,
+       (select count(*) from private.gsr_conversion_backup where company_id = tests.company('rba')) as backups;
+select tests.assert_raises(
+  'select tests.move_rba()',
+  'Someone in this company already has a GSR dated the first day of a month being converted. Nothing was changed.'
+);
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'rba')
+  and (select rba = tests.full_hash(tests.company('rba')) and backups = 0 from h_before)
+  and (select count(*) = 0 from private.gsr_conversion_backup where company_id = tests.company('rba'))
+  and not exists (
+    (select * from fp_before except select * from tests.fingerprint())
+    union all
+    (select * from tests.fingerprint() except select * from fp_before)
+  )
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'day_taken: the refused move changed something, or left the flag up'
+);
+
+rollback to savepoint before_any_move;
+
+-- =======================================================================================
+-- Run 6: putting a move back by hand
+-- =======================================================================================
+-- case: the_backup_puts_a_move_back_by_hand
+-- rba shaped like its own live data (run 2), plus a goal set for o1 before they were left out, so
+-- the move also makes a GSR, and a note on e1's goal. After the move, the put-back statements
+-- written above private.gsr_conversion_backup in 0047 are read from the migration and run as
+-- they stand, so the comment and this case cannot drift apart.
+\set put_back_sql `cd "$(git rev-parse --show-toplevel)" && sed -n '/^-- put back: from here$/,/^-- put back: to here$/p' supabase/migrations/0047_gsr_on_demand.sql | sed -e '1d' -e '$d' -e 's/^--   //'`
+insert into public.review_cycles (company_id, name, cadence, period_start, period_end) values
+  (tests.company('rba'), 'Sample rba August 47c', 'monthly', '2026-08-01', '2026-08-31'),
+  (tests.company('rba'), 'Sample rba Q3 47c', 'quarterly', '2026-07-01', '2026-09-30');
+insert into tests.fixture (name, id)
+select case name when 'Sample rba August 47c' then 'r_aug' else 'r_q3' end, id
+  from public.review_cycles where name in ('Sample rba August 47c', 'Sample rba Q3 47c');
+insert into public.goals (company_id, employee_id, cycle_id, scope, kind, title, is_focus) values
+  (tests.company('rba'), tests.id('c_e1'), tests.id('r_aug'), 'cycle', 'role', 'Sample aug e1 47c', true),
+  (tests.company('rba'), tests.id('c_e2'), tests.id('r_aug'), 'cycle', 'professional', 'Sample aug e2 47c', false),
+  (tests.company('rba'), tests.id('c_o1'), tests.id('r_aug'), 'cycle', 'personal', 'Sample aug o1 47c', false);
+insert into tests.fixture (name, id) select 'g_aug_e1', id from public.goals where title = 'Sample aug e1 47c';
+insert into public.goal_notes (goal_id, body) values (tests.id('g_aug_e1'), 'Sample aug note 47c');
+insert into public.reviews (cycle_id, company_id, employee_id, status, completed_at, gsr_score) values
+  (tests.id('r_aug'), tests.company('rba'), tests.id('c_e1'), 'complete', '2026-09-03 15:00+00', 75),
+  (tests.id('r_aug'), tests.company('rba'), tests.id('c_e2'), 'in_progress', null, null),
+  (tests.id('r_q3'), tests.company('rba'), tests.id('c_e1'), 'not_started', null, null);
+insert into tests.fixture (name, id)
+select 'rv_q3_e1', id from public.reviews where cycle_id = tests.id('r_q3');
+insert into public.review_scores (review_id, pillar_id, label, target, actual, sort_order)
+select tests.id('rv_q3_e1'), p.id, 'Sample line ' || p.name, 100, 75, 0
+  from public.gsr_pillars p
+ where p.company_id = tests.company('rba') and p.name in ('Performance', 'Core Values');
+select tests.act_as(tests.id('c_admin'));
+update public.reviews set status = 'complete', completed_at = '2026-10-02 15:00+00', reviewer_id = tests.id('c_admin')
+ where id = tests.id('rv_q3_e1');
+reset role; select set_config('request.jwt.claims', '', true);
+insert into public.cycle_omissions (cycle_id, employee_id, reason) values
+  (tests.id('r_aug'), tests.id('c_o1'), 'Sample reason 47c'),
+  (tests.id('r_aug'), tests.id('c_o2'), null);
+update public.review_cycles set status = 'closed' where id = tests.id('r_aug');
+
+create temp table fp_before as select * from tests.fingerprint();
+create temp table b_rows as
+select 'review_cycles' as tbl, to_jsonb(t) - 'updated_at' as row from public.review_cycles t where t.company_id = tests.company('rba')
+union all select 'reviews', to_jsonb(t) - 'updated_at' from public.reviews t where t.company_id = tests.company('rba')
+union all select 'review_scores', to_jsonb(t) - 'updated_at' from public.review_scores t where t.company_id = tests.company('rba')
+union all select 'goals', to_jsonb(t) - 'updated_at' from public.goals t where t.company_id = tests.company('rba')
+union all select 'goal_notes', to_jsonb(t) - 'updated_at' from public.goal_notes t where t.company_id = tests.company('rba')
+union all select 'cycle_omissions', to_jsonb(t) from public.cycle_omissions t where t.company_id = tests.company('rba');
+
+select tests.move_rba();
+select tests.assert(
+  not exists (select 1 from public.review_cycles where id = tests.id('r_aug'))
+  and (select count(*) = 1 from private.gsr_conversion_backup where what = 'created_gsr'),
+  'put_back: the move did not happen as this case expects'
+);
+
+:put_back_sql
+
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'rba')
+  and not exists (select 1 from public.reviews where company_id = tests.company('rba') and cycle_id is null)
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back: rba is not on periods, still holds a GSR with no cycle, or the flag is up'
+);
+create temp table a_rows as
+select 'review_cycles' as tbl, to_jsonb(t) - 'updated_at' as row from public.review_cycles t where t.company_id = tests.company('rba')
+union all select 'reviews', to_jsonb(t) - 'updated_at' from public.reviews t where t.company_id = tests.company('rba')
+union all select 'review_scores', to_jsonb(t) - 'updated_at' from public.review_scores t where t.company_id = tests.company('rba')
+union all select 'goals', to_jsonb(t) - 'updated_at' from public.goals t where t.company_id = tests.company('rba')
+union all select 'goal_notes', to_jsonb(t) - 'updated_at' from public.goal_notes t where t.company_id = tests.company('rba')
+union all select 'cycle_omissions', to_jsonb(t) from public.cycle_omissions t where t.company_id = tests.company('rba');
+select tests.assert(
+  not exists ((select * from b_rows except all select * from a_rows)
+              union all
+              (select * from a_rows except all select * from b_rows))
+  and (select count(*) = 13 from b_rows),
+  'put_back: a row of rba is not what it was before the move'
+);
+select tests.assert(
+  not exists (
+    (select * from fp_before where slug in ('klasik', 'kingdom')
+     except
+     select * from tests.fingerprint() where slug in ('klasik', 'kingdom'))
+    union all
+    (select * from tests.fingerprint() where slug in ('klasik', 'kingdom')
+     except
+     select * from fp_before where slug in ('klasik', 'kingdom'))
+  ),
+  'put_back: a fingerprint of klasik or kingdom changed'
+);
+-- The monthly rules hold again: the closed month refuses its goals, and nobody starts a GSR.
+select tests.assert_raises(
+  format($q$update public.goals set progress = 10 where id = %L$q$, tests.id('g_aug_e1')),
+  'This review cycle is closed. Reopen it to change its goals.'
+);
+select tests.act_as(tests.id('c_e5'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('rba'), tests.id('c_e5')),
+  'GSRs on demand are not turned on for this company.'
+);
+reset role; select set_config('request.jwt.claims', '', true);

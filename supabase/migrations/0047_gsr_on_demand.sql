@@ -1088,9 +1088,9 @@ revoke execute on function public.guard_goal_owner() from public, anon, authenti
 -- update exemptions sit before both branches and so hold for both: the why (outcome_note),
 -- updated_at, and a carried-from goal that is gone. So does the delete pass-through: when the
 -- GSR itself is being deleted its goals go with it. The done-GSR branch matches only a GSR of the
--- goal's own person, as the cycle branch's lock does, so a write that names someone else's GSR by
--- id (another company's included) is answered by inherit_goal_company's person refusal, never by
--- whether that GSR is done. And the done refusals are worded only for someone in the GSR's company,
+-- goal's own person, before the write or after it, so a write that names someone else's GSR by id
+-- (another company's included) is answered by inherit_goal_company's person refusal, never by
+-- whether that GSR is done, and a goal cannot leave a done GSR by changing its person. And the done refusals are worded only for someone in the GSR's company,
 -- a Rococo admin (private.is_company_member counts both) or the SQL editor; any other signed-in
 -- writer is refused in row level security's words, so naming a person and their GSR from outside
 -- tells nothing, whatever the policies say.
@@ -1108,6 +1108,7 @@ declare
   v_from     uuid := case when tg_op = 'INSERT' then null else old.cycle_id end;
   v_to       uuid := case when tg_op = 'DELETE' then null else new.cycle_id end;
   v_whose    uuid := case when tg_op = 'DELETE' then old.employee_id else new.employee_id end;
+  v_was      uuid := case when tg_op = 'INSERT' then null else old.employee_id end;
   v_gsr_from uuid := case when tg_op = 'INSERT' then null else old.review_id end;
   v_gsr_to   uuid := case when tg_op = 'DELETE' then null else new.review_id end;
   v_probe    public.goals%rowtype;
@@ -1177,7 +1178,7 @@ begin
     from public.reviews r
    where r.id in (v_gsr_from, v_gsr_to)
      and r.cycle_id is null
-     and r.employee_id = v_whose
+     and r.employee_id in (v_whose, v_was)
      and r.status = 'complete';
   if v_done then
     if (select auth.uid()) is not null and v_outside then
@@ -1470,9 +1471,8 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --     cycles, their reviews and their line items are not touched.
 -- Before any of it, a private copy of every row removed or re-pointed is kept, whole, so a move
 -- made in error can be put back by hand: each month ('cycle'), each left-out row ('omission'),
--- each converted review as it was ('review_cycle', which names its month) and each moved goal as
--- it was ('goal_cycle'). A GSR the conversion created is one a goal now points at with no
--- 'review_cycle' row of its own.
+-- each converted review as it was ('review_cycle', which names its month), each moved goal as it
+-- was ('goal_cycle') and each GSR the conversion created ('created_gsr').
 --
 -- The guards that would refuse this stand aside only while the transaction-local flag
 -- hub.gsr_conversion is '1' (the pattern of hub.task_internal and hub.division_cleanup): the
@@ -1480,8 +1480,69 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 -- stamp_standalone_gsr), the goal and note freeze guards, and the company a GSR and its goals
 -- take (inherit_company_from_cycle, inherit_goal_company). Only
 -- private.convert_gsrs_to_on_demand sets it, and it puts it back to '' before it returns, on
--- every path, so a later statement in the same transaction is judged as usual. No signed-in
--- account can run the conversion, its trigger, or read the copy.
+-- every path, so a later statement in the same transaction is judged as usual; the SQL editor
+-- sets it by hand only to put a move back, as below. No signed-in account can run the
+-- conversion, its trigger, or read the copy.
+--
+-- Putting a move back, by hand. Paste these into the SQL editor as one transaction, with the
+-- company's slug in place of rba (it is named twice). Only where each row lives is put back:
+-- anything changed after the move (a GSR marked done or reopened, a goal edited) stays as it is
+-- now. A GSR started on demand after the move has no month to go back to, so an admin deletes it
+-- (and its goals) first; while one is there, step 1 stops the put-back and nothing changes. The
+-- statements between the two marker lines are what supabase/tests/0047_gsr_conversion.test.sql
+-- runs, read from this file.
+--
+--   begin;
+-- put back: from here
+--   select set_config('hub.gsr_conversion', '1', true);
+--   create temp table put_back on commit drop as
+--     select b.* from private.gsr_conversion_backup b
+--      where b.company_id = (select c.id from public.companies c where c.slug = 'rba')
+--        and b.converted_at = (select max(m.converted_at) from private.gsr_conversion_backup m
+--                               where m.company_id = b.company_id);
+--   -- 1. Stop if a GSR with no cycle is not one the move made.
+--   do $$ begin
+--     if exists (select 1 from public.reviews r
+--                 where r.company_id = (select p.company_id from put_back p limit 1)
+--                   and r.cycle_id is null
+--                   and r.id not in (select (p.payload->>'id')::uuid from put_back p
+--                                     where p.what in ('review_cycle', 'created_gsr'))) then
+--       raise exception 'A GSR was started on demand after the move. Delete it first. Nothing was changed.';
+--     end if;
+--   end $$;
+--   -- 2. The months as they were, open until step 7 so their reviews can come back.
+--   insert into public.review_cycles
+--   select x.* from put_back p,
+--          jsonb_populate_record(null::public.review_cycles, p.payload || '{"status": "open"}') x
+--    where p.what = 'cycle';
+--   -- 3. Each converted review back in its month, with no dates.
+--   update public.reviews r set cycle_id = x.cycle_id, started_on = null, done_on = null
+--     from put_back p, jsonb_populate_record(null::public.reviews, p.payload) x
+--    where p.what = 'review_cycle' and r.id = x.id;
+--   -- 4. Each moved goal back in its month, off its GSR.
+--   update public.goals g set review_id = null, cycle_id = x.cycle_id
+--     from put_back p, jsonb_populate_record(null::public.goals, p.payload) x
+--    where p.what = 'goal_cycle' and g.id = x.id;
+--   -- 5. The GSRs the move made, which now hold no goal.
+--   delete from public.reviews r using put_back p
+--    where p.what = 'created_gsr' and r.id = (p.payload->>'id')::uuid;
+--   -- 6. The left-out rows, then who left them out, when and why, which the insert stamps afresh.
+--   insert into public.cycle_omissions
+--   select x.* from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
+--    where p.what = 'omission';
+--   update public.cycle_omissions o
+--      set reason = x.reason, omitted_by = x.omitted_by, created_at = x.created_at
+--     from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
+--    where p.what = 'omission' and o.cycle_id = x.cycle_id and o.employee_id = x.employee_id;
+--   -- 7. Each month's status as it was.
+--   update public.review_cycles c set status = x.status
+--     from put_back p, jsonb_populate_record(null::public.review_cycles, p.payload) x
+--    where p.what = 'cycle' and c.id = x.id;
+--   -- 8. Back to periods, and the flag down.
+--   update public.companies set gsr_mode = 'periods' where slug = 'rba';
+--   select set_config('hub.gsr_conversion', '', true);
+-- put back: to here
+--   commit;
 
 create table if not exists private.gsr_conversion_backup (
   id           bigint generated always as identity primary key,
@@ -1492,7 +1553,7 @@ create table if not exists private.gsr_conversion_backup (
 );
 alter table private.gsr_conversion_backup drop constraint if exists gsr_conversion_backup_what_check;
 alter table private.gsr_conversion_backup add constraint gsr_conversion_backup_what_check
-  check (what in ('cycle', 'omission', 'review_cycle', 'goal_cycle'));
+  check (what in ('cycle', 'omission', 'review_cycle', 'goal_cycle', 'created_gsr'));
 alter table private.gsr_conversion_backup enable row level security;
 revoke all on table private.gsr_conversion_backup from public, anon, authenticated;
 
@@ -1554,6 +1615,10 @@ begin
   end if;
   v_today := (now() at time zone v_tz)::date;
 
+  -- A write in flight into a month holds a key share lock on it, which this waits for, so the copy
+  -- below sees that row; a later one waits here, then fails its foreign key on the month removed.
+  perform 1 from public.review_cycles c where c.company_id = p_company and c.kind = 'gsr' for update;
+
   -- Deleting a month deletes whatever still points at it. Only a monthly goal can move onto a
   -- GSR, so any other goal in a month stops the move before anything changes.
   if exists (
@@ -1563,6 +1628,23 @@ begin
      where c.company_id = p_company and c.kind = 'gsr' and g.scope <> 'cycle'
   ) then
     raise exception 'A goal in one of this company''s GSR months is not a monthly goal, so it cannot move onto a GSR. Settle it by hand first.'
+      using errcode = 'check_violation';
+  end if;
+
+  -- One GSR a person a day, across companies: someone with a row in a month who already has a GSR
+  -- with no cycle started on its first day (one who came from a company on demand) stops the move.
+  if exists (
+    select 1
+      from public.review_cycles c
+      join (select r.cycle_id, r.employee_id from public.reviews r
+            union
+            select g.cycle_id, g.employee_id from public.goals g) x on x.cycle_id = c.id
+      join public.reviews s on s.employee_id = x.employee_id
+                           and s.cycle_id is null
+                           and s.started_on = c.period_start
+     where c.company_id = p_company and c.kind = 'gsr'
+  ) then
+    raise exception 'Someone in this company already has a GSR dated the first day of a month being converted. Nothing was changed.'
       using errcode = 'check_violation';
   end if;
 
@@ -1628,6 +1710,8 @@ begin
       insert into public.reviews (company_id, employee_id, status, started_on)
       values (v_row.company_id, v_row.employee_id, 'not_started', v_row.period_start)
       returning id into v_review;
+      insert into private.gsr_conversion_backup (company_id, what, payload)
+      select p_company, 'created_gsr', to_jsonb(r) from public.reviews r where r.id = v_review;
       update public.goals g
          set review_id = v_review,
              cycle_id  = null
@@ -1644,7 +1728,8 @@ begin
          select 1 from public.goals g join public.review_cycles c on c.id = g.cycle_id
           where c.company_id = p_company and c.kind = 'gsr'
        ) then
-      raise exception 'A review or goal is still in one of this company''s GSR months, so the move stops here.';
+      raise exception 'A review or goal is still in one of this company''s GSR months, so the move stops here.'
+        using errcode = 'check_violation';
     end if;
 
     delete from public.review_cycles c

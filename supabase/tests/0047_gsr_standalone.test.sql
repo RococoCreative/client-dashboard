@@ -821,3 +821,74 @@ select tests.assert(
   (select gsr_mode = 'on_demand' from public.companies where id = tests.company('rba')),
   'no_way_back: the company went back to periods'
 );
+
+-- ---------------------------------------------------------------------------------------
+-- A project note on a GSR
+-- ---------------------------------------------------------------------------------------
+
+-- case: a_project_note_follows_its_gsr
+-- s_e6's GSR, dated as a conversion dates it so it cannot meet another case's day, and two rba
+-- projects.
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on)
+values (tests.company('rba'), tests.id('s_e6'), 'in_progress', '2030-01-15');
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select 'g_e6_notes', id from public.reviews where employee_id = tests.id('s_e6') and started_on = '2030-01-15';
+insert into public.projects (company_id, name) values
+  (tests.company('rba'), 'Sample project one 47s'),
+  (tests.company('rba'), 'Sample project two 47s');
+insert into tests.fixture (name, id)
+select case name when 'Sample project one 47s' then 'p_one' else 'p_two' end, id
+  from public.projects where name like 'Sample project % 47s';
+
+-- An admin of the company adds one; it takes the GSR's company whatever was sent.
+select tests.act_as(tests.id('s_admin'));
+select tests.assert(
+  tests.rows_of(format($q$insert into public.review_project_notes (company_id, review_id, project_id, note)
+                          values (%L, %L, %L, 'Sample project note 47s')$q$,
+                       tests.company('klasik'), tests.id('g_e6_notes'), tests.id('p_one'))) = 1,
+  'project_note: an admin could not add a project note to an open GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+insert into tests.fixture (name, id)
+select 'pn_one', id from public.review_project_notes where note = 'Sample project note 47s';
+select tests.assert(
+  (select company_id = tests.company('rba') from public.review_project_notes where id = tests.id('pn_one')),
+  'project_note: the note did not take the GSR''s company'
+);
+
+-- Another company's admin cannot add one.
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.review_project_notes (company_id, review_id, project_id, note)
+            values (%L, %L, %L, 'Sample outsider project note 47s')$q$,
+         tests.company('klasik'), tests.id('g_e6_notes'), tests.id('p_two')),
+  '%row-level security%'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+-- Done, its notes are signed off: none added, changed or removed.
+select tests.act_as(tests.id('s_admin'));
+update public.reviews set status = 'complete', completed_at = now(), gsr_score = 70, reviewer_id = tests.id('s_admin')
+ where id = tests.id('g_e6_notes');
+select tests.assert_raises(
+  format($q$insert into public.review_project_notes (review_id, project_id, note)
+            values (%L, %L, 'Sample late project note 47s')$q$, tests.id('g_e6_notes'), tests.id('p_two')),
+  'This review is signed off. Reopen it to change it.'
+);
+select tests.assert_raises(
+  format($q$update public.review_project_notes set note = 'Sample changed 47s' where id = %L$q$, tests.id('pn_one')),
+  'This review is signed off. Reopen it to change it.'
+);
+select tests.assert_raises(
+  format($q$delete from public.review_project_notes where id = %L$q$, tests.id('pn_one')),
+  'This review is signed off. Reopen it to change it.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select status = 'complete' from public.reviews where id = tests.id('g_e6_notes'))
+  and (select count(*) = 1 from public.review_project_notes where review_id = tests.id('g_e6_notes'))
+  and (select note = 'Sample project note 47s' from public.review_project_notes where id = tests.id('pn_one')),
+  'project_note: a note on a done GSR changed, or the GSR was not done'
+);

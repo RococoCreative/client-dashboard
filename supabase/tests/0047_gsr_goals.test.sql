@@ -529,8 +529,19 @@ select tests.assert_raises(
   'This GSR is done. Reopen it to change its goals.'
 );
 reset role; select set_config('request.jwt.claims', '', true);
+-- Nor by changing its person in the same write, onto another person's open GSR: only a Rococo
+-- admin can change a goal's person, and even they are refused.
+select tests.create_person('q_rococo', null, 'employee', true);
+select tests.act_as(tests.id('q_rococo'));
+select tests.assert_raises(
+  format($q$update public.goals set employee_id = %L, review_id = %L where id = %L$q$,
+         tests.id('q_peer'), tests.id('gsr_peer'), tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
 select tests.assert(
   (select review_id = tests.id('gsr_e1_old') and cycle_id is null and title = 'Sample focus 47g'
+          and employee_id = tests.id('q_e1')
      from public.goals where id = tests.id('g_focus')),
   'leave_done: a goal left a done GSR, or changed'
 );
