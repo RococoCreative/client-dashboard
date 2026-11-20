@@ -1023,3 +1023,50 @@ select tests.assert(
   not exists (select 1 from public.reviews where employee_id = tests.id('s_rococo_gone')),
   'company_delete: the company''s GSR stayed'
 );
+
+-- ---------------------------------------------------------------------------------------
+-- Who marked it done
+-- ---------------------------------------------------------------------------------------
+
+-- case: the_database_stamps_who_marked_it_done
+-- A manager closing a report's GSR while sending someone else's id as reviewer ends with their
+-- own id on it; so does a Rococo admin. The SQL editor's is left as given.
+select tests.act_as(tests.id('s_mgr'));
+select tests.assert(
+  tests.rows_of(format($q$update public.reviews
+                             set status = 'complete', completed_at = now(), gsr_score = 55, reviewer_id = %L
+                           where id = %L$q$, tests.id('s_admin'), tests.id('g_e4'))) = 1,
+  'stamp_reviewer: a manager could not mark a report''s GSR done'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_rococo'));
+select tests.assert(
+  tests.rows_of(format($q$update public.reviews
+                             set status = 'complete', completed_at = now(), gsr_score = 65, reviewer_id = %L
+                           where id = %L$q$, tests.id('s_admin'), tests.id('g_e2'))) = 1,
+  'stamp_reviewer: a Rococo admin could not mark a GSR done'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select reviewer_id = tests.id('s_mgr') and status = 'complete' from public.reviews where id = tests.id('g_e4'))
+  and (select reviewer_id = tests.id('s_rococo') and status = 'complete' from public.reviews where id = tests.id('g_e2')),
+  'stamp_reviewer: the row carries the id the client sent, not who marked it done'
+);
+-- Reopening clears nothing it did not clear before: who marked it done stays on the row.
+select tests.act_as(tests.id('s_mgr'));
+update public.reviews set status = 'in_progress', completed_at = null where id = tests.id('g_e4');
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select reviewer_id = tests.id('s_mgr') and status = 'in_progress' from public.reviews where id = tests.id('g_e4')),
+  'stamp_reviewer: reopening changed who marked it done'
+);
+-- The SQL editor's close (which reviews_guard_employee_fields lets through only under the
+-- conversion flag) keeps the reviewer it gives.
+select set_config('hub.gsr_conversion', '1', true);
+update public.reviews set status = 'complete', completed_at = now(), gsr_score = 50, reviewer_id = tests.id('s_admin')
+ where id = tests.id('g_e4');
+select set_config('hub.gsr_conversion', '', true);
+select tests.assert(
+  (select reviewer_id = tests.id('s_admin') from public.reviews where id = tests.id('g_e4')),
+  'stamp_reviewer: the SQL editor''s reviewer was replaced'
+);

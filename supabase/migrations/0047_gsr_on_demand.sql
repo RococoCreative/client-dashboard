@@ -744,6 +744,9 @@ revoke execute on function public.guard_review_cycle() from public, anon, authen
 --   * gets started_on as the company's date, whatever was sent, and it never changes after;
 --   * gets done_on as the company's date when it is marked done, cleared when it is reopened,
 --     and otherwise kept, the way gsr_score is released;
+--   * gets reviewer_id as the signed-in writer who marks it done (inserted done or moved to done),
+--     whatever was sent, so the record of who closed it is the database's; with nobody signed in
+--     it is kept as given, and reopening clears nothing it did not clear before;
 --   * has one a day: a start on a day the person already has one passes on to the unique key,
 --     so a start that ignores a duplicate lands on that one;
 --   * has two open at most when one is started. Reopening is never limited, so a leader can put
@@ -817,6 +820,9 @@ begin
       raise exception 'This person already has two GSRs open. Mark the earlier one done first.'
         using errcode = 'check_violation';
     end if;
+    if new.status = 'complete' and (select auth.uid()) is not null then
+      new.reviewer_id := private.auth_profile_id();
+    end if;
     return new;
   end if;
 
@@ -838,6 +844,9 @@ begin
   new.started_on := old.started_on;
   if new.status = 'complete' and old.status is distinct from 'complete' then
     new.done_on := v_today;
+    if (select auth.uid()) is not null then
+      new.reviewer_id := private.auth_profile_id();
+    end if;
   elsif new.status <> 'complete' then
     new.done_on := null;
   else
