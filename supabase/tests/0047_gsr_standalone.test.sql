@@ -175,6 +175,28 @@ select tests.assert(
   not exists (select 1 from public.reviews where employee_id = tests.id('s_e5')),
   'stranger: a refused start landed'
 );
+-- The refusal does not lean on the insert policies: with a policy that would admit anything, a
+-- stranger is still refused, in the same words. The policy is gone again before the next case.
+create policy "Sample admit any review 47s" on public.reviews for insert to authenticated with check (true);
+select tests.act_as(tests.id('s_e2'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('rba'), tests.id('s_e5')),
+  'new row violates row-level security policy for table "reviews"'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('klasik'), tests.id('s_e5')),
+  'new row violates row-level security policy for table "reviews"'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+drop policy "Sample admit any review 47s" on public.reviews;
+select tests.assert(
+  not exists (select 1 from public.reviews where employee_id = tests.id('s_e5')),
+  'stranger: a start landed once a policy admitted it'
+);
 
 -- case: rococo_starts_for_an_rba_person
 select tests.act_as(tests.id('s_rococo'));

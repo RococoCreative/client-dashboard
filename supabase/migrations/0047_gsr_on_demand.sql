@@ -722,9 +722,10 @@ revoke execute on function public.guard_review_cycle() from public, anon, authen
 --     included, and any writer who changes the company, the SQL editor included, lands it in a
 --     company on demand. (A move of the person to another company leaves their GSRs where they
 --     were started.)
---   * tells a writer refused by row level security nothing first: the mode, the limit and an
---     unknown person (inherit_company_from_cycle, section 5) are answered only to a writer with a
---     say over the person.
+--   * refuses a writer with no say over the person outright, in row level security's own words,
+--     and tells them nothing else: the mode, the limit and an unknown person
+--     (inherit_company_from_cycle, section 5) are answered only to a writer with a say over the
+--     person.
 -- While a company moves over (hub.gsr_conversion is '1', Task 5) the dates are kept as given and
 -- the mode and the limit are not judged.
 --
@@ -755,15 +756,16 @@ begin
     new.started_on := v_today;
     new.done_on := case when new.status = 'complete' then v_today end;
     -- What follows is answered only to the SQL editor, a Rococo admin, the person and anyone who
-    -- leads or manages them (led_person_ids holds the people an admin manages). Anyone else falls
-    -- through to row level security, which refuses them: every policy that admits a GSR with no
-    -- cycle admits only those callers. So a stranger never learns whether the person is there or
-    -- how many GSRs they have open.
+    -- leads or manages them (led_person_ids holds the people an admin manages). Anyone else is
+    -- refused here, with the words row level security would use, and told nothing else: so a
+    -- stranger never learns whether the person is there or how many GSRs they have open, and a GSR
+    -- with no cycle never lands outside a company on demand however the insert policies change.
     if (select auth.uid()) is not null
        and not private.is_rococo_admin()
        and private.auth_profile_id() is distinct from new.employee_id
        and not exists (select 1 from private.led_person_ids() as l (id) where l.id = new.employee_id) then
-      return new;
+      raise exception 'new row violates row-level security policy for table "reviews"'
+        using errcode = 'insufficient_privilege';
     end if;
     if not private.gsr_on_demand(new.company_id) then
       raise exception 'GSRs on demand are not turned on for this company.'
@@ -1054,7 +1056,10 @@ revoke execute on function public.guard_goal_owner() from public, anon, authenti
 -- reaches it, and a goal in a cycle has no review_id, so this branch never reaches a month. The
 -- update exemptions sit before both branches and so hold for both: the why (outcome_note),
 -- updated_at, and a carried-from goal that is gone. So does the delete pass-through: when the
--- GSR itself is being deleted its goals go with it.
+-- GSR itself is being deleted its goals go with it. The done-GSR branch matches only a GSR of the
+-- goal's own person, as the cycle branch's lock does, so a write that names someone else's GSR by
+-- id (another company's included) is answered by inherit_goal_company's person refusal, never by
+-- whether that GSR is done.
 --
 -- While a company moves over (hub.gsr_conversion is '1', Task 5) both guards stand aside, so the
 -- SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
@@ -1135,6 +1140,7 @@ begin
     select 1 from public.reviews r
     where r.id in (v_gsr_from, v_gsr_to)
       and r.cycle_id is null
+      and r.employee_id = v_whose
       and r.status = 'complete'
   ) then
     raise exception 'This GSR is done. Reopen it to change its goals.'

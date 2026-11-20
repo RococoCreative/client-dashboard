@@ -483,6 +483,74 @@ select tests.assert(
   'delete_gsr: another GSR''s goal went with it'
 );
 
+-- case: reopening_one_gsr_leaves_another_frozen
+-- q_e1 has two GSRs done: the earlier one and a third, dated as a conversion dates it. Reopening
+-- the third leaves the earlier one's goals frozen.
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on)
+values (tests.company('rba'), tests.id('q_e1'), 'in_progress', '2026-10-15');
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select 'gsr_e1_third', id from public.reviews
+ where employee_id = tests.id('q_e1') and cycle_id is null and started_on = '2026-10-15';
+insert into tests.fixture (name, id)
+select 'g_focus', id from public.goals where title = 'Sample focus 47g';
+select tests.act_as(tests.id('q_mgr'));
+select tests.assert(
+  tests.rows_of(format($q$update public.reviews
+                             set status = 'complete', completed_at = now(), gsr_score = 60, reviewer_id = %L
+                           where id in (%L, %L)$q$,
+                       tests.id('q_mgr'), tests.id('gsr_e1_old'), tests.id('gsr_e1_third'))) = 2,
+  'second_frozen: a leader could not mark both GSRs done'
+);
+select tests.assert(
+  tests.rows_of(format($q$update public.reviews set status = 'in_progress', completed_at = null where id = %L$q$,
+                       tests.id('gsr_e1_third'))) = 1,
+  'second_frozen: a leader could not reopen the third GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('q_admin'));
+select tests.assert_raises(
+  format($q$update public.goals set title = 'Sample thawed by another' where id = %L$q$, tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+-- case: a_goal_cannot_leave_a_done_gsr
+-- Not by clearing review_id, nor by moving to a cycle instead.
+select tests.act_as(tests.id('q_admin'));
+select tests.assert_raises(
+  format($q$update public.goals set review_id = null where id = %L$q$, tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+select tests.assert_raises(
+  format($q$update public.goals set review_id = null, cycle_id = %L where id = %L$q$,
+         tests.id('c_r_month'), tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select review_id = tests.id('gsr_e1_old') and cycle_id is null and title = 'Sample focus 47g'
+     from public.goals where id = tests.id('g_focus')),
+  'leave_done: a goal left a done GSR, or changed'
+);
+
+-- case: another_companys_done_gsr_by_id
+-- Naming another company's done GSR for one of your own people is the person refusal: it never
+-- says whether that GSR is done.
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+            values (%L, %L, %L, 'cycle', 'role', 'Sample across onto a done GSR')$q$,
+         tests.company('klasik'), tests.id('k_e1'), tests.id('gsr_e1_old')),
+  'A goal on a GSR belongs to that GSR''s person.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.goals where title = 'Sample across onto a done GSR'),
+  'done_by_id: a goal landed on another company''s done GSR'
+);
+
 -- ---------------------------------------------------------------------------------------
 -- A company on periods, as before
 -- ---------------------------------------------------------------------------------------
