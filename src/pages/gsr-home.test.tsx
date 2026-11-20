@@ -49,7 +49,7 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { setActingPerson } from "../test/actingPerson.ts";
-import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
+import { COMPANIES, KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { createGoal, createPillar, deleteGoal, deletePillar, updateCycle } from "../services/gsr.ts";
 import { listGsrsForLog, listLastGsrDates, listPersonGsrs } from "../services/gsrOnDemand.ts";
 import { listCompanyProfiles, updateProfile } from "../services/profiles.ts";
@@ -57,6 +57,8 @@ import { listGsrsForLog as readLog, seedMockGsr, setMockGsrMode } from "../test/
 import type { Gsr, GsrCadence, Profile } from "../types/database.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import GsrLogPage from "./gsr/GsrLogPage.tsx";
+import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
+import PortfolioPage from "./rococo/PortfolioPage.tsx";
 
 const onDemand = { ...RBA.company, gsr_mode: "on_demand" as const };
 const admin = makeHub("admin", onDemand);
@@ -454,5 +456,57 @@ describe("a company on periods", () => {
     expect(screen.getByText("GSRs complete")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "GSRs this week" })).not.toBeInTheDocument();
     noOnDemandReads();
+  });
+});
+
+describe("one count of GSRs done, whoever its person is now", () => {
+  it("reads the same number on the log, Home's week card, the division strip and the portfolio", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    // Two done this week (Monday September 14 to Sunday 20, inside September too): one of them is
+    // Noor's, who has been deactivated since.
+    done(jamie.id, "2026-09-14", 80);
+    done(noor.id, "2026-09-15", 90);
+    setActingPerson(alex);
+    await updateProfile(noor.id, { is_active: false });
+    onTestFinished(async () => {
+      setActingPerson(alex);
+      await updateProfile(noor.id, { is_active: true });
+    });
+
+    const log = renderWithHub(<GsrLogPage />, admin, { path: "/gsr", pattern: "/gsr" });
+    const logHeadline = await screen.findByTestId("gsr-headline");
+    expect(logHeadline).toHaveTextContent(/^2 GSRs done/);
+    expect(screen.getByTestId("gsr-not-listed")).toHaveTextContent("Includes 1 GSR from people no longer active.");
+    // The table still lists the active people only.
+    const table = screen.getByRole("table", { name: "People and their GSRs" });
+    expect(within(table).queryByText("Noor Haddad")).not.toBeInTheDocument();
+    log.unmount();
+
+    const home = renderWithHub(<DashboardPage />, admin);
+    const card = await weekCard();
+    expect(await within(card).findByTestId("gsr-week-headline")).toHaveTextContent(/^2 GSRs done/);
+    expect(within(card).getByTestId("gsr-week-not-listed")).toHaveTextContent("Includes 1 GSR from people no longer active.");
+    home.unmount();
+
+    const scorecards = renderWithHub(<ScorecardsPage />, admin);
+    const strip = await screen.findByRole("region", { name: "Division compare" });
+    const combined = () => within(within(strip).getByRole("listitem", { name: "Combined" })).getByText("GSRs done").nextElementSibling;
+    await waitFor(() => expect(combined()).toHaveTextContent("2"));
+    scorecards.unmount();
+
+    const rococo = makeHub("rococo", null);
+    renderWithHub(<PortfolioPage />, { ...rococo, companies: COMPANIES.map((c) => (c.id === RBA.company.id ? onDemand : c)) }, { path: "/rococo", pattern: "/rococo" });
+    const company = (await screen.findByRole("heading", { name: "RBA Projects" })).closest("li") as HTMLElement;
+    const signal = (await within(company).findByText("GSRs this week")).parentElement as HTMLElement;
+    expect(within(signal).getByText("2 done")).toBeInTheDocument();
+  });
+
+  it("keeps a manager's headline to the people they lead", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    done(rowan.id, "2026-09-14", 80);
+    done(jamie.id, "2026-09-15", 90);
+    renderWithHub(<GsrLogPage />, manager, { path: "/gsr", pattern: "/gsr" });
+    expect(await screen.findByTestId("gsr-headline")).toHaveTextContent(/^1 GSR done/);
+    expect(screen.queryByTestId("gsr-not-listed")).not.toBeInTheDocument();
   });
 });

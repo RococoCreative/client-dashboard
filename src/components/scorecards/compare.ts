@@ -7,10 +7,12 @@
 // divisions' figures and once in Combined, so the divisions can add up to more than the whole.
 // In a company whose GSRs are on demand (0047) there is no month's GSR cycle: the caller hands in
 // the GSRs done in the month instead, and each group reads how many of them its people did
-// (windowFigures, lib/gsr/onDemand.ts).
+// (windowFigures, lib/gsr/onDemand.ts), counted by the GSRs log's rule (countedFor,
+// lib/gsr/gsrStanding.ts): Combined every GSR read, a division its people's, active or not.
 import { isOptimizationMetric, monthOf, monthResult, summarizeResults, type ResultSummary } from "../../lib/scorecard.ts";
 import { cycleProgress, cycleRoster } from "../../lib/gsr/cycles.ts";
 import { windowFigures, type DateRange, type GsrFigureRow } from "../../lib/gsr/onDemand.ts";
+import { countedFor, countedGsrs } from "../../lib/gsr/gsrStanding.ts";
 import type { CompanyDivision, CycleOmission, MetricEntry, Profile, Review, ReviewCycle, RoleMetric } from "../../types/database.ts";
 
 // The switch value for the whole company.
@@ -98,8 +100,10 @@ export function divisionCompareRows(input: {
     };
     if (gsrs === undefined) return base;
     if (gsrs === null) return { ...base, gsrsDone: null };
-    const ids = new Set(group.map((p) => p.id));
-    return { ...base, gsrsDone: windowFigures(gsrs.rows.filter((g) => ids.has(g.employee_id)), gsrs.range).done };
+    // Counted as the GSRs log counts for an admin (countedFor): Combined is every GSR read, a
+    // division the GSRs of everyone in it, active or not.
+    const whose = countedFor(true, group, key === COMBINED ? null : group);
+    return { ...base, gsrsDone: windowFigures(countedGsrs(gsrs.rows, whose), gsrs.range).done };
   };
   const rows = [row(COMBINED, combinedLabel), ...divisions.map((d) => row(d.id, d.name))];
   if (people.some((p) => p.is_active && p.division_ids.length === 0)) rows.push(row(NO_DIVISION, "No division"));

@@ -14,7 +14,7 @@ import { metaClass, secondaryClass } from "../ui/type.ts";
 import DueBadge from "../gsr/onDemand/DueBadge.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { gsrHeadline, gsrPeopleFor, gsrStanding, mostOverdue } from "../../lib/gsr/gsrStanding.ts";
+import { countedFor, gsrHeadline, gsrPeopleFor, gsrStanding, mostOverdue, notListedLine } from "../../lib/gsr/gsrStanding.ts";
 import { windowRange } from "../../lib/gsr/onDemand.ts";
 import { displayName, formatDate, formatPeriod } from "../../lib/format.ts";
 import { companyToday } from "../../lib/wins.ts";
@@ -36,13 +36,16 @@ export default function GsrWeekCard({ companyId }: { companyId: string }) {
     if (state.error && !state.data) return <Notice tone="error">This week's GSRs did not load. {state.error}</Notice>;
     if (!state.data) return <SkeletonRows rows={3} />;
     const { gsrs, lastDates, people } = state.data;
-    const { figures, rows } = gsrStanding(gsrPeopleFor(profile, isAdmin, people), gsrs, lastDates, range, today);
+    const listed = gsrPeopleFor(profile, isAdmin, people);
+    const { figures, rows, notListed } = gsrStanding(listed, gsrs, lastDates, range, today, countedFor(isAdmin, listed, null));
+    const notListedNote = notListedLine(notListed);
     const overdue = mostOverdue(rows);
     const more = overdue.length - SHOWN;
     return (
       <>
         <p data-testid="gsr-week-headline" className="tnum font-display text-[18px] leading-snug text-heading">{gsrHeadline(figures)}</p>
         <p className={`mt-0.5 ${metaClass}`}>{formatPeriod(range.from, range.to)}</p>
+        {notListedNote ? <p data-testid="gsr-week-not-listed" className={`mt-0.5 ${metaClass}`}>{notListedNote}</p> : null}
         {overdue.length === 0 ? (
           <p className={`mt-4 ${secondaryClass}`}>Nobody is overdue a GSR.</p>
         ) : (

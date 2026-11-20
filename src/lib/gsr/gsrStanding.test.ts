@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { RBA } from "../../test/fixtures.ts";
 import type { Gsr, Profile } from "../../types/database.ts";
-import { gsrHeadline, gsrPeopleFor, gsrStanding, lastStartedOn, mostOverdue, type GsrStandingRow } from "./gsrStanding.ts";
+import { countedFor, countedGsrs, gsrHeadline, gsrPeopleFor, gsrStanding, lastStartedOn, mostOverdue, notListedLine, type GsrStandingRow } from "./gsrStanding.ts";
 
 const byName = (name: string) => RBA.profiles.find((p) => p.full_name === name)!;
 const alex = byName("Alex Morgan");
@@ -92,5 +92,43 @@ describe("the day a person's last GSR began", () => {
   it("is the latest start, whatever the order, and null with none", () => {
     expect(lastStartedOn([{ started_on: "2026-09-01" }, { started_on: "2026-09-12" }, { started_on: "2026-08-30" }])).toBe("2026-09-12");
     expect(lastStartedOn([])).toBeNull();
+  });
+});
+
+describe("whose GSRs a headline counts", () => {
+  const gone = { ...noor, is_active: false };
+  const gsrs = [done(jamie.id, "2026-09-14", 80), done(noor.id, "2026-09-15", 90), gsr(rowan.id, "2026-09-12")];
+
+  it("is every GSR read for a viewer who runs the company, a done one whose person has left included", () => {
+    const whose = countedFor(true, [jamie, rowan], null);
+    expect(whose).toBeNull();
+    expect(countedGsrs(gsrs, whose).map((g) => g.employee_id)).toEqual([jamie.id, noor.id, rowan.id]);
+    const { figures, rows, notListed } = gsrStanding([jamie, rowan], gsrs, [], range, today, whose);
+    expect(figures).toEqual({ done: 2, average: 85, inProgress: 1 });
+    // The table still lists the active people only; one GSR counted is from someone not in it.
+    expect(rows.map((r) => r.person.id)).toEqual([jamie.id, rowan.id]);
+    expect(notListed).toBe(1);
+    expect(notListedLine(notListed)).toBe("Includes 1 GSR from people no longer active.");
+    expect(notListedLine(2)).toBe("Includes 2 GSRs from people no longer active.");
+    expect(notListedLine(0)).toBeNull();
+  });
+
+  it("is, for one division, the GSRs of everyone in it, active or not", () => {
+    const whose = countedFor(true, [jamie], [jamie, gone]);
+    expect(countedGsrs(gsrs, whose).map((g) => g.employee_id)).toEqual([jamie.id, noor.id]);
+  });
+
+  it("stays the people they lead for anyone else", () => {
+    const whose = countedFor(false, [rowan, kai], null);
+    expect(countedGsrs(gsrs, whose).map((g) => g.employee_id)).toEqual([rowan.id]);
+    const { figures, notListed } = gsrStanding([rowan, kai], gsrs, [], range, today, whose);
+    expect(figures).toEqual({ done: 0, average: null, inProgress: 1 });
+    expect(notListed).toBe(0);
+  });
+
+  it("is the people given when no rule is passed, as before", () => {
+    const { figures, notListed } = gsrStanding([jamie, rowan], gsrs, [], range, today);
+    expect(figures).toEqual({ done: 1, average: 80, inProgress: 1 });
+    expect(notListed).toBe(0);
   });
 });

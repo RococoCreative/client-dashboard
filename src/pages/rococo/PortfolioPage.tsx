@@ -23,6 +23,7 @@ import { listInvitations } from "../../services/invitations.ts";
 import { listCompanyReviews, listCycleOmissions, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
 import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
 import { windowFigures, windowRange } from "../../lib/gsr/onDemand.ts";
+import { countedFor, countedGsrs } from "../../lib/gsr/gsrStanding.ts";
 import { companyToday } from "../../lib/wins.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSops } from "../../services/sops.ts";
@@ -65,10 +66,11 @@ interface CompanySummary {
   gsrWeek: { done: number; average: number | null } | null;
 }
 
-// This week's GSRs for a company on demand, Monday to Sunday by the company's own date.
+// This week's GSRs for a company on demand, Monday to Sunday by the company's own date, counted by
+// the GSRs log's rule for someone who runs the company (countedFor): every GSR the week read returns.
 async function gsrWeekOf(company: Company): Promise<{ done: number; average: number | null }> {
   const range = windowRange("week", companyToday(company.time_zone));
-  const { done, average } = windowFigures(await listGsrsForLog(company.id, range), range);
+  const { done, average } = windowFigures(countedGsrs(await listGsrsForLog(company.id, range), countedFor(true, [], null)), range);
   return { done, average };
 }
 

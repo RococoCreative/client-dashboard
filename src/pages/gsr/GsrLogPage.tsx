@@ -34,7 +34,7 @@ import { COMBINED, peopleInScope } from "../../components/scorecards/compare.ts"
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { GSR_RHYTHM_LABELS, GSR_WINDOW_LABELS, windowRange, type DateRange, type GsrWindow } from "../../lib/gsr/onDemand.ts";
-import { gsrHeadline, gsrPeopleFor, gsrStanding, type GsrStandingRow } from "../../lib/gsr/gsrStanding.ts";
+import { countedFor, gsrHeadline, gsrPeopleFor, gsrStanding, notListedLine, type GsrStandingRow } from "../../lib/gsr/gsrStanding.ts";
 import { displayName, formatDate, formatNumber, formatPeriod } from "../../lib/format.ts";
 import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { companyToday } from "../../lib/wins.ts";
@@ -224,7 +224,12 @@ export default function GsrLogPage() {
   const divisions = viewerDivisions(profile, allDivisions);
   const split = allowed && divisions.length > 0;
   const inScope = peopleInScope(gsrPeopleFor(profile, isAdmin, people), split ? scope : COMBINED);
-  const { figures, rows } = gsrStanding(inScope, gsrs, lastDates, range, today);
+  // The headline counts by countedFor: for an admin every GSR read, or a division's by the division
+  // of the GSR's person, active or not; for anyone else the people they lead. The table lists the
+  // active people either way.
+  const division = split && scope !== COMBINED ? peopleInScope(people, scope) : null;
+  const { figures, rows, notListed } = gsrStanding(inScope, gsrs, lastDates, range, today, countedFor(isAdmin, inScope, division));
+  const notListedNote = notListedLine(notListed);
   const startable = rows.filter((r) => r.canStart).map((r) => r.person);
   const metaOf = (person: Profile) =>
     [split && person.division_ids.length > 0 ? divisionLabel(person.division_ids, allDivisions) : null, person.title].filter(Boolean).join(" · ");
@@ -265,6 +270,7 @@ export default function GsrLogPage() {
           {gsrHeadline(figures)}
         </p>
         <p className={`mt-0.5 ${metaClass}`}>{formatPeriod(range.from, range.to)}</p>
+        {notListedNote ? <p data-testid="gsr-not-listed" className={`mt-0.5 ${metaClass}`}>{notListedNote}</p> : null}
       </section>
 
       {rows.length === 0 ? (
