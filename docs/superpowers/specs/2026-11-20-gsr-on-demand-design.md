@@ -146,6 +146,11 @@ already applied in production and is never edited (rule 8).
 - At most two open per person: the newest and the one before it. This is what lets the last GSR be
   closed from inside the new one without letting open GSRs pile up. A third is refused with a
   plain message naming the one to close first.
+- That limit is judged only when a GSR is started. Reopening a done GSR is always allowed, so a
+  manager can put right one that was closed by mistake, and a conversion may leave a person with
+  more than two open. Whatever the count, "Last GSR" is the one before the current one by start
+  date, and "New GSR" on a person at or over the limit opens their newest and names the others to
+  close. (Builder's call.)
 - Nothing about `cycle_omissions` applies to a standalone GSR.
 
 ### Its goals
@@ -213,8 +218,12 @@ and the audit of rhythm changes.
 Flipping a company's `gsr_mode` to `'on_demand'` converts its past GSRs in the same write:
 
 - Every review in one of its GSR cycles becomes a standalone GSR: `started_on` is the cycle's first
-  day; `done_on` is the cycle's last day when it is complete; status, score and completion time stay
-  as they are.
+  day; status, score and completion time stay as they are.
+- A review that is complete gets `done_on`: the cycle's last day, or the day it was actually
+  marked complete if that came earlier. So a month locked after it ended stays in its month, a
+  GSR marked done inside a month still running counts on the day it was done, and no converted GSR
+  is ever dated in the future. A review that is not complete converts as an open GSR, whatever the
+  state of its cycle.
 - That person's goals in that cycle move to the GSR. A goal in a GSR cycle for a person with no
   review there gets an open GSR to hold it, so no goal is left without a home.
 - The company's GSR cycles and their omission rows are then removed. Scored review cycles are not
@@ -235,10 +244,14 @@ All of this is pure code in `src/lib/gsr`, shared by every company and tested th
 - **When it counts.** On its `done_on` date. A GSR started September 29 and marked done October 2
   counts in the week, month and quarter that hold October 2. (Builder's call. A converted GSR
   counts on the last day of its month, so history stays in the month it belonged to.)
-- **A window's figures.** For any date range and any set of people: how many GSRs were done, their
-  average score, and how many are in progress. Every done GSR counts once, so a person with five
-  done GSRs in the window weighs five times a person with one. A person's own average is the
-  average of their own done GSRs in the window.
+- **A window's figures.** For any date range and any set of people: how many GSRs were done in it
+  and their average score. Every done GSR counts once, so a person with five done GSRs in the
+  window weighs five times a person with one. A person's own average is the average of their own
+  done GSRs in the window.
+- **What the window does not change.** In progress, last GSR, due and overdue are always as of
+  today: a GSR is in progress if it is open now, whatever window is showing. A past window answers
+  "what was done then", never "what was open then", so nothing needs a history of when a GSR was
+  open. (Builder's call.)
 - **A scored review's GSR pillar.** For a company on demand, the pillar reads the person's GSRs
   done inside the review cycle's period. The line item is what it is today: 100 for each counted
   GSR as the target, their scores as the actual, so the pillar is their average. With none done
@@ -279,8 +292,9 @@ GSRs                                    [This week v] [All divisions v]
   Each name opens that person's GSRs, newest first.
 ```
 
-- The window sets every number: this week (the default), this month, this quarter, or custom
-  dates. Weeks run Monday to Sunday.
+- The window sets Done and Average, in the headline and on every row: this week (the default),
+  this month, this quarter, or custom dates. Weeks run Monday to Sunday. In progress, Last GSR and
+  Overdue always read as of today.
 - "New GSR" is the page's one primary action and asks for a person; each row also starts or opens
   that person's GSR.
 - Admins see the people they can see. Managers get this page too, for the people they lead. Today
