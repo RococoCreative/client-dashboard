@@ -211,14 +211,22 @@ describe("the GSRs log", () => {
     const kiritimati = { ...onDemand, time_zone: "Pacific/Kiritimati" };
     done(jamie.id, "2026-09-20", 60);
     done(noor.id, "2026-09-21", 90);
+    // Daily, last begun on Sunday the 20th: due on Monday the 21st, which is today only in the
+    // company's time zone. By the browser's date it would not be due yet.
+    await rhythm(jamie, "daily");
     renderLog(makeHub("admin", kiritimati));
     expect(await headline()).toHaveTextContent("1 GSR done · Average 90 · 0 in progress");
     expect(screen.getByText("Sep 21 to Sep 27, 2026")).toBeInTheDocument();
+    expect(within(await rowOf("Jamie Fox")).getByText("Due today")).toBeInTheDocument();
   });
 
   it("shows a manager only the people they lead", async () => {
     seed(rowan.id, { started_on: "2026-09-14" });
+    done(rowan.id, "2026-09-15", 90);
+    // Done this week by someone Harper does not lead, with a score that would move the average.
+    done(jamie.id, "2026-09-14", 10);
     renderLog(manager);
+    expect(await headline()).toHaveTextContent("1 GSR done · Average 90 · 1 in progress");
     const t = await table();
     const names = within(t).getAllByRole("rowheader").map((th) => within(th).getByRole("link").textContent);
     expect(names).toEqual(["Kai Bennett", "Rowan Ellis"]);
