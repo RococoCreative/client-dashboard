@@ -1,8 +1,9 @@
 // Pins that the invitations mock tells the same story as the service: one invitation per address
 // per company, a spent (accepted) one cleared to make way for a new one, one still waiting refused
-// with words that point at it, and a delete that finds nothing read as a refusal.
+// with words that point at it, and a delete that finds nothing read as a refusal. Its invitation
+// email answers the way the notify function does: sent, declined with a reason, or a thrown line.
 import { describe, expect, it } from "vitest";
-import { createInvitation, deleteInvitation, listInvitations } from "./invitations.ts";
+import { createInvitation, deleteInvitation, emailInvitation, invitationEmailCalls, listInvitations, setMockInvitationEmail } from "./invitations.ts";
 
 const company = "co-invite-test";
 
@@ -28,5 +29,16 @@ describe("invitations mock", () => {
 
   it("reads a delete that finds nothing as a refusal", async () => {
     await expect(deleteInvitation("no-such-invitation")).rejects.toThrow(/not yours to change/);
+  });
+
+  it("records each invitation email and answers sent, a reason, or a failure as told", async () => {
+    const invitation = await createInvitation({ company_id: company, email: "mail@example.com", role: "employee" });
+    expect(await emailInvitation(invitation.id)).toEqual({ sent: true });
+    setMockInvitationEmail({ kind: "reason", reason: "They have already signed in." });
+    expect(await emailInvitation(invitation.id)).toEqual({ sent: false, reason: "They have already signed in." });
+    setMockInvitationEmail({ kind: "fail", message: "Emails are not set up yet." });
+    await expect(emailInvitation(invitation.id)).rejects.toThrow("Emails are not set up yet.");
+    expect(invitationEmailCalls).toEqual([invitation.id, invitation.id, invitation.id]);
+    await expect(emailInvitation("no-such-invitation")).rejects.toThrow("That invitation was not found.");
   });
 });

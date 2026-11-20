@@ -1,5 +1,7 @@
 // In-memory stand-in for services/invitations.ts, same exports, so page tests and `npm run demo`
-// run against seeded invitation rows and never touch the network.
+// run against seeded invitation rows and never touch the network. The invitation email is
+// recorded, not sent: emailInvitation answers { sent: true } unless a test tells it to fail or to
+// answer with a reason (setMockInvitationEmail), and every call lands in invitationEmailCalls.
 import type { Invitation, Role } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
@@ -40,6 +42,28 @@ export async function deleteInvitation(id: string): Promise<void> {
   const index = invitations.findIndex((i) => i.id === id);
   if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
   invitations.splice(index, 1);
+}
+
+// What the next emailInvitation calls answer: sent, refused with a reason, or a thrown error.
+type EmailOutcome = { kind: "sent" } | { kind: "reason"; reason: string } | { kind: "fail"; message: string };
+let emailOutcome: EmailOutcome = { kind: "sent" };
+export const invitationEmailCalls: string[] = [];
+
+export function setMockInvitationEmail(outcome: EmailOutcome): void {
+  emailOutcome = outcome;
+}
+
+export function resetMockInvitationEmail(): void {
+  emailOutcome = { kind: "sent" };
+  invitationEmailCalls.length = 0;
+}
+
+export async function emailInvitation(invitationId: string): Promise<{ sent: boolean; reason?: string }> {
+  invitationEmailCalls.push(invitationId);
+  if (!invitations.some((i) => i.id === invitationId)) throw new Error("That invitation was not found.");
+  if (emailOutcome.kind === "fail") throw new Error(emailOutcome.message);
+  if (emailOutcome.kind === "reason") return { sent: false, reason: emailOutcome.reason };
+  return { sent: true };
 }
 
 export function inviteLink(email: string, origin = "http://localhost"): string {

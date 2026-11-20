@@ -62,15 +62,16 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    (`shouldCreateUser: true`) only because the "Before User Created" hook in
    `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and
    rejects everyone else. The app-side domain lookup is UX, not security. No service-role
-   key anywhere in the app or in Vercel; invitations are rows plus a link, not emails.
+   key anywhere in the app or in Vercel; an invitation is a row, and its email goes out through
+   the `notify` function, with the link kept as a fallback the admin can copy.
    The same posture covers outside systems: a company connects its own GoHighLevel or
    QuickBooks account through the app's own OAuth flow in the `connections` Edge Function
    (`supabase/functions/connections`), never through anything of Rococo's. Provider tokens
    live in `connection_tokens`, which only that function reads; the browser sees status rows
    and never calls a provider. The `notify` Edge Function (`supabase/functions/notify`) sends the
-   task assignment email through Resend and is the only place the Resend key lives; its secrets
-   are `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and the task link starts from `APP_URL`
-   alone, never from anything the caller sends.
+   task assignment email and the invitation email through Resend and is the only place the Resend
+   key lives; its secrets are `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and every link it
+   sends starts from `APP_URL` alone, never from anything the caller sends.
 7. **Scoring math lives in one place.** `src/lib/gsr/scoring.ts` is pure, tested, and the
    only implementation of review scoring: pillar weights, rating and deliverable line items, the
    unscored-is-zero rule and its one exception, a Monthly GSRs pillar with no locked month, which
