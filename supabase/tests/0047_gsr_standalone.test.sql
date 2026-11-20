@@ -3,7 +3,9 @@
 -- holds one, the person, anyone who leads them and an admin who manages them start it, the
 -- database stamps its dates in the company's time zone, a person has one a day and two open at
 -- most, a leader marks it done and reopens it and changes nothing else on it, nobody closes their
--- own whatever their role, it is read through the same wall as every review, and a review in a
+-- own whatever their role (nor takes someone else's to close it), it stays with its person and
+-- its company, a writer refused by row level security learns nothing first, it is read through
+-- the same wall as every review, and a review in a
 -- cycle in a company on periods is exactly what it was.
 --
 -- Setup moves rba on demand as the SQL editor; klasik stays on periods.
@@ -47,6 +49,7 @@ select tests.create_person('s_e8', tests.company('rba'));
 select tests.create_person('k_admin', tests.company('klasik'), 'admin');
 select tests.create_person('k_mgr', tests.company('klasik'), 'manager');
 select tests.create_person('k_e1', tests.company('klasik'));
+select tests.create_person('s_rococo', null, 'employee', true);
 update public.profiles set view_all_divisions = true
  where id in (tests.id('s_owner'), tests.id('s_admin'), tests.id('k_admin'));
 update public.profiles set reports_to = tests.id('s_mgr') where id in (tests.id('s_e1'), tests.id('s_e4'));
@@ -159,9 +162,33 @@ select tests.assert_raises(
   '%row-level security%'
 );
 reset role; select set_config('request.jwt.claims', '', true);
+-- A person who is not there: a stranger learns nothing the row level security refusal would not
+-- tell them.
+select tests.act_as(tests.id('s_e2'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('rba'), gen_random_uuid()),
+  '%row-level security%'
+);
+reset role; select set_config('request.jwt.claims', '', true);
 select tests.assert(
   not exists (select 1 from public.reviews where employee_id = tests.id('s_e5')),
   'stranger: a refused start landed'
+);
+
+-- case: rococo_starts_for_an_rba_person
+select tests.act_as(tests.id('s_rococo'));
+select tests.assert(
+  tests.rows_of(format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+                       tests.company('rba'), tests.id('s_e5'))) = 1,
+  'rococo_starts: a Rococo admin could not start a GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select count(*) = 1 and bool_and(company_id = tests.company('rba'))
+          and bool_and(started_on = (now() at time zone 'Pacific/Kiritimati')::date)
+     from public.reviews where employee_id = tests.id('s_e5') and cycle_id is null),
+  'rococo_starts: the GSR did not land once, dated, in rba'
 );
 
 -- case: dates_are_the_companys
@@ -219,6 +246,22 @@ select tests.assert_raises(
   format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
          tests.company('rba'), tests.id('s_e7')),
   'This person already has two GSRs open. Mark the earlier one done first.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+-- Someone with no say over s_e7 is not told they are at the limit: a peer and another company's
+-- admin get the row level security refusal.
+select tests.act_as(tests.id('s_e2'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('rba'), tests.id('s_e7')),
+  '%row-level security%'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)$q$,
+         tests.company('klasik'), tests.id('s_e7')),
+  '%row-level security%'
 );
 reset role; select set_config('request.jwt.claims', '', true);
 select tests.act_as(tests.id('s_admin'));
@@ -489,6 +532,99 @@ select tests.assert(
     where id in (tests.id('g_mgr'), tests.id('g_admin'), tests.id('g_owner')))
   and (select status = 'in_progress' from public.reviews where id = tests.id('g_e1')),
   'own: a GSR was reopened by its own person'
+);
+
+-- Nor through an upsert on their own GSR.
+select tests.act_as(tests.id('s_e1'));
+select tests.assert_raises(
+  format($q$insert into public.reviews (company_id, employee_id) values (%L, %L)
+            on conflict (employee_id, started_on) do update set status = 'complete', completed_at = now()$q$,
+         tests.company('rba'), tests.id('s_e1')),
+  'Your own GSR is marked done and reopened by someone who leads you.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+-- Nor by taking someone else's GSR as their own and closing it in the same write. The GSR is from
+-- an earlier day, so no GSR of the writer's started today stands in the way.
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on)
+values (tests.company('rba'), tests.id('s_e5'), 'in_progress', '2026-09-01');
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select 'g_e5_old', id from public.reviews where employee_id = tests.id('s_e5') and started_on = '2026-09-01';
+select tests.act_as(tests.id('s_admin'));
+select tests.assert_raises(
+  format($q$update public.reviews set employee_id = %L, status = 'complete', completed_at = now(), gsr_score = 100
+            where id = %L$q$, tests.id('s_admin'), tests.id('g_e5_old')),
+  'Your own GSR is marked done and reopened by someone who leads you.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_owner'));
+select tests.assert_raises(
+  format($q$update public.reviews set employee_id = %L, status = 'complete', completed_at = now(), gsr_score = 100
+            where id = %L$q$, tests.id('s_owner'), tests.id('g_e5_old')),
+  'Your own GSR is marked done and reopened by someone who leads you.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_rococo'));
+select tests.assert_raises(
+  format($q$update public.reviews set employee_id = %L, status = 'complete', completed_at = now(), gsr_score = 100
+            where id = %L$q$, tests.id('s_rococo'), tests.id('g_e5_old')),
+  'Your own GSR is marked done and reopened by someone who leads you.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select employee_id = tests.id('s_e5') and status = 'in_progress' from public.reviews where id = tests.id('g_e5_old'))
+  and (select status = 'in_progress' from public.reviews where id = tests.id('g_e1')),
+  'own: a GSR was taken over and closed, or closed by an upsert'
+);
+
+-- case: a_gsr_stays_with_its_person_and_company
+-- No signed-in writer changes whose GSR it is or which company holds it, an admin or a Rococo
+-- admin included.
+select tests.act_as(tests.id('s_admin'));
+select tests.assert_raises(
+  format($q$update public.reviews set employee_id = %L where id = %L$q$, tests.id('s_e2'), tests.id('g_e5_old')),
+  'A GSR stays with the person it was started for.'
+);
+select tests.assert_raises(
+  format($q$update public.reviews set company_id = %L where id = %L$q$, tests.company('klasik'), tests.id('g_e5_old')),
+  'A GSR stays in the company it was started in.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_rococo'));
+select tests.assert_raises(
+  format($q$update public.reviews set employee_id = %L where id = %L$q$, tests.id('s_e2'), tests.id('g_e5_old')),
+  'A GSR stays with the person it was started for.'
+);
+select tests.assert_raises(
+  format($q$update public.reviews set company_id = %L where id = %L$q$, tests.company('klasik'), tests.id('g_e5_old')),
+  'A GSR stays in the company it was started in.'
+);
+-- A person moved to a company on periods leaves their GSR behind, and it cannot follow them.
+update public.profiles set company_id = tests.company('klasik') where id = tests.id('s_e6');
+select tests.assert_raises(
+  format($q$update public.reviews set company_id = %L
+            where employee_id = %L and cycle_id is null$q$, tests.company('klasik'), tests.id('s_e6')),
+  'A GSR stays in the company it was started in.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+-- The SQL editor may change a GSR's company only into a company on demand. Every change by the
+-- SQL editor is first refused by reviews_guard_employee_fields today; it is set aside here, inside
+-- the rolled-back transaction, so this rule is seen on its own.
+alter table public.reviews disable trigger reviews_guard_employee_fields;
+select tests.assert_raises(
+  format($q$update public.reviews set company_id = %L
+            where employee_id = %L and cycle_id is null$q$, tests.company('klasik'), tests.id('s_e6')),
+  'GSRs on demand are not turned on for this company.'
+);
+alter table public.reviews enable trigger reviews_guard_employee_fields;
+select tests.assert(
+  (select employee_id = tests.id('s_e5') and company_id = tests.company('rba')
+     from public.reviews where id = tests.id('g_e5_old'))
+  and not exists (select 1 from public.reviews
+                   where company_id = tests.company('klasik') and cycle_id is null),
+  'stays: a GSR changed person, or reached a company on periods'
 );
 
 -- case: a_manager_who_is_also_a_report

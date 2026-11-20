@@ -264,7 +264,9 @@ create policy "Leaders lock and reopen a GSR for the people they lead"
 -- The 0046 body with the leader branch narrowed the same way: it reads old.cycle_id is null where
 -- it read a GSR cycle. Section 5 adds one check, first and before the admin pass: on a GSR with no
 -- cycle, nobody changes what marks their own GSR done or reopens it (status, completion time,
--- score, who marked it done), whatever their role. v_me is read before that check rather than
+-- score, who marked it done), whatever their role. Their own is the GSR's person before the write
+-- or after it, so nobody makes someone else's GSR theirs and closes it in one write (section 6
+-- refuses the change of person on its own). v_me is read before that check rather than
 -- after the admin pass. Everything else, and every message, is as it was.
 create or replace function public.guard_review_employee_fields()
 returns trigger
@@ -278,7 +280,7 @@ declare
 begin
   v_me := private.auth_profile_id();
   if old.cycle_id is null
-     and v_me = old.employee_id
+     and v_me in (old.employee_id, new.employee_id)
      and (new.status, new.completed_at, new.gsr_score, new.reviewer_id)
          is distinct from (old.status, old.completed_at, old.gsr_score, old.reviewer_id) then
     raise exception 'Your own GSR is marked done and reopened by someone who leads you.'
@@ -584,8 +586,9 @@ create unique index if not exists reviews_person_day_key on public.reviews (empl
 
 -- The 0003 body with a GSR's company added: with no cycle, a new GSR takes its person's company,
 -- and a review the SQL editor takes out of its cycle (Task 5's conversion) keeps the company it
--- had, so a person who has since moved company does not carry it across the wall. With a cycle,
--- unchanged.
+-- had, so a person who has since moved company does not carry it across the wall. A person who is
+-- not there is named only to the SQL editor and a Rococo admin; anyone else is left to row level
+-- security, which refuses a GSR with no company. With a cycle, unchanged.
 create or replace function public.inherit_company_from_cycle()
 returns trigger
 language plpgsql
@@ -599,7 +602,8 @@ begin
       return new;
     end if;
     select company_id into new.company_id from public.profiles where id = new.employee_id;
-    if new.company_id is null then
+    if new.company_id is null
+       and ((select auth.uid()) is null or private.is_rococo_admin()) then
       raise exception 'Unknown person.';
     end if;
     return new;
@@ -704,7 +708,13 @@ revoke execute on function public.guard_review_cycle() from public, anon, authen
 --     so a start that ignores a duplicate lands on that one;
 --   * has two open at most when one is started. Reopening is never limited, so a leader can put
 --     right one closed by mistake;
---   * keeps it with its person's company if the person or the company is changed.
+--   * stays with its person and its company: no signed-in writer changes either, Rococo admins
+--     included, and any writer who changes the company, the SQL editor included, lands it in a
+--     company on demand. (A move of the person to another company leaves their GSRs where they
+--     were started.)
+--   * tells a writer refused by row level security nothing first: the mode, the limit and an
+--     unknown person (inherit_company_from_cycle, section 5) are answered only to a writer with a
+--     say over the person.
 -- While a company moves over (hub.gsr_conversion is '1', Task 5) the dates are kept as given and
 -- the mode and the limit are not judged.
 --
@@ -732,6 +742,19 @@ begin
    where c.id = new.company_id;
 
   if tg_op = 'INSERT' then
+    new.started_on := v_today;
+    new.done_on := case when new.status = 'complete' then v_today end;
+    -- What follows is answered only to the SQL editor, a Rococo admin, the person and anyone who
+    -- leads or manages them (led_person_ids holds the people an admin manages). Anyone else falls
+    -- through to row level security, which refuses them: every policy that admits a GSR with no
+    -- cycle admits only those callers. So a stranger never learns whether the person is there or
+    -- how many GSRs they have open.
+    if (select auth.uid()) is not null
+       and not private.is_rococo_admin()
+       and private.auth_profile_id() is distinct from new.employee_id
+       and not exists (select 1 from private.led_person_ids() as l (id) where l.id = new.employee_id) then
+      return new;
+    end if;
     if not private.gsr_on_demand(new.company_id) then
       raise exception 'GSRs on demand are not turned on for this company.'
         using errcode = 'check_violation';
@@ -740,8 +763,6 @@ begin
       raise exception 'Your own GSR is marked done and reopened by someone who leads you.'
         using errcode = 'check_violation';
     end if;
-    new.started_on := v_today;
-    new.done_on := case when new.status = 'complete' then v_today end;
     if not exists (
          select 1 from public.reviews r
           where r.employee_id = new.employee_id and r.started_on = v_today
@@ -757,10 +778,19 @@ begin
     return new;
   end if;
 
-  if (new.employee_id is distinct from old.employee_id or new.company_id is distinct from old.company_id)
-     and (select p.company_id from public.profiles p where p.id = new.employee_id)
-         is distinct from new.company_id then
-    raise exception 'That person belongs to another company.'
+  if (select auth.uid()) is not null then
+    if new.employee_id is distinct from old.employee_id then
+      raise exception 'A GSR stays with the person it was started for.'
+        using errcode = 'check_violation';
+    end if;
+    if new.company_id is distinct from old.company_id then
+      raise exception 'A GSR stays in the company it was started in.'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+  if new.company_id is distinct from old.company_id
+     and not private.gsr_on_demand(new.company_id) then
+    raise exception 'GSRs on demand are not turned on for this company.'
       using errcode = 'check_violation';
   end if;
   new.started_on := old.started_on;
@@ -842,5 +872,5 @@ as
    where r.cycle_id is null
    group by r.company_id, r.employee_id;
 
-revoke all on public.gsr_last_started from public, anon;
+revoke all on public.gsr_last_started from public, anon, authenticated;
 grant select on public.gsr_last_started to authenticated;
