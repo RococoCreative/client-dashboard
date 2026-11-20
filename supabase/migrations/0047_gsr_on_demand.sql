@@ -26,14 +26,23 @@
 --   4. Narrowed to companies on demand. A manager locks and reopens only a GSR with no cycle, so in
 --      a company on periods only admins lock a month, as before 0046. A manager sets a person's
 --      rhythm only in a company on demand. Rhythm gains None and Daily.
+--   5. A GSR with no cycle. reviews.cycle_id becomes optional, and a review without one is a GSR
+--      on its own, in its person's company, with two dates (started_on, done_on) a review in a
+--      cycle never carries. No signed-in writer moves a review into or out of a cycle. Nobody
+--      marks their own GSR done or reopens it, whatever their role.
+--   6. Its dates and limits. The database stamps both dates in the company's time zone, starts
+--      one only in a company on demand, one a person a day and two open at most.
+--   7. Who starts one: the person, anyone who leads them, an admin who manages them.
+--   8. public.gsr_last_started, the day each person's last GSR began, read through the wall.
 --
 -- Kept for everyone from 0046, because the live schema is built on it and it changes nothing a
 -- person can see or do: review_cycles.kind, the duplicate-cycle key that includes it, and
 -- profiles.gsr_cadence with the audit of its changes.
 --
 -- Rebuilt functions are copied from their latest bodies (guard_company_fields from 0042;
--- guard_review_cycle_period, guard_review_employee_fields and guard_profile_fields from 0046) and
--- changed only on the lines named here. The messages people already see stay word for word.
+-- guard_review_cycle_period, guard_review_employee_fields and guard_profile_fields from 0046;
+-- inherit_company_from_cycle from 0003; guard_review_cycle from 0039) and changed only on the
+-- lines named here. The messages people already see stay word for word.
 --
 -- Paste after 0046. Re-pasting 0046 after this brings back everything section 3 removes and
 -- section 4 narrows; pasting this again puts it right. Idempotent.
@@ -253,7 +262,10 @@ create policy "Leaders lock and reopen a GSR for the people they lead"
   );
 
 -- The 0046 body with the leader branch narrowed the same way: it reads old.cycle_id is null where
--- it read a GSR cycle. Everything else, and every message, is as it was.
+-- it read a GSR cycle. Section 5 adds one check, first and before the admin pass: on a GSR with no
+-- cycle, nobody changes what marks their own GSR done or reopens it (status, completion time,
+-- score, who marked it done), whatever their role. v_me is read before that check rather than
+-- after the admin pass. Everything else, and every message, is as it was.
 create or replace function public.guard_review_employee_fields()
 returns trigger
 language plpgsql
@@ -264,13 +276,20 @@ declare
   v_probe public.reviews%rowtype;
   v_me    uuid;
 begin
+  v_me := private.auth_profile_id();
+  if old.cycle_id is null
+     and v_me = old.employee_id
+     and (new.status, new.completed_at, new.gsr_score, new.reviewer_id)
+         is distinct from (old.status, old.completed_at, old.gsr_score, old.reviewer_id) then
+    raise exception 'Your own GSR is marked done and reopened by someone who leads you.'
+      using errcode = 'check_violation';
+  end if;
   if private.can_manage_company(old.company_id) then
     return new;
   end if;
   v_probe := new;
   v_probe.updated_at := old.updated_at;
   v_probe.pillar_snapshot := old.pillar_snapshot;
-  v_me := private.auth_profile_id();
 
   if v_me is not null
      and v_me is distinct from old.employee_id
@@ -543,3 +562,285 @@ end $$;
 alter table public.profiles drop constraint if exists profiles_gsr_cadence_check;
 alter table public.profiles add constraint profiles_gsr_cadence_check
   check (gsr_cadence in ('none', 'daily', 'weekly', 'biweekly', 'monthly', 'quarterly'));
+
+-- ---------------------------------------------------------------------------------------
+-- 5. A GSR with no cycle
+-- ---------------------------------------------------------------------------------------
+-- A review with no cycle is a GSR on its own. A review with a cycle is what it always was, and
+-- carries no dates. 0003 made cycle_id required; dropping that is a no-op the second time.
+alter table public.reviews alter column cycle_id drop not null;
+alter table public.reviews add column if not exists started_on date;
+alter table public.reviews add column if not exists done_on date;
+
+-- Every live review has a cycle and no dates, so every live row passes.
+alter table public.reviews drop constraint if exists reviews_home_check;
+alter table public.reviews add constraint reviews_home_check
+  check ((cycle_id is not null and started_on is null and done_on is null)
+         or (cycle_id is null and started_on is not null));
+
+-- One GSR a person a day. Not partial, so a start can name it in on conflict (employee_id,
+-- started_on) do nothing; a review in a cycle has no started_on and never collides.
+create unique index if not exists reviews_person_day_key on public.reviews (employee_id, started_on);
+
+-- The 0003 body with a GSR's company added: with no cycle, a new GSR takes its person's company,
+-- and a review the SQL editor takes out of its cycle (Task 5's conversion) keeps the company it
+-- had, so a person who has since moved company does not carry it across the wall. With a cycle,
+-- unchanged.
+create or replace function public.inherit_company_from_cycle()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.cycle_id is null then
+    if tg_op = 'UPDATE' then
+      new.company_id := old.company_id;
+      return new;
+    end if;
+    select company_id into new.company_id from public.profiles where id = new.employee_id;
+    if new.company_id is null then
+      raise exception 'Unknown person.';
+    end if;
+    return new;
+  end if;
+  select company_id into new.company_id from public.review_cycles where id = new.cycle_id;
+  if new.company_id is null then
+    raise exception 'Unknown review cycle.';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.inherit_company_from_cycle() from public, anon, authenticated;
+
+-- The 0039 body with two checks put first. A review that has no cycle and had none has nothing
+-- here to judge, so it passes at once. A signed-in writer never moves a review between having a
+-- cycle and having none, either way; only the SQL editor does, when a company moves over (Task 5).
+-- Everything after is the 0039 body, line for line, with its messages.
+create or replace function public.guard_review_cycle()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_cycle_company uuid;
+  v_cycle_status  text;
+  v_old_status    text;
+begin
+  if new.cycle_id is null and (tg_op = 'INSERT' or old.cycle_id is null) then
+    return new;
+  end if;
+  if tg_op = 'UPDATE'
+     and (new.cycle_id is null) <> (old.cycle_id is null)
+     and (select auth.uid()) is not null then
+    raise exception 'A review in a cycle stays in a cycle, and a GSR on its own stays on its own.'
+      using errcode = 'check_violation';
+  end if;
+
+  if tg_op = 'UPDATE' then
+    select c.status into v_old_status from public.review_cycles c where c.id = old.cycle_id;
+    if v_old_status = 'closed' then
+      if new.cycle_id is distinct from old.cycle_id then
+        raise exception 'This review cycle is closed. Reopen the cycle first.'
+          using errcode = 'check_violation';
+      end if;
+      if old.status = 'complete' and new.status is distinct from 'complete' then
+        raise exception 'This review cycle is closed. Reopen the cycle first.'
+          using errcode = 'check_violation';
+      end if;
+    end if;
+  end if;
+
+  select c.company_id, c.status into v_cycle_company, v_cycle_status
+    from public.review_cycles c
+   where c.id = new.cycle_id;
+  if not found then
+    return new;
+  end if;
+
+  if (tg_op = 'INSERT'
+      or new.employee_id is distinct from old.employee_id
+      or new.cycle_id is distinct from old.cycle_id)
+     and (select p.company_id from public.profiles p where p.id = new.employee_id)
+         is distinct from v_cycle_company then
+    raise exception 'That person belongs to another company.'
+      using errcode = 'check_violation';
+  end if;
+
+  if v_cycle_status = 'closed' then
+    -- Opening a GSR is an insert that ignores a duplicate, then a read. When the review is
+    -- already there the insert changes nothing, so a closed month still opens for reading; the
+    -- unique key refuses a plain insert of the same pair on its own.
+    if tg_op = 'INSERT'
+       and exists (select 1 from public.reviews r
+                    where r.cycle_id = new.cycle_id and r.employee_id = new.employee_id) then
+      return new;
+    end if;
+    -- Leaving complete was judged above, against the cycle the review was signed off in.
+    if tg_op = 'INSERT' or new.cycle_id is distinct from old.cycle_id then
+      raise exception 'This review cycle is closed. Reopen the cycle first.'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_review_cycle() from public, anon, authenticated;
+
+-- guard_review_omitted (0034) needs no change: it looks for an omission with the review's cycle,
+-- and a GSR with no cycle matches none.
+
+-- ---------------------------------------------------------------------------------------
+-- 6. A GSR's dates and limits
+-- ---------------------------------------------------------------------------------------
+-- For a review with no cycle, every writer:
+--   * starts one only in a company on demand;
+--   * never starts their own already done (section 4 holds them to the same on an update);
+--   * gets started_on as the company's date, whatever was sent, and it never changes after;
+--   * gets done_on as the company's date when it is marked done, cleared when it is reopened,
+--     and otherwise kept, the way gsr_score is released;
+--   * has one a day: a start on a day the person already has one passes on to the unique key,
+--     so a start that ignores a duplicate lands on that one;
+--   * has two open at most when one is started. Reopening is never limited, so a leader can put
+--     right one closed by mistake;
+--   * keeps it with its person's company if the person or the company is changed.
+-- While a company moves over (hub.gsr_conversion is '1', Task 5) the dates are kept as given and
+-- the mode and the limit are not judged.
+--
+-- BEFORE triggers on reviews fire in name order: reviews_guard_cycle,
+-- reviews_guard_employee_fields, reviews_guard_omitted, reviews_guard_signed_off,
+-- reviews_inherit_company, reviews_release_gsr_score, reviews_set_updated_at,
+-- reviews_snapshot_pillars, then this one. So the company is already set, and a signed-off GSR
+-- has already been judged on what the writer sent before done_on is stamped or cleared.
+create or replace function public.stamp_standalone_gsr()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_today date;
+begin
+  if new.cycle_id is not null
+     or coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+    return new;
+  end if;
+
+  select (now() at time zone c.time_zone)::date into v_today
+    from public.companies c
+   where c.id = new.company_id;
+
+  if tg_op = 'INSERT' then
+    if not private.gsr_on_demand(new.company_id) then
+      raise exception 'GSRs on demand are not turned on for this company.'
+        using errcode = 'check_violation';
+    end if;
+    if new.status = 'complete' and private.auth_profile_id() = new.employee_id then
+      raise exception 'Your own GSR is marked done and reopened by someone who leads you.'
+        using errcode = 'check_violation';
+    end if;
+    new.started_on := v_today;
+    new.done_on := case when new.status = 'complete' then v_today end;
+    if not exists (
+         select 1 from public.reviews r
+          where r.employee_id = new.employee_id and r.started_on = v_today
+       )
+       and (select count(*) from public.reviews r
+             where r.employee_id = new.employee_id
+               and r.company_id = new.company_id
+               and r.cycle_id is null
+               and r.status <> 'complete') >= 2 then
+      raise exception 'This person already has two GSRs open. Mark the earlier one done first.'
+        using errcode = 'check_violation';
+    end if;
+    return new;
+  end if;
+
+  if (new.employee_id is distinct from old.employee_id or new.company_id is distinct from old.company_id)
+     and (select p.company_id from public.profiles p where p.id = new.employee_id)
+         is distinct from new.company_id then
+    raise exception 'That person belongs to another company.'
+      using errcode = 'check_violation';
+  end if;
+  new.started_on := old.started_on;
+  if new.status = 'complete' and old.status is distinct from 'complete' then
+    new.done_on := v_today;
+  elsif new.status <> 'complete' then
+    new.done_on := null;
+  else
+    new.done_on := old.done_on;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.stamp_standalone_gsr() from public, anon, authenticated;
+
+drop trigger if exists reviews_stamp_gsr on public.reviews;
+create trigger reviews_stamp_gsr
+  before insert or update on public.reviews
+  for each row execute function public.stamp_standalone_gsr();
+
+-- ---------------------------------------------------------------------------------------
+-- 7. Who starts one, and who closes it
+-- ---------------------------------------------------------------------------------------
+-- The person starts their own, and anyone who leads them starts one for them, blank, in the
+-- shapes the two monthly open policies (0046) require, with no cycle in place of an open GSR
+-- month. An admin who manages the person starts one through "Admins add for the people they
+-- manage" (0038), and a Rococo admin through the same policy. Section 6 refuses all of them in a
+-- company on periods.
+--
+-- Marking done and reopening: a leader through "Leaders lock and reopen a GSR for the people
+-- they lead" (section 4), an admin through 0038's update policy, never the person themself
+-- (section 4's guard). Deleting is an admin's, as for every review (0038).
+drop policy if exists "People start their own GSR" on public.reviews;
+create policy "People start their own GSR"
+  on public.reviews for insert to authenticated
+  with check (
+    cycle_id is null
+    and employee_id = private.auth_profile_id()
+    and company_id = private.auth_company_id()
+    and status = 'not_started'
+    and previous_status is null
+    and manager_feedback is null
+    and peer_feedback is null
+    and client_feedback is null
+    and reviewer_id is null
+    and completed_at is null
+  );
+
+drop policy if exists "Leaders start a GSR for the people they lead" on public.reviews;
+create policy "Leaders start a GSR for the people they lead"
+  on public.reviews for insert to authenticated
+  with check (
+    cycle_id is null
+    and company_id = private.auth_company_id()
+    and employee_id in (select private.led_person_ids())
+    and status = 'not_started'
+    and previous_status is null
+    and manager_feedback is null
+    and peer_feedback is null
+    and client_feedback is null
+    and employee_reflection is null
+    and support_discussion is null
+    and reviewer_id is null
+    and completed_at is null
+    and gsr_score is null
+  );
+
+-- ---------------------------------------------------------------------------------------
+-- 8. When each person's last GSR was started
+-- ---------------------------------------------------------------------------------------
+-- For the due flag on a list of people. security_invoker, so it reads through the reviews wall
+-- as whoever asks: a person sees their own row, a leader and an admin the rows of the people
+-- they see, and nobody another company's.
+create or replace view public.gsr_last_started
+with (security_invoker = true)
+as
+  select r.company_id, r.employee_id, max(r.started_on) as last_started_on
+    from public.reviews r
+   where r.cycle_id is null
+   group by r.company_id, r.employee_id;
+
+revoke all on public.gsr_last_started from public, anon;
+grant select on public.gsr_last_started to authenticated;
