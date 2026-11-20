@@ -68,7 +68,17 @@ export default function FocusTopicCard({
         </form>
       ) : (
         <Button variant="secondary" size="sm" className="mt-3" onClick={() => setComposing(true)}>
-          <Plus size={13} aria-hidden /> {setLabel ?? `Set ${whose} monthly GSR based on this focus topic`}
+          {/* Left out, the label is exactly the JSX a monthly GSR has always drawn (three text nodes),
+              so a company on periods is drawn as before; a passed label is used as given. */}
+          {setLabel === undefined ? (
+            <>
+              <Plus size={13} aria-hidden /> Set {whose} monthly GSR based on this focus topic
+            </>
+          ) : (
+            <>
+              <Plus size={13} aria-hidden /> {setLabel}
+            </>
+          )}
         </Button>
       )}
     </div>

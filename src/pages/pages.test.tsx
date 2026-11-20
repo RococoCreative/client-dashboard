@@ -886,6 +886,23 @@ describe("monthly goal setting review", () => {
     expect(screen.queryByRole("button", { name: /monthly GSR based on this focus topic/ })).not.toBeInTheDocument();
   });
 
+  it("draws the focus topic button exactly as it always has: the icon, then three text nodes", async () => {
+    // A company on periods renders this button node for node as main does, so the browser shapes
+    // its words the same way. A label joined into one string draws a fraction of a pixel apart.
+    const riley = KLASIK.reviews.find((r) => r.cycle_id === currentCycle.id && r.status === "complete")!;
+    await updateReview(riley.id, { status: "in_progress", completed_at: null });
+    renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${riley.id}`, pattern: "/gsr/reviews/:reviewId" });
+    const button = await screen.findByRole("button", { name: "Set their monthly GSR based on this focus topic" });
+    const nodes = Array.from(button.childNodes);
+    expect(nodes).toHaveLength(4);
+    expect(nodes[0].nodeName.toLowerCase()).toBe("svg");
+    expect(nodes.slice(1).map((n) => [n.nodeType, n.textContent])).toEqual([
+      [Node.TEXT_NODE, " Set "],
+      [Node.TEXT_NODE, "their"],
+      [Node.TEXT_NODE, " monthly GSR based on this focus topic"],
+    ]);
+  });
+
   it("sets a GSR of the person's own from the focus topic, in their words", async () => {
     const user = userEvent.setup();
     // Riley's September review has no goals yet, so the card offers to set one from the topic.
