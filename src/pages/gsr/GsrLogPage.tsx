@@ -33,24 +33,15 @@ import { useStartGsr } from "../../components/gsr/onDemand/useStartGsr.ts";
 import { COMBINED, peopleInScope } from "../../components/scorecards/compare.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import {
-  GSR_RHYTHM_LABELS,
-  GSR_WINDOW_LABELS,
-  currentGsr,
-  dueFor,
-  figuresByPerson,
-  windowFigures,
-  windowRange,
-  type DateRange,
-  type GsrWindow,
-} from "../../lib/gsr/onDemand.ts";
-import { displayName, formatDate, formatNumber, formatPeriod, pluralize } from "../../lib/format.ts";
-import { canSeeDivisions, divisionLabel, isDivisionLimited, ledBy, viewerDivisions } from "../../lib/people.ts";
+import { GSR_RHYTHM_LABELS, GSR_WINDOW_LABELS, windowRange, type DateRange, type GsrWindow } from "../../lib/gsr/onDemand.ts";
+import { gsrHeadline, gsrPeopleFor, gsrStanding, type GsrStandingRow } from "../../lib/gsr/gsrStanding.ts";
+import { displayName, formatDate, formatNumber, formatPeriod } from "../../lib/format.ts";
+import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
 import { companyToday } from "../../lib/wins.ts";
 import { listDivisions } from "../../services/divisions.ts";
 import { listGsrsForLog, listLastGsrDates } from "../../services/gsrOnDemand.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
-import type { Gsr, Profile } from "../../types/database.ts";
+import type { Profile } from "../../types/database.ts";
 import { gsrTabsFor } from "./gsrTabs.ts";
 
 type WindowChoice = GsrWindow | "custom";
@@ -76,17 +67,7 @@ const cellClass =
   `${tdClass} py-2 max-md:flex max-md:items-center max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:px-0 max-md:py-1 ` +
   "max-md:before:text-[12.5px] max-md:before:text-ink-2 max-md:before:content-[attr(data-label)]";
 
-interface Row {
-  person: Profile;
-  last: string | null;
-  done: number;
-  average: number | null;
-  open: Gsr | null;
-  due: ReturnType<typeof dueFor>["state"];
-  canStart: boolean;
-}
-
-function PersonRow({ row, meta, busy, onStart }: { row: Row; meta: string; busy: boolean; onStart: (id: string) => void }) {
+function PersonRow({ row, meta, busy, onStart }: { row: GsrStandingRow; meta: string; busy: boolean; onStart: (id: string) => void }) {
   const name = displayName(row.person);
   return (
     <tr role="row" className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0 md:[&>*:first-child]:pl-6 md:[&>*:last-child]:pr-6">
@@ -237,31 +218,13 @@ export default function GsrLogPage() {
   }
 
   const { gsrs, lastDates, people, divisions: allDivisions } = state.data;
-  // An admin sees everyone active; anyone else who leads people, the people they lead. The chain is
-  // walked through everyone the database showed, so a lapsed manager in the middle still links it.
-  const listed = (isAdmin ? people : ledBy(profile, people)).filter((p) => p.is_active);
+  // An admin sees everyone active; anyone else who leads people, the people they lead, by name
+  // (gsrPeopleFor). The headline and the rows come from gsrStanding, the same one Home's GSRs this
+  // week card reads, so the two never disagree for the same viewer.
   const divisions = viewerDivisions(profile, allDivisions);
   const split = allowed && divisions.length > 0;
-  const inScope = peopleInScope(listed, split ? scope : COMBINED).sort((a, b) => displayName(a).localeCompare(displayName(b)));
-  const ids = new Set(inScope.map((p) => p.id));
-  const theirs = gsrs.filter((g) => ids.has(g.employee_id));
-  const figures = windowFigures(theirs, range);
-  const byPerson = figuresByPerson(theirs, range);
-  const lastBy = new Map(lastDates.map((d) => [d.employee_id, d.last_started_on] as const));
-  const rows: Row[] = inScope.map((person) => {
-    const own = byPerson.get(person.id);
-    const last = lastBy.get(person.id) ?? null;
-    return {
-      person,
-      last,
-      done: own?.done ?? 0,
-      average: own?.average ?? null,
-      open: own?.open ? currentGsr(theirs.filter((g) => g.employee_id === person.id)) : null,
-      due: dueFor(person.gsr_cadence, last, today).state,
-      // A Rococo admin placed on a roster has no GSRs of their own.
-      canStart: !person.is_rococo_admin,
-    };
-  });
+  const inScope = peopleInScope(gsrPeopleFor(profile, isAdmin, people), split ? scope : COMBINED);
+  const { figures, rows } = gsrStanding(inScope, gsrs, lastDates, range, today);
   const startable = rows.filter((r) => r.canStart).map((r) => r.person);
   const metaOf = (person: Profile) =>
     [split && person.division_ids.length > 0 ? divisionLabel(person.division_ids, allDivisions) : null, person.title].filter(Boolean).join(" · ");
@@ -299,7 +262,7 @@ export default function GsrLogPage() {
 
       <section aria-label="GSRs in this window" className="mb-4 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs sm:px-6">
         <p data-testid="gsr-headline" className="tnum font-display text-[18px] leading-snug text-heading">
-          {`${pluralize(figures.done, "GSR")} done · Average ${formatNumber(figures.average)} · ${figures.inProgress} in progress`}
+          {gsrHeadline(figures)}
         </p>
         <p className={`mt-0.5 ${metaClass}`}>{formatPeriod(range.from, range.to)}</p>
       </section>
