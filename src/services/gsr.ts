@@ -159,8 +159,10 @@ export async function listCompanyReviews(companyId: string): Promise<Review[]> {
   return (data as Review[]) ?? [];
 }
 
+// A review in a cycle only: a GSR that stands on its own is loaded through services/gsrOnDemand.ts,
+// so period code can never open one by its id.
 export async function getReview(id: string): Promise<Review> {
-  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("id", id).single();
+  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("id", id).not("cycle_id", "is", null).single();
   if (error) throw error;
   return data as Review;
 }

@@ -61,7 +61,7 @@ export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cyc
 function dropGoalsOfDeletedGsrs(): void {
   for (let i = goals.length - 1; i >= 0; i--) {
     const reviewId = goals[i].review_id;
-    if (reviewId !== null && mockGsrStatus(reviewId) === null) goals.splice(i, 1);
+    if (reviewId != null && mockGsrStatus(reviewId) === null) goals.splice(i, 1);
   }
 }
 

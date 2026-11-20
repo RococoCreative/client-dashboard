@@ -5,19 +5,29 @@
 // the wall for a company on periods, one GSR a person a day, two open at most when one is started,
 // and nobody marking their own done or reopening it. "Today" is the company's.
 //
+// Who may act mirrors the reviews policies: the acting person is the demo persona of the address,
+// resolved in the GSR's company (personaIn in fixtures.ts, the person makeHub(persona, company)
+// picks; the admin when the address names none). A person reads and starts their own; someone who
+// leads them (ledBy, the whole chain) reads, starts, marks done and reopens theirs; an admin or
+// owner of the company does all that for anyone in it and alone deletes; a Rococo admin does
+// everything. Every read and write hands out a copy, never the stored row, as the service does.
+//
 // resetMockGsrs, setMockGsrMode and seedMockGsr are test-only extras; src/test/setup.ts resets
 // after every test, which also puts every company's format back to what its fixture says.
 import { companyToday } from "../../lib/wins.ts";
 import type { DateRange } from "../../lib/gsr/onDemand.ts";
 import type { Gsr, GsrLastStarted, GsrMode } from "../../types/database.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
-import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
+import { fromAll, personaIn } from "../fixtures.ts";
 import { gsrModeOf, resetCompanyGsrModes, setCompanyGsrMode, timeZoneOf } from "./companies.ts";
-import { companyOf } from "./profiles.ts";
+import { companyOf, peopleOf } from "./profiles.ts";
 
 export const TWO_OPEN_MESSAGE = "This person already has two GSRs open. Mark the earlier one done first.";
 export const OWN_GSR_MESSAGE = "Your own GSR is marked done and reopened by someone who leads you.";
 const WALL_MESSAGE = "GSRs on demand are not turned on for this company.";
+// What the client surfaces for an insert no policy admits.
+const INSERT_REFUSED = 'new row violates row-level security policy for table "reviews"';
 
 const copy = (gsr: Gsr): Gsr => ({ ...gsr });
 const gsrs: Gsr[] = fromAll((b) => b.gsrs).map(copy);
@@ -30,10 +40,41 @@ const today = (companyId: string) => companyToday(timeZoneOf(companyId));
 // Newest start first; the later-created row wins a tie, as the service orders them.
 const newestFirst = (a: Gsr, b: Gsr) => b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at);
 
-function find(id: string): Gsr {
-  const found = gsrs.find((g) => g.id === id);
-  if (!found) throw new Error("That is not here any more, or it is not yours to open.");
+// What the signed-in person may do with one person's GSRs in one company.
+function reach(companyId: string, employeeId: string): { own: boolean; leads: boolean; admin: boolean } {
+  const me = personaIn(companyId);
+  if (me.is_rococo_admin) return { own: false, leads: true, admin: true };
+  if (me.company_id !== companyId) return { own: false, leads: false, admin: false };
+  const admin = isCompanyAdminRole(me.role);
+  const leads = employeeId !== me.id && ledBy(me, peopleOf(companyId)).some((p) => p.id === employeeId);
+  return { own: me.id === employeeId, leads: leads || (admin && employeeId !== me.id), admin };
+}
+const canRead = (gsr: Gsr) => {
+  const r = reach(gsr.company_id, gsr.employee_id);
+  return r.own || r.leads || r.admin;
+};
+
+// The stored row an update or delete reaches, or null when there is none (or none it may read).
+function stored(id: string): { index: number; gsr: Gsr } | null {
+  const index = gsrs.findIndex((g) => g.id === id);
+  return index === -1 || !canRead(gsrs[index]) ? null : { index, gsr: gsrs[index] };
+}
+
+// Marking done and reopening: the database refuses the person themself with its own words
+// (guard_review_employee_fields, 0047), and anyone else who neither leads them nor runs the company
+// reaches no row, which the service's .single() reports as not changed.
+function closable(id: string): { index: number; gsr: Gsr } {
+  const found = stored(id);
+  if (!found) throw new Error(NOT_CHANGED_MESSAGE);
+  const r = reach(found.gsr.company_id, found.gsr.employee_id);
+  if (r.own) throw new Error(OWN_GSR_MESSAGE);
+  if (!r.leads && !r.admin) throw new Error(NOT_CHANGED_MESSAGE);
   return found;
+}
+
+function replace(index: number, patch: Partial<Gsr>): Gsr {
+  gsrs[index] = { ...gsrs[index], ...patch, updated_at: now() };
+  return copy(gsrs[index]);
 }
 
 function blank(companyId: string, employeeId: string, startedOn: string): Gsr {
@@ -81,26 +122,30 @@ export function setMockGsrMode(companyId: string, mode: GsrMode): void {
 export function seedMockGsr(row: Partial<Gsr> & Pick<Gsr, "company_id" | "employee_id" | "started_on">): Gsr {
   const created: Gsr = { ...blank(row.company_id, row.employee_id, row.started_on), created_at: `${row.started_on}T12:00:00.000Z`, ...row, cycle_id: null };
   gsrs.push(created);
-  return created;
+  return copy(created);
 }
 
+// A row the reader may not see reads as missing, as getReview's does.
 export async function getGsr(id: string): Promise<Gsr> {
-  return find(id);
+  const found = gsrs.find((g) => g.id === id);
+  if (!found || !canRead(found)) throw new Error("Review not found.");
+  return copy(found);
 }
 
 export async function listPersonGsrs(companyId: string, employeeId: string): Promise<Gsr[]> {
-  return gsrs.filter((g) => g.company_id === companyId && g.employee_id === employeeId).sort(newestFirst);
+  return gsrs.filter((g) => g.company_id === companyId && g.employee_id === employeeId && canRead(g)).sort(newestFirst).map(copy);
 }
 
 export async function listGsrsForLog(companyId: string, range: DateRange): Promise<Gsr[]> {
   return gsrs
-    .filter((g) => g.company_id === companyId && ((g.done_on !== null && g.done_on >= range.from && g.done_on <= range.to) || g.status !== "complete"))
-    .sort(newestFirst);
+    .filter((g) => g.company_id === companyId && canRead(g) && ((g.done_on !== null && g.done_on >= range.from && g.done_on <= range.to) || g.status !== "complete"))
+    .sort(newestFirst)
+    .map(copy);
 }
 
 export async function listLastGsrDates(companyId: string): Promise<Array<Pick<GsrLastStarted, "employee_id" | "last_started_on">>> {
   const last = new Map<string, string>();
-  for (const g of gsrs.filter((x) => x.company_id === companyId)) {
+  for (const g of gsrs.filter((x) => x.company_id === companyId && canRead(x))) {
     const seen = last.get(g.employee_id);
     if (!seen || g.started_on > seen) last.set(g.employee_id, g.started_on);
   }
@@ -111,6 +156,8 @@ export async function listLastGsrDates(companyId: string): Promise<Array<Pick<Gs
 // back as atLimit, and either way the person's newest is returned. The company is the person's.
 export async function startGsr(companyId: string, employeeId: string): Promise<{ gsr: Gsr; atLimit: boolean }> {
   const company = companyOf(employeeId) ?? companyId;
+  const r = reach(company, employeeId);
+  if (!r.own && !r.leads && !r.admin) throw new Error(INSERT_REFUSED);
   if (gsrModeOf(company) !== "on_demand") throw new Error(WALL_MESSAGE);
   const day = today(company);
   const theirs = gsrs.filter((g) => g.employee_id === employeeId);
@@ -124,31 +171,22 @@ export async function startGsr(companyId: string, employeeId: string): Promise<{
   return { gsr: newest, atLimit };
 }
 
-// Nobody marks their own GSR done or reopens it (guard_review_employee_fields, 0047): not the
-// person signed in, and not a writer naming the person as the one who marked it.
-function refuseOwn(gsr: Gsr, reviewerId?: string): void {
-  if (reviewerId === gsr.employee_id || personaFromLocation().profile.id === gsr.employee_id) throw new Error(OWN_GSR_MESSAGE);
-}
-
 export async function markGsrDone(id: string, score: number | null, reviewerId: string): Promise<Gsr> {
-  const gsr = find(id);
-  refuseOwn(gsr, reviewerId);
+  const { index, gsr } = closable(id);
   const doneOn = gsr.status === "complete" ? gsr.done_on : today(gsr.company_id);
-  Object.assign(gsr, { status: "complete", completed_at: now(), gsr_score: score, reviewer_id: reviewerId, done_on: doneOn, updated_at: now() });
-  return gsr;
+  return replace(index, { status: "complete", completed_at: now(), gsr_score: score, reviewer_id: reviewerId, done_on: doneOn });
 }
 
 // The database clears done_on and lets the score go on reopen (0023, 0047).
 export async function reopenGsr(id: string): Promise<Gsr> {
-  const gsr = find(id);
-  refuseOwn(gsr);
-  Object.assign(gsr, { status: "in_progress", completed_at: null, gsr_score: null, done_on: null, updated_at: now() });
-  return gsr;
+  const { index } = closable(id);
+  return replace(index, { status: "in_progress", completed_at: null, gsr_score: null, done_on: null });
 }
 
-// Its goals go with it: the goals mock drops a goal whose GSR is gone.
+// An admin's or a Rococo admin's alone (0038). Its goals go with it: the goals mock drops a goal
+// whose GSR is gone.
 export async function deleteGsr(id: string): Promise<void> {
-  const index = gsrs.findIndex((g) => g.id === id);
-  if (index === -1) throw new Error(NOT_CHANGED_MESSAGE);
-  gsrs.splice(index, 1);
+  const found = stored(id);
+  if (!found || !reach(found.gsr.company_id, found.gsr.employee_id).admin) throw new Error(NOT_CHANGED_MESSAGE);
+  gsrs.splice(found.index, 1);
 }

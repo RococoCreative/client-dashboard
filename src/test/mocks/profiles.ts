@@ -13,6 +13,11 @@ export function companyOf(profileId: string): string | null {
   return profiles.find((p) => p.id === profileId)?.company_id ?? null;
 }
 
+// A company's people, read live, for the mocks that walk who leads whom (mocks/gsrOnDemand.ts).
+export function peopleOf(companyId: string): Profile[] {
+  return profiles.filter((p) => p.company_id === companyId);
+}
+
 export async function getMyProfile(): Promise<Profile | null> {
   const { profile } = personaFromLocation();
   return profiles.find((p) => p.id === profile.id) ?? profile;

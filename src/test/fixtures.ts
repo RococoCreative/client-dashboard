@@ -1632,6 +1632,17 @@ export function personaFromLocation(): { profile: Profile; company: Company } {
   return { profile: personaProfile(persona, bundle), company };
 }
 
+// The demo persona of the address, as the person holding that role in a given company, the way
+// makeHub(persona, company) picks them. With no persona in the address it is the admin, so a page
+// test that renders makeHub("admin", company) acts as that same person here. The mocks that judge
+// who may act on a company's rows (mocks/gsrOnDemand.ts) read it; a test sets the acting person with
+// window.history.pushState({}, "", "/?persona=manager&company=rba").
+export function personaIn(companyId: string): Profile {
+  const remembered = readRemembered();
+  const persona = (new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("persona") ?? remembered.persona ?? "admin") as Persona;
+  return personaProfile(persona, bundleFor(companyId) ?? KLASIK);
+}
+
 // The demo's in-app redirects drop the query string, so the last persona is kept for the tab.
 function readRemembered(): { persona: string | null; company: string | null } {
   try {

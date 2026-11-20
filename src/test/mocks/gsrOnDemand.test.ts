@@ -3,15 +3,43 @@
 // goals and notes frozen until it is reopened, and standalone GSRs never showing up where period
 // code reads reviews. Every page test for a company on demand leans on this mock telling the same
 // story the database would.
-import { describe, expect, it } from "vitest";
-import { KLASIK, RBA } from "../fixtures.ts";
+//
+// Who is acting is the demo persona in the address (?persona=admin|employee|manager|owner|rococo),
+// resolved in the GSR's company the way makeHub(persona, company) resolves it; with none, the admin.
+import { afterEach, describe, expect, it } from "vitest";
+import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
+import { KLASIK, RBA, type Persona } from "../fixtures.ts";
 import { getCompany } from "./companies.ts";
-import { createGoal, createGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, updateGoal } from "./gsr.ts";
-import { OWN_GSR_MESSAGE, listPersonGsrs, markGsrDone, reopenGsr, seedMockGsr, setMockGsrMode, startGsr } from "./gsrOnDemand.ts";
+import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote } from "./gsr.ts";
+import {
+  OWN_GSR_MESSAGE,
+  deleteGsr,
+  getGsr,
+  listGsrsForLog,
+  listLastGsrDates,
+  listPersonGsrs,
+  markGsrDone,
+  reopenGsr,
+  seedMockGsr,
+  setMockGsrMode,
+  startGsr,
+} from "./gsrOnDemand.ts";
 
 const rba = RBA.company.id;
 const admin = RBA.profiles[0].id;
 const jamie = RBA.profiles[1].id;
+const noor = RBA.profiles[2].id;
+const harper = RBA.profiles.find((p) => p.role === "manager")!.id;
+// Kai reports to Rowan, who reports to Harper: Harper leads Kai two levels up.
+const kai = RBA.profiles.find((p) => p.id === "rba-crew")!.id;
+const RLS = /row-level security/;
+
+const actAs = (persona: Persona) => window.history.pushState({}, "", `/?persona=${persona}&company=rba`);
+
+afterEach(() => {
+  window.history.pushState({}, "", "/");
+  sessionStorage.clear();
+});
 
 describe("GSRs on demand mock", () => {
   it("refuses a GSR in a company on periods", async () => {
@@ -50,7 +78,11 @@ describe("GSRs on demand mock", () => {
   it("refuses the person marking their own GSR done", async () => {
     setMockGsrMode(rba, "on_demand");
     const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    const doneBefore = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
+    actAs("employee");
     await expect(markGsrDone(gsr.id, 80, jamie)).rejects.toThrow(OWN_GSR_MESSAGE);
+    await expect(reopenGsr(doneBefore.id)).rejects.toThrow(OWN_GSR_MESSAGE);
+    actAs("admin");
     const done = await markGsrDone(gsr.id, 80, admin);
     expect(done).toMatchObject({ status: "complete", gsr_score: 80, reviewer_id: admin, done_on: "2026-09-15" });
     expect(done.completed_at).not.toBeNull();
@@ -63,6 +95,7 @@ describe("GSRs on demand mock", () => {
     const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
     const goal = await createGoal({ company_id: rba, employee_id: jamie, title: "Walk every site", kind: "role", review_id: gsr.id });
     expect(goal.review_id).toBe(gsr.id);
+    const note = await createGoalNote({ goal_id: goal.id, company_id: rba, employee_id: jamie, author_id: jamie, body: "Started" });
     expect(goalLinkProblem({ company_id: rba, assignee_id: jamie, goal_id: goal.id })).toBeNull();
 
     await markGsrDone(gsr.id, 90, admin);
@@ -73,6 +106,9 @@ describe("GSRs on demand mock", () => {
     await expect(createGoalNote({ goal_id: goal.id, company_id: rba, employee_id: jamie, author_id: jamie, body: "Late note" })).rejects.toThrow(
       "This GSR is done. Reopen it to change its notes.",
     );
+    await expect(deleteGoal(goal.id)).rejects.toThrow("This GSR is done. Reopen it to change its goals.");
+    await expect(updateGoalNote(note.id, "Edited")).rejects.toThrow("This GSR is done. Reopen it to change its notes.");
+    await expect(deleteGoalNote(note.id)).rejects.toThrow("This GSR is done. Reopen it to change its notes.");
     expect(goalLinkProblem({ company_id: rba, assignee_id: jamie, goal_id: goal.id })).toBe("That GSR is done, so its goals take no new tasks.");
 
     await reopenGsr(gsr.id);
@@ -88,5 +124,68 @@ describe("GSRs on demand mock", () => {
     expect((await listEmployeeReviews(rba, jamie)).map((r) => r.id)).toEqual(periodReviews.map((r) => r.id));
     expect((await listCompanyReviews(rba)).map((r) => r.id)).toEqual(companyReviews.map((r) => r.id));
     expect((await listPersonGsrs(rba, jamie)).map((g) => g.id)).toEqual([gsr.id]);
+  });
+
+  it("hands out a new object on every change, never the one it stores", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const seeded = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    const before = await getGsr(seeded.id);
+    const after = await markGsrDone(seeded.id, 80, admin);
+    expect(after).not.toBe(before);
+    expect(before.status).toBe("in_progress");
+    expect(after.status).toBe("complete");
+    const reopened = await reopenGsr(seeded.id);
+    expect(reopened).not.toBe(after);
+    expect(after.status).toBe("complete");
+    // A row read from a list is a copy: changing it changes nothing stored.
+    const [listed] = await listPersonGsrs(rba, jamie);
+    listed.status = "complete";
+    expect((await getGsr(seeded.id)).status).toBe("in_progress");
+  });
+
+  it("lets a peer neither start, close, reopen nor delete someone's GSR", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const open = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-08", status: "in_progress" });
+    const done = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
+    actAs("employee");
+    await expect(startGsr(rba, noor)).rejects.toThrow(RLS);
+    await expect(markGsrDone(open.id, 80, jamie)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    await expect(reopenGsr(done.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    await expect(deleteGsr(open.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    // Their own they start.
+    expect((await startGsr(rba, jamie)).gsr.employee_id).toBe(jamie);
+    actAs("admin");
+    expect((await listPersonGsrs(rba, noor)).map((g) => g.status)).toEqual(["in_progress", "complete"]);
+  });
+
+  it("lets a leader two levels up start and close a GSR, but not delete it", async () => {
+    setMockGsrMode(rba, "on_demand");
+    actAs("manager");
+    const { gsr } = await startGsr(rba, kai);
+    expect(gsr.employee_id).toBe(kai);
+    expect((await markGsrDone(gsr.id, 75, harper)).status).toBe("complete");
+    expect((await reopenGsr(gsr.id)).status).toBe("in_progress");
+    await expect(deleteGsr(gsr.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+  });
+
+  it("lets an admin delete a GSR, and its goals go with it", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    const goal = await createGoal({ company_id: rba, employee_id: jamie, title: "Walk every site", kind: "role", review_id: gsr.id });
+    actAs("admin");
+    await deleteGsr(gsr.id);
+    await expect(getGsr(gsr.id)).rejects.toThrow();
+    expect((await listGoals(rba, jamie)).some((g) => g.id === goal.id)).toBe(false);
+  });
+
+  it("shows an employee nothing of a peer's GSRs", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const theirs = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-08", status: "in_progress" });
+    const mine = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-09", status: "in_progress" });
+    actAs("employee");
+    expect(await listPersonGsrs(rba, noor)).toEqual([]);
+    await expect(getGsr(theirs.id)).rejects.toThrow("Review not found.");
+    expect((await listGsrsForLog(rba, { from: "2026-09-01", to: "2026-09-30" })).map((g) => g.id)).toEqual([mine.id]);
+    expect(await listLastGsrDates(rba)).toEqual([{ employee_id: jamie, last_started_on: "2026-09-09" }]);
   });
 });

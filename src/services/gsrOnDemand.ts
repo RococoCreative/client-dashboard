@@ -69,7 +69,17 @@ export async function startGsr(companyId: string, employeeId: string): Promise<{
     .upsert({ company_id: companyId, employee_id: employeeId, cycle_id: null }, { onConflict: "employee_id,started_on", ignoreDuplicates: true });
   const atLimit = error?.message === TWO_OPEN_MESSAGE;
   if (error && !atLimit) throw error;
-  const [newest] = await listPersonGsrs(companyId, employeeId);
+  const { data, error: readError } = await db()
+    .from("reviews")
+    .select(REVIEW_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("employee_id", employeeId)
+    .is("cycle_id", null)
+    .order("started_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (readError) throw readError;
+  const newest = ((data as Gsr[] | null) ?? [])[0];
   if (!newest) throw new Error("That GSR could not be opened. Reload the page and try again.");
   return { gsr: newest, atLimit };
 }
