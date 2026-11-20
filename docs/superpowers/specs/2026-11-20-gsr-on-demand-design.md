@@ -138,6 +138,49 @@ things hold that wall, and each is tested:
 4. **0047 takes back what 0046 put on every company** (see "What 0047 changes in 0046"), so a
    company on periods is under exactly the rules it had before 0046.
 
+### Protecting the cycles Klasik and Kingdom are on
+
+The owner's condition before any building: this must not break the cycles Klasik is on. What is
+live there on November 20, 2026, and must come through untouched:
+
+- Klasik: two open GSR months (October, with two of four GSRs locked, and November, with four in
+  progress), seventeen goals between them, three people left out, and two open quarterly review
+  cycles, each with one review signed off.
+- Kingdom: one open GSR month with two GSRs.
+
+Checked against the rules live since 0046: every GSR month in all three companies is a whole
+calendar month, the app can only create whole months, everyone's rhythm is monthly, and the
+nineteen older database test files pass unchanged with 0046 applied. One older test changed with
+0046: a manager who is not an admin can now lock a report's month in the database, though no
+screen offers it. 0047 takes that back, and that test returns to its original assertion.
+
+What the build is held to:
+
+1. **0047 changes no row belonging to a company on periods.** Before it is applied to production,
+   a fingerprint of each company's cycles, reviews, scores, goals, notes and omissions is taken
+   (counts and content hashes, no personal data read out). The same fingerprint is taken after.
+   They must match for all three companies, and again for Klasik and Kingdom after RBA moves.
+2. **The period rules are added to, not rewritten.** Where a database function gains a branch for
+   a standalone GSR, the cycle branch keeps its logic and its messages word for word. In
+   `src/lib/gsr`, the functions periods use today (`scoreGsrMonths`, `monthsWithin`,
+   `gsrCycleInPlay`, `cycleRoster`, `previousCycle` and the rest) are left as they are; on demand
+   gets its own functions beside them.
+3. **The existing tests are the contract.** Every existing database test and every existing page
+   test for a company on periods passes without an edit to what it asserts. Any existing assertion
+   that has to change is listed for the owner with the reason, and is treated as a warning sign.
+4. **The screens are compared, not assumed.** Every GSR and review screen is captured for a
+   company on periods before the build and after it, at phone, tablet and desktop widths. The
+   captures must be identical.
+5. **Moving a company cannot hit the wrong one.** The hand-run change must name the company it is
+   for, and the database refuses the change for any company not named in the same transaction. A
+   statement that would touch two companies, or all of them, changes nothing.
+6. **Moving a company can be put back.** The conversion keeps a private copy of everything it
+   removes or re-points (the cycles, the left-out rows, and which cycle each GSR and goal belonged
+   to), so a move made in error can be restored by hand.
+7. **The app can be rolled back at once.** The app as it is on `main` today must run unchanged
+   against the database after 0047, so a bad release is undone by re-publishing the previous one.
+   The older database tests passing on 0047 are the proof.
+
 ### The setting
 
 - `companies.gsr_mode`: `'periods'` (the default, today's behaviour) or `'on_demand'`.
@@ -405,9 +448,11 @@ page, 44px tap targets that never overlap, no sideways scroll from 390px, theme 
    every company is on periods. It is verified the way 0046 was: production compared with a local
    database built from the files, object by object.
 2. The app ships with every company on periods. The other companies' tests pass unchanged, which is
-   the proof nothing moved for them.
-3. With the owner's say-so, RBA's setting is changed by hand in the database. Its two past GSRs
-   convert and RBA sees the new screens. Klasik and Kingdom see nothing.
+   the proof nothing moved for them. The fingerprints are compared again, and the owner looks at
+   one of Klasik's GSR months on the live site before anything else happens.
+3. With the owner's say-so, RBA's setting is changed by hand in the database, naming RBA. Its two
+   past GSRs convert and RBA sees the new screens. Klasik and Kingdom see nothing, and their
+   fingerprints are compared once more.
 4. Later, and only when the owner has Klasik's or Kingdom's approval: the same change for that
    company. Once all three are over, a cleanup removes the period code for GSRs.
 
