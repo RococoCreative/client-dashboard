@@ -33,6 +33,7 @@ import GoalsPage from "./pages/gsr/GoalsPage.tsx";
 import MyReviewsPage from "./pages/gsr/MyReviewsPage.tsx";
 import CyclePage from "./pages/gsr/CyclePage.tsx";
 import ReviewPage from "./pages/gsr/ReviewPage.tsx";
+import GsrPage from "./pages/gsr/GsrPage.tsx";
 import ScorecardsPage from "./pages/gsr/ScorecardsPage.tsx";
 import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
@@ -135,6 +136,13 @@ function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children:
   const allowed = settingsTabsFor(can);
   if (tab === null || !allowed.some((t) => t.key === tab)) return allowed.length > 0 ? <RedirectTo path={allowed[0].to} /> : <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+// One GSR's address: a company on demand opens the GSR's own page, a company on periods the review
+// in its cycle, exactly as before.
+function GsrOrReview() {
+  const { company } = useHub();
+  return company?.gsr_mode === "on_demand" ? <GsrPage /> : <ReviewPage />;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -495,7 +503,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
             <Route path="reviews/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
-            <Route path="gsr/reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
+            <Route path="gsr/reviews/:reviewId" element={<WithCompany><GsrOrReview /></WithCompany>} />
             <Route path="reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
             <Route path="my" element={isRococo ? <Navigate to="/" replace /> : <RedirectTo path="/my/gsr" />} />
             <Route path="my/gsr" element={isRococo ? <Navigate to="/" replace /> : <WithCompany><MyGsrPage /></WithCompany>} />

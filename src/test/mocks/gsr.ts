@@ -20,7 +20,7 @@ import type {
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
-import { mockGsrStatus } from "./gsrOnDemand.ts";
+import { mockGsrStatus, patchMockGsrDiscussion } from "./gsrOnDemand.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -170,6 +170,11 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
+  // A GSR on demand (0047) is a reviews row too, held by mocks/gsrOnDemand.ts; its page writes only
+  // its opening discussion here.
+  if (!before && mockGsrStatus(id) !== null && Object.keys(patch).every((key) => key === "support_discussion")) {
+    return patchMockGsrDiscussion(id, patch.support_discussion ?? null) as unknown as Review;
+  }
   // A signed-off review stays signed off while its cycle is closed (0039).
   if (before?.status === "complete" && patch.status !== undefined && patch.status !== "complete" && cycles.find((c) => c.id === before.cycle_id)?.status === "closed") {
     throw new Error(CLOSED_CYCLE_MESSAGE);

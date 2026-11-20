@@ -21,7 +21,8 @@ export default function FocusTopicCard({
   isOwn,
   onAdd,
 }: {
-  cycle: ReviewCycle;
+  // A monthly cycle's theme, or a focus topic from the calendar in the same two fields.
+  cycle: Pick<ReviewCycle, "theme" | "theme_description">;
   focusGoal: Goal | null;
   canEdit: boolean;
   isOwn: boolean;

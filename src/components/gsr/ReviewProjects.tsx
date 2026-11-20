@@ -22,7 +22,8 @@ export default function ReviewProjects({
   isOwn,
   onNotes,
 }: {
-  review: Review;
+  // A review in a cycle or a GSR on demand: only its id, company and status are read.
+  review: Pick<Review, "id" | "company_id" | "status">;
   // The person's assignments in the review's company.
   assignments: ProjectAssignment[];
   // The company's projects, archived ones too, to name each one.

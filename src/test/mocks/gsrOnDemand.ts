@@ -109,6 +109,16 @@ export function mockGsrStatus(id: string): Gsr["status"] | null {
   return gsrs.find((g) => g.id === id)?.status ?? null;
 }
 
+// The opening discussion of a GSR, for mocks/gsr.ts: the service writes it through updateReview,
+// whose update reaches any reviews row the reader may change, a GSR's included. A done GSR keeps it
+// until it is reopened, with the words a signed-off review uses (0029, 0035).
+export function patchMockGsrDiscussion(id: string, value: string | null): Gsr {
+  const found = stored(id);
+  if (!found) throw new Error(NOT_CHANGED_MESSAGE);
+  if (found.gsr.status === "complete" && value !== found.gsr.support_discussion) throw new Error("This review is signed off. Reopen it to change it.");
+  return replace(found.index, { support_discussion: value });
+}
+
 export function resetMockGsrs(): void {
   gsrs.splice(0, gsrs.length, ...fromAll((b) => b.gsrs).map(copy));
   resetCompanyGsrModes();
