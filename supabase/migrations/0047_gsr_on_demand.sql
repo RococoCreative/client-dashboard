@@ -15,9 +15,11 @@
 --      guard_company_fields refuses. In the SQL editor the change must name its company in the
 --      same transaction (set hub.gsr_on_demand_for to the slug), so a statement that reaches the
 --      wrong company, or every company, changes nothing. It goes back to periods only while the
---      company holds no GSR without a cycle.
+--      company holds no GSR without a cycle. A new company is born on periods: a signed-in
+--      writer cannot create one on demand, and the SQL editor does so only by naming it.
 --   3. What 0046 put on every company, taken back. No member opens a cycle (the policy goes). A
---      person's rhythm no longer decides whose GSR a cycle holds (the trigger goes). A month takes
+--      person's rhythm no longer decides whose GSR a cycle holds (the trigger goes, with
+--      private.person_gsr_cadence, which only it used). A month takes
 --      any dates an admin gives it, and weekly, two-week and quarterly GSR periods are gone with
 --      their rules: the cadences are monthly, quarterly, annual and custom again, monthly is a GSR
 --      and the rest are reviews, and a cycle's kind always follows its cadence.
@@ -105,6 +107,11 @@ revoke all on function public.guard_company_fields() from public, anon, authenti
 -- Every row an update reaches is judged, so a statement that reaches a company not named fails
 -- whole. Going back to periods is refused once the company holds a GSR with no cycle, which has
 -- no period to go back to.
+--
+-- A new company is born on periods. Only update is guarded by companies_guard_fields, so on
+-- insert this refuses a signed-in writer (0001 lets a Rococo admin create a company) asking for
+-- anything else, with the update rule's message, and holds the SQL editor to the same naming
+-- rule as a move.
 create or replace function public.guard_company_gsr_mode()
 returns trigger
 language plpgsql
@@ -112,7 +119,14 @@ security definer
 set search_path = ''
 as $$
 begin
-  if new.gsr_mode is not distinct from old.gsr_mode then
+  if tg_op = 'INSERT' then
+    if new.gsr_mode is not distinct from 'periods' then
+      return new;
+    end if;
+    if (select auth.uid()) is not null then
+      raise exception 'The GSR format is changed by Rococo in the database.';
+    end if;
+  elsif new.gsr_mode is not distinct from old.gsr_mode then
     return new;
   end if;
   if new.gsr_mode = 'on_demand'
@@ -132,7 +146,7 @@ revoke execute on function public.guard_company_gsr_mode() from public, anon, au
 
 drop trigger if exists companies_guard_gsr_mode on public.companies;
 create trigger companies_guard_gsr_mode
-  before update of gsr_mode on public.companies
+  before insert or update of gsr_mode on public.companies
   for each row execute function public.guard_company_gsr_mode();
 
 -- ---------------------------------------------------------------------------------------
@@ -141,9 +155,11 @@ create trigger companies_guard_gsr_mode
 -- No member opens a cycle. Admins create every cycle by hand, as before 0046 (0010, 0038).
 drop policy if exists "Members open a GSR period" on public.review_cycles;
 
--- A person's rhythm no longer decides whose GSR a cycle holds.
+-- A person's rhythm no longer decides whose GSR a cycle holds. person_gsr_cadence served only
+-- that trigger.
 drop trigger if exists reviews_guard_rhythm on public.reviews;
 drop function if exists public.guard_review_rhythm();
+drop function if exists private.person_gsr_cadence(uuid);
 
 -- The 0046 trigger function reduced to one job: on every insert and update, a cycle's kind is
 -- set from its cadence, monthly a GSR and anything else a review. The period rules, the kind

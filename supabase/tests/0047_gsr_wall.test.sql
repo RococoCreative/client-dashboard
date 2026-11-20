@@ -1,8 +1,9 @@
 -- 0047_gsr_wall.test.sql
 -- Proves the wall 0047 puts around GSRs on demand: every company starts on periods, no signed-in
 -- account changes the format (Rococo admins included), the change run by hand in the database
--- must name the one company it is for and touches no other, and everything 0046 put on every
--- company is taken back for a company on periods: no member opens a cycle, a month takes any
+-- must name the one company it is for and touches no other, a new company is born on periods
+-- unless the SQL editor names it, and everything 0046 put on every company is taken back for a
+-- company on periods (and is gone after a re-paste): no member opens a cycle, a month takes any
 -- dates again, a cycle's kind follows its cadence, weekly cycles are gone, a person's rhythm
 -- decides nothing about whose GSR a month holds, and a manager sets no rhythm. Rhythm takes None
 -- and Daily, and once a company is on demand its managers set the rhythm, and only the rhythm,
@@ -89,6 +90,48 @@ select set_config('hub.gsr_on_demand_for', '', true);
 select tests.assert(
   (select bool_and(gsr_mode = 'periods') from public.companies where slug in ('kingdom', 'klasik', 'rba')),
   'must_name: a refused change moved a company'
+);
+
+-- case: a_company_is_born_on_periods
+-- A new company cannot skip the rules above: a signed-in writer creates it on periods only, and
+-- the SQL editor creates it on demand only by naming it.
+select tests.act_as(tests.id('g_rococo'));
+insert into public.companies (slug, name) values ('sample-born-47', 'Sample born 47');
+select tests.assert_raises(
+  $q$insert into public.companies (slug, name, gsr_mode) values ('sample-eager-47', 'Sample eager 47', 'on_demand')$q$,
+  'The GSR format is changed by Rococo in the database.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'sample-born-47')
+  and not exists (select 1 from public.companies where slug = 'sample-eager-47'),
+  'born_on_periods: a new company was not on periods, or the refused one landed'
+);
+select tests.assert_raises(
+  $q$insert into public.companies (slug, name, gsr_mode) values ('sample-unnamed-47', 'Sample unnamed 47', 'on_demand')$q$,
+  'Name the company this change is for: set hub.gsr_on_demand_for to its slug in the same transaction.'
+);
+select set_config('hub.gsr_on_demand_for', 'rba', true);
+select tests.assert_raises(
+  $q$insert into public.companies (slug, name, gsr_mode) values ('sample-unnamed-47', 'Sample unnamed 47', 'on_demand')$q$,
+  'Name the company this change is for: set hub.gsr_on_demand_for to its slug in the same transaction.'
+);
+select set_config('hub.gsr_on_demand_for', '', true);
+
+-- case: what_0046_put_on_every_company_is_gone
+-- Read after the harness has pasted 0046 again and then 0047, so this is the state a re-paste
+-- leaves too.
+select tests.assert(
+  not exists (select 1 from pg_policies
+               where schemaname = 'public' and tablename = 'review_cycles'
+                 and policyname = 'Members open a GSR period')
+  and not exists (select 1 from pg_trigger
+                   where tgrelid = 'public.reviews'::regclass and tgname = 'reviews_guard_rhythm')
+  and to_regprocedure('public.guard_review_rhythm()') is null
+  and to_regprocedure('private.gsr_period_ok(text, date, date)') is null
+  and to_regprocedure('private.gsr_period_name(text, date, date)') is null
+  and to_regprocedure('private.person_gsr_cadence(uuid)') is null,
+  'gone: something 0047 takes back from 0046 is still there'
 );
 
 -- ---------------------------------------------------------------------------------------
