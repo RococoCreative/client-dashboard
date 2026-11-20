@@ -33,6 +33,9 @@ export interface NavItem {
   // Other paths that belong to this item, so it stays marked there too (an SOP opened from the
   // SOPs tab lives at /sops/:id).
   alsoActive?: readonly string[];
+  // Who sees it in a company whose GSRs are on demand (companies.gsr_mode, 0047), in place of
+  // audience. Unset, the item reads the same in every company.
+  onDemandAudience?: NavAudience;
 }
 
 export const NAV_GROUP_ORDER: readonly NavGroup[] = ["home", "sales_finance", "production", "people_hr", "resources", "utility"];
@@ -64,7 +67,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "projects", to: "/production", label: "Projects", icon: HardHat, audience: "both", group: "production", requires: "production", capability: "production_view" },
   { id: "people", to: "/people", label: "People", icon: Users, audience: "lead", group: "people_hr" },
   { id: "goals", to: "/goals", label: "Goals", icon: Target, audience: "admin", group: "people_hr" },
-  { id: "gsr", to: "/gsr", label: "GSRs", icon: CalendarCheck, audience: "admin", group: "people_hr" },
+  // On demand, the GSRs log is for anyone who leads people; on periods, the months are an admin's.
+  { id: "gsr", to: "/gsr", label: "GSRs", icon: CalendarCheck, audience: "admin", onDemandAudience: "lead", group: "people_hr" },
   { id: "reviews", to: "/reviews", label: "Reviews", icon: ClipboardCheck, audience: "admin", group: "people_hr" },
   { id: "scorecards", to: "/scorecards", label: "Scorecards", icon: Gauge, audience: "admin", group: "people_hr" },
   { id: "my-gsr-employee", to: "/my/gsr", label: "My GSR", icon: CalendarCheck, audience: "employee", group: "people_hr" },
@@ -102,7 +106,8 @@ function audienceSees(audience: NavAudience, isAdmin: boolean, isLead: boolean):
 }
 
 function visible(item: NavItem, company: Company, isAdmin: boolean, isRococo: boolean, isLead: boolean, can: CanFn): boolean {
-  if (!audienceSees(item.audience, isAdmin, isLead)) return false;
+  const audience = company.gsr_mode === "on_demand" && item.onDemandAudience ? item.onDemandAudience : item.audience;
+  if (!audienceSees(audience, isAdmin, isLead)) return false;
   if (item.requires && !hasModule(company, item.requires)) return false;
   if (item.setting && !company[item.setting]) return false;
   if (item.capability && !can(item.capability)) return false;

@@ -14,7 +14,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listPillars } from "../../services/gsr.ts";
 import { secondaryClass } from "../../components/ui/type.ts";
 import { SECTION_LABEL } from "../../lib/gsr/cycles.ts";
-import { GSR_TABS } from "./gsrTabs.ts";
+import { gsrTabsFor } from "./gsrTabs.ts";
 
 export default function GsrSetupPage() {
   const { company } = useHub();
@@ -29,7 +29,7 @@ export default function GsrSetupPage() {
         title={SECTION_LABEL.gsr}
         description="What shapes every month: the focus topic each GSR is built on, and how many goals each one requires."
       />
-      <Tabs items={GSR_TABS} label="GSRs" />
+      <Tabs items={gsrTabsFor(current.gsr_mode)} label="GSRs" />
       <div className="space-y-6">
         <Section eyebrow="Scoring" title="How GSRs are scored" padded={false}>
           <div className="px-4 pb-1 sm:px-6">

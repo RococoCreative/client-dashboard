@@ -34,6 +34,7 @@ import MyReviewsPage from "./pages/gsr/MyReviewsPage.tsx";
 import CyclePage from "./pages/gsr/CyclePage.tsx";
 import ReviewPage from "./pages/gsr/ReviewPage.tsx";
 import GsrPage from "./pages/gsr/GsrPage.tsx";
+import GsrLogPage from "./pages/gsr/GsrLogPage.tsx";
 import ScorecardsPage from "./pages/gsr/ScorecardsPage.tsx";
 import MyGsrPage from "./pages/gsr/MyGsrPage.tsx";
 import MyGoalsPage from "./pages/gsr/MyGoalsPage.tsx";
@@ -143,6 +144,21 @@ function SettingsTabOnly({ tab, children }: { tab: SettingsTab | null; children:
 function GsrOrReview() {
   const { company } = useHub();
   return company?.gsr_mode === "on_demand" ? <GsrPage /> : <ReviewPage />;
+}
+
+// GSRs' own address: a company on demand opens the GSRs log for anyone who leads people and sends
+// everyone else to their own GSR; a company on periods keeps the months for an admin, exactly as
+// before.
+function GsrHome() {
+  const { company, isAdmin, isLead } = useHub();
+  if (company?.gsr_mode === "on_demand") return isAdmin || isLead ? <GsrLogPage /> : <RedirectTo path="/my/gsr" />;
+  return isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />;
+}
+
+// A month's address. A company on demand has no months, so an old link lands on the GSRs log.
+function GsrCycleOrLog() {
+  const { company } = useHub();
+  return company?.gsr_mode === "on_demand" ? <RedirectTo path="/gsr" /> : <AdminOnly><CyclePage /></AdminOnly>;
 }
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -479,7 +495,7 @@ function SignedIn({ session }: { session: Session }) {
             {/* Two sections keyed on cadence: Monthly GSRs (monthly) and Reviews (every scored
                 cadence). A cycle and a review are reachable under either prefix so old links keep
                 working; new links come from lib/gsr/cycles.ts and land in the section that owns them. */}
-            <Route path="gsr" element={<WithCompany>{isAdmin ? <CyclesPage section="gsr" /> : <RedirectTo path="/my/gsr" />}</WithCompany>} />
+            <Route path="gsr" element={<WithCompany><GsrHome /></WithCompany>} />
             <Route path="reviews" element={<WithCompany>{isAdmin ? <CyclesPage section="reviews" /> : <RedirectTo path="/my/reviews" />}</WithCompany>} />
             <Route path="gsr/setup" element={<AdminOnly><GsrSetupPage /></AdminOnly>} />
             <Route path="reviews/setup" element={<AdminOnly><ReviewsSetupPage /></AdminOnly>} />
@@ -501,7 +517,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="settings/production" element={<RedirectTo path="/production/setup" />} />
             <Route path="reviews/company-goals" element={<RedirectTo path="/goals/company" />} />
             <Route path="gsr/company-goals" element={<RedirectTo path="/goals/company" />} />
-            <Route path="gsr/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
+            <Route path="gsr/cycles/:cycleId" element={<GsrCycleOrLog />} />
             <Route path="reviews/cycles/:cycleId" element={<AdminOnly><CyclePage /></AdminOnly>} />
             <Route path="gsr/reviews/:reviewId" element={<WithCompany><GsrOrReview /></WithCompany>} />
             <Route path="reviews/:reviewId" element={<WithCompany><ReviewPage /></WithCompany>} />
