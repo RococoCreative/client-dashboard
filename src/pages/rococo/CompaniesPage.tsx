@@ -4,6 +4,8 @@
 // database cannot reach on its own: the grant each connected provider holds, and the company's
 // stored files. Each company's name, theme, logo and win days read as text first, one open at a
 // time; the module and Financials switches stay live, and Delete sits at the foot of the card.
+// Each company's GSR format (companies.gsr_mode, 0047) reads as text and nothing else: it is changed
+// only by hand in the database, and no screen or signed-in account can change it.
 import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
@@ -338,6 +340,9 @@ export default function CompaniesPage() {
                       <label htmlFor={`co-manual-financials-${company.id}`} className="text-[13px] text-ink tap:mt-3">Manual Financials page</label>
                     </div>
                   </fieldset>
+                  <div className="md:col-span-12">
+                    <Shown label="GSR format" value={company.gsr_mode === "on_demand" ? "On demand" : "By month"} />
+                  </div>
                   <div className="md:col-span-12">
                     <p className={labelClass}>Sign-in domains</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">

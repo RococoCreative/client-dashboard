@@ -1,7 +1,8 @@
 // The division compare strip: each division next to the whole company for one month, on the
 // numbers leadership compares them by. Average optimization rate against target (each person
 // against their own role's target), how many people that average covers, and how many of the
-// month's reviews are complete. Shared by the dashboard and the Scorecards report; the figures
+// month's reviews are complete (in a company whose GSRs are on demand, how many GSRs were done in
+// the month instead). Shared by the dashboard and the Scorecards report; the figures
 // arrive worked out (compare.ts, over lib/scorecard.ts), so this only lays them out. Someone who
 // works in more than one division counts in each, so when the groups add up to more than the
 // whole the strip says why. On a phone a division's name and its average share one line.
@@ -51,10 +52,18 @@ export default function DivisionCompare({ rows, monthLabel, active }: { rows: re
                     {o.counted} of {row.people}
                   </dd>
                 </div>
-                <div className="flex gap-1">
-                  <dt className="text-ink-3">Reviews complete</dt>
-                  <dd>{row.reviews ? `${row.reviews.complete}/${row.reviews.total}` : "-"}</dd>
-                </div>
+                {row.gsrsDone !== undefined ? (
+                  // A company on demand has no month's GSR cycle: the GSRs done in the month instead.
+                  <div className="flex gap-1">
+                    <dt className="text-ink-3">GSRs done this month</dt>
+                    <dd>{row.gsrsDone ?? "-"}</dd>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <dt className="text-ink-3">Reviews complete</dt>
+                    <dd>{row.reviews ? `${row.reviews.complete}/${row.reviews.total}` : "-"}</dd>
+                  </div>
+                )}
               </dl>
             </li>
           );

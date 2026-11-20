@@ -2,7 +2,7 @@
 // previous, the figure a scored review reads, and carrying a goal forward.
 import { describe, expect, it } from "vitest";
 import { RBA } from "../../test/fixtures.ts";
-import { carryForwardToGsr, currentGsr, dueFor, figuresByPerson, previousGsr, scoreGsrsInPeriod, windowFigures, windowRange } from "./onDemand.ts";
+import { carryForwardToGsr, currentGsr, dueFor, figuresByPerson, gsrsCountedIn, previousGsr, scoreGsrsInPeriod, windowFigures, windowRange } from "./onDemand.ts";
 import type { GsrFigureRow } from "./onDemand.ts";
 
 describe("GSRs on demand", () => {
@@ -43,6 +43,17 @@ describe("GSRs on demand", () => {
     const figure = scoreGsrsInPeriod({ period_start: "2026-07-01", period_end: "2026-09-30" }, rows);
     expect([figure.target, figure.actual]).toEqual([200, 160]);
     expect(figure.gsrs.map((g) => g.counted)).toEqual([true, true, false]); // the two done inside, then the open one
+  });
+  it("reads back how many GSRs a signed-off line item counted", () => {
+    const rows = [
+      { employee_id: "a", status: "complete" as const, started_on: "2026-07-01", done_on: "2026-07-10", gsr_score: 70 },
+      { employee_id: "a", status: "complete" as const, started_on: "2026-09-01", done_on: "2026-09-30", gsr_score: 90 },
+      { employee_id: "a", status: "complete" as const, started_on: "2026-08-01", done_on: "2026-08-04", gsr_score: null },
+    ];
+    const figure = scoreGsrsInPeriod({ period_start: "2026-07-01", period_end: "2026-09-30" }, rows);
+    // Done with no score is listed, never counted.
+    expect(gsrsCountedIn(figure.target)).toBe(2);
+    expect(gsrsCountedIn(0)).toBe(0);
   });
   it("finds the current and the previous GSR", () => {
     const g = (id: string, started_on: string, status: "complete" | "in_progress") => ({ id, started_on, status, created_at: `${started_on}T09:00:00Z` });

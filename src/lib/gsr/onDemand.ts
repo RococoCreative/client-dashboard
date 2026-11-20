@@ -145,6 +145,12 @@ export function scoreGsrsInPeriod<T extends GsrFigureRow>(
   return { gsrs: listed, target: counted.length * LOCKED_MONTH_TARGET, actual: counted.reduce((sum, l) => sum + (l.gsr.gsr_score ?? 0), 0) };
 }
 
+// How many GSRs a signed-off review's GSR line item counted, read back from its target: a signed-off
+// review keeps only that line item, and scoreGsrsInPeriod wrote LOCKED_MONTH_TARGET for each.
+export function gsrsCountedIn(target: number): number {
+  return Math.round(target / LOCKED_MONTH_TARGET);
+}
+
 // The same carry as a cycle's, aimed at a GSR: it keeps and drops exactly what carryForward does.
 export function carryForwardToGsr(goal: Goal, reviewId: string, sortOrder?: number): Omit<CarriedGoal, "cycle_id"> & { cycle_id: null; review_id: string } {
   const carried = carryForward(goal, "", sortOrder);

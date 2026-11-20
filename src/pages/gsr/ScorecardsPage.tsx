@@ -4,7 +4,8 @@
 // given the view), a Combined / per-division switch and the division compare strip sit on top. A
 // person's name opens their profile, where results are entered. The numbers all come from
 // lib/scorecard.ts. The people are the ones the database shows the viewer, so a viewer who sees
-// only some divisions reads the whole as "In your divisions".
+// only some divisions reads the whole as "In your divisions". In a company whose GSRs are on demand
+// (0047), the strip counts the GSRs done in the month instead of the month's GSR reviews.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
@@ -26,6 +27,8 @@ import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listJobRoles } from "../../services/jobRoles.ts";
 import { listDivisions } from "../../services/divisions.ts";
 import { listCycleOmissions, listCycleReviews, listCycles } from "../../services/gsr.ts";
+import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
+import { windowRange } from "../../lib/gsr/onDemand.ts";
 import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts";
 import { formatMetricValue, monthOf, monthResult, monthsOfYear, ytd, type MetricResult } from "../../lib/scorecard.ts";
 import { canSeeDivisions, divisionLabel, isDivisionLimited, viewerDivisions } from "../../lib/people.ts";
@@ -167,6 +170,12 @@ export default function ScorecardsPage() {
   const cycle = state.data && allowed ? monthCycle(state.data.cycles, month) : null;
   const cycleId = cycle?.id ?? null;
   const monthReviews = useAsync(() => (cycleId ? listCycleReviews(cycleId) : Promise.resolve([])), [cycleId]);
+  // A company on demand: the GSRs done in the strip's month, read only for those who see the strip.
+  const gsrMonth = company!.gsr_mode === "on_demand" && allowed ? month : null;
+  const monthGsrs = useAsync(
+    () => (gsrMonth ? listGsrsForLog(companyId, windowRange("month", gsrMonth)).then((rows) => ({ rows, range: windowRange("month", gsrMonth) })) : Promise.resolve(null)),
+    [companyId, gsrMonth],
+  );
 
   function chooseYear(next: number) {
     setYear(next);
@@ -225,7 +234,7 @@ export default function ScorecardsPage() {
   const roleName = (id: string | null) => jobRoles.find((r) => r.id === id)?.name ?? null;
   const divisionName = (person: Profile) => (split && person.division_ids.length > 0 ? divisionLabel(person.division_ids, allDivisions) : null);
   const compare = split
-    ? divisionCompareRows({ people, divisions, metrics, entries, month, cycle, reviews: monthReviews.data ?? [], omissions: state.data.omissions, combinedLabel })
+    ? divisionCompareRows({ people, divisions, metrics, entries, month, cycle, reviews: monthReviews.data ?? [], omissions: state.data.omissions, combinedLabel, ...(gsrMonth ? { gsrs: monthGsrs.data } : {}) })
     : [];
 
   return (

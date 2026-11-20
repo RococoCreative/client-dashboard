@@ -1,7 +1,8 @@
 // Rococo's home: the portfolio. Every company in the hub as a card carrying the signals to
 // read before a client call (people, review cycle, library, financials, marketing) and the
 // things that need a Rococo hand. Rococo admins land here with no company active; opening a
-// company from a card switches the whole hub to that company's branding and nav.
+// company from a card switches the whole hub to that company's branding and nav. A company whose
+// GSRs are on demand (0047) also shows this week's GSRs: how many were done and their average.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Plus } from "lucide-react";
@@ -20,6 +21,9 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllDomains } from "../../services/companies.ts";
 import { listInvitations } from "../../services/invitations.ts";
 import { listCompanyReviews, listCycleOmissions, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
+import { windowFigures, windowRange } from "../../lib/gsr/onDemand.ts";
+import { companyToday } from "../../lib/wins.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
@@ -57,10 +61,19 @@ interface CompanySummary {
   liveUnbudgeted: number;
   pendingInvites: number;
   alerts: string[];
+  // A company on demand only: the GSRs done this week, in its own time zone, and their average.
+  gsrWeek: { done: number; average: number | null } | null;
+}
+
+// This week's GSRs for a company on demand, Monday to Sunday by the company's own date.
+async function gsrWeekOf(company: Company): Promise<{ done: number; average: number | null }> {
+  const range = windowRange("week", companyToday(company.time_zone));
+  const { done, average } = windowFigures(await listGsrsForLog(company.id, range), range);
+  return { done, average };
 }
 
 async function summarize(company: Company, domains: CompanyDomain[]): Promise<CompanySummary> {
-  const [people, cycles, reviews, pillars, sops, snapshots, campaigns, invitations, omissions] = await Promise.all([
+  const [people, cycles, reviews, pillars, sops, snapshots, campaigns, invitations, omissions, gsrWeek] = await Promise.all([
     listCompanyProfiles(company.id),
     listCycles(company.id),
     listCompanyReviews(company.id),
@@ -70,6 +83,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     listCampaigns(company.id),
     listInvitations(company.id),
     listCycleOmissions(company.id),
+    company.gsr_mode === "on_demand" ? gsrWeekOf(company) : Promise.resolve(null),
   ]);
   const active = people.filter((p) => p.is_active);
   // A cycle covers the whole active roster, signed in or not, plus anyone deactivated since whose
@@ -143,6 +157,7 @@ async function summarize(company: Company, domains: CompanyDomain[]): Promise<Co
     liveUnbudgeted: marketing.unbudgeted,
     pendingInvites: pending.length,
     alerts,
+    gsrWeek,
   };
 }
 
@@ -164,6 +179,10 @@ function marketingHint(summary: CompanySummary): string | undefined {
   if (summary.liveUnbudgeted > 0) parts.push(`${summary.liveUnbudgeted} with no budget set`);
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
+
+// The signals' columns from a small screen up, by how many signals a card carries. Written out so
+// Tailwind sees each class whole.
+const SIGNAL_COLUMNS: Record<number, string> = { 4: "sm:grid-cols-4", 5: "sm:grid-cols-5", 6: "sm:grid-cols-6" };
 
 function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (path: string) => void }) {
   const { company, cycles, latestSnapshot } = summary;
@@ -188,7 +207,7 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
         </Button>
       </header>
 
-      <dl className={`mt-5 grid grid-cols-2 gap-4 ${company.manual_financials ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+      <dl className={`mt-5 grid grid-cols-2 gap-4 ${SIGNAL_COLUMNS[4 + (company.manual_financials ? 1 : 0) + (summary.gsrWeek ? 1 : 0)]}`}>
         <Signal label="People" value={String(summary.people)} hint={pluralize(summary.admins, "admin")} />
         <Signal
           label={cycles.length > 1 ? "Review cycles" : "Review cycle"}
@@ -199,6 +218,13 @@ function CompanyCard({ summary, onEnter }: { summary: CompanySummary; onEnter: (
               : undefined
           }
         />
+        {summary.gsrWeek ? (
+          <Signal
+            label="GSRs this week"
+            value={`${summary.gsrWeek.done} done`}
+            hint={summary.gsrWeek.average === null ? "No average yet" : `Average ${summary.gsrWeek.average}`}
+          />
+        ) : null}
         <Signal label="SOP library" value={pluralize(summary.publishedSops, "published SOP")} hint={summary.lastSopUpdate ? `Updated ${formatDate(summary.lastSopUpdate)}` : "Nothing yet"} />
         {company.manual_financials ? (
           <Signal

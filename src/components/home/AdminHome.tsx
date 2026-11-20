@@ -30,6 +30,8 @@ import { CAMPAIGN_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCompanyGoals, listCycleOmissions, listCycleReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
+import { windowRange } from "../../lib/gsr/onDemand.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listRecentSops, listSops } from "../../services/sops.ts";
 import { listResources } from "../../services/resources.ts";
@@ -57,6 +59,7 @@ export default function AdminHome() {
   const showManualFinancials = company!.manual_financials;
   const year = new Date().getFullYear();
   const links = useHomeLinks(company!);
+  const onDemand = company!.gsr_mode === "on_demand";
 
   const state = useAsync(async () => {
     const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own, omissions] = await Promise.all([
@@ -107,8 +110,11 @@ export default function AdminHome() {
     const month = latestResultMonth(entries, today);
     const cycle = monthCycle(cycles, month);
     const monthReviews = cycle ? await listCycleReviews(cycle.id) : [];
-    return { divisions, metrics, entries, month, cycle, monthReviews };
-  }, [companyId, allowed, viewKey]);
+    // A company whose GSRs are on demand: the GSRs done in the strip's month, which it counts instead.
+    const range = windowRange("month", month);
+    const monthGsrs = onDemand ? { rows: await listGsrsForLog(companyId, range), range } : undefined;
+    return { divisions, metrics, entries, month, cycle, monthReviews, monthGsrs };
+  }, [companyId, allowed, viewKey, onDemand]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
@@ -129,7 +135,7 @@ export default function AdminHome() {
   const activeScope = splitData && (scope === COMBINED || splitData.divisions.some((d) => d.id === scope)) ? scope : COMBINED;
   const people = peopleInScope(everyone, activeScope);
   const compare = splitData
-    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions, combinedLabel })
+    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions, combinedLabel, ...(splitData.monthGsrs ? { gsrs: splitData.monthGsrs } : {}) })
     : [];
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like

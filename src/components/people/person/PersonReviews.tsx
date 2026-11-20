@@ -2,7 +2,8 @@
 // before each review, frozen into the review at sign-off), their deliverables for the year, their
 // review history, and the latest scored review. Ratings and their notes stay live controls for an
 // admin and read only for a manager. Every number here comes from the scoring engine, never from
-// arithmetic of its own.
+// arithmetic of its own. In a company whose GSRs are on demand (0047), the line under the impact
+// score reads the GSRs done inside the open scored review's period instead of its locked months.
 import { Link } from "react-router-dom";
 import Badge from "../../ui/Badge.tsx";
 import BlurInput from "../../ui/BlurInput.tsx";
@@ -20,9 +21,34 @@ import { scoreProfile } from "../../../lib/gsr/scoring.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../../lib/gsr/history.ts";
 import { reviewPath, scoredCycleInPlay } from "../../../lib/gsr/cycles.ts";
 import { scoreGsrMonths } from "../../../lib/gsr/goals.ts";
-import { formatPeriod } from "../../../lib/format.ts";
-import { REVIEW_STATUS_LABELS } from "../../../types/database.ts";
+import { scoreGsrsInPeriod } from "../../../lib/gsr/onDemand.ts";
+import { lineItemPercent } from "../../../lib/gsr/scoring.ts";
+import { formatPeriod, pluralize } from "../../../lib/format.ts";
+import { useAsync } from "../../../hooks/useAsync.ts";
+import { listPersonGsrs } from "../../../services/gsrOnDemand.ts";
+import { REVIEW_STATUS_LABELS, type ReviewCycle } from "../../../types/database.ts";
 import type { PersonTabProps } from "../../../pages/people/personTabs.ts";
+
+// For a company on demand: where the person's GSRs done inside the open scored review's period
+// stand, the figure that review signs off (scoreGsrsInPeriod). A GSR still open is never applied.
+function GsrPeriodLine({ companyId, personId, cycle }: { companyId: string; personId: string; cycle: ReviewCycle }) {
+  const state = useAsync(() => listPersonGsrs(companyId, personId), [companyId, personId]);
+  if (!state.data) return null;
+  const figure = scoreGsrsInPeriod(cycle, state.data);
+  const counted = figure.gsrs.filter((g) => g.counted).length;
+  const percent = lineItemPercent(figure);
+  return (
+    <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-3 text-sm">
+      <div className="min-w-0">
+        <p className="text-ink-2">GSRs, {cycle.name}</p>
+        <p className="text-[12px] text-ink-3">
+          {counted === 0 ? "Counts once a GSR is marked done." : `${pluralize(counted, "GSR")} done so far; written into the review when it is signed off.`}
+        </p>
+      </div>
+      <span className="tnum text-ink">{percent === null ? "-" : `${percent}%`}</span>
+    </div>
+  );
+}
 
 export default function PersonReviews({
   companyId,
@@ -33,7 +59,8 @@ export default function PersonReviews({
   // Writes one criterion's rating or note through the page's queue for it.
   writeImpact: (criterionId: string, change: { rating?: number; note?: string | null }) => Promise<boolean>;
 }) {
-  const { profile: me, isAdmin } = useHub();
+  const { profile: me, isAdmin, company } = useHub();
+  const onDemand = company?.gsr_mode === "on_demand";
   const { reviews, cycles, pillars, criteria, impact, scores, goals, omittedCycleIds } = data;
   const year = new Date().getFullYear();
   const self = person.id === me.id;
@@ -41,7 +68,7 @@ export default function PersonReviews({
   // stand. The same scored cycle the person's own dashboard reads, found among scored cycles first.
   const gsrPillar = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active) ?? null;
   const scoredCycle = scoredCycleInPlay(cycles);
-  const gsrQuarter = gsrPillar && scoredCycle ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
+  const gsrQuarter = gsrPillar && scoredCycle && !onDemand ? scoreGsrMonths(scoredCycle, cycles, goals, reviews, gsrPillar.required_goals, omittedCycleIds) : null;
 
   const rows = reviewHistory(reviews, cycles, pillars, scores);
   // The newest review and the newest scored review are different rows once a monthly Goal
@@ -154,6 +181,7 @@ export default function PersonReviews({
             })}
           </div>
           {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
+          {onDemand && gsrPillar && scoredCycle ? <GsrPeriodLine companyId={companyId} personId={person.id} cycle={scoredCycle} /> : null}
         </Section>
       ) : null}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
