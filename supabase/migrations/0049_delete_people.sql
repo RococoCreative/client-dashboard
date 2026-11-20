@@ -17,11 +17,12 @@
 --   3. The block list. private.blocked_signups holds the addresses of people deleted after they
 --      signed in. Nobody signed in reads or writes it; only the functions below do.
 --   4. The sign-in goes. After a person who had signed in is deleted, their address goes on the
---      block list and their auth.users row is deleted, so their account and sessions go with it.
---      profiles.user_id is on delete set null (0013) and the profile row is already gone, so the
---      account delete reaches nothing back in profiles and cannot loop.
+--      block list, any invitation still waiting for it in their own company is deleted (so the
+--      company can invite them again), and their auth.users row is deleted, so their account and
+--      sessions go with it. profiles.user_id is on delete set null (0013) and the profile row is
+--      already gone, so the account delete reaches nothing back in profiles and cannot loop.
 --   5. The gate. restrict_signups (0002) refuses a blocked address unless it has a pending
---      invitation. Every other branch and message is as 0002 wrote it.
+--      invitation made after the block. Every other branch and message is as 0002 wrote it.
 --   6. Coming back. handle_new_user (0028) lifts the block once the address signs in through a
 --      pending invitation. Nothing else in it changes.
 --   7. Letting the cascade through. Some guards refused the cascade, and some stamps put back a
@@ -137,7 +138,8 @@ revoke all on table private.blocked_signups from public, anon, authenticated;
 -- 4. The sign-in goes
 -- ---------------------------------------------------------------------------------------
 -- Runs after the delete, once the cascades are done. Both the profile's address and the account's
--- (they match unless the account's address was changed by hand) go on the list. Deleting the
+-- (they match unless the account's address was changed by hand) go on the list, and any pending
+-- invitation for either in the person's own company goes. Deleting the
 -- auth.users row takes the person's sessions and identities with it on Supabase.
 create or replace function private.remove_deleted_account()
 returns trigger
@@ -161,6 +163,15 @@ begin
     set company_id = excluded.company_id,
         blocked_at = now(),
         blocked_by = excluded.blocked_by;
+
+  -- A pending invitation for the address in the person's own company would only stand in the way:
+  -- it was made before the block, so it no longer opens the gate, and it holds the company's one
+  -- invitation for the address, so inviting them again would be refused. Other companies' rows are
+  -- theirs to keep. Invitations have no delete guard; their audit trigger records these.
+  delete from public.invitations i
+   where i.company_id = old.company_id
+     and i.accepted_at is null
+     and i.email in (lower(trim(old.email)), v_account_email);
 
   delete from auth.users where id = old.user_id;
   return old;

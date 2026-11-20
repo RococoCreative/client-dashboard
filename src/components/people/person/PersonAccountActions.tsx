@@ -110,10 +110,10 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
   // deleteStaffProfile throws when nothing went (they signed in meanwhile, or the database refused),
   // so the dialog stays open on the reason instead of closing as if they were gone.
   async function remove() {
+    if (hasHistory && !nameMatches) return;
     setBusy(true);
     setDialogError("");
     try {
-      if (hasHistory && !nameMatches) return;
       await deleteStaffProfile(person.id);
       navigate("/people");
     } catch (err) {

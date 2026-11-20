@@ -229,11 +229,18 @@ create table tests.gone as
 select p.id, p.user_id, lower(p.email) as email from public.profiles p where p.id = tests.id('d_emp');
 grant select on tests.gone to authenticated;
 
--- An invitation for the employee's address made while they are still here (an admin can invite an
--- address by itself), dated two minutes back. It must not open the gate once they are deleted.
+-- Invitations for the employee's address made while they are still here, dated two minutes back:
+-- one by rba's admin (an admin can invite an address by itself), which the delete clears, and one
+-- in kingdom by Rococo (only Rococo invites an address on another company's domain), which is
+-- kingdom's to keep and must not open the gate once they are deleted.
 select tests.act_as(tests.id('d_admin'));
 insert into public.invitations (company_id, email, role)
 values (tests.company('rba'), (select email from tests.gone where id = tests.id('d_emp')), 'employee');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('rococo'));
+insert into public.invitations (company_id, email, role)
+values (tests.company('kingdom'), (select email from tests.gone where id = tests.id('d_emp')), 'employee');
 reset role;
 select set_config('request.jwt.claims', '', true);
 update public.invitations set created_at = now() - interval '2 minutes'
@@ -446,12 +453,22 @@ select tests.assert(
   'sql_editor_deletes_and_blocks: the address was not blocked, or the account stayed'
 );
 
--- case: gate_refuses_deleted_address
--- The invitation made before the delete is still pending, and still does not open the gate.
+-- case: deleted_persons_waiting_invitation_cleared
+-- The delete cleared rba's invitation and left kingdom's.
 select tests.assert(
-  (select count(*) from public.invitations
-    where email = (select email from tests.gone where id = tests.id('d_emp')) and accepted_at is null) = 1
-  and tests.ask_gate((select email from tests.gone where id = tests.id('d_emp')))
+  not exists (select 1 from public.invitations
+               where email = (select email from tests.gone where id = tests.id('d_emp'))
+                 and company_id = tests.company('rba'))
+  and (select count(*) from public.invitations
+        where email = (select email from tests.gone where id = tests.id('d_emp'))
+          and company_id = tests.company('kingdom') and accepted_at is null) = 1,
+  'deleted_persons_waiting_invitation_cleared: rba''s invitation stayed, or kingdom''s went'
+);
+
+-- case: gate_refuses_deleted_address
+-- Kingdom's invitation, made before the delete, is still pending and does not open the gate.
+select tests.assert(
+  tests.ask_gate((select email from tests.gone where id = tests.id('d_emp')))
     = 'This address was removed from the hub. Ask an owner or admin to invite you again.',
   'gate_refuses_deleted_address: the gate admitted a deleted address, or an invitation made before the delete opened it'
 );
@@ -474,9 +491,8 @@ select tests.assert(
 );
 
 -- case: gate_admits_with_invitation
--- The admin clears the stale invitation and invites the address again, after the block.
+-- The admin invites the address again, after the block, with nothing in the way.
 select tests.act_as(tests.id('d_admin'));
-delete from public.invitations where email = (select email from tests.gone where id = tests.id('d_emp'));
 insert into public.invitations (company_id, email, role)
 values (tests.company('rba'), (select email from tests.gone where id = tests.id('d_emp')), 'employee');
 reset role;
@@ -499,7 +515,8 @@ select tests.assert(
   'invitation_sign_in_lifts_block: the block stayed'
 );
 select tests.assert(
-  (select accepted_at is not null from public.invitations where email = (select email from tests.gone where id = tests.id('d_emp'))),
+  (select accepted_at is not null from public.invitations
+    where email = (select email from tests.gone where id = tests.id('d_emp')) and company_id = tests.company('rba')),
   'invitation_sign_in_lifts_block: the invitation was not settled'
 );
 
