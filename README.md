@@ -196,15 +196,20 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   refusals for a signed-in person, the private block list `private.blocked_signups`, a trigger that
   blocks the address and deletes the person's `auth.users` row, the signup gate refusing a blocked
   address without a pending invitation, and `handle_new_user` lifting the block at an invited
-  sign-in. It also lets the cascade through guards and stamps that refused or undid it (goals and
-  notes in a closed or locked month, a note's author, who created a project, who reviewed a review,
-  who entered a figure). It redefines functions from `0002`, `0021`, `0026`, `0028`, `0033`,
-  `0035` and `0047`; if any of those is pasted again after `0049`, paste `0049` straight after it.
-  Before applying, check that nothing outside Supabase's own auth tables points at `auth.users`
-  without `on delete cascade` or `set null` (`select conrelid::regclass, confdeltype from
-  pg_constraint where confrelid = 'auth.users'::regclass`), or the account delete fails and so does
-  the whole delete. The hook needs no change in the dashboard: it is the same function. Apply it
-  before merging the app, which offers Delete person.
+  sign-in through an invitation made after the block. It also lets the cascade and the account
+  delete through guards and stamps that refused or undid them (goals and notes in a closed or
+  locked month, a note's author, who created a project, who reviewed a review, who entered a
+  figure, who sent an invitation, who created a review cycle). It redefines functions that these
+  earlier migrations also define: `0001`, `0002`, `0003`, `0009`, `0011`, `0012`, `0013`, `0014`,
+  `0021`, `0023`, `0026`, `0028`, `0029`, `0033`, `0034`, `0035`, `0038`, `0039`, `0046` and
+  `0047`. If any of them is pasted again after `0049`, paste `0049` straight after it. Before
+  applying, run two checks. `select conrelid::regclass, confdeltype from pg_constraint where
+  confrelid = 'auth.users'::regclass` must show nothing outside Supabase's own auth tables without
+  `on delete cascade` or `set null`, and `select has_table_privilege('postgres', 'auth.users',
+  'DELETE')` must be true (paste the migration as `postgres`, the SQL editor's role, so it owns the
+  trigger function). Either one failing makes every delete of a signed-in person refuse and roll
+  back. The hook needs no change in the dashboard: it is the same function. Apply it before merging
+  the app, which offers Delete person.
 - **Next free number:** `0050`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
@@ -277,7 +282,11 @@ columns on the company, and each defaults to what every company has today.
 - **Deleted, then invited again:** a person deleted after signing in is on a private block list,
   and the signup gate refuses their address, even on a company domain, with "This address was
   removed from the hub. Ask an owner or admin to invite you again." A pending invitation opens the
-  gate as it does for any personal address, and signing in through it lifts the block (0049).
+  gate as it does for any personal address, and signing in through it lifts the block (0049). An
+  invitation made before the delete does not count. A deleted Rococo admin cannot come back this
+  way (an invitation would place them in a company with its role), so Rococo lifts their block in
+  the SQL editor, `delete from private.blocked_signups where email = '...'`, and they sign in
+  again as Rococo staff.
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
   compensation and deliverables with them and leaves their months with the old company. Their
   ratings start over in the new company, since criteria are each company's own, and their
@@ -304,9 +313,11 @@ invitation stands anyway and its sign-in link is copied to the clipboard instead
 invitation keeps Copy link and Email again on its row until the person signs in.
 
 Deleting goes further than deactivating. Someone who never signed in is removed with Remove on
-their Setup tab, as before. Someone who has signed in gets Delete person there instead, offered to
-an owner or admin who manages them and to Rococo, never on yourself, on someone ranked above you or
-on a Rococo admin's profile (0049). It deletes everything on their profile: reviews and scores,
+their Setup tab; when the page has loaded reviews, GSRs or goals for them, Remove asks for their
+full name typed first, since it deletes those too, closed and locked months included. Someone who
+has signed in gets Delete person there instead, offered to an owner or admin who manages them and
+to Rococo, never on yourself, on someone ranked above you or on a Rococo admin's profile, and to an
+admin who sees only some divisions only for people ranked below them (0049). It deletes everything on their profile: reviews and scores,
 GSRs, goals and their notes, ratings, KPIs, compensation and deliverables. Tasks, goals, notes and
 reviews they assigned, set, wrote, completed or signed off for other people stay, without their
 name. Their sign-in is deleted with them and their address is blocked until an owner or admin

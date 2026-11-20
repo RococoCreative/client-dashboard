@@ -9,7 +9,13 @@
 // says what goes, offers Deactivate as the softer way, and holds its button until the person's
 // full name is typed exactly. It is offered to an owner or admin (or Rococo) who may change this
 // person, never on yourself, never on someone ranked above you and never on a Rococo admin's
-// profile unless you are Rococo; the database holds all of that, and the last owner, as well.
+// profile unless you are Rococo; the database holds all of that, and the last owner, as well. An
+// admin who sees only some divisions manages only the people ranked below them (0038), so a peer
+// admin is not offered to them; everyone the page shows them below their rank is in their reach.
+//
+// Remove deletes everything set up for someone who never signed in, and since 0049 that includes
+// goals and notes in a closed or locked month. So when the page has loaded any reviews, GSRs or
+// goals for them, Remove asks for their name typed the same way; with none it stays one click.
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../ui/Button.tsx";
@@ -23,7 +29,7 @@ import { listPersonGsrs } from "../../../services/gsrOnDemand.ts";
 import { deletePerson, deleteStaffProfile, type ProfilePatch } from "../../../services/profiles.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { displayName, pluralize } from "../../../lib/format.ts";
-import { canGrantRole, hasAccount, isCompanyAdminRole } from "../../../lib/people.ts";
+import { ROLE_RANK, canGrantRole, hasAccount, hasFullScope, isCompanyAdminRole } from "../../../lib/people.ts";
 import { inputClass } from "../../ui/forms.ts";
 import type { Gsr, Invitation, Profile } from "../../../types/database.ts";
 
@@ -42,6 +48,19 @@ function countsLine(counts: ProfileCounts): string {
   return `On their profile now: ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}.`;
 }
 
+// The typed confirmation both deletes use: the full name shown in its own case (the uppercase field
+// label would hide the case the match needs), and the field it is typed into.
+function TypedName({ id, name, value, disabled, onChange }: { id: string; name: string; value: string; disabled: boolean; onChange: (value: string) => void }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm text-ink-2">
+        Type <span className="font-medium text-ink">{name}</span> to confirm
+      </label>
+      <input id={id} className={inputClass} value={value} autoComplete="off" spellCheck={false} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
 export default function AccountActions({ companyId, person, counts, onPatch }: { companyId: string; person: Profile; counts?: ProfileCounts; onPatch: Patch }) {
   const { profile: me, can, company } = useHub();
   const navigate = useNavigate();
@@ -58,9 +77,15 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
   const account = hasAccount(person);
   const mayRemove = !account && canChange && !self;
   const mayDelete =
-    account && canChange && !self && (me.is_rococo_admin || isCompanyAdminRole(me.role)) && (!person.is_rococo_admin || me.is_rococo_admin);
+    account &&
+    canChange &&
+    !self &&
+    (me.is_rococo_admin || isCompanyAdminRole(me.role)) &&
+    (hasFullScope(me) || ROLE_RANK[person.role] < ROLE_RANK[me.role]) &&
+    (!person.is_rococo_admin || me.is_rococo_admin);
   const fullName = name.trim();
   const nameMatches = typed.trim() === fullName;
+  const hasHistory = counts !== undefined && counts.reviews + counts.gsrs + counts.goals > 0;
   // Invitations are read only when Remove could be offered; every other case resolves empty.
   const invitations = useAsync(() => (mayRemove ? listInvitations(companyId) : Promise.resolve([] as Invitation[])), [companyId, mayRemove]);
   const invitation = invitations.data?.find((i) => !i.accepted_at && (i.profile_id === person.id || i.email === person.email)) ?? null;
@@ -88,6 +113,7 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
     setBusy(true);
     setDialogError("");
     try {
+      if (hasHistory && !nameMatches) return;
       await deleteStaffProfile(person.id);
       navigate("/people");
     } catch (err) {
@@ -103,7 +129,7 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
     setBusy(true);
     setDialogError("");
     try {
-      await deletePerson(person.id);
+      await deletePerson(companyId, person.id);
       navigate("/people", { state: { deleted: fullName } });
     } catch (err) {
       setDialogError(errorMessage(err, "They were not deleted. Try again."));
@@ -180,12 +206,20 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
         <ConfirmDialog
           title={`Remove ${name} from the team?`}
           body={`This deletes their profile and everything set up for them, including reviews, ${can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}. It does not stop an address on one of this company's sign-in domains from signing in. To keep their history, or to keep them out, deactivate them instead.`}
-          confirmLabel="Remove"
+          confirmLabel={hasHistory ? `Remove ${first} for good` : "Remove"}
+          confirmDisabled={hasHistory && !nameMatches}
           busy={busy}
           error={dialogError}
           onConfirm={() => void remove()}
-          onCancel={() => { setRemoving(false); setDialogError(""); }}
-        />
+          onCancel={() => { setRemoving(false); setTyped(""); setDialogError(""); }}
+        >
+          {hasHistory && counts ? (
+            <>
+              <p className="text-sm text-ink">{countsLine(counts)} This cannot be undone.</p>
+              <TypedName id="remove-person-name" name={fullName} value={typed} disabled={busy} onChange={setTyped} />
+            </>
+          ) : null}
+        </ConfirmDialog>
       ) : null}
       {deleting ? (
         <ConfirmDialog
@@ -209,20 +243,7 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
               </Button>
             ) : null}
           </div>
-          <div>
-            <label htmlFor="delete-person-name" className="block text-sm text-ink-2">
-              Type <span className="font-medium text-ink">{fullName}</span> to confirm
-            </label>
-            <input
-              id="delete-person-name"
-              className={inputClass}
-              value={typed}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-              onChange={(e) => setTyped(e.target.value)}
-            />
-          </div>
+          <TypedName id="delete-person-name" name={fullName} value={typed} disabled={busy} onChange={setTyped} />
         </ConfirmDialog>
       ) : null}
     </Section>

@@ -4,9 +4,13 @@
 -- in an open month, a closed month and a locked month, notes, private steps, ratings, KPIs, pay,
 -- deliverables), the tasks they created or were given stay with the name blanked, their account
 -- goes and their address is blocked; the sign-in gate then refuses the address, admits it once a
--- pending invitation exists, and signing in through that invitation lifts the block. Deleting a
--- manager, by an admin or from the SQL editor, blanks their name on what they set, wrote,
--- created, entered and reviewed for others, even in a closed or locked month. The guard refuses
+-- pending invitation made after the block exists (one made before it does not count), and signing
+-- in through that invitation lifts the block. Deleting a manager, by an admin or from the SQL
+-- editor, blanks their name on what they set, wrote, created, entered and reviewed for others, even
+-- in a closed or locked month. Deleting someone who sent an owner invitation before being demoted,
+-- someone who sent an invitation outside a limited admin's divisions, or the creator of a GSR month
+-- in a company on demand goes through, with only the sender or creator cleared, while clearing
+-- either by hand is still refused. The guard refuses
 -- deleting yourself, a Rococo admin's profile, someone ranked above you and a company's only
 -- owner, each with its message; a manager who is not an admin, an admin of another company and an
 -- admin limited to some divisions (outside them) delete nothing; a person who never signed in is
@@ -225,6 +229,16 @@ create table tests.gone as
 select p.id, p.user_id, lower(p.email) as email from public.profiles p where p.id = tests.id('d_emp');
 grant select on tests.gone to authenticated;
 
+-- An invitation for the employee's address made while they are still here (an admin can invite an
+-- address by itself), dated two minutes back. It must not open the gate once they are deleted.
+select tests.act_as(tests.id('d_admin'));
+insert into public.invitations (company_id, email, role)
+values (tests.company('rba'), (select email from tests.gone where id = tests.id('d_emp')), 'employee');
+reset role;
+select set_config('request.jwt.claims', '', true);
+update public.invitations set created_at = now() - interval '2 minutes'
+ where email = (select email from tests.gone where id = tests.id('d_emp'));
+
 -- The employee's reviews and how many scores each employee's reviews hold, before.
 create table tests.gone_reviews as
 select r.id, (select count(*) from public.review_scores s where s.review_id = r.id) as scores
@@ -433,10 +447,20 @@ select tests.assert(
 );
 
 -- case: gate_refuses_deleted_address
+-- The invitation made before the delete is still pending, and still does not open the gate.
 select tests.assert(
-  tests.ask_gate((select email from tests.gone where id = tests.id('d_emp')))
+  (select count(*) from public.invitations
+    where email = (select email from tests.gone where id = tests.id('d_emp')) and accepted_at is null) = 1
+  and tests.ask_gate((select email from tests.gone where id = tests.id('d_emp')))
     = 'This address was removed from the hub. Ask an owner or admin to invite you again.',
-  'gate_refuses_deleted_address: the gate admitted a deleted address on the company''s domain'
+  'gate_refuses_deleted_address: the gate admitted a deleted address, or an invitation made before the delete opened it'
+);
+-- Time passes: the block is a minute old. The older invitation still does not count.
+update private.blocked_signups set blocked_at = blocked_at - interval '1 minute'
+ where email = (select email from tests.gone where id = tests.id('d_emp'));
+select tests.assert(
+  tests.ask_gate((select email from tests.gone where id = tests.id('d_emp'))) is not null,
+  'gate_refuses_deleted_address: an invitation older than the block opened the gate'
 );
 select tests.assert(
   tests.ask_gate('someone.new@' || (select domain from public.company_domains
@@ -450,14 +474,16 @@ select tests.assert(
 );
 
 -- case: gate_admits_with_invitation
+-- The admin clears the stale invitation and invites the address again, after the block.
 select tests.act_as(tests.id('d_admin'));
+delete from public.invitations where email = (select email from tests.gone where id = tests.id('d_emp'));
 insert into public.invitations (company_id, email, role)
 values (tests.company('rba'), (select email from tests.gone where id = tests.id('d_emp')), 'employee');
 reset role;
 select set_config('request.jwt.claims', '', true);
 select tests.assert(
   tests.ask_gate((select email from tests.gone where id = tests.id('d_emp'))) is null,
-  'gate_admits_with_invitation: a pending invitation did not open the gate'
+  'gate_admits_with_invitation: a pending invitation made after the block did not open the gate'
 );
 
 -- case: invitation_sign_in_lifts_block
@@ -540,4 +566,111 @@ select tests.assert(
 select tests.assert(
   (select count(*) from public.profiles where id in (tests.id('k_admin'), tests.id('k_emp'))) = 2,
   'other_companies_untouched: a kingdom person went'
+);
+
+-- case: demoted_inviter_deleted_cleanly
+-- An owner sends an owner invitation, is made an admin, and a full admin deletes them. Clearing the
+-- invitation's sender is the account delete's write, not the admin's, so it is not judged as the
+-- admin granting owner. The admin still cannot clear the sender by hand.
+select tests.create_person('d_exowner', tests.company('rba'), 'owner');
+select tests.claims_of('d_exowner');
+insert into public.invitations (company_id, email, role)
+values (tests.company('rba'), 'test.future.owner@example.test', 'owner');
+select set_config('request.jwt.claims', '', true);
+update public.profiles set role = 'admin' where id = tests.id('d_exowner');
+select tests.assert(
+  (select invited_by = tests.user_of(tests.id('d_exowner')) from public.invitations where email = 'test.future.owner@example.test'),
+  'demoted_inviter_deleted_cleanly: setup did not record the sender'
+);
+select tests.act_as(tests.id('d_admin'));
+select tests.assert_raises(
+  $q$update public.invitations set invited_by = null where email = 'test.future.owner@example.test'$q$,
+  'Only an owner or Rococo can make someone an owner.'
+);
+select tests.assert(
+  tests.rows_of(format('delete from public.profiles where id = %L', tests.id('d_exowner'))) = 1,
+  'demoted_inviter_deleted_cleanly: the delete did not reach the demoted inviter'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select invited_by is null and role = 'owner' and accepted_at is null
+     from public.invitations where email = 'test.future.owner@example.test'),
+  'demoted_inviter_deleted_cleanly: the invitation went, changed, or still names the sender'
+);
+
+-- case: limited_admin_deletes_an_inviter
+-- A former full admin, now an employee in North, invited someone on the South roster. The North
+-- admin may delete them, though the invitation is outside the divisions the North admin can see.
+select tests.create_person('d_ex_admin', tests.company('rba'), 'admin');
+update public.profiles set view_all_divisions = true where id = tests.id('d_ex_admin');
+insert into public.profiles (company_id, email, full_name, division_ids)
+values (tests.company('rba'), 'test.south.roster@example.test', 'Test South Roster', array[tests.id('div_south')]);
+select tests.claims_of('d_ex_admin');
+insert into public.invitations (company_id, email, role, profile_id)
+select tests.company('rba'), email, 'employee', id from public.profiles where email = 'test.south.roster@example.test';
+select set_config('request.jwt.claims', '', true);
+update public.profiles
+   set role = 'employee', view_all_divisions = false, division_ids = array[tests.id('div_north')]
+ where id = tests.id('d_ex_admin');
+select tests.claims_of('d_north_admin');
+select tests.assert(
+  not private.invitation_in_scope(tests.company('rba'),
+        (select id from public.profiles where email = 'test.south.roster@example.test'), 'test.south.roster@example.test'),
+  'limited_admin_deletes_an_inviter: the invitation is in the North admin''s scope, so this proves nothing'
+);
+-- Clearing the sender by hand is still the guard's to refuse. Row level security already hides
+-- this invitation from the North admin, so the guard is reached with their claims as system.
+select tests.assert_raises(
+  $q$update public.invitations set invited_by = null where email = 'test.south.roster@example.test'$q$,
+  'You can only invite people in the divisions you can see.'
+);
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('d_north_admin'));
+select tests.assert(
+  tests.rows_of(format('delete from public.profiles where id = %L', tests.id('d_ex_admin'))) = 1,
+  'limited_admin_deletes_an_inviter: the North admin could not delete the former admin'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select invited_by is null from public.invitations where email = 'test.south.roster@example.test'),
+  'limited_admin_deletes_an_inviter: the invitation went or still names the sender'
+);
+
+-- case: cycle_creator_deleted_cleanly
+-- An admin created the quarter, and a GSR month in rba after it moved to GSRs on demand (moving
+-- converts the months, so the month is put in the way the put-back does, under hub.gsr_conversion
+-- with nobody signed in: the one way a month exists in a company on demand). Deleting the creator
+-- keeps both with created_by cleared; clearing it on the month by hand is still refused.
+select tests.create_person('d_cyc', tests.company('rba'), 'admin');
+update public.profiles set view_all_divisions = true where id = tests.id('d_cyc');
+update public.review_cycles set created_by = tests.user_of(tests.id('d_cyc')) where id = tests.id('q3');
+select set_config('hub.gsr_on_demand_for', 'rba', true);
+update public.companies set gsr_mode = 'on_demand' where id = tests.company('rba');
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.review_cycles (company_id, name, cadence, period_start, period_end, created_by)
+values (tests.company('rba'), 'Test November', 'monthly', '2026-11-01', '2026-11-30', tests.user_of(tests.id('d_cyc')));
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id) select 'nov', id from public.review_cycles where name = 'Test November';
+-- Clearing the creator by hand is still the guard's to refuse, reached with the admin's claims as
+-- system (row level security may hide a month in a company on demand).
+select tests.claims_of('d_admin');
+select tests.assert_raises(
+  format('update public.review_cycles set created_by = null where id = %L', tests.id('nov')),
+  'This company has GSRs on demand, so it opens no GSR months.'
+);
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('d_admin'));
+select tests.assert(
+  tests.rows_of(format('delete from public.profiles where id = %L', tests.id('d_cyc'))) = 1,
+  'cycle_creator_deleted_cleanly: the delete did not reach the cycles'' creator'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select count(*) from public.review_cycles
+    where id in (tests.id('q3'), tests.id('nov')) and created_by is null) = 2
+  and (select kind = 'gsr' and name = 'Test November' from public.review_cycles where id = tests.id('nov')),
+  'cycle_creator_deleted_cleanly: a cycle went, changed, or still names its creator'
 );

@@ -32,6 +32,13 @@
 --      note's author), stamp_actor (who created or last edited a project, milestone, win, sync
 --      source, link or focus topic), guard_review_employee_fields (who reviewed a review, from the
 --      SQL editor) and stamp_metric_entry (who entered a figure).
+--   8. Letting the account delete through. Deleting the auth.users row (4) clears the columns that
+--      point at the account: invitations.invited_by and review_cycles.created_by. Three guards
+--      judged that clearing as an edit by whoever deleted the person, and could refuse it, which
+--      failed the whole delete with a message about something else: guard_invitation_role (an
+--      owner invitation sent by someone who is now an admin), guard_invitation_scope (a limited
+--      admin) and guard_review_cycle_period (a GSR month in a company on demand). Each lets that
+--      one write through, and only when the account is gone and nothing else on the row changed.
 --
 -- Idempotent: safe to paste again.
 
@@ -169,8 +176,10 @@ create trigger profiles_remove_account
 -- ---------------------------------------------------------------------------------------
 -- 5. The gate
 -- ---------------------------------------------------------------------------------------
--- The 0002 body with the block check added first. A pending invitation opens the gate for a
--- blocked address, as it does for any personal address; signing in through it lifts the block (6).
+-- The 0002 body with the block check added first. A pending invitation made after the block opens
+-- the gate for a blocked address, as any pending invitation does for a personal address; signing
+-- in through it lifts the block (6). One made before the block (an admin could invite a signed-in
+-- person's address by itself) does not, so the block holds until someone invites them again.
 create or replace function public.restrict_signups(event jsonb)
 returns jsonb
 language plpgsql
@@ -183,8 +192,14 @@ declare
   v_email  text := lower(trim(coalesce(event -> 'user' ->> 'email', '')));
   v_domain text := split_part(lower(trim(coalesce(event -> 'user' ->> 'email', ''))), '@', 2);
 begin
-  if exists (select 1 from private.blocked_signups b where b.email = v_email)
-     and not exists (select 1 from public.invitations i where i.email = v_email and i.accepted_at is null)
+  if exists (
+       select 1 from private.blocked_signups b
+        where b.email = v_email
+          and not exists (
+            select 1 from public.invitations i
+             where i.email = v_email and i.accepted_at is null and i.created_at > b.blocked_at
+          )
+     )
   then
     return jsonb_build_object('error', jsonb_build_object(
       'http_code', 403,
@@ -743,3 +758,116 @@ begin
 end;
 $$;
 revoke execute on function public.stamp_metric_entry() from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------------------
+-- 8. Letting the account delete through
+-- ---------------------------------------------------------------------------------------
+-- Each pass is the same shape: an update that clears the column pointing at an account, where that
+-- account no longer exists and nothing else on the row changed (updated_at aside), is the foreign
+-- key clearing a deleted person, never a writer's edit. A signed-in writer cannot meet it on
+-- purpose: the account still exists for any address they could name, so clearing the column by
+-- hand is judged as before.
+
+-- The 0033 body with that pass first.
+create or replace function public.guard_invitation_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- 0049: the account that sent it is being deleted.
+  if tg_op = 'UPDATE'
+     and new.invited_by is null
+     and old.invited_by is not null
+     and not exists (select 1 from auth.users u where u.id = old.invited_by)
+     and (to_jsonb(new) - '{invited_by,updated_at}'::text[])
+         = (to_jsonb(old) - '{invited_by,updated_at}'::text[]) then
+    return new;
+  end if;
+  if auth.uid() is null or private.is_rococo_admin() then
+    return new;
+  end if;
+  if new.role = 'owner' and not private.is_company_owner() then
+    raise exception 'Only an owner or Rococo can make someone an owner.';
+  end if;
+  if private.role_rank(new.role) > private.auth_role_rank() then
+    raise exception 'You cannot grant a role above your own.';
+  end if;
+  if new.accepted_at is null
+     and exists (
+       select 1 from public.profiles p
+        where p.user_id is null
+          and (p.company_id = new.company_id or p.company_id is null)
+          and (p.id = new.profile_id
+               or (new.profile_id is null and lower(p.email) = lower(new.email)))
+          and private.role_rank(p.role) > private.auth_role_rank()
+     ) then
+    raise exception 'You cannot invite someone ranked above you.';
+  end if;
+  if tg_op = 'UPDATE' and private.role_rank(old.role) > private.auth_role_rank() then
+    raise exception 'You cannot change an invitation for someone ranked above you.';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_invitation_role() from public, anon, authenticated;
+
+-- The 0038 body with that pass first.
+create or replace function public.guard_invitation_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  -- 0049: the account that sent it is being deleted.
+  if tg_op = 'UPDATE'
+     and new.invited_by is null
+     and old.invited_by is not null
+     and not exists (select 1 from auth.users u where u.id = old.invited_by)
+     and (to_jsonb(new) - '{invited_by,updated_at}'::text[])
+         = (to_jsonb(old) - '{invited_by,updated_at}'::text[]) then
+    return new;
+  end if;
+  if (select auth.uid()) is null or private.is_rococo_admin() then
+    return new;
+  end if;
+  if not private.invitation_in_scope(new.company_id, new.profile_id, new.email) then
+    raise exception 'You can only invite people in the divisions you can see.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_invitation_scope() from public, anon, authenticated;
+
+-- The 0047 body with that pass after the kind line, so the kind is still set from the cadence
+-- (it cannot move here: the cadence is part of what must be unchanged).
+create or replace function public.guard_review_cycle_period()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  new.kind := case when new.cadence = 'monthly' then 'gsr' else 'review' end;
+  -- 0049: the account that created it is being deleted.
+  if tg_op = 'UPDATE'
+     and new.created_by is null
+     and old.created_by is not null
+     and not exists (select 1 from auth.users u where u.id = old.created_by)
+     and (to_jsonb(new) - '{created_by,updated_at}'::text[])
+         = (to_jsonb(old) - '{created_by,updated_at}'::text[]) then
+    return new;
+  end if;
+  if new.kind = 'gsr'
+     and private.gsr_on_demand(new.company_id)
+     and not (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
+    raise exception 'This company has GSRs on demand, so it opens no GSR months.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_review_cycle_period() from public, anon, authenticated;

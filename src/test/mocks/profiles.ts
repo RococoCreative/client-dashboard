@@ -94,14 +94,13 @@ function forgetPerson(profileId: string): void {
 }
 
 // The delete policy (an admin of the company over the people they manage, or Rococo) and then the
-// guard, in the order 0049 checks them.
-export async function deletePerson(profileId: string): Promise<void> {
-  const index = profiles.findIndex((p) => p.id === profileId);
+// guard, in the order 0049 checks them. Only a person in the company named is reached, as the
+// service filters by it.
+export async function deletePerson(companyId: string, profileId: string): Promise<void> {
+  const index = profiles.findIndex((p) => p.id === profileId && p.company_id === companyId);
   if (index === -1) throw new Error(PERSON_NOT_DELETED);
   const target = profiles[index];
-  const companyId = target.company_id;
-  const me = companyId ? personaIn(companyId) : null;
-  if (!me || !companyId) throw new Error(PERSON_NOT_DELETED);
+  const me = personaIn(companyId);
   const manages =
     me.is_rococo_admin ||
     (isCompanyAdminRole(me.role) && me.company_id === companyId && ledBy(me, peopleOf(companyId)).some((p) => p.id === target.id));
