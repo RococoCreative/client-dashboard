@@ -378,6 +378,7 @@ function build(company: Company): CompanyBundle {
     can_view_divisions: false,
     view_all_divisions: person.role === "admin",
     view_division_ids: [],
+    gsr_cadence: "monthly",
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -419,6 +420,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-current"),
       company_id: company.id,
       name: quarterly ? "Q3 2026" : "September 2026",
+      kind: spec.cadence === "monthly" ? "gsr" : "review",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-07-01" : "2026-09-01",
       period_end: quarterly ? "2026-09-30" : "2026-09-30",
@@ -433,6 +435,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-previous"),
       company_id: company.id,
       name: quarterly ? "Q2 2026" : "August 2026",
+      kind: spec.cadence === "monthly" ? "gsr" : "review",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-04-01" : "2026-08-01",
       period_end: quarterly ? "2026-06-30" : "2026-08-31",
@@ -450,6 +453,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-overlapping"),
       company_id: company.id,
       name: quarterly ? "September 2026" : "Q3 2026",
+      kind: quarterly ? "gsr" : "review",
       cadence: quarterly ? "monthly" : "quarterly",
       period_start: quarterly ? "2026-09-01" : "2026-07-01",
       period_end: "2026-09-30",
@@ -1163,6 +1167,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1188,6 +1193,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1368,6 +1374,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: EARLIER,
       updated_at: EARLIER,
     });
@@ -1468,6 +1475,7 @@ const ROCOCO: Profile = {
   can_view_divisions: false,
   view_all_divisions: false,
   view_division_ids: [],
+  gsr_cadence: "monthly",
   created_at: EARLIER,
   updated_at: EARLIER,
 };

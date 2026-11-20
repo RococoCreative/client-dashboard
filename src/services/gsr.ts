@@ -11,7 +11,7 @@ const PILLAR_COLUMNS =
   "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
 const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_order, is_active, created_at, updated_at";
 const CYCLE_COLUMNS =
-  "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
+  "id, company_id, name, kind, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
 const REVIEW_COLUMNS =
   "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, support_discussion, created_at, updated_at";
 const SCORE_COLUMNS =

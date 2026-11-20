@@ -103,7 +103,7 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 ### What is applied live
 
 Kept current by whoever pastes a migration, so the next session knows where it stands. Live
-project `jjdcejevdqpwuastsmpq`, as of 2026-11-19:
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
@@ -166,8 +166,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-19:
     `create table if not exists`, so the check `0045` rebuilt stays. Paste `0045` after it.
   - `0026` and `0030` touch nothing `0043` or `0044` creates (the milestone status column, its
     check and trigger, `milestone_templates` and the trigger that copies it onto new projects).
+- **Applied 2026-11-20:** `0046_gsr_rhythms`. It adds `review_cycles.kind` (a Goal Setting
+  Review period or a scored review) and `profiles.gsr_cadence` (the rhythm a person's Goal
+  Setting Review runs at, monthly by default), with the guards and function bodies that read
+  them. Every company is on the defaults, so nothing visible changed, and no screen reads
+  either column yet.
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Next free number:** `0046`.
+- **Next free number:** `0047`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.

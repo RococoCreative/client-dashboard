@@ -113,7 +113,7 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
 }
 export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
-  const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), ...input };
+  const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), kind: input.cadence === "monthly" ? "gsr" : "review", ...input };
   cycles.push(created);
   return created;
 }

@@ -119,6 +119,8 @@ export interface Profile {
   // owner or Rococo sets these; owners always see everyone.
   view_all_divisions: boolean;
   view_division_ids: string[];
+  // The rhythm their Goal Setting Review runs at (0046). Nothing reads it yet.
+  gsr_cadence: GsrCadence;
   created_at: string;
   updated_at: string;
 }
@@ -335,12 +337,17 @@ export interface GsrCriterion {
 }
 
 export type Cadence = "monthly" | "quarterly" | "annual" | "custom";
+// The rhythms a person's Goal Setting Review can run at (profiles.gsr_cadence, 0046).
+export type GsrCadence = "weekly" | "biweekly" | "monthly" | "quarterly";
+// What a cycle is for: a Goal Setting Review period or a scored review (review_cycles.kind, 0046).
+export type CycleKind = "gsr" | "review";
 export type CycleStatus = "open" | "closed";
 
 export interface ReviewCycle {
   id: string;
   company_id: string;
   name: string;
+  kind: CycleKind;
   cadence: Cadence;
   period_start: string;
   period_end: string;

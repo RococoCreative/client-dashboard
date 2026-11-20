@@ -10,7 +10,7 @@ import { requireRows } from "../lib/errors.ts";
 import type { Profile, Role } from "../types/database.ts";
 
 const COLUMNS =
-  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, division_ids, can_view_divisions, view_all_divisions, view_division_ids, created_at, updated_at";
+  "id, user_id, email, full_name, title, company_id, role, is_rococo_admin, is_active, hire_date, phone, department, reports_to, job_role_id, division_id, division_ids, can_view_divisions, view_all_divisions, view_division_ids, gsr_cadence, created_at, updated_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const { data: userData, error: userError } = await db().auth.getUser();
