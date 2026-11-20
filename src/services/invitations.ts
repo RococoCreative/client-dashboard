@@ -1,15 +1,17 @@
-// Data layer for invitations. An invitation is a row, not an email: no server here holds
-// the service-role key that Supabase's invite mailer needs, so the admin sends the person
-// the sign-in link (inviteLink) and the signup gate lets that address through. When the
-// person signs in, handle_new_user claims the unclaimed roster profile at that address (an
+// Data layer for invitations. An invitation is a row: creating it is what lets the address past
+// the signup gate. Its email now goes out through the notify Edge Function (emailInvitation), which
+// holds the Resend key; the browser never sends mail and never holds that key. The sign-in link
+// (inviteLink) stays as a fallback the admin can copy and pass on when an email does not go. When
+// the person signs in, handle_new_user claims the unclaimed roster profile at that address (an
 // invitation's profile_id only ranks which invitation is settled, never picks the row), stamps
 // accepted_at, and withdraws other companies' pending invitations for the address.
 import { db } from "./supabase.ts";
 import { requireRows } from "../lib/errors.ts";
 import { appOrigin } from "../lib/appUrl.ts";
+import { invokeFunction } from "./invoke.ts";
 import type { Invitation, Role } from "../types/database.ts";
 
-const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at";
+const COLUMNS = "id, company_id, email, role, title, profile_id, invited_by, created_at, accepted_at, last_emailed_at";
 
 export async function listInvitations(companyId: string): Promise<Invitation[]> {
   const { data, error } = await db()
@@ -66,6 +68,14 @@ export async function deleteInvitation(id: string): Promise<void> {
   const { data, error } = await db().from("invitations").delete().eq("id", id).select("id");
   if (error) throw error;
   requireRows(data);
+}
+
+// Asks the notify function to email the invitation. It decides who may have it sent, and refuses
+// an invitation already accepted, an address that is not one plain address, an inactive person, or
+// a second email within 10 minutes, answering { sent: false, reason }; anything that stops the send
+// throws with the function's own line. Pressing it again after the pause resends.
+export async function emailInvitation(invitationId: string): Promise<{ sent: boolean; reason?: string }> {
+  return invokeFunction<{ sent: boolean; reason?: string }>("notify", { invitation_id: invitationId });
 }
 
 // The login screen reads ?email= and pre-fills the field, so this link is all a new

@@ -2,8 +2,10 @@
 // same thing as an account: an admin adds someone, fills in their profile, and sends the invite
 // whenever the company is ready for them. Each row says where the person works, who they report
 // to, their role and which state they are in, and carries the one action that moves them along.
-// Inviting is still a row plus a link, because the hub holds no mail-sending key, so the admin
-// shares the sign-in link and the signup gate lets that address through.
+// Send invite creates the invitation row, which lets that address past the signup gate, and then
+// asks the notify function to email it; the hub itself holds no mail-sending key. The invitation
+// never depends on the email: when the email does not go out, the row still reads Invited, the link
+// is copied so the admin can pass it on, and Email again tries once more.
 //
 // The list is whatever the database shows the viewer (0038): the whole company for an owner, a
 // full-scope admin or Rococo; their divisions, their chain and everyone unplaced for any other
@@ -12,7 +14,8 @@
 // no adding, no invitations (those are admin-only in the database too), no row actions, and the
 // role as plain text.
 //
-// A row carries the invitation actions only: Send invite, Copy link and cancelling an invitation.
+// A row carries the invitation actions only: Send invite, then Copy link, Email again and cancelling
+// an invitation.
 // Deactivate, Reactivate and Remove live on the person's Setup tab, with the same rules. A Rococo
 // admin placed with the company shows on the roster too, but their role and access are Rococo's to
 // manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
@@ -44,7 +47,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { listDivisions } from "../../services/divisions.ts";
 import { createStaffProfile, listCompanyProfiles } from "../../services/profiles.ts";
-import { createInvitation, deleteInvitation, inviteLink, listInvitations } from "../../services/invitations.ts";
+import { createInvitation, deleteInvitation, emailInvitation, inviteLink, listInvitations } from "../../services/invitations.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
@@ -145,7 +148,7 @@ function AddStaffDialog({
       <form onSubmit={handleSubmit} className="p-6">
         <h2 id="add-staff-title" className="font-display text-lg text-heading">Add someone to the team</h2>
         <p className="mt-1 text-[13px] text-ink-2">
-          This sets up their profile only. Nothing is sent. Invite them whenever the company is ready.
+          This sets up their profile only. Nothing is sent until you invite them, whenever the company is ready.
         </p>
         <div className="mt-5 space-y-4">
           <Field label="Name" htmlFor="staff-name">
@@ -224,6 +227,14 @@ export default function PeoplePage() {
   const [adding, setAdding] = useState(false);
   const [cancelling, setCancelling] = useState<{ person: Profile; invitation: Invitation } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // The person whose invitation is being created, and the invitation whose email is on its way, so
+  // a second press does nothing and the row can say Sending.
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [emailing, setEmailing] = useState<string | null>(null);
+  // One invitation action at a time, so two sends never race for the line below the header.
+  const inviteBusy = inviting !== null || emailing !== null;
+  // What the last invitation email came to: emailed, or ready with its link copied instead.
+  const [emailLine, setEmailLine] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // The cancel dialog reports only its own failure. Sharing `error` with the row actions meant it
@@ -341,21 +352,63 @@ export default function PeoplePage() {
     }
   }
 
-  async function sendInvite(person: Profile) {
-    setError("");
+  // Emails a waiting invitation through the notify function. The invitation stands whatever the
+  // email does: when it does not go out, the link is copied instead and the line says why.
+  async function emailIt(invitation: Invitation) {
+    if (inviteBusy) return;
+    setEmailing(invitation.id);
+    setEmailLine(null);
+    let reason: string | null = null;
     try {
-      const created = await createInvitation({
+      const result = await emailInvitation(invitation.id);
+      if (result?.sent !== true) reason = result?.reason || "the email service did not send it";
+    } catch (err) {
+      reason = errorMessage(err);
+    }
+    if (reason === null) {
+      setEmailLine({ tone: "success", text: `Invitation emailed to ${invitation.email}.` });
+    } else {
+      const why = reason.trim().replace(/\.+$/, "");
+      let copiedIt = true;
+      try {
+        await navigator.clipboard.writeText(linkFor(invitation));
+        setCopied(invitation.id);
+        setTimeout(() => setCopied(null), 1600);
+      } catch {
+        copiedIt = false;
+      }
+      setEmailLine({
+        tone: "warning",
+        text: copiedIt
+          ? `The invitation is ready but the email did not go out: ${why}. Its link is copied, so you can send it yourself.`
+          : `The invitation is ready but the email did not go out: ${why}. Send them this link yourself: ${linkFor(invitation)}`,
+      });
+    }
+    setEmailing(null);
+  }
+
+  async function sendInvite(person: Profile) {
+    if (inviteBusy) return;
+    setError("");
+    setEmailLine(null);
+    setInviting(person.id);
+    let created: Invitation;
+    try {
+      created = await createInvitation({
         company_id: companyId,
         email: person.email,
         role: person.role,
         title: person.title,
         profile_id: person.id,
       });
-      state.setData((prev) => (prev ? { ...prev, invitations: [created, ...prev.invitations] } : prev));
-      await copyLink(created);
     } catch (err) {
       setError(errorMessage(err));
+      setInviting(null);
+      return;
     }
+    state.setData((prev) => (prev ? { ...prev, invitations: [created, ...prev.invitations] } : prev));
+    setInviting(null);
+    await emailIt(created);
   }
 
   async function handleCancelInvite() {
@@ -428,6 +481,7 @@ export default function PeoplePage() {
         }
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
+      {emailLine ? <Notice tone={emailLine.tone} className="mb-4">{emailLine.text}</Notice> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
 
       {!state.data && !state.error ? (
@@ -528,9 +582,20 @@ export default function PeoplePage() {
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (
-                                    <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
-                                      {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
-                                    </Button>
+                                    <>
+                                      <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
+                                        {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        aria-label={`Email the invitation to ${displayName(person)} again`}
+                                        disabled={inviteBusy}
+                                        onClick={() => void emailIt(invitation)}
+                                      >
+                                        <Send size={13} aria-hidden /> {emailing === invitation.id ? "Sending..." : "Email again"}
+                                      </Button>
+                                    </>
                                   ) : null}
                                   <Button variant="danger" size="sm" aria-label={`Cancel invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
                                     Cancel invitation
@@ -538,8 +603,14 @@ export default function PeoplePage() {
                                 </>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (
-                                <Button variant="secondary" size="sm" aria-label={`Send the invitation to ${displayName(person)}`} onClick={() => void sendInvite(person)}>
-                                  <Send size={13} aria-hidden /> Send invite
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  aria-label={`Send the invitation to ${displayName(person)}`}
+                                  disabled={inviteBusy}
+                                  onClick={() => void sendInvite(person)}
+                                >
+                                  <Send size={13} aria-hidden /> {inviting === person.id ? "Sending..." : "Send invite"}
                                 </Button>
                               ) : null}
                             </span>
@@ -561,8 +632,8 @@ export default function PeoplePage() {
             <p className="border-t border-line px-4 sm:px-6 py-3 text-[12px] text-ink-3">
               Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
               set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
-              invitation copies a sign-in link to your clipboard. Pass it on however you like; the hub does not send email.
-              Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
+              invitation emails them a link to the sign-in screen. If the email does not go out, the link is copied for you to
+              pass on, and Copy link and Email again stay on their row until they sign in. Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
               either way they take over the profile set up here rather than starting a second one. To deactivate or remove
               someone, open them and go to Setup.
             </p>

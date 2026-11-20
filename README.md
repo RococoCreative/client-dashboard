@@ -142,8 +142,12 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
-  set up yet." until all three are set. The version in this repo is live (version 4,
-  2026-11-18): it sends only for the task's creator, an owner or admin, or Rococo.
+  set up yet." until all three are set. Live is version 4 (2026-11-18), the task email only: it
+  sends only for the task's creator, an owner or admin, or Rococo. The version in this repo also
+  sends the invitation email and is not deployed yet; until it is, Send invite on the People
+  page reports that the email did not go out and copies the link instead. It needs `0048` first.
+  Redeploy it with `supabase functions deploy notify` (JWT check on, no new secrets) after
+  applying `0048` and before merging the app, and record the version here.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
   (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
@@ -181,8 +185,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `0046`. If any of them is ever pasted again after `0047`, paste `0047` straight after it.
   `0046` matters most: pasted again on its own it puts members opening cycles, the rhythm
   trigger and whole-month dates back on every company.
+- **Written, not applied yet:** `0048_invitation_emails`. It holds `invitations.email` to one
+  plain address and adds `invitations.last_emailed_at`, the invitation email's 10 minute pace,
+  which no signed-in writer can set or change. Every live invitation row already matches the
+  address check. It does not depend on `0047`. The order: apply `0048`, then deploy `notify`, then
+  merge the app (the app and the function both read `last_emailed_at`).
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Next free number:** `0048`.
+- **Next free number:** `0049`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -233,8 +242,11 @@ columns on the company, and each defaults to what every company has today.
 - **Company email:** the login screen recognizes the domain, switches to that company's
   theme, and sends a one-time link. The signup gate admits the address and the profile is
   placed in the company automatically.
-- **Personal email:** an admin creates an invitation on the People page and sends the
-  sign-in link it produces. The gate admits the invited address. On first sign-in a person
+- **Personal email:** an admin presses Send invite on the People page. That creates the
+  invitation, which the gate needs to admit the address, and the `notify` function emails it:
+  a link to the sign-in screen with the address filled in. If the email does not go out, the
+  invitation still stands and its link is copied for the admin to pass on; Email again on the
+  row tries once more. The gate admits the invited address. On first sign-in a person
   who is not on any roster yet gets the invitation's company, role, and title; a person
   already on a roster keeps that roster row's role, and its title unless the row has none.
 - **Invited by more than one company:** a person already on a company's roster takes that
@@ -269,7 +281,9 @@ Active. Any row except your own, a Rococo admin's, and one ranked above you (see
 also be deactivated, signed in or not, and then reads Inactive. An inactive person drops out of review cycles until reactivated, except
 where their review was already signed off: a cycle keeps that row, so its counts and team score
 never change after the fact. Sending an invitation creates the invitation row, points it at that
-profile, and copies a sign-in link to the clipboard; the hub sends no email.
+profile, and emails the person through the `notify` function. If the email does not go out, the
+invitation stands anyway and its sign-in link is copied to the clipboard instead. A waiting
+invitation keeps Copy link and Email again on its row until the person signs in.
 
 Signing in claims the profile that is already there rather than creating a second one, whether
 the person arrives through an invitation or through a company sign-in domain. Policies find the
@@ -844,7 +858,11 @@ place, Connect answers with a plain "not set up yet" line and nothing else chang
 
 ## The notify function
 
-`supabase/functions/notify` sends the task assignment email. The app calls
+`supabase/functions/notify` sends the hub's two emails: the task assignment email and the
+invitation email. A request carries exactly one of `{ task_id }` and `{ invitation_id }`; anything
+else is refused with a 400.
+
+**The task email.** The app calls
 `POST /functions/v1/notify` with `{ task_id }` after a task is saved with a new assignee, and it
 answers `{ sent: true }` or `{ sent: false }`. Any active, signed-in person who can see the task
 may call it; the function reads the task on the caller's own JWT, so row level security decides.
@@ -854,19 +872,40 @@ has not already been emailed about this assignment. It claims the send in one up
 one email; if Resend refuses the message, the claim is released and a later save can try again.
 Saving a task never depends on the email.
 
+**The invitation email.** The People page calls `POST /functions/v1/notify` with
+`{ invitation_id }` right after Send invite creates the invitation, and again whenever an admin
+presses Email again on a waiting one. The function reads the invitation on the caller's own JWT,
+so row level security decides whether they may see it (404 "That invitation was not found."
+otherwise). Only an owner or admin of the invitation's company, or a Rococo admin, can have it
+sent; anyone else gets `{ sent: false, reason }`. So does an invitation already accepted ("They
+have already signed in."), an address that is not one plain address ("That address cannot be
+emailed."), and a person who is inactive ("They are inactive."). It sends at most once in 10
+minutes per invitation: it claims the send in one update of `invitations.last_emailed_at` (0048),
+which no signed-in writer can change, and a second press inside the pause gets "An invitation
+email went to them in the last 10 minutes. Try again later." The email comes from the company's
+name at `TASKS_FROM_EMAIL`, says who invited them, the address to sign in with, and links to
+`{APP_URL}/?email={address}&company={slug}`, built from `APP_URL` and the invitation row only.
+Pressing Email again after the pause resends. If Resend does not accept the message, the claim is
+put back (only if it is still this send's) and the answer is a 502; the page keeps the
+invitation, copies its link, and says the email did not go out.
+Until the three secrets are set it answers "Emails are not set up yet."
+
 It is the only place the Resend key lives. It needs these secrets (Dashboard, Edge Functions,
 Secrets):
 
 - `RESEND_API_KEY`: a Resend API key with sending access, restricted to the sending domain.
 - `TASKS_FROM_EMAIL`: the sending address, `tasks@companyhub.rocococreative.io`. The sender name
   is the company's name.
-- `APP_URL`: the production address, `https://companyhub.rocococreative.io`. The task link starts
-  from it and from nothing else, so an email can only ever link to the app.
+- `APP_URL`: the production address, `https://companyhub.rocococreative.io`. The task link and
+  the invitation link start from it and from nothing else, so an email can only ever link to the
+  app.
 
-Until all three are set, the function answers "Task emails are not set up yet." and claims
+Until all three are set, the task email answers "Task emails are not set up yet." and claims
 nothing. A task that is already complete is never announced, and a send that Resend does not
-answer within ten seconds counts as a failed send. Deploy with the gateway's
-JWT check on: `supabase functions deploy notify`.
+answer within ten seconds counts as a failed send, for either email. The invitation email needs
+no new secrets, but it needs `0048` applied and the function redeployed before it goes out: apply
+`0048`, then deploy `notify`, then merge the app. Deploy with the gateway's JWT check on:
+`supabase functions deploy notify`.
 
 ## Data sources and Google setup
 

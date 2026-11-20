@@ -1216,8 +1216,8 @@ function build(company: Company): CompanyBundle {
   }
 
   const invitations: Invitation[] = [
-    { id: p("invite-1"), company_id: company.id, email: `new.hire@${spec.domain}`, role: "employee", title: "Carpenter", profile_id: p("staff-invited"), invited_by: profiles[0].id, created_at: NOW, accepted_at: null },
-    { id: p("invite-2"), company_id: company.id, email: profiles[1]?.email ?? `someone@${spec.domain}`, role: "employee", title: null, profile_id: profiles[1]?.id ?? null, invited_by: profiles[0].id, created_at: EARLIER, accepted_at: EARLIER },
+    { id: p("invite-1"), company_id: company.id, email: `new.hire@${spec.domain}`, role: "employee", title: "Carpenter", profile_id: p("staff-invited"), invited_by: profiles[0].id, created_at: NOW, accepted_at: null, last_emailed_at: null },
+    { id: p("invite-2"), company_id: company.id, email: profiles[1]?.email ?? `someone@${spec.domain}`, role: "employee", title: null, profile_id: profiles[1]?.id ?? null, invited_by: profiles[0].id, created_at: EARLIER, accepted_at: EARLIER, last_emailed_at: null },
   ];
 
   // Eight months of 2026 with a gentle upward trend, plus two quarters and last year.
