@@ -21,186 +21,30 @@
 // keeps what it is: its title, description and kind read only and it cannot be deleted, while its
 // agreed completion, action steps and notes stay theirs to work, as the database allows (0035).
 // That rule binds only the goal's own person (0039): their manager edits it like any other.
-import { useRef, useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Lock, Plus } from "lucide-react";
-import ActionSteps from "./ActionSteps.tsx";
+import { ArrowRight, Check, Plus } from "lucide-react";
+import AddGoalForm from "./AddGoalForm.tsx";
+import FocusTopicCard from "./FocusTopicCard.tsx";
+import GoalEditor, { type Standing, type TaskLinks } from "./GoalEditor.tsx";
 import GoalNotes from "./GoalNotes.tsx";
 import GoalTasks from "./GoalTasks.tsx";
 import Badge from "../ui/Badge.tsx";
 import BlurInput from "../ui/BlurInput.tsx";
 import Button from "../ui/Button.tsx";
 import ConfirmDialog from "../ui/ConfirmDialog.tsx";
-import ProgressSlider from "../ui/ProgressSlider.tsx";
 import Section from "../ui/Section.tsx";
-import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
+import { textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
 import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
-import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Profile, type Review, type ReviewCycle, type TaskWithSteps } from "../../types/database.ts";
+import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Review, type ReviewCycle } from "../../types/database.ts";
 import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
 
-type GoalPatch = Parameters<typeof updateGoal>[1];
 type NotesUpdate = (update: (notes: GoalNote[]) => GoalNote[]) => void;
-type TasksUpdate = (update: (tasks: TaskWithSteps[]) => TaskWithSteps[]) => void;
-// What a goal needs to list its tasks: the linked ones on the page, the profiles for the task form,
-// who is looking, and how to update the page's list. Absent where the company does not run tasks.
-type TaskLinks = { tasks: TaskWithSteps[]; people: Profile[]; viewerProfileId: string; onTasks: TasksUpdate };
-// Where a goal stands in a scored month: one of the mandatory GSRs, or a stretch goal.
-type Standing = "mandatory" | "stretch";
-
-// The focus topic's GSR is a working goal, never a personal one.
-const FOCUS_KINDS: GoalKind[] = ["role", "professional"];
-
-// One of this month's goals: title, kind, agreed completion, description, steps, notes.
-function GoalEditor({
-  goal,
-  notes,
-  names,
-  taskLinks,
-  standing,
-  canEdit,
-  canTick,
-  setForThem,
-  carriedFrom,
-  onChange,
-  onNotes,
-  onDelete,
-  onError,
-  onTouched,
-}: {
-  goal: Goal;
-  notes: GoalNote[];
-  names: ReadonlyMap<string, string>;
-  taskLinks: TaskLinks | null;
-  // For a company that scores its GSRs, whether the goal is mandatory or a stretch goal; null
-  // where nothing is scored.
-  standing: Standing | null;
-  canEdit: boolean;
-  canTick: boolean;
-  // Set for the person by someone else and read by that person: what the goal is stays as set.
-  setForThem: boolean;
-  carriedFrom: string | null;
-  onChange: (goal: Goal) => void;
-  onNotes: NotesUpdate;
-  onDelete: () => void;
-  onError: (message: string) => void;
-  onTouched: () => void;
-}) {
-  // Title, kind, completion, description and steps all write this one goals row, and each answer
-  // carries the whole row. Queued, the writes land in the order they were made, so a slow
-  // completion save cannot come back after a tick and put the old steps back on screen.
-  // Each save resolves whether it landed, so a field or the slider that failed goes back to what
-  // is stored and says so.
-  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
-  function save(patch: GoalPatch): Promise<boolean> {
-    const run = saveChain.current
-      .catch(() => undefined)
-      .then(async () => {
-        onChange(await updateGoal(goal.id, patch));
-        onTouched();
-      });
-    saveChain.current = run;
-    return run.then(
-      () => true,
-      (err: unknown) => {
-        onError(errorMessage(err));
-        return false;
-      },
-    );
-  }
-  const { done, total } = stepsTaken(goal);
-  // Title, kind, description and delete. Completion, steps and notes follow canEdit and canTick.
-  const canDefine = canEdit && !setForThem;
-
-  return (
-    <li className="rounded-lg border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {canDefine ? (
-            <BlurInput value={goal.title} required ariaLabel={`Title for ${goal.title}`} onSave={(next) => save({ title: next.trim() })} className={`${inputClass} mt-0 font-medium`} />
-          ) : (
-            <h3 className="text-sm font-medium text-ink">{goal.title}</h3>
-          )}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-            {canDefine ? (
-              <select value={goal.kind} aria-label={`Kind for ${goal.title}`} onChange={(e) => void save({ kind: e.target.value as GoalKind })} className={`${selectClass} mt-0 w-auto py-0.5 text-[12px]`}>
-                {(goal.is_focus ? FOCUS_KINDS : GOAL_KIND_ORDER).map((k) => (
-                  <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
-                ))}
-              </select>
-            ) : (
-              <span>{GOAL_KIND_LABELS[goal.kind]}</span>
-            )}
-            {goal.is_focus ? <Badge tone="accent">{standing ? "#1 · Focus topic GSR" : "Focus topic GSR"}</Badge> : null}
-            {carriedFrom ? (
-              <Badge tone="warning">
-                <ArrowRight size={11} aria-hidden /> Carried from {carriedFrom}
-              </Badge>
-            ) : null}
-            {standing === "mandatory" && !goal.is_focus ? <Badge tone="info">Mandatory</Badge> : standing === "stretch" ? <Badge>Stretch</Badge> : null}
-            {setForThem ? (
-              <span className="inline-flex items-center gap-1">
-                <Lock size={11} aria-hidden />
-                Set by your manager
-              </span>
-            ) : null}
-          </div>
-        </div>
-        {canDefine ? (
-          <Button variant="danger" size="sm" aria-label={`Delete ${goal.title}`} onClick={onDelete}>
-            Delete
-          </Button>
-        ) : null}
-      </div>
-
-      {/* The completion is the one figure that says how the goal landed. Either side moves it; the
-          manager has the last word, because only an admin locks the month in. Steps below are
-          checkpoints on the way and move nothing. */}
-      <div className="mt-3">
-        <p className={eyebrowClass}>Agreed completion</p>
-        <ProgressSlider className="mt-1" label={`Agreed completion for ${goal.title}`} value={goal.progress} disabled={!canTick} onCommit={(next) => save(progressPatch(next, goal.status))} />
-      </div>
-
-      {canDefine ? (
-        <BlurInput multiline rows={1} value={goal.description ?? ""} placeholder="What does success look like?" ariaLabel={`Description for ${goal.title}`} onSave={(next) => save({ description: next.trim() || null })} className={`${textareaClass} mt-3 min-h-[36px] text-[13px]`} />
-      ) : goal.description ? (
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{goal.description}</p>
-      ) : null}
-
-      <div className="mt-3">
-        <p className={`${eyebrowClass} flex items-baseline gap-2`}>
-          Action steps
-          {total > 0 ? <span className="tnum text-[12px] normal-case tracking-normal text-ink-3">{done} of {total} done</span> : null}
-        </p>
-        <ActionSteps steps={goal.action_steps} canTick={canTick} canEdit={canEdit} onChange={(steps) => save({ action_steps: steps })} />
-      </div>
-
-      {canEdit || notes.length > 0 ? (
-        <div className="mt-3">
-          <p className={eyebrowClass}>Notes</p>
-          <GoalNotes goal={goal} notes={notes} names={names} canWrite={canEdit} onNotes={onNotes} onError={onError} onSaved={onTouched} />
-        </div>
-      ) : null}
-
-      {taskLinks ? (
-        <GoalTasks
-          goal={goal}
-          tasks={taskLinks.tasks.filter((t) => t.goal_id === goal.id)}
-          people={taskLinks.people}
-          canEdit={canEdit}
-          viewerProfileId={taskLinks.viewerProfileId}
-          onTasks={taskLinks.onTasks}
-          onError={onError}
-          onSaved={onTouched}
-        />
-      ) : null}
-    </li>
-  );
-}
 
 // Last month's goal, read-only: how it landed, which steps were taken, and its notes.
 function LastMonthGoal({
@@ -301,84 +145,6 @@ function LastMonthGoal({
         </div>
       ) : null}
     </li>
-  );
-}
-
-// The month's focus topic and what it means, always on the month and there for reference, with the
-// way to set the person's #1 GSR from it. Their words make the goal, as a role or professional
-// goal; the explanation stays here rather than being copied into a goal titled after the topic.
-function FocusTopicCard({
-  cycle,
-  focusGoal,
-  canEdit,
-  isOwn,
-  onAdd,
-}: {
-  cycle: ReviewCycle;
-  focusGoal: Goal | null;
-  canEdit: boolean;
-  isOwn: boolean;
-  onAdd: (title: string, kind: GoalKind) => void;
-}) {
-  const [composing, setComposing] = useState(false);
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<GoalKind>("professional");
-  const whose = isOwn ? "your" : "their";
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const text = title.trim();
-    if (!text) return;
-    setTitle("");
-    setComposing(false);
-    onAdd(text, kind);
-  }
-  return (
-    <div className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3">
-      <p className={eyebrowClass}>Focus topic</p>
-      <p className="mt-0.5 text-sm font-medium text-ink">{cycle.theme}</p>
-      {cycle.theme_description ? <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">{cycle.theme_description}</p> : null}
-      {focusGoal ? (
-        <p className="mt-2 text-[12.5px] text-ink-3">
-          {isOwn ? "Your" : "Their"} #1 GSR for this topic: <span className="text-ink">{focusGoal.title}</span>
-        </p>
-      ) : !canEdit ? null : composing ? (
-        <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={`What will ${isOwn ? "you" : "they"} do this month on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
-          <select value={kind} aria-label="Kind for the focus topic GSR" onChange={(e) => setKind(e.target.value as GoalKind)} className={`${selectClass} mt-0 w-auto`}>
-            {FOCUS_KINDS.map((k) => (
-              <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
-            ))}
-          </select>
-          <Button type="submit" variant="secondary" disabled={!title.trim()}>
-            <Plus size={14} aria-hidden /> Add
-          </Button>
-          <Button variant="ghost" onClick={() => { setComposing(false); setTitle(""); }}>Cancel</Button>
-        </form>
-      ) : (
-        <Button variant="secondary" size="sm" className="mt-3" onClick={() => setComposing(true)}>
-          <Plus size={13} aria-hidden /> Set {whose} monthly GSR based on this focus topic
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function AddGoalForm({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => void }) {
-  const [title, setTitle] = useState("");
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const text = title.trim();
-    if (!text) return;
-    setTitle("");
-    onAdd(text);
-  }
-  return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} aria-label={placeholder} className={`${inputClass} mt-0 flex-1`} />
-      <Button type="submit" variant="secondary" disabled={!title.trim()}>
-        <Plus size={14} aria-hidden /> Add
-      </Button>
-    </form>
   );
 }
 
