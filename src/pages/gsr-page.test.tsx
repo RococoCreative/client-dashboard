@@ -43,7 +43,8 @@ import App from "../App.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import { createGoal, createPillar, deletePillar, listGoals } from "../services/gsr.ts";
 import { deleteFocusTopic, upsertFocusTopic } from "../services/focusTopics.ts";
-import { OWN_GSR_MESSAGE, listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
+import { OWN_DONE_DELETE_MESSAGE, OWN_GSR_MESSAGE, listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
+import { errorMessage } from "../lib/errors.ts";
 import { setActingPerson } from "../test/actingPerson.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
@@ -238,10 +239,22 @@ describe("one GSR's page", () => {
     expect(screen.queryByRole("textbox", { name: "What would help you do your job better?" })).not.toBeInTheDocument();
   });
 
-  it("offers an admin Delete GSR on their own GSR", async () => {
-    renderGsr(seed(alex.id), admin);
+  it("offers an admin Delete GSR on their own GSR while it is open, and not once it is done", async () => {
+    const { unmount } = renderGsr(seed(alex.id), admin);
     expect(await screen.findByRole("button", { name: "Delete GSR" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark done" })).not.toBeInTheDocument();
+    unmount();
+    renderGsr(seed(alex.id, { started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70, reviewer_id: harper.id }), admin);
+    await title(/^GSR · /);
+    expect(screen.queryByRole("button", { name: "Delete GSR" })).not.toBeInTheDocument();
+  });
+
+  it("still offers an admin Delete GSR on someone else's done GSR, and says why their own stays", async () => {
+    const done = seed(rowan.id, { started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70, reviewer_id: alex.id });
+    renderGsr(done, admin);
+    expect(await screen.findByRole("button", { name: "Delete GSR" })).toBeInTheDocument();
+    // The database's refusal of one's own done GSR reads as written, never as a raw error.
+    expect(errorMessage(new Error(OWN_DONE_DELETE_MESSAGE))).toBe("Your own GSR stays once it is done. Someone who leads you can delete it.");
   });
 
   it("lets an admin delete a GSR after a confirm, and offers it to nobody else", async () => {

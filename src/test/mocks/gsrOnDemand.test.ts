@@ -17,6 +17,7 @@ import { renderWithHub } from "../renderWithHub.tsx";
 import { getCompany } from "./companies.ts";
 import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote, updateReview } from "./gsr.ts";
 import {
+  OWN_DONE_DELETE_MESSAGE,
   OWN_GSR_MESSAGE,
   deleteGsr,
   getGsr,
@@ -230,6 +231,37 @@ describe("GSRs on demand mock", () => {
     await expect(startGsr(rba, kai)).rejects.toThrow("GSRs on demand are not turned on for this company.");
     actAs(admin);
     await expect(startGsr(rba, noor)).rejects.toThrow("GSRs on demand are not turned on for this company.");
+  });
+
+  it("keeps a done GSR from its own person's delete, whatever their role, as 0047 does", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const open = seedMockGsr({ company_id: rba, employee_id: admin, started_on: "2026-09-08", status: "in_progress" });
+    const done = seedMockGsr({ company_id: rba, employee_id: admin, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
+    const reportsDone = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 60 });
+    actAs(admin);
+    await expect(deleteGsr(done.id)).rejects.toThrow(OWN_DONE_DELETE_MESSAGE);
+    expect(OWN_DONE_DELETE_MESSAGE).toBe("Your own GSR stays once it is done. Someone who leads you can delete it.");
+    await deleteGsr(open.id);
+    await deleteGsr(reportsDone.id);
+    expect((await listPersonGsrs(rba, admin)).map((g) => g.id)).toEqual([done.id]);
+    expect(await listPersonGsrs(rba, jamie)).toEqual([]);
+  });
+
+  it("records who is acting as the one who marked a GSR done, whatever id is sent", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const gsr = seedMockGsr({ company_id: rba, employee_id: kai, started_on: "2026-09-08", status: "in_progress" });
+    actAs(harper);
+    expect((await markGsrDone(gsr.id, 70, admin)).reviewer_id).toBe(harper);
+    expect((await getGsr(gsr.id)).reviewer_id).toBe(harper);
+  });
+
+  it("refuses marking a done GSR done again, as the database does", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    actAs(admin);
+    const done = await markGsrDone(gsr.id, 70, admin);
+    await expect(markGsrDone(gsr.id, 95, admin)).rejects.toThrow("This review is signed off. Reopen it to change it.");
+    expect(await getGsr(gsr.id)).toMatchObject({ status: "complete", gsr_score: 70, completed_at: done.completed_at });
   });
 
   it("lets only an admin and the person write a GSR's opening discussion, and freezes a done one", async () => {

@@ -26,6 +26,9 @@ import { companyOf, peopleOf } from "./profiles.ts";
 
 export const TWO_OPEN_MESSAGE = "This person already has two GSRs open. Mark the earlier one done first.";
 export const OWN_GSR_MESSAGE = "Your own GSR is marked done and reopened by someone who leads you.";
+export const OWN_DONE_DELETE_MESSAGE = "Your own GSR stays once it is done. Someone who leads you can delete it.";
+// guard_signed_off_review (0029, 0047): a done GSR takes no second Mark done.
+const SIGNED_OFF_MESSAGE = "This review is signed off. Reopen it to change it.";
 const WALL_MESSAGE = "GSRs on demand are not turned on for this company.";
 // What the client surfaces for an insert no policy admits.
 const INSERT_REFUSED = 'new row violates row-level security policy for table "reviews"';
@@ -192,10 +195,13 @@ export async function startGsr(companyId: string, employeeId: string): Promise<{
   return { gsr: newest, atLimit };
 }
 
+// As the database: a done GSR is signed off, so marking it done again is refused; and who marked
+// it done is the acting person, whatever id the caller sends (stamp_standalone_gsr, 0047).
 export async function markGsrDone(id: string, score: number | null, reviewerId: string): Promise<Gsr> {
+  void reviewerId;
   const { index, gsr } = closable(id);
-  const doneOn = gsr.status === "complete" ? gsr.done_on : today(gsr.company_id);
-  return replace(index, { status: "complete", completed_at: now(), gsr_score: score, reviewer_id: reviewerId, done_on: doneOn });
+  if (gsr.status === "complete") throw new Error(SIGNED_OFF_MESSAGE);
+  return replace(index, { status: "complete", completed_at: now(), gsr_score: score, reviewer_id: personaIn(gsr.company_id).id, done_on: today(gsr.company_id) });
 }
 
 // The database clears done_on and lets the score go on reopen (0023, 0047).
@@ -204,10 +210,13 @@ export async function reopenGsr(id: string): Promise<Gsr> {
   return replace(index, { status: "in_progress", completed_at: null, gsr_score: null, done_on: null });
 }
 
-// An admin's or a Rococo admin's alone (0038). Its goals go with it: the goals mock drops a goal
-// whose GSR is gone.
+// An admin's or a Rococo admin's alone (0038), never their own once it is done (0047). Its goals
+// go with it: the goals mock drops a goal whose GSR is gone.
 export async function deleteGsr(id: string): Promise<void> {
   const found = stored(id);
-  if (!found || !reach(found.gsr.company_id, found.gsr.employee_id).admin) throw new Error(NOT_CHANGED_MESSAGE);
+  if (!found) throw new Error(NOT_CHANGED_MESSAGE);
+  const r = reach(found.gsr.company_id, found.gsr.employee_id);
+  if (!r.admin) throw new Error(NOT_CHANGED_MESSAGE);
+  if (found.gsr.status === "complete" && personaIn(found.gsr.company_id).id === found.gsr.employee_id) throw new Error(OWN_DONE_DELETE_MESSAGE);
   gsrs.splice(found.index, 1);
 }

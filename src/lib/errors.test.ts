@@ -23,6 +23,12 @@ describe("errorMessage", () => {
     }
   });
 
+  it("passes the refusal of deleting one's own done GSR through as written", () => {
+    const message = "Your own GSR stays once it is done. Someone who leads you can delete it.";
+    expect(errorMessage({ message, code: "23514" })).toBe(message);
+    expect(errorMessage(new Error(message))).toBe(message);
+  });
+
   it("leaves a message it does not recognise as it is", () => {
     expect(errorMessage({ message: "This pillar is part of a signed-off review." })).toBe("This pillar is part of a signed-off review.");
   });

@@ -14,6 +14,7 @@ import { db } from "./supabase.ts";
 // Refusals the database makes, word for word, so a caller can tell one from another.
 export const TWO_OPEN_MESSAGE = "This person already has two GSRs open. Mark the earlier one done first.";
 export const OWN_GSR_MESSAGE = "Your own GSR is marked done and reopened by someone who leads you.";
+export const OWN_DONE_DELETE_MESSAGE = "Your own GSR stays once it is done. Someone who leads you can delete it.";
 
 export async function getGsr(id: string): Promise<Gsr> {
   const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("id", id).is("cycle_id", null).single();
@@ -129,7 +130,8 @@ export async function reopenGsr(id: string): Promise<Gsr> {
   return data as Gsr;
 }
 
-// An admin's, as for every review; its goals go with it.
+// An admin's, as for every review, but never their own once it is done (the database refuses it
+// with OWN_DONE_DELETE_MESSAGE); its goals go with it.
 export async function deleteGsr(id: string): Promise<void> {
   const { data, error } = await db().from("reviews").delete().eq("id", id).is("cycle_id", null).select("id");
   if (error) throw error;
