@@ -858,13 +858,20 @@ select tests.assert(
   'project_note: the note did not take the GSR''s company'
 );
 
--- Another company's admin cannot add one.
+-- Another company's admin cannot add one, whether they send their own company's id or the
+-- GSR's: the note takes the GSR's company either way, and that is not theirs.
 select tests.act_as(tests.id('k_admin'));
 select tests.assert_raises(
   format($q$insert into public.review_project_notes (company_id, review_id, project_id, note)
             values (%L, %L, %L, 'Sample outsider project note 47s')$q$,
          tests.company('klasik'), tests.id('g_e6_notes'), tests.id('p_two')),
-  '%row-level security%'
+  'new row violates row-level security policy for table "review_project_notes"'
+);
+select tests.assert_raises(
+  format($q$insert into public.review_project_notes (company_id, review_id, project_id, note)
+            values (%L, %L, %L, 'Sample outsider project note 47s')$q$,
+         tests.company('rba'), tests.id('g_e6_notes'), tests.id('p_two')),
+  'new row violates row-level security policy for table "review_project_notes"'
 );
 reset role; select set_config('request.jwt.claims', '', true);
 

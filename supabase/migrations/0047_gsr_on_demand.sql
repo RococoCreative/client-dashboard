@@ -1505,6 +1505,8 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --     v_changed integer;
 --     v_scores  integer;
 --     v_notes   integer;
+--     v_cols    text;
+--     v_vals    text;
 --   begin
 --     if v_company is null then
 --       raise exception 'No company has that slug. Nothing was changed.';
@@ -1530,10 +1532,18 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --                             where p.what in ('review_cycle', 'created_gsr'))
 --        and g.id not in (select (p.payload->>'id')::uuid from put_back p
 --                          where p.what = 'goal_cycle');
+--     -- A GSR the move made counts as changed when a column it was made with differs. Both sides
+--     -- are typed rows rendered here, so the session's time zone and later columns do not count.
 --     select count(*) into v_changed
---       from put_back p join public.reviews r on r.id = (p.payload->>'id')::uuid
+--       from put_back p
+--       join public.reviews r on r.id = (p.payload->>'id')::uuid
+--       cross join lateral jsonb_populate_record(null::public.reviews, p.payload) x
 --      where p.what = 'created_gsr'
---        and (to_jsonb(r) - 'updated_at') is distinct from (p.payload - 'updated_at');
+--        and (select jsonb_object_agg(e.key, e.value) from jsonb_each(to_jsonb(r)) e
+--              where p.payload ? e.key and e.key <> 'updated_at')
+--            is distinct from
+--            (select jsonb_object_agg(e.key, e.value) from jsonb_each(to_jsonb(x)) e
+--              where p.payload ? e.key and e.key <> 'updated_at');
 --     select count(*) into v_scores
 --       from put_back p join public.review_scores s on s.review_id = (p.payload->>'id')::uuid
 --      where p.what = 'created_gsr';
@@ -1543,16 +1553,28 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --      where p.what = 'created_gsr';
 --     if v_goals + v_changed + v_scores + v_notes > 0 then
 --       raise exception using errcode = 'check_violation', message = format(
---         'This move cannot be put back as things stand. Goals added to its GSRs since: %s. '
---         || 'GSRs it made that changed since: %s. Score rows on GSRs it made: %s. '
---         || 'Project notes on GSRs it made: %s. Remove or keep them by hand first. '
---         || 'Nothing was changed.', v_goals, v_changed, v_scores, v_notes);
+--         'This move cannot be put back yet, and nothing was changed. '
+--         || 'Goals added to its GSRs since the move: %s. Delete them, as they have no month '
+--         || 'to go back to. GSRs the move made that changed since: %s. Set each back to not '
+--         || 'started, with no completion, score, reviewer or feedback. Score rows on GSRs the '
+--         || 'move made: %s. Delete them once their GSR is no longer done. Project notes on GSRs '
+--         || 'the move made: %s. Delete them.', v_goals, v_changed, v_scores, v_notes);
 --     end if;
---     -- 2. The months as they were, open until step 7 so their reviews can come back.
---     insert into public.review_cycles
---     select x.* from put_back p,
---            jsonb_populate_record(null::public.review_cycles, p.payload || '{"status": "open"}') x
---      where p.what = 'cycle';
+--     -- 2. The months as they were, open until step 7 so their reviews can come back. Only the
+--     -- columns the copy holds are written, so a column added since takes its own default.
+--     select string_agg(quote_ident(a.attname), ', ' order by a.attnum),
+--            string_agg('x.' || quote_ident(a.attname), ', ' order by a.attnum)
+--       into v_cols, v_vals
+--       from pg_attribute a
+--      where a.attrelid = 'public.review_cycles'::regclass
+--        and a.attnum > 0 and not a.attisdropped
+--        and exists (select 1 from put_back p where p.what = 'cycle' and p.payload ? a.attname);
+--     if v_cols is not null then
+--       execute format('insert into public.review_cycles (%s) select %s from put_back p, '
+--         || 'jsonb_populate_record(null::public.review_cycles, '
+--         || 'p.payload || ''{"status": "open"}'') x '
+--         || 'where p.what = ''cycle''', v_cols, v_vals);
+--     end if;
 --     -- 3. Each converted review back in its month, with no dates.
 --     update public.reviews r set cycle_id = x.cycle_id, started_on = null, done_on = null
 --       from put_back p, jsonb_populate_record(null::public.reviews, p.payload) x
@@ -1565,9 +1587,18 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --     delete from public.reviews r using put_back p
 --      where p.what = 'created_gsr' and r.id = (p.payload->>'id')::uuid;
 --     -- 6. The left-out rows, then who left them out, when and why, which the insert stamps.
---     insert into public.cycle_omissions
---     select x.* from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x
---      where p.what = 'omission';
+--     select string_agg(quote_ident(a.attname), ', ' order by a.attnum),
+--            string_agg('x.' || quote_ident(a.attname), ', ' order by a.attnum)
+--       into v_cols, v_vals
+--       from pg_attribute a
+--      where a.attrelid = 'public.cycle_omissions'::regclass
+--        and a.attnum > 0 and not a.attisdropped
+--        and exists (select 1 from put_back p where p.what = 'omission' and p.payload ? a.attname);
+--     if v_cols is not null then
+--       execute format('insert into public.cycle_omissions (%s) select %s from put_back p, '
+--         || 'jsonb_populate_record(null::public.cycle_omissions, p.payload) x '
+--         || 'where p.what = ''omission''', v_cols, v_vals);
+--     end if;
 --     update public.cycle_omissions o
 --        set reason = x.reason, omitted_by = x.omitted_by, created_at = x.created_at
 --       from put_back p, jsonb_populate_record(null::public.cycle_omissions, p.payload) x

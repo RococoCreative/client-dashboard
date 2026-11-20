@@ -925,7 +925,7 @@ values (tests.company('rba'), tests.id('c_o1'), tests.id('gsr_o1'), 'cycle', 'ro
 reset role; select set_config('request.jwt.claims', '', true);
 create temp table s_before as select * from tests.rows_now(tests.company('rba'));
 select tests.assert_raises(:'put_back_sql',
-  'This move cannot be put back as things stand. Goals added to its GSRs since: 1. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 0.%Nothing was changed.');
+  'This move cannot be put back yet, and nothing was changed. Goals added to its GSRs since the move: 1.%GSRs the move made that changed since: 0.%Score rows on GSRs the%move made: 0.%Project notes on GSRs%the move made: 0. Delete them.');
 select tests.assert(
   (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
   and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
@@ -942,7 +942,7 @@ values (tests.company('rba'), tests.id('c_e2'), tests.id('rv_aug_e2'), 'cycle', 
 reset role; select set_config('request.jwt.claims', '', true);
 create temp table s_before as select * from tests.rows_now(tests.company('rba'));
 select tests.assert_raises(:'put_back_sql',
-  'This move cannot be put back as things stand. Goals added to its GSRs since: 1. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 0.%Nothing was changed.');
+  'This move cannot be put back yet, and nothing was changed. Goals added to its GSRs since the move: 1.%GSRs the move made that changed since: 0.%Score rows on GSRs the%move made: 0.%Project notes on GSRs%the move made: 0. Delete them.');
 select tests.assert(
   (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
   and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
@@ -969,7 +969,7 @@ select tests.assert(
 );
 create temp table s_before as select * from tests.rows_now(tests.company('rba'));
 select tests.assert_raises(:'put_back_sql',
-  'This move cannot be put back as things stand. Goals added to its GSRs since: 0. GSRs it made that changed since: 1. Score rows on GSRs it made: 1. Project notes on GSRs it made: 0.%Nothing was changed.');
+  'This move cannot be put back yet, and nothing was changed. Goals added to its GSRs since the move: 0.%GSRs the move made that changed since: 1.%Score rows on GSRs the%move made: 1.%Project notes on GSRs%the move made: 0. Delete them.');
 select tests.assert(
   (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
   and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
@@ -986,7 +986,7 @@ select tests.id('gsr_o1'), id, 'Sample project note 47c' from public.projects wh
 reset role; select set_config('request.jwt.claims', '', true);
 create temp table s_before as select * from tests.rows_now(tests.company('rba'));
 select tests.assert_raises(:'put_back_sql',
-  'This move cannot be put back as things stand. Goals added to its GSRs since: 0. GSRs it made that changed since: 0. Score rows on GSRs it made: 0. Project notes on GSRs it made: 1.%Nothing was changed.');
+  'This move cannot be put back yet, and nothing was changed. Goals added to its GSRs since the move: 0.%GSRs the move made that changed since: 0.%Score rows on GSRs the%move made: 0.%Project notes on GSRs%the move made: 1. Delete them.');
 select tests.assert(
   (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
   and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
@@ -996,15 +996,44 @@ select tests.assert(
 );
 rollback to savepoint put_back_case;
 
+-- case: the_put_back_holds_after_later_columns
+-- A column added since the move, to reviews (nullable, with a default) and to the months and
+-- left-out rows (required, with a default), changes nothing: the put-back still runs, and the
+-- months take the new column's default. Undone, columns and all, before the real put-back.
+savepoint put_back_case;
+alter table public.reviews add column scratch_47c text default 'later';
+alter table public.review_cycles add column scratch_47c text not null default 'later';
+alter table public.cycle_omissions add column scratch_47c text not null default 'later';
+:put_back_sql
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'rba')
+  and not exists (select 1 from public.reviews where company_id = tests.company('rba') and cycle_id is null)
+  and (select scratch_47c = 'later' and status = 'closed' from public.review_cycles where id = tests.id('r_aug'))
+  and (select count(*) = 2 from public.cycle_omissions where cycle_id = tests.id('r_aug') and scratch_47c = 'later'),
+  'later_columns: the put-back did not run, or the months did not take the new column''s default'
+);
+rollback to savepoint put_back_case;
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists (select 1 from information_schema.columns where column_name = 'scratch_47c'),
+  'later_columns: the scratch case was not undone'
+);
+
+-- case: the_put_back_holds_in_another_time_zone (the put-back below)
 -- The put-back itself, after two edits it keeps: a moved goal's completion changed, and the
--- converted open GSR marked done.
+-- converted open GSR marked done. It runs with the session a long way from where the move ran,
+-- so the copy's times read differently as text; the result is the same.
 select tests.act_as(tests.id('c_admin'));
 update public.goals set progress = 60 where id = tests.id('g_aug_e2');
 update public.reviews set status = 'complete', completed_at = now(), gsr_score = 50, reviewer_id = tests.id('c_admin')
  where id = tests.id('rv_aug_e2');
 reset role; select set_config('request.jwt.claims', '', true);
 
+select tests.assert(current_setting('TimeZone') is distinct from 'Pacific/Kiritimati',
+  'put_back: the move already ran in the zone this case moves to');
+set local time zone 'Pacific/Kiritimati';
 :put_back_sql
+reset time zone;
 
 select tests.assert(
   (select gsr_mode = 'periods' from public.companies where slug = 'rba')
