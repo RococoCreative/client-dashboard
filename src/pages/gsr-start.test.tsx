@@ -7,7 +7,8 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -59,10 +60,25 @@ const harper = manager.profile;
 const rowan = RBA.profiles.find((p) => p.full_name === "Rowan Ellis")!;
 const asRowan: HubValue = { ...employee, profile: rowan };
 
-// The router state a page was left with, so a test can see what a reload would bring back.
+// The router state a page was left with, so a test can see what a reload would bring back, and
+// every state the GSR's address has carried since the test began, so a test can see what a start
+// handed the page. A history Back, as the browser's.
+const statesSeen: unknown[] = [];
+beforeEach(() => {
+  statesSeen.length = 0;
+});
 function StateProbe() {
-  const { state } = useLocation();
-  return <output data-testid="router-state">{JSON.stringify(state ?? null)}</output>;
+  const { state, key } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    statesSeen.push(state ?? null);
+  }, [state, key]);
+  return (
+    <>
+      <output data-testid="router-state">{JSON.stringify(state ?? null)}</output>
+      <button type="button" onClick={() => navigate(-1)}>History back</button>
+    </>
+  );
 }
 
 type Entry = string | { pathname: string; state: unknown };
@@ -153,7 +169,9 @@ describe("starting a GSR", () => {
     const first = gsrTab(manager, rowan);
     await user.click(within(await gsrsSection()).getByRole("button", { name: "New GSR" }));
     expect(await pageTitle("GSR · Sep 10, 2026")).toBeInTheDocument();
-    expect(screen.getByTestId("router-state")).toBeInTheDocument();
+    // The start handed the page { atLimit: true }, and the page took it off the address.
+    expect(statesSeen).toContainEqual(expect.objectContaining({ atLimit: true }));
+    await waitFor(() => expect(screen.getByTestId("router-state")).toHaveTextContent("null"));
     expect(
       await screen.findByText("Rowan already has two GSRs open. Mark the earlier one done first. You can do it here, in Last GSR."),
     ).toBeInTheDocument();
@@ -228,6 +246,58 @@ describe("starting a GSR", () => {
     renderApp(manager, path);
     expect(await pageTitle("GSR · Sep 10, 2026")).toBeInTheDocument();
     expect(screen.queryByText(/already has two GSRs open/)).not.toBeInTheDocument();
+  });
+
+  it("does not show the limit notice again after following its link and pressing Back", async () => {
+    const user = userEvent.setup();
+    seed(rowan.id, { started_on: "2026-09-01" });
+    seed(rowan.id, { started_on: "2026-09-05", status: "complete", done_on: "2026-09-06", gsr_score: 80 });
+    seed(rowan.id, { started_on: "2026-09-10" });
+    gsrTab(manager, rowan);
+    await user.click(within(await gsrsSection()).getByRole("button", { name: "New GSR" }));
+    expect(await pageTitle("GSR · Sep 10, 2026")).toBeInTheDocument();
+    expect(await screen.findByText(/Rowan already has two GSRs open/)).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Open the GSR from Sep 1, 2026" }));
+    expect(await pageTitle("GSR · Sep 1, 2026")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "History back" }));
+    expect(await pageTitle("GSR · Sep 10, 2026")).toBeInTheDocument();
+    expect(screen.queryByText(/already has two GSRs open/)).not.toBeInTheDocument();
+  });
+
+  it("says once that today's GSR is already done when a start lands on it", async () => {
+    const user = userEvent.setup();
+    const today = seed(rowan.id, { started_on: "2026-09-15", status: "complete", done_on: "2026-09-15", gsr_score: 80, reviewer_id: harper.id });
+    const first = gsrTab(manager, rowan);
+    await user.click(within(await gsrsSection()).getByRole("button", { name: "New GSR" }));
+    expect(await pageTitle("GSR · Sep 15, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Rowan's GSR for today is already done. A new one can be started tomorrow.")).toBeInTheDocument();
+    expect(statesSeen).toContainEqual(expect.objectContaining({ doneToday: true }));
+    await waitFor(() => expect(screen.getByTestId("router-state")).toHaveTextContent("null"));
+    expect((await listPersonGsrs(RBA.company.id, rowan.id)).map((g) => g.id)).toEqual([today.id]);
+    first.unmount();
+
+    // Once only: opening it again says nothing.
+    renderApp(manager, `/gsr/reviews/${today.id}`);
+    expect(await pageTitle("GSR · Sep 15, 2026")).toBeInTheDocument();
+    expect(screen.queryByText(/for today is already done/)).not.toBeInTheDocument();
+  });
+
+  it("tells the person themself in their own words that today's GSR is done", async () => {
+    const user = userEvent.setup();
+    seed(rowan.id, { started_on: "2026-09-15", status: "complete", done_on: "2026-09-15", gsr_score: 80, reviewer_id: harper.id });
+    renderApp(asRowan, "/my/gsr");
+    await user.click(await screen.findByRole("button", { name: "Start a GSR" }));
+    expect(await pageTitle("GSR · Sep 15, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Your GSR for today is already done. A new one can be started tomorrow.")).toBeInTheDocument();
+  });
+
+  it("says nothing of today when the GSR a start opens is still open", async () => {
+    const user = userEvent.setup();
+    seed(rowan.id, { started_on: "2026-09-15" });
+    gsrTab(manager, rowan);
+    await user.click(within(await gsrsSection()).getByRole("button", { name: "New GSR" }));
+    expect(await pageTitle("GSR · Sep 15, 2026")).toBeInTheDocument();
+    expect(screen.queryByText(/for today is already done/)).not.toBeInTheDocument();
   });
 
   it("says a failed start beside the control and lets it be tried again", async () => {

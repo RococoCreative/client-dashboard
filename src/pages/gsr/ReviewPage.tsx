@@ -634,6 +634,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     else setError("");
     try {
       if (!monthly) {
+        // In a company on demand, the person's GSRs as they stand now, not as this page loaded
+        // them: a GSR marked done or reopened since counts as it is. With none done in the period,
+        // the admin is asked first, as when the page already showed none.
+        const fresh = onDemand ? await listPersonGsrs(review.company_id, review.employee_id) : null;
+        const period = fresh ? scoreGsrsInPeriod(cycle, fresh) : null;
+        if (fresh && period) {
+          state.setData((prev) => (prev ? { ...prev, personGsrs: fresh } : prev));
+          if (gsrPillars.length > 0 && period.target === 0 && !confirmLeftOut) {
+            setConfirmLeftOut(true);
+            return;
+          }
+        }
         // The line items as the database holds them now, not as this page last rendered them.
         const current = await listReviewScores(review.id);
         for (const pillar of modulePillars) {
@@ -646,7 +658,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         // The months' figure, the same way: one line item, so a slider moved after sign-off moves
         // nothing on the review.
         for (const pillar of gsrPillars) {
-          const figure = gsrLine(pillar.id);
+          const figure = period ?? gsrLine(pillar.id);
           await writeSignedOffLine(
             current,
             pillar.id,
@@ -725,6 +737,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 onClick={() => {
                   setLockError("");
                   if (monthScore) void startLock();
+                  // On demand, sign-off reads the GSRs again and asks about leaving them out itself.
+                  else if (onDemand && !monthly) void markComplete();
                   else if (gsrLeftOut) setConfirmLeftOut(true);
                   else void markComplete();
                 }}

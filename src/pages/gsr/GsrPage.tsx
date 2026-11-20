@@ -16,8 +16,9 @@
 //
 // Arriving from a start that found two GSRs open already (useStartGsr, router state atLimit), the
 // page says so once: which GSR to close first, where to do it, or, for the person themself, that
-// their manager does it. The state is taken off the address as it is read, so a reload or a later
-// visit does not say it again.
+// their manager does it. Arriving from a start that landed on today's GSR, already done (router
+// state doneToday), it says a new one can be started tomorrow. The state is taken off the address
+// as it is read, so a reload, a later visit or a Back to it does not say it again.
 //
 // A company on periods never reaches this page: the route renders ReviewPage there. The GSR is
 // loaded by its id and checked against the active company, so a Rococo admin who switches company
@@ -69,6 +70,9 @@ const GSR_PROJECT_WORDING: ProjectNotesWording = {
   other: "The note on each project from this GSR.",
 };
 
+// What a start can leave for the page to say once (useStartGsr's router state).
+type ArrivalNotice = "atLimit" | "doneToday";
+
 // The notice for a GSR opened at the limit: the other open GSR is the one to close first. It is
 // closed right here when the Last GSR panel is showing it; otherwise the notice links to it. The
 // person themself hears only that their manager closes it, since they never close their own.
@@ -90,14 +94,17 @@ export default function GsrPage() {
   const { reviewId = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const arrivedAtLimit = (location.state as { atLimit?: boolean } | null)?.atLimit === true;
-  // The GSR the limit notice belongs to, kept once the address's state is cleared, and only for
-  // that GSR: following the notice's link to the earlier one does not carry it along.
-  const [limitFor, setLimitFor] = useState<string | null>(arrivedAtLimit ? reviewId : null);
-  if (arrivedAtLimit && limitFor !== reviewId) setLimitFor(reviewId);
+  const arrivedWith = location.state as { atLimit?: boolean; doneToday?: boolean } | null;
+  const arrived: ArrivalNotice | null = arrivedWith?.atLimit === true ? "atLimit" : arrivedWith?.doneToday === true ? "doneToday" : null;
+  // The notice a start left, kept for its GSR once the address's state is cleared, and only while
+  // that GSR is open here: following the notice's link to another GSR drops it, so pressing Back
+  // to this one (the page stays mounted) does not bring it back.
+  const [notice, setNotice] = useState<{ for: string; kind: ArrivalNotice } | null>(arrived ? { for: reviewId, kind: arrived } : null);
+  if (arrived && (notice?.for !== reviewId || notice.kind !== arrived)) setNotice({ for: reviewId, kind: arrived });
+  else if (!arrived && notice && notice.for !== reviewId) setNotice(null);
   useEffect(() => {
-    if (arrivedAtLimit) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-  }, [arrivedAtLimit, location.pathname, location.search, navigate]);
+    if (arrived) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [arrived, location.pathname, location.search, navigate]);
   const { company, profile, isAdmin } = useHub();
   const companyId = company!.id;
   const tasksOn = hasModule(company, "tasks");
@@ -250,7 +257,12 @@ export default function GsrPage() {
         }
       />
 
-      {limitFor === gsr.id ? <LimitNotice gsr={gsr} personGsrs={personGsrs} last={last} personName={personName} isOwn={isOwn} /> : null}
+      {notice?.for === gsr.id && notice.kind === "atLimit" ? <LimitNotice gsr={gsr} personGsrs={personGsrs} last={last} personName={personName} isOwn={isOwn} /> : null}
+      {notice?.for === gsr.id && notice.kind === "doneToday" ? (
+        <Notice className="mb-4">
+          {isOwn ? "Your GSR for today is already done. A new one can be started tomorrow." : `${personName.split(" ")[0]}'s GSR for today is already done. A new one can be started tomorrow.`}
+        </Notice>
+      ) : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 

@@ -146,6 +146,44 @@ describe("a scored review in a company on demand", () => {
   });
 });
 
+describe("signing off reads the GSRs again", () => {
+  it("counts a GSR marked done after the review page loaded in the line item it writes", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const pillar = await scoresGsrs();
+    onTestFinished(async () => {
+      await updateReview(jamieReview.id, { status: "in_progress", completed_at: null });
+    });
+    done(jamie.id, "2026-08-10", 70);
+    const later = seed(jamie.id, { started_on: "2026-09-03" });
+    renderReview();
+    await waitFor(async () => expect(within(await pillarSection()).getByText("70")).toBeInTheDocument());
+    // Marked done by someone else while the page stays open.
+    await markGsrDone(later.id, 90, alex.id);
+    await userEvent.click(screen.getByRole("button", { name: "Mark complete" }));
+    expect(await screen.findByRole("button", { name: "Reopen" })).toBeInTheDocument();
+    const lines = (await listReviewScores(jamieReview.id)).filter((s) => s.pillar_id === pillar.id);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ target: 200, actual: 160 });
+  });
+
+  it("signs off with the GSR done since, rather than asking to leave the pillar out", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const pillar = await scoresGsrs();
+    onTestFinished(async () => {
+      await updateReview(jamieReview.id, { status: "in_progress", completed_at: null });
+    });
+    const open = seed(jamie.id, { started_on: "2026-09-03" });
+    renderReview();
+    expect(await within(await pillarSection()).findByText("Left out of this review")).toBeInTheDocument();
+    await markGsrDone(open.id, 80, alex.id);
+    await userEvent.click(screen.getByRole("button", { name: "Mark complete" }));
+    expect(await screen.findByRole("button", { name: "Reopen" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sign off without GSRs?" })).not.toBeInTheDocument();
+    const lines = (await listReviewScores(jamieReview.id)).filter((s) => s.pillar_id === pillar.id);
+    expect(lines[0]).toMatchObject({ target: 100, actual: 80 });
+  });
+});
+
 describe("signing off with no scored GSR in the period", () => {
   // Signs off through the dialog that warns the pillar will sit out, then checks what was frozen.
   async function signOffLeftOut(pillarId: string, dialogLine: RegExp) {
