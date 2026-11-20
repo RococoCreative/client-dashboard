@@ -13,7 +13,7 @@ import Button from "../ui/Button.tsx";
 import ProgressSlider from "../ui/ProgressSlider.tsx";
 import { inputClass, selectClass, textareaClass } from "../ui/forms.ts";
 import { updateGoal } from "../../services/gsr.ts";
-import { GOAL_KIND_ORDER, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
+import { FOCUS_KINDS, GOAL_KIND_ORDER, progressPatch, stepsTaken } from "../../lib/gsr/goals.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type Profile, type TaskWithSteps } from "../../types/database.ts";
 import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
@@ -26,9 +26,6 @@ export type TasksUpdate = (update: (tasks: TaskWithSteps[]) => TaskWithSteps[]) 
 export type TaskLinks = { tasks: TaskWithSteps[]; people: Profile[]; viewerProfileId: string; onTasks: TasksUpdate };
 // Where a goal stands in a scored month: one of the mandatory GSRs, or a stretch goal.
 export type Standing = "mandatory" | "stretch";
-
-// The focus topic's GSR is a working goal, never a personal one.
-const FOCUS_KINDS: GoalKind[] = ["role", "professional"];
 
 // One of this month's goals: title, kind, agreed completion, description, steps, notes.
 export default function GoalEditor({

@@ -5,11 +5,9 @@ import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import Button from "../ui/Button.tsx";
 import { inputClass, selectClass } from "../ui/forms.ts";
+import { FOCUS_KINDS } from "../../lib/gsr/goals.ts";
 import { GOAL_KIND_LABELS, type Goal, type GoalKind, type ReviewCycle } from "../../types/database.ts";
 import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
-
-// The focus topic's GSR is a working goal, never a personal one.
-const FOCUS_KINDS: GoalKind[] = ["role", "professional"];
 
 // The month's focus topic and what it means, always on the month and there for reference, with the
 // way to set the person's #1 GSR from it. Their words make the goal, as a role or professional
@@ -20,6 +18,8 @@ export default function FocusTopicCard({
   canEdit,
   isOwn,
   onAdd,
+  placeholder,
+  setLabel,
 }: {
   // A monthly cycle's theme, or a focus topic from the calendar in the same two fields.
   cycle: Pick<ReviewCycle, "theme" | "theme_description">;
@@ -27,6 +27,10 @@ export default function FocusTopicCard({
   canEdit: boolean;
   isOwn: boolean;
   onAdd: (title: string, kind: GoalKind) => void;
+  // The wording of the GSR field and its button. Left out, a monthly GSR's; a GSR on demand, which
+  // has no month, passes its own.
+  placeholder?: string;
+  setLabel?: string;
 }) {
   const [composing, setComposing] = useState(false);
   const [title, setTitle] = useState("");
@@ -51,7 +55,7 @@ export default function FocusTopicCard({
         </p>
       ) : !canEdit ? null : composing ? (
         <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={`What will ${isOwn ? "you" : "they"} do this month on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
+          <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={placeholder ?? `What will ${isOwn ? "you" : "they"} do this month on this topic?`} aria-label="GSR for this focus topic" className={`${inputClass} mt-0 min-w-0 flex-1`} />
           <select value={kind} aria-label="Kind for the focus topic GSR" onChange={(e) => setKind(e.target.value as GoalKind)} className={`${selectClass} mt-0 w-auto`}>
             {FOCUS_KINDS.map((k) => (
               <option key={k} value={k}>{GOAL_KIND_LABELS[k]}</option>
@@ -64,7 +68,7 @@ export default function FocusTopicCard({
         </form>
       ) : (
         <Button variant="secondary" size="sm" className="mt-3" onClick={() => setComposing(true)}>
-          <Plus size={13} aria-hidden /> Set {whose} monthly GSR based on this focus topic
+          <Plus size={13} aria-hidden /> {setLabel ?? `Set ${whose} monthly GSR based on this focus topic`}
         </Button>
       )}
     </div>

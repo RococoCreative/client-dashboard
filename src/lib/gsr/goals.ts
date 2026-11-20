@@ -11,6 +11,9 @@ import type { ActionStep, Goal, GoalKind, GoalStatus, Review } from "../../types
 // in the same order.
 export const GOAL_KIND_ORDER: GoalKind[] = ["role", "professional", "personal"];
 
+// The kinds a focus topic's GSR may be: a working goal, never a personal one.
+export const FOCUS_KINDS: GoalKind[] = ["role", "professional"];
+
 // A month's goals in that order, the focus topic's GSR ahead of them all, because it is the
 // month's #1 GSR; within a kind, the order they were filed in.
 export function rankGoals<T extends Pick<Goal, "kind" | "is_focus" | "sort_order" | "created_at">>(goals: T[]): T[] {

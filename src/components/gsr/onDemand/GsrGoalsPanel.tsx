@@ -69,6 +69,7 @@ export default function GsrGoalsPanel({
 }) {
   const { profile, isAdmin } = useHub();
   const isOwn = gsr.employee_id === profile.id;
+  const whose = isOwn ? "your" : "their";
   const own = gsrGoals(goals, gsr.id);
   const ordered = rankGoals(own);
   const focusGoal = ordered.find((g) => g.is_focus) ?? null;
@@ -160,7 +161,6 @@ export default function GsrGoalsPanel({
     }
   }
 
-  const whose = isOwn ? "your" : "their";
   return (
     <Section
       eyebrow="Goals"
@@ -185,7 +185,15 @@ export default function GsrGoalsPanel({
         </p>
       ) : null}
       {topic ? (
-        <FocusTopicCard cycle={{ theme: topic.theme, theme_description: topic.description }} focusGoal={focusGoal} canEdit={canEdit} isOwn={isOwn} onAdd={(title, kind) => void add(title, kind, true)} />
+        <FocusTopicCard
+          cycle={{ theme: topic.theme, theme_description: topic.description }}
+          focusGoal={focusGoal}
+          canEdit={canEdit}
+          isOwn={isOwn}
+          onAdd={(title, kind) => void add(title, kind, true)}
+          placeholder={`What will ${isOwn ? "you" : "they"} do on this topic?`}
+          setLabel={`Set ${whose} GSR based on this focus topic`}
+        />
       ) : canEdit && isAdmin ? (
         <p className="mb-4 rounded-lg border border-dashed border-line-strong px-4 py-3 text-[12.5px] text-ink-2">
           No focus topic for {monthName(gsr.started_on)} yet. Plan the year in{" "}

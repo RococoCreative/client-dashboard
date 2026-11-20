@@ -894,6 +894,8 @@ describe("monthly goal setting review", () => {
     await updateReview(riley.id, { status: "in_progress", completed_at: null });
     renderWithHub(<ReviewPage />, admin, { path: `/gsr/reviews/${riley.id}`, pattern: "/gsr/reviews/:reviewId" });
     await user.click(await screen.findByRole("button", { name: "Set their monthly GSR based on this focus topic" }));
+    // A monthly GSR keeps its own wording for the field (a GSR on demand words it without a month).
+    expect(screen.getByPlaceholderText("What will they do this month on this topic?")).toBeInTheDocument();
     // The #1 GSR is a role or professional goal, never a personal one.
     const kind = screen.getByLabelText("Kind for the focus topic GSR");
     expect(within(kind).getAllByRole("option").map((o) => o.textContent)).toEqual(["Role", "Professional"]);

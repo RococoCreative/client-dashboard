@@ -95,6 +95,9 @@ describe("one GSR's page", () => {
     expect(screen.getByText("In progress")).toBeInTheDocument();
     expect(await screen.findByText("Clean sites")).toBeInTheDocument();
     expect(screen.queryByText("Change orders")).not.toBeInTheDocument();
+    // Worded for a GSR, which has no month of its own.
+    await userEvent.click(screen.getByRole("button", { name: "Set their GSR based on this focus topic" }));
+    expect(screen.getByPlaceholderText("What will they do on this topic?")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Title for Walk every site on Fridays" })).toBeInTheDocument();
     // Whose GSR it is, in the header, with the way back to their GSRs.
     expect(screen.getByRole("link", { name: "Rowan Ellis" })).toHaveAttribute("href", `/people/${rowan.id}/gsr`);
@@ -148,6 +151,17 @@ describe("one GSR's page", () => {
     await waitFor(async () => expect((await listPersonGsrs(RBA.company.id, jamie.id))[0].support_discussion).toBe("A second laptop on site"));
   });
 
+  it("words the focus topic field for the person's own GSR without a month", async () => {
+    const topic = await upsertFocusTopic(RBA.company.id, "2026-09-01", "Change orders", null);
+    onTestFinished(() => deleteFocusTopic(topic.id));
+    renderGsr(seed(jamie.id), employee);
+    await userEvent.click(await screen.findByRole("button", { name: "Set your GSR based on this focus topic" }));
+    expect(screen.getByPlaceholderText("What will you do on this topic?")).toBeInTheDocument();
+    // The goals say nothing of a month ("Performance this month" below tracks a real one).
+    const goals = screen.getByRole("heading", { name: "Goals for this GSR" }).closest("section") as HTMLElement;
+    expect(within(goals).queryByText(/month/i)).not.toBeInTheDocument();
+  });
+
   it("does not let an admin mark their own GSR done", async () => {
     const gsr = seed(alex.id);
     renderGsr(gsr, admin);
@@ -159,6 +173,9 @@ describe("one GSR's page", () => {
     const done = seed(rowan.id, { status: "complete", done_on: "2026-09-14", completed_at: "2026-09-14T15:00:00.000Z", gsr_score: 72, reviewer_id: harper.id });
     const { unmount } = renderGsr(done, manager);
     expect(await screen.findByText(/^Done /)).toBeInTheDocument();
+    // Marked done, never signed off.
+    expect(screen.getByText("As it was discussed when this GSR was marked done.")).toBeInTheDocument();
+    expect(screen.queryByText(/signed off/)).not.toBeInTheDocument();
     // A done GSR is read only.
     expect(screen.queryByRole("textbox", { name: "Add a goal for this GSR" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Reopen" }));

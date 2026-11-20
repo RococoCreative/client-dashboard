@@ -14,6 +14,7 @@ export default function SupportDiscussionCard({
   isOwn,
   signedOff,
   onSave,
+  signedOffLine = "As it was discussed when this review was signed off.",
 }: {
   value: string | null;
   canWrite: boolean;
@@ -21,6 +22,9 @@ export default function SupportDiscussionCard({
   signedOff: boolean;
   // Resolves whether the write landed, so a refused one keeps the draft and says "Not saved".
   onSave: (next: string | null) => Promise<boolean>;
+  // The line once it is frozen. Left out, a review's; a GSR on demand, marked done rather than
+  // signed off, passes its own.
+  signedOffLine?: string;
 }) {
   return (
     <Section
@@ -28,7 +32,7 @@ export default function SupportDiscussionCard({
       title={SUPPORT_QUESTION}
       description={
         signedOff
-          ? "As it was discussed when this review was signed off."
+          ? signedOffLine
           : isOwn
             ? "Start here. Write it before the meeting if you like; your manager reads it and adds to it."
             : "Asked first, before the goals. The person can write here too, so the meeting often starts from their words."

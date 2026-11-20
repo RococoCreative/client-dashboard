@@ -49,6 +49,15 @@ import { listProjects } from "../../services/projects.ts";
 import { listReviewProjectNotes } from "../../services/reviewProjectNotes.ts";
 import { listTasksForGoals } from "../../services/tasks.ts";
 import type { TaskWithSteps } from "../../types/database.ts";
+import type { ProjectNotesWording } from "../../components/gsr/ReviewProjects.tsx";
+
+// The project notes' lines on a GSR, which is marked done rather than signed off.
+const GSR_PROJECT_WORDING: ProjectNotesWording = {
+  signedOff: "The note on each project, as it was when this GSR was marked done.",
+  writer: "A note on each project the person is assigned to, written in the GSR. The person reads them on their own GSR.",
+  own: "Your manager's note on each of your projects from this GSR.",
+  other: "The note on each project from this GSR.",
+};
 
 // What the Mark done dialog shows and writes: the score of the goals as they were read again when it
 // opened, or no score where the company does not score its GSRs.
@@ -235,7 +244,7 @@ export default function GsrPage() {
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 
       <div className="mb-6">
-        <SupportDiscussionCard value={gsr.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={!open} onSave={saveDiscussion} />
+        <SupportDiscussionCard value={gsr.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={!open} onSave={saveDiscussion} signedOffLine="As it was discussed when this GSR was marked done." />
       </div>
 
       {/* Last GSR, the person's previous GSR read back, takes its place here beside the goals. */}
@@ -292,6 +301,7 @@ export default function GsrPage() {
           notes={projectNotes}
           canWrite={canEnter}
           isOwn={isOwn}
+          wording={GSR_PROJECT_WORDING}
           onNotes={(update) => setData((prev) => ({ ...prev, projectNotes: update(prev.projectNotes) }))}
         />
       </div>
