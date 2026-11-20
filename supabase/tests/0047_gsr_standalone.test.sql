@@ -899,3 +899,127 @@ select tests.assert(
   and (select note = 'Sample project note 47s' from public.review_project_notes where id = tests.id('pn_one')),
   'project_note: a note on a done GSR changed, or the GSR was not done'
 );
+
+-- ---------------------------------------------------------------------------------------
+-- Deleting one
+-- ---------------------------------------------------------------------------------------
+
+-- case: nobody_deletes_their_own_done_gsr
+-- An admin, an owner and a Rococo admin, each on their own done GSR, are refused, and each deletes
+-- their own open one. g_admin and g_owner are done (case nobody_closes_their_own). The Rococo admin
+-- sits in rba; the other GSRs here are dated as a conversion dates them, so no day collides.
+select tests.create_person('s_rococo_rba', tests.company('rba'), 'employee', true);
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on, done_on, completed_at, gsr_score)
+values (tests.company('rba'), tests.id('s_rococo_rba'), 'complete', '2030-02-01', '2030-02-02', '2030-02-02 12:00+00', 70);
+insert into public.reviews (company_id, employee_id, status, started_on) values
+  (tests.company('rba'), tests.id('s_rococo_rba'), 'in_progress', '2030-03-01'),
+  (tests.company('rba'), tests.id('s_admin'), 'in_progress', '2030-03-01'),
+  (tests.company('rba'), tests.id('s_owner'), 'in_progress', '2030-03-01');
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select case when r.employee_id = tests.id('s_rococo_rba') and r.status = 'complete' then 'g_rococo_done'
+            when r.employee_id = tests.id('s_rococo_rba') then 'g_rococo_open'
+            when r.employee_id = tests.id('s_admin') then 'g_admin_open'
+            else 'g_owner_open' end, r.id
+  from public.reviews r
+ where r.cycle_id is null
+   and r.started_on in ('2030-02-01', '2030-03-01')
+   and r.employee_id in (tests.id('s_rococo_rba'), tests.id('s_admin'), tests.id('s_owner'));
+
+select tests.act_as(tests.id('s_admin'));
+select tests.assert_raises(
+  format($q$delete from public.reviews where id = %L$q$, tests.id('g_admin')),
+  'Your own GSR stays once it is done. Someone who leads you can delete it.'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('g_admin_open'))) = 1,
+  'own_delete: an admin could not delete their own open GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_owner'));
+select tests.assert_raises(
+  format($q$delete from public.reviews where id = %L$q$, tests.id('g_owner')),
+  'Your own GSR stays once it is done. Someone who leads you can delete it.'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('g_owner_open'))) = 1,
+  'own_delete: an owner could not delete their own open GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_rococo_rba'));
+select tests.assert_raises(
+  format($q$delete from public.reviews where id = %L$q$, tests.id('g_rococo_done')),
+  'Your own GSR stays once it is done. Someone who leads you can delete it.'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('g_rococo_open'))) = 1,
+  'own_delete: a Rococo admin could not delete their own open GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select count(*) = 3 and bool_and(status = 'complete') from public.reviews
+    where id in (tests.id('g_admin'), tests.id('g_owner'), tests.id('g_rococo_done')))
+  and not exists (select 1 from public.reviews
+                   where id in (tests.id('g_admin_open'), tests.id('g_owner_open'), tests.id('g_rococo_open'))),
+  'own_delete: a done GSR went, or an open one stayed'
+);
+
+-- case: someone_else_deletes_a_done_gsr
+-- An admin deletes a report's done GSR, and the owner deletes the admin's.
+select tests.act_as(tests.id('s_admin'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('g_e3'))) = 1,
+  'other_delete: an admin could not delete a report''s done GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('s_owner'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('g_admin'))) = 1,
+  'other_delete: an owner could not delete an admin''s done GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.reviews where id in (tests.id('g_e3'), tests.id('g_admin'))),
+  'other_delete: a done GSR someone else deleted stayed'
+);
+
+-- case: a_review_in_a_cycle_deletes_as_before
+-- An admin's own signed-off review in a month in klasik, on periods, deletes as it always has.
+insert into public.reviews (cycle_id, company_id, employee_id, status, completed_at, gsr_score)
+values (tests.id('c_k_month'), tests.company('klasik'), tests.id('k_admin'), 'complete', now(), 60);
+select tests.act_as(tests.id('k_admin'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where cycle_id = %L and employee_id = %L$q$,
+                       tests.id('c_k_month'), tests.id('k_admin'))) = 1,
+  'cycle_delete: an admin could not delete their own signed-off review in a cycle'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+-- case: deleting_the_person_takes_their_gsrs
+-- The person goes, and their done GSR with them. And a Rococo admin who deletes a company
+-- holding their own done GSR is not stopped by it.
+delete from public.profiles where id = tests.id('s_mgr2');
+select tests.assert(
+  not exists (select 1 from public.reviews where id = tests.id('g_mgr2')),
+  'person_delete: deleting the person left their done GSR'
+);
+select set_config('hub.gsr_on_demand_for', 'sample-gone-47s', true);
+insert into public.companies (slug, name, gsr_mode) values ('sample-gone-47s', 'Sample gone 47s', 'on_demand');
+select set_config('hub.gsr_on_demand_for', '', true);
+select tests.create_person('s_rococo_gone', (select id from public.companies where slug = 'sample-gone-47s'), 'employee', true);
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on, done_on, completed_at, gsr_score)
+select c.id, tests.id('s_rococo_gone'), 'complete', '2030-02-01', '2030-02-02', '2030-02-02 12:00+00', 70
+  from public.companies c where c.slug = 'sample-gone-47s';
+select set_config('hub.gsr_conversion', '', true);
+select tests.act_as(tests.id('s_rococo_gone'));
+select tests.assert(
+  tests.rows_of($q$delete from public.companies where slug = 'sample-gone-47s'$q$) = 1,
+  'company_delete: a Rococo admin could not delete a company holding their own done GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.reviews where employee_id = tests.id('s_rococo_gone')),
+  'company_delete: the company''s GSR stayed'
+);

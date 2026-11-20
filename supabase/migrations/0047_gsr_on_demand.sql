@@ -32,7 +32,8 @@
 --      marks their own GSR done or reopens it, whatever their role.
 --   6. Its dates and limits. The database stamps both dates in the company's time zone, starts
 --      one only in a company on demand, one a person a day and two open at most.
---   7. Who starts one: the person, anyone who leads them, an admin who manages them.
+--   7. Who starts one: the person, anyone who leads them, an admin who manages them. Nobody
+--      deletes their own once it is done.
 --   8. public.gsr_last_started, the day each person's last GSR began, read through the wall.
 --   9. Its goals. goals.review_id points a GSR goal at its GSR. A GSR goal has one home, a cycle
 --      or a GSR; a goal on a GSR is that GSR's person's, in their company, one focus goal a GSR,
@@ -861,7 +862,8 @@ create trigger reviews_stamp_gsr
 --
 -- Marking done and reopening: a leader through "Leaders lock and reopen a GSR for the people
 -- they lead" (section 4), an admin through 0038's update policy, never the person themself
--- (section 4's guard). Deleting is an admin's, as for every review (0038).
+-- (section 4's guard). Deleting is an admin's, as for every review (0038), with one exception
+-- below: nobody deletes their own GSR once it is done.
 drop policy if exists "People start their own GSR" on public.reviews;
 create policy "People start their own GSR"
   on public.reviews for insert to authenticated
@@ -896,6 +898,37 @@ create policy "Leaders start a GSR for the people they lead"
     and completed_at is null
     and gsr_score is null
   );
+
+-- Nobody deletes their own GSR once it is done, whatever their role: a score someone else locked
+-- in stays on the record, as nobody reopens their own. An admin still deletes their own open GSR
+-- (one started on themself by mistake) and anyone's GSR they manage, done or not. A review in a
+-- cycle is not reached. Neither is a delete with no signed-in user (the SQL editor, the put-back)
+-- nor one that reaches the GSR because its person or its company is being deleted.
+create or replace function public.guard_own_done_gsr_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.cycle_id is null
+     and old.status = 'complete'
+     and (select auth.uid()) is not null
+     and private.auth_profile_id() = old.employee_id
+     and exists (select 1 from public.profiles p where p.id = old.employee_id)
+     and exists (select 1 from public.companies c where c.id = old.company_id) then
+    raise exception 'Your own GSR stays once it is done. Someone who leads you can delete it.'
+      using errcode = 'check_violation';
+  end if;
+  return old;
+end;
+$$;
+revoke execute on function public.guard_own_done_gsr_delete() from public, anon, authenticated;
+
+drop trigger if exists reviews_guard_own_done_delete on public.reviews;
+create trigger reviews_guard_own_done_delete
+  before delete on public.reviews
+  for each row execute function public.guard_own_done_gsr_delete();
 
 -- ---------------------------------------------------------------------------------------
 -- 8. When each person's last GSR was started
