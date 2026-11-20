@@ -90,26 +90,53 @@ describe("ModuleOnly", () => {
 describe("routes land the same with modules on", () => {
   type Persona = "admin" | "employee";
 
-  // Signs in as the persona through the real gate, opens the path, and waits until the
-  // router stops redirecting: the address has to hold still for 50ms on the real clock (the tests
-  // pin Date), not just for two checks in a row, since waitFor also checks on every DOM change (the
-  // sidebar's task count arriving, say) and two of those can land between one redirect and the
-  // next. Returns where it landed.
-  async function landing(path: string, persona: Persona, slug: string): Promise<{ pathname: string; search: string }> {
+  // Signs in as the persona through the real gate, opens the path, and returns where the router
+  // landed. It is told where the case expects to land, because "the address went quiet" is not
+  // the same as "the router is done": a redirect that waits on the hub's role and company check
+  // can take longer than any quiet window on a busy machine, and a helper that only waits for
+  // quiet returns one hop short. So it waits, as long as the redirects take (up to 5s), for the
+  // address to reach the expected pathname (and, when given, a search the case calls arrived).
+  // Then the address has to hold there for 50ms on the real clock (the tests pin Date), since
+  // waitFor also checks on every DOM change and two of those can land between one redirect and
+  // the next. If the router never reaches the expected address, or reaches it and then moves on,
+  // it returns the address it was at instead, so the caller's own assertion fails naming where
+  // the app really went.
+  async function landing(
+    path: string,
+    persona: Persona,
+    slug: string,
+    expected: string,
+    arrived: (search: URLSearchParams) => boolean = () => true,
+  ): Promise<{ pathname: string; search: string }> {
     window.history.pushState({}, "", `${path}${path.includes("?") ? "&" : "?"}persona=${persona}&company=${slug}`);
     render(<App />);
     await screen.findByRole("navigation", { name: "Primary" });
+    const here = () => ({ pathname: window.location.pathname, search: window.location.search });
+    const atExpected = () => window.location.pathname === expected && arrived(new URLSearchParams(window.location.search));
+    try {
+      await waitFor(() => {
+        if (!atExpected()) throw new Error(`Not at ${expected} yet`);
+      }, { timeout: 5000 });
+    } catch {
+      return here();
+    }
     let last = "";
     let since = 0;
+    let movedOn: { pathname: string; search: string } | null = null;
     await waitFor(() => {
+      if (movedOn) return;
+      if (!atExpected()) {
+        movedOn = here();
+        return;
+      }
       const now = window.location.pathname + window.location.search;
       if (now !== last) {
         last = now;
         since = performance.now();
       }
-      if (performance.now() - since < 50) throw new Error("Still redirecting");
+      if (performance.now() - since < 50) throw new Error(`Still settling at ${now}`);
     });
-    return { pathname: window.location.pathname, search: window.location.search };
+    return movedOn ?? here();
   }
 
   // Fills a route template with ids from that company's own fixtures.
@@ -175,8 +202,9 @@ describe("routes land the same with modules on", () => {
   for (const [slug, bundle] of companies) {
     it.each(adminCases)(`admin at ${slug}: %s lands where it always has`, async (template, expected) => {
       const path = fill(template, bundle);
-      const landed = await landing(path, "admin", slug);
-      expect(landed.pathname).toBe(expected ? fill(expected, bundle) : path);
+      const want = expected ? fill(expected, bundle) : path;
+      const landed = await landing(path, "admin", slug, want);
+      expect(landed.pathname).toBe(want);
     });
 
     // The provider sends the browser to the company's own return path (App.tsx ConnectionReturn).
@@ -184,15 +212,23 @@ describe("routes land the same with modules on", () => {
     // address so a reload does not report it again.
     it(`admin at ${slug}: a connection return lands on Settings > Connections with its outcome`, async () => {
       const message = "The sign-in was cancelled or refused. Nothing changed.";
-      const landed = await landing(`/settings/connections/${bundle.company.id}?connect_error=${encodeURIComponent(message)}`, "admin", slug);
+      // It has arrived once the outcome is off the address, not merely once the path matches.
+      const landed = await landing(
+        `/settings/connections/${bundle.company.id}?connect_error=${encodeURIComponent(message)}`,
+        "admin",
+        slug,
+        "/settings/connections",
+        (search) => !search.has("connect_error"),
+      );
       expect(landed.pathname).toBe("/settings/connections");
       expect(screen.getByText(message)).toBeInTheDocument();
       expect(new URLSearchParams(landed.search).get("connect_error")).toBeNull();
     });
 
     it.each(employeeCases)(`employee at ${slug}: %s lands on %s`, async (template, expected) => {
-      const landed = await landing(fill(template, bundle), "employee", slug);
-      expect(landed.pathname).toBe(fill(expected, bundle));
+      const want = fill(expected, bundle);
+      const landed = await landing(fill(template, bundle), "employee", slug, want);
+      expect(landed.pathname).toBe(want);
     });
   }
 
@@ -222,7 +258,7 @@ describe("routes land the same with modules on", () => {
     ["/tasks/kingdom-task-1", "employee", "klasik", "/"],
   ];
   it.each(moduleRoutes)("module routes: %s as %s at %s lands on %s", async (path, persona, slug, expected) => {
-    const landed = await landing(path, persona, slug);
+    const landed = await landing(path, persona, slug, expected);
     expect(landed.pathname).toBe(expected);
   });
 
