@@ -110,12 +110,19 @@ export function mockGsrStatus(id: string): Gsr["status"] | null {
 }
 
 // The opening discussion of a GSR, for mocks/gsr.ts: the service writes it through updateReview,
-// whose update reaches any reviews row the reader may change, a GSR's included. A done GSR keeps it
-// until it is reopened, with the words a signed-off review uses (0029, 0035).
+// whose update reaches any reviews row the reader may change, a GSR's included. As the database
+// holds it (0047): a done GSR is frozen whole (guard_signed_off_review); an admin of the company
+// writes it on an open one, and so does the person; a leader who is not an admin locks and reopens
+// and nothing else, and anyone else is refused (guard_review_employee_fields).
 export function patchMockGsrDiscussion(id: string, value: string | null): Gsr {
   const found = stored(id);
   if (!found) throw new Error(NOT_CHANGED_MESSAGE);
-  if (found.gsr.status === "complete" && value !== found.gsr.support_discussion) throw new Error("This review is signed off. Reopen it to change it.");
+  if (value === found.gsr.support_discussion) return replace(found.index, {});
+  if (found.gsr.status === "complete") throw new Error("This review is signed off. Reopen it to change it.");
+  const r = reach(found.gsr.company_id, found.gsr.employee_id);
+  if (!r.admin && !r.own) {
+    throw new Error(r.leads ? "A manager can lock and reopen a GSR, and nothing else on it." : "Only admins can edit review scores, status, and feedback.");
+  }
   return replace(found.index, { support_discussion: value });
 }
 

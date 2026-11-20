@@ -43,7 +43,7 @@ import App from "../App.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import { createGoal, createPillar, deletePillar, listGoals } from "../services/gsr.ts";
 import { deleteFocusTopic, upsertFocusTopic } from "../services/focusTopics.ts";
-import { listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
+import { OWN_GSR_MESSAGE, listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
 import { setActingPerson } from "../test/actingPerson.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
@@ -204,6 +204,43 @@ describe("one GSR's page", () => {
     expect(screen.queryByText(/% · Marked done by/)).not.toBeInTheDocument();
     const [stored] = await listPersonGsrs(RBA.company.id, rowan.id);
     expect(stored).toMatchObject({ status: "complete", gsr_score: null, reviewer_id: alex.id });
+  });
+
+  it("reads a not-started GSR as In progress", async () => {
+    renderGsr(seed(rowan.id, { status: "not_started" }), admin);
+    expect(await screen.findByText("In progress")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeInTheDocument();
+  });
+
+  it("shows a done GSR's stored score even when nobody is on file as marking it done", async () => {
+    renderGsr(seed(rowan.id, { status: "complete", done_on: "2026-08-31", completed_at: "2026-08-31T15:00:00.000Z", gsr_score: 65, reviewer_id: null }), admin);
+    expect(await screen.findByText("Done Aug 31, 2026")).toBeInTheDocument();
+    expect(screen.getByText("65%")).toBeInTheDocument();
+    expect(screen.queryByText(/Marked done by/)).not.toBeInTheDocument();
+  });
+
+  it("says a refused Mark done inside the dialog", async () => {
+    const gsr = seed(rowan.id);
+    renderGsr(gsr, manager);
+    await userEvent.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dialog = await screen.findByRole("dialog");
+    // The write reaches the database as Rowan himself, which it refuses.
+    setActingPerson(rowan);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Mark done" }));
+    expect(await within(dialog).findByText(OWN_GSR_MESSAGE)).toBeInTheDocument();
+    expect((await listPersonGsrs(RBA.company.id, rowan.id))[0].status).toBe("in_progress");
+  });
+
+  it("shows a manager who is not an admin the opening discussion read only on a report's GSR", async () => {
+    renderGsr(seed(rowan.id, { support_discussion: "A second truck" }), manager);
+    expect(await screen.findByText("A second truck")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "What would help you do your job better?" })).not.toBeInTheDocument();
+  });
+
+  it("offers an admin Delete GSR on their own GSR", async () => {
+    renderGsr(seed(alex.id), admin);
+    expect(await screen.findByRole("button", { name: "Delete GSR" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark done" })).not.toBeInTheDocument();
   });
 
   it("lets an admin delete a GSR after a confirm, and offers it to nobody else", async () => {

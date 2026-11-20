@@ -19,7 +19,7 @@ import Section from "../../ui/Section.tsx";
 import { eyebrowLabelClass } from "../../ui/type.ts";
 import { useHub } from "../../../context/HubContext.tsx";
 import { createGoal, deleteGoal } from "../../../services/gsr.ts";
-import { goalLockedFor, monthTotal, rankGoals, requiredAndStretch, scoreMonth } from "../../../lib/gsr/goals.ts";
+import { goalLockedFor, monthTotal, rankGoals, requiredAndStretch, scoreMonth, unfiledRoleGoals } from "../../../lib/gsr/goals.ts";
 import { gsrGoals, isOpen } from "../../../lib/gsr/onDemand.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { pluralize } from "../../../lib/format.ts";
@@ -77,9 +77,8 @@ export default function GsrGoalsPanel({
   const split = required ? requiredAndStretch(own, required) : null;
   const standing = (goal: Goal): Standing | null => (split ? (split.required.includes(goal) ? "mandatory" : "stretch") : null);
   const total = required ? monthTotal(own, required) : null;
-  // A role goal is filed once a goal with its title is on this GSR, whoever typed it.
-  const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const pendingRoleGoals = roleGoals.filter((template) => !own.some((g) => sameTitle(g.title, template.title)));
+  // The role's goals not filed on this GSR yet (lib/gsr/goals.ts).
+  const pendingRoleGoals = unfiledRoleGoals(roleGoals, own);
 
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);

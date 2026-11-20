@@ -15,7 +15,7 @@ import { actingPerson, setActingPerson } from "../actingPerson.ts";
 import { KLASIK, RBA, makeHub } from "../fixtures.ts";
 import { renderWithHub } from "../renderWithHub.tsx";
 import { getCompany } from "./companies.ts";
-import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote } from "./gsr.ts";
+import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote, updateReview } from "./gsr.ts";
 import {
   OWN_GSR_MESSAGE,
   deleteGsr,
@@ -230,5 +230,20 @@ describe("GSRs on demand mock", () => {
     await expect(startGsr(rba, kai)).rejects.toThrow("GSRs on demand are not turned on for this company.");
     actAs(admin);
     await expect(startGsr(rba, noor)).rejects.toThrow("GSRs on demand are not turned on for this company.");
+  });
+
+  it("lets only an admin and the person write a GSR's opening discussion, and freezes a done one", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const gsr = seedMockGsr({ company_id: rba, employee_id: kai, started_on: "2026-09-14", status: "in_progress" });
+    // Harper leads Kai but is not an admin: a leader locks and reopens, and nothing else.
+    actAs(harper);
+    await expect(updateReview(gsr.id, { support_discussion: "More crew" })).rejects.toThrow("A manager can lock and reopen a GSR, and nothing else on it.");
+    actAs(kai);
+    expect((await updateReview(gsr.id, { support_discussion: "More crew" })).support_discussion).toBe("More crew");
+    actAs(admin);
+    expect((await updateReview(gsr.id, { support_discussion: "More crew, and a truck" })).support_discussion).toBe("More crew, and a truck");
+    await markGsrDone(gsr.id, null, admin);
+    await expect(updateReview(gsr.id, { support_discussion: "Too late" })).rejects.toThrow("This review is signed off. Reopen it to change it.");
+    expect((await getGsr(gsr.id)).support_discussion).toBe("More crew, and a truck");
   });
 });

@@ -26,7 +26,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Check, Plus } from "lucide-react";
 import AddGoalForm from "./AddGoalForm.tsx";
 import FocusTopicCard from "./FocusTopicCard.tsx";
-import GoalEditor, { type Standing, type TaskLinks } from "./GoalEditor.tsx";
+import GoalEditor, { type NotesUpdate, type Standing, type TaskLinks } from "./GoalEditor.tsx";
 import GoalNotes from "./GoalNotes.tsx";
 import GoalTasks from "./GoalTasks.tsx";
 import Badge from "../ui/Badge.tsx";
@@ -37,14 +37,12 @@ import Section from "../ui/Section.tsx";
 import { textareaClass } from "../ui/forms.ts";
 import { GOAL_OUTCOME_TONE } from "../status.ts";
 import { createGoal, deleteGoal, updateGoal } from "../../services/gsr.ts";
-import { carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken } from "../../lib/gsr/goals.ts";
+import { carryForward, goalLockedFor, goalOutcome, hitCount, monthFrozen, monthLocked, monthTotal, rankGoals, requiredAndStretch, scoreMonth, splitGoals, stepsTaken, unfiledRoleGoals } from "../../lib/gsr/goals.ts";
 import { cyclePath, cycleSettled, cycleYear } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
 import { GOAL_KIND_LABELS, type Goal, type GoalKind, type GoalNote, type JobRoleGoal, type Review, type ReviewCycle } from "../../types/database.ts";
 import { eyebrowLabelClass as eyebrowClass } from "../ui/type.ts";
-
-type NotesUpdate = (update: (notes: GoalNote[]) => GoalNote[]) => void;
 
 // Last month's goal, read-only: how it landed, which steps were taken, and its notes.
 function LastMonthGoal({
@@ -240,8 +238,7 @@ export default function GoalSettingPanel({
   const [carrying, setCarrying] = useState("");
   const [seeding, setSeeding] = useState(false);
   // A role goal is filed once a goal with its title is on this month's list, whoever typed it.
-  const sameTitle = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const pendingRoleGoals = roleGoals.filter((template) => !thisCycle.some((g) => sameTitle(g.title, template.title)));
+  const pendingRoleGoals = unfiledRoleGoals(roleGoals, thisCycle);
   // The focus topic's GSR first, then role, professional and personal (lib/gsr/goals.ts).
   const ordered = rankGoals(thisCycle);
   const focusGoal = ordered.find((g) => g.is_focus) ?? null;

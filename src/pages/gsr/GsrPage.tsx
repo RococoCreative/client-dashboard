@@ -218,8 +218,10 @@ export default function GsrPage() {
             <span className="text-ink">{personName}</span>
             {employee?.title ? <span>{employee.title}</span> : null}
             <Badge tone={open ? "info" : "success"}>{open ? "In progress" : `Done ${formatDate(gsr.done_on)}`}</Badge>
-            {!open && markedBy ? (
-              <span className="tnum text-ink-3">{gsr.gsr_score !== null ? `${gsr.gsr_score}% · Marked done by ${markedBy}` : `Marked done by ${markedBy}`}</span>
+            {/* A stored score always shows; who marked it done only when that is known (a GSR
+                carried over from a past month may have no reviewer). */}
+            {!open && (gsr.gsr_score !== null || markedBy) ? (
+              <span className="tnum text-ink-3">{[gsr.gsr_score !== null ? `${gsr.gsr_score}%` : null, markedBy ? `Marked done by ${markedBy}` : null].filter(Boolean).join(" · ")}</span>
             ) : null}
           </span>
         }
