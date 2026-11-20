@@ -55,7 +55,7 @@ export default function DivisionCompare({ rows, monthLabel, active }: { rows: re
                 {row.gsrsDone !== undefined ? (
                   // A company on demand has no month's GSR cycle: the GSRs done in the month instead.
                   <div className="flex gap-1">
-                    <dt className="text-ink-3">GSRs done this month</dt>
+                    <dt className="text-ink-3">GSRs done</dt>
                     <dd>{row.gsrsDone ?? "-"}</dd>
                   </div>
                 ) : (

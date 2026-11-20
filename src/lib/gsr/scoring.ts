@@ -244,12 +244,16 @@ export function pillarsForReview(review: { status: string; pillar_snapshot?: Pil
 // item, so its score is null and it sat out of the score of record (pillarLeftOut), the other
 // pillars carrying its weight. "Not scored" there reads as if the review were unfinished; this
 // says why it is empty. The review page and My reviews both draw these bars, so both ask here and
-// say the same thing.
+// say the same thing. A company whose GSRs are on demand (companies.gsr_mode, 0047) has no months:
+// there the pillar sat out because no GSR was done in the period. The format defaults to periods,
+// so a caller that does not pass it reads exactly as before.
 export function signedOffBarDetail(
   review: { status: string },
   pillar: { scoringType?: ScoringType; score: number | null },
+  gsrMode: "periods" | "on_demand" = "periods",
 ): string | undefined {
-  return review.status === "complete" && pillar.scoringType === "gsr_goals" && pillar.score === null ? "No month locked in" : undefined;
+  if (!(review.status === "complete" && pillar.scoringType === "gsr_goals" && pillar.score === null)) return undefined;
+  return gsrMode === "on_demand" ? "No GSR done" : "No month locked in";
 }
 
 // Team average over reviews that have any score at all; null for an unscored team.

@@ -77,7 +77,7 @@ export default function MyReviewsPage() {
                 </div>
                 <div className="space-y-3 md:col-span-2">
                   {bars.map((p) => (
-                    <ScoreBar key={p.pillarId} label={p.leftOut ? `${p.name} (left out)` : `${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p)} />
+                    <ScoreBar key={p.pillarId} label={p.leftOut ? `${p.name} (left out)` : `${p.name} (${formatNumber(p.weight)}%)`} percent={p.score} detail={signedOffBarDetail(featured.review, p, company!.gsr_mode)} />
                   ))}
                 </div>
               </div>

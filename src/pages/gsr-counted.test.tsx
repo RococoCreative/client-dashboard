@@ -37,11 +37,12 @@ vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewP
 vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
-import { createPillar, deletePillar, deleteScore, listReviewScores, updateReview } from "../services/gsr.ts";
+import { createPillar, deletePillar, deleteScore, ensureReview, listReviewScores, updateReview } from "../services/gsr.ts";
 import { markGsrDone, reopenGsr, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
 import { COMPANIES, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import type { Gsr } from "../types/database.ts";
+import MyReviewsPage from "./gsr/MyReviewsPage.tsx";
 import PersonPage from "./people/PersonPage.tsx";
 import ReviewPage from "./gsr/ReviewPage.tsx";
 import ScorecardsPage from "./gsr/ScorecardsPage.tsx";
@@ -145,6 +146,84 @@ describe("a scored review in a company on demand", () => {
   });
 });
 
+describe("signing off with no scored GSR in the period", () => {
+  // Signs off through the dialog that warns the pillar will sit out, then checks what was frozen.
+  async function signOffLeftOut(pillarId: string, dialogLine: RegExp) {
+    renderReview();
+    await screen.findByRole("heading", { name: "Monthly GSRs" });
+    await userEvent.click(await screen.findByRole("button", { name: "Mark complete" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Sign off without GSRs?" })).toBeInTheDocument();
+    expect(within(dialog).getByText(dialogLine)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Mark complete" }));
+    expect(await screen.findByRole("button", { name: "Reopen" })).toBeInTheDocument();
+    // No Monthly GSRs line item is written, so the pillar sat out of the score of record.
+    expect((await listReviewScores(jamieReview.id)).filter((s) => s.pillar_id === pillarId)).toHaveLength(0);
+    const section = await pillarSection();
+    expect(within(section).getByText("Left out of this review")).toBeInTheDocument();
+    expect(within(section).getByText("-")).toBeInTheDocument();
+    expect(within(section).getByText("No GSR inside this period was done when it was signed off, so this pillar was left out and the other pillars carried its weight.")).toBeInTheDocument();
+    // The overall card's bar says why it is empty, without a month.
+    const bar = screen.getByText("Monthly GSRs (left out)").parentElement as HTMLElement;
+    expect(within(bar).getByText("No GSR done")).toBeInTheDocument();
+    expect(screen.queryByText("No month locked in")).not.toBeInTheDocument();
+  }
+
+  it("writes no line item when no GSR was done, and reads No GSR done", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const pillar = await scoresGsrs();
+    onTestFinished(async () => {
+      await updateReview(jamieReview.id, { status: "in_progress", completed_at: null });
+    });
+    seed(jamie.id, { started_on: "2026-09-14" });
+    await signOffLeftOut(pillar.id, /^No scored GSR was done in Q3 2026, so Monthly GSRs is left out/);
+  });
+
+  it("treats a GSR done with no score the same, and lists it as done with no score", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const pillar = await scoresGsrs();
+    onTestFinished(async () => {
+      await updateReview(jamieReview.id, { status: "in_progress", completed_at: null });
+    });
+    done(jamie.id, "2026-09-03", null);
+    const open = renderReview();
+    const section = await pillarSection();
+    expect(await within(section).findByText("Done Sep 3, 2026, with no score")).toBeInTheDocument();
+    expect(within(section).getByText("Left out of this review")).toBeInTheDocument();
+    open.unmount();
+    await signOffLeftOut(pillar.id, /^No scored GSR was done in Q3 2026/);
+  });
+});
+
+describe("My reviews for a review signed off with the GSR pillar left out", () => {
+  async function signedOffFresh(hub: ReturnType<typeof makeHub>) {
+    const pillar = await scoresGsrs();
+    const fresh = { ...hub.profile, id: "rba-fresh-person", full_name: "Robin Fresh" };
+    const review = await ensureReview(q3.id, RBA.company.id, fresh.id);
+    await updateReview(review.id, { status: "complete", completed_at: new Date().toISOString(), reviewer_id: alex.id });
+    onTestFinished(async () => {
+      await updateReview(review.id, { status: "in_progress", completed_at: null });
+    });
+    renderWithHub(<MyReviewsPage />, { ...hub, profile: fresh });
+    const card = (await screen.findByRole("heading", { name: q3.name })).closest("section") as HTMLElement;
+    return { pillar, bar: within(card).getByText("Monthly GSRs (left out)").parentElement as HTMLElement };
+  }
+
+  it("shows No GSR done in a company on demand", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const { bar } = await signedOffFresh(makeHub("employee", onDemand));
+    expect(within(bar).getByText("No GSR done")).toBeInTheDocument();
+    // The bar's label is the pillar's own name; what it says about the pillar has no month.
+    expect(within(bar).queryByText("No month locked in")).not.toBeInTheDocument();
+  });
+
+  it("keeps today's text for a company on periods", async () => {
+    const { bar } = await signedOffFresh(makeHub("employee", RBA.company));
+    expect(within(bar).getByText("No month locked in")).toBeInTheDocument();
+    expect(within(bar).queryByText("No GSR done")).not.toBeInTheDocument();
+  });
+});
+
 describe("a person's Reviews tab in a company on demand", () => {
   it("reads the same figure as the open scored review", async () => {
     setMockGsrMode(RBA.company.id, "on_demand");
@@ -171,7 +250,7 @@ describe("the division comparison in a company on demand", () => {
     seed(noor.id, { started_on: "2026-09-14" });
     renderWithHub(<ScorecardsPage />, admin);
     const strip = await screen.findByRole("region", { name: "Division compare" });
-    const doneIn = (label: string) => within(within(strip).getByRole("listitem", { name: label })).getByText("GSRs done this month").nextElementSibling;
+    const doneIn = (label: string) => within(within(strip).getByRole("listitem", { name: label })).getByText("GSRs done").nextElementSibling;
     await waitFor(() => expect(doneIn("Combined")).toHaveTextContent("3"));
     expect(doneIn("RBA South")).toHaveTextContent("2");
     expect(doneIn("RBA North")).toHaveTextContent("1");
@@ -182,7 +261,7 @@ describe("the division comparison in a company on demand", () => {
     renderWithHub(<ScorecardsPage />, makeHub("admin", RBA.company));
     const strip = await screen.findByRole("region", { name: "Division compare" });
     expect(within(strip).getAllByText("Reviews complete").length).toBeGreaterThan(0);
-    expect(within(strip).queryByText("GSRs done this month")).not.toBeInTheDocument();
+    expect(within(strip).queryByText("GSRs done")).not.toBeInTheDocument();
   });
 });
 

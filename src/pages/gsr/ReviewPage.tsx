@@ -880,7 +880,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     label={p.leftOut ? `${p.name} (left out)` : `${p.name} (${formatNumber(p.weight)}%)`}
                     percent={p.score}
                     // Signed off with no month locked in, the pillar sat out; its card says so.
-                    detail={onDemand && signedOffBarDetail(review, p) ? "No GSR done" : signedOffBarDetail(review, p)}
+                    detail={signedOffBarDetail(review, p, company!.gsr_mode)}
                   />
                 ))}
                 {shownPillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
@@ -1146,7 +1146,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
           title={onDemand ? "Sign off without GSRs?" : "Sign off without Monthly GSRs?"}
           body={
             onDemand
-              ? `No GSR was done in ${cycle.name}, so ${gsrPillars[0]?.name ?? "the GSR pillar"} is left out of this review and the other pillars carry its weight. Mark a GSR done first if it should count.`
+              ? `No scored GSR was done in ${cycle.name}, so ${gsrPillars[0]?.name ?? "the GSR pillar"} is left out of this review and the other pillars carry its weight. Mark a GSR done first if it should count.`
               : `No month in ${cycle.name} is locked in, so Monthly GSRs is left out of this review and the other pillars carry its weight. Lock a month in first if it should count.`
           }
           confirmLabel="Mark complete"
