@@ -12,6 +12,17 @@ import { errorMessage } from "../../lib/errors.ts";
 import type { Project, ProjectAssignment, Review, ReviewProjectNote } from "../../types/database.ts";
 
 type NotesUpdate = (update: (notes: ReviewProjectNote[]) => ReviewProjectNote[]) => void;
+// The section's line for each reader: once frozen, for whoever writes the notes, for the person,
+// and for anyone else.
+export type ProjectNotesWording = { signedOff: string; writer: string; own: string; other: string };
+
+// A review's wording, which every review in a cycle shows.
+const REVIEW_WORDING: ProjectNotesWording = {
+  signedOff: "The note on each project, as it was when this review was signed off.",
+  writer: "A note on each project the person is assigned to, written in the review. The person reads them on their own review.",
+  own: "Your manager's note on each of your projects from this review.",
+  other: "The note on each project from this review.",
+};
 
 export default function ReviewProjects({
   review,
@@ -21,8 +32,10 @@ export default function ReviewProjects({
   canWrite,
   isOwn,
   onNotes,
+  wording = REVIEW_WORDING,
 }: {
-  review: Review;
+  // A review in a cycle or a GSR on demand: only its id, company and status are read.
+  review: Pick<Review, "id" | "company_id" | "status">;
   // The person's assignments in the review's company.
   assignments: ProjectAssignment[];
   // The company's projects, archived ones too, to name each one.
@@ -31,6 +44,8 @@ export default function ReviewProjects({
   canWrite: boolean;
   isOwn: boolean;
   onNotes: NotesUpdate;
+  // Left out, a review's; a GSR on demand passes its own.
+  wording?: ProjectNotesWording;
 }) {
   const [error, setError] = useState("");
   const signedOff = review.status === "complete";
@@ -58,13 +73,7 @@ export default function ReviewProjects({
       eyebrow="Project by project"
       title="Projects"
       description={
-        signedOff
-          ? "The note on each project, as it was when this review was signed off."
-          : canWrite
-            ? "A note on each project the person is assigned to, written in the review. The person reads them on their own review."
-            : isOwn
-              ? "Your manager's note on each of your projects from this review."
-              : "The note on each project from this review."
+        signedOff ? wording.signedOff : canWrite ? wording.writer : isOwn ? wording.own : wording.other
       }
     >
       {error ? <Notice tone="error" className="mb-3">{error}</Notice> : null}

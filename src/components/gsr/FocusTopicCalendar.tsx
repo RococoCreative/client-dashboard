@@ -58,7 +58,12 @@ function CycleNote({ cycle, topic, canMirror }: { cycle: ReviewCycle | undefined
   return <p className="mt-1 text-[12px] text-ink-3">The {cycle.name} GSR keeps its own theme: {cycle.theme}</p>;
 }
 
-export default function FocusTopicCalendar({ companyId }: { companyId: string }) {
+// What the calendar says it is for. Today's words are a company on periods'; a company on demand
+// passes its own, as the other shared parts do.
+const PERIODS_DESCRIPTION =
+  "The topic each month's #1 GSR is built on, such as a core value or a process push. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is.";
+
+export default function FocusTopicCalendar({ companyId, description = PERIODS_DESCRIPTION }: { companyId: string; description?: string }) {
   const location = useLocation();
   const { profile } = useHub();
   // Copying a topic onto an open GSR changes the cycle, which only a full-scope admin may do.
@@ -128,7 +133,7 @@ export default function FocusTopicCalendar({ companyId }: { companyId: string })
       <Section
         eyebrow="The whole company, one topic a month"
         title="Focus topic calendar"
-        description="The topic each month's #1 GSR is built on, such as a core value or a process push. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is."
+        description={description}
         padded={false}
       >
         {state.error && !state.data ? <Notice tone="error" className="m-4 sm:m-6">{state.error}</Notice> : null}

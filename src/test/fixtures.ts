@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, Gsr, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -11,6 +11,8 @@ import { isCompanyAdminRole, isLeadRole } from "../lib/people.ts";
 import { meets } from "../lib/capabilities.ts";
 import { mockCapabilityMap } from "./mocks/capabilities.ts";
 import { applyDenseLoad } from "./denseLoad.ts";
+import { applyOnDemandDemo } from "./onDemandDemo.ts";
+import { actingPerson } from "./actingPerson.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -19,10 +21,10 @@ const EARLIER = "2026-08-04T15:30:00.000Z";
 const RUN_STARTED = "2026-09-15T11:58:00.000Z";
 
 export const COMPANIES: Company[] = [
-  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
-  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
+  { id: "co-kingdom", slug: "kingdom", name: "Kingdom Custom Construction", theme_key: "kingdom", logo_url: null, modules: [...MODULE_KEYS], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
+  { id: "co-klasik", slug: "klasik", name: "Klasik Construction", theme_key: "klasik", logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
   // RBA has the task tracker on and nothing else.
-  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: NOW, updated_at: NOW },
+  { id: "co-rba", slug: "rba", name: "RBA Projects", theme_key: "rba", logo_url: null, modules: ["tasks"], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: NOW, updated_at: NOW },
 ];
 
 export const DOMAINS: CompanyDomain[] = [
@@ -280,6 +282,9 @@ export interface CompanyBundle {
   criteria: GsrCriterion[];
   cycles: ReviewCycle[];
   reviews: Review[];
+  // 0047. GSRs that stand on their own, with no cycle: empty in every fixture, since every company
+  // here is on periods. Tests seed them with seedMockGsr; the demo adds some with ?gsr=on_demand.
+  gsrs: Gsr[];
   scores: ReviewScore[];
   impactScores: ImpactScore[];
   jobRoles: JobRole[];
@@ -378,6 +383,7 @@ function build(company: Company): CompanyBundle {
     can_view_divisions: false,
     view_all_divisions: person.role === "admin",
     view_division_ids: [],
+    gsr_cadence: "monthly",
     created_at: EARLIER,
     updated_at: EARLIER,
   }));
@@ -419,6 +425,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-current"),
       company_id: company.id,
       name: quarterly ? "Q3 2026" : "September 2026",
+      kind: spec.cadence === "monthly" ? "gsr" : "review",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-07-01" : "2026-09-01",
       period_end: quarterly ? "2026-09-30" : "2026-09-30",
@@ -433,6 +440,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-previous"),
       company_id: company.id,
       name: quarterly ? "Q2 2026" : "August 2026",
+      kind: spec.cadence === "monthly" ? "gsr" : "review",
       cadence: spec.cadence,
       period_start: quarterly ? "2026-04-01" : "2026-08-01",
       period_end: quarterly ? "2026-06-30" : "2026-08-31",
@@ -450,6 +458,7 @@ function build(company: Company): CompanyBundle {
       id: p("cycle-overlapping"),
       company_id: company.id,
       name: quarterly ? "September 2026" : "Q3 2026",
+      kind: quarterly ? "gsr" : "review",
       cadence: quarterly ? "monthly" : "quarterly",
       period_start: quarterly ? "2026-09-01" : "2026-07-01",
       period_end: "2026-09-30",
@@ -531,6 +540,8 @@ function build(company: Company): CompanyBundle {
       pillar_snapshot: i === 1 ? signedOffWith : null,
       gsr_score: null,
       support_discussion: null,
+      started_on: null,
+      done_on: null,
       created_at: NOW,
       updated_at: NOW,
     };
@@ -739,6 +750,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Run the weekly client update without prompting",
@@ -764,6 +776,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Get the OSHA 30 certification",
@@ -785,6 +798,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "personal",
           is_focus: false,
           title: "Coach the kids' fall soccer season",
@@ -806,6 +820,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Close out the punch list within five days",
@@ -830,6 +845,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Send the Friday client update every week",
@@ -854,6 +870,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "role",
           is_focus: false,
           title: "Finish OSHA modules 1 to 10",
@@ -879,6 +896,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[0].id,
+          review_id: null,
           kind: "professional",
           is_focus: true,
           title: "Core value: Integrity",
@@ -903,6 +921,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: cycles[1].id,
+          review_id: null,
           kind: "professional",
           is_focus: true,
           title: "Safety documentation",
@@ -927,6 +946,7 @@ function build(company: Company): CompanyBundle {
           company_id: company.id,
           employee_id: employees[0].id,
           cycle_id: null,
+          review_id: null,
           kind: "professional",
           is_focus: false,
           title: "Lead a project from bid to closeout",
@@ -1163,6 +1183,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     },
@@ -1188,6 +1209,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: NOW,
       updated_at: NOW,
     });
@@ -1368,6 +1390,7 @@ function build(company: Company): CompanyBundle {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: EARLIER,
       updated_at: EARLIER,
     });
@@ -1436,7 +1459,7 @@ function build(company: Company): CompanyBundle {
     reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
   }
 
-  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
+  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, gsrs: [], scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
@@ -1446,6 +1469,13 @@ const BUNDLES: CompanyBundle[] = COMPANIES.map(build);
 if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("load") === "dense") {
   const rba = BUNDLES.find((b) => b.company.slug === "rba");
   if (rba) applyDenseLoad(rba);
+}
+
+// RBA on GSRs on demand, for visual checks (npm run demo, with ?gsr=on_demand in the address). Read
+// after the dense load, so the two can be on together. Tests never set it.
+if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("gsr") === "on_demand") {
+  const rba = BUNDLES.find((b) => b.company.slug === "rba");
+  if (rba) applyOnDemandDemo(rba);
 }
 
 const ROCOCO: Profile = {
@@ -1468,6 +1498,7 @@ const ROCOCO: Profile = {
   can_view_divisions: false,
   view_all_divisions: false,
   view_division_ids: [],
+  gsr_cadence: "monthly",
   created_at: EARLIER,
   updated_at: EARLIER,
 };
@@ -1600,6 +1631,27 @@ export function personaFromLocation(): { profile: Profile; company: Company } {
   const company = COMPANIES.find((c) => c.slug === slug) ?? KLASIK.company;
   const bundle = bundleFor(company.id) ?? KLASIK;
   return { profile: personaProfile(persona, bundle), company };
+}
+
+// Who is acting on a company's rows, for the mocks that judge who may do what (mocks/gsrOnDemand.ts).
+// First the person recorded in src/test/actingPerson.ts: the hub a page test rendered (renderWithHub
+// records it) or one a unit test set. Failing that, the demo persona of the address, as the person
+// holding that role in the company the way makeHub(persona, company) picks them; that is the demo's
+// path, which never renders through renderWithHub. Failing both, the company's admin. A persona
+// string that is not one of the five, or a company with no sample data, is an error rather than
+// someone else quietly acting. A documented persona a company lacks keeps makeHub's stand-in: the
+// owner at Klasik and RBA is the admin, the manager at Klasik is the employee.
+const PERSONAS: readonly Persona[] = ["admin", "employee", "rococo", "owner", "manager"];
+export function personaIn(companyId: string): Profile {
+  const recorded = actingPerson();
+  if (recorded) return recorded;
+  const remembered = readRemembered();
+  const persona = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("persona") ?? remembered.persona ?? "admin";
+  const bundle = bundleFor(companyId);
+  if (!PERSONAS.includes(persona as Persona) || !bundle) {
+    throw new Error(`The demo persona "${persona}" matches nobody at ${bundle?.company.name ?? companyId}.`);
+  }
+  return personaProfile(persona as Persona, bundle);
 }
 
 // The demo's in-app redirects drop the query string, so the last persona is kept for the tab.

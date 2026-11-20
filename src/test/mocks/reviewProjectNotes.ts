@@ -1,10 +1,11 @@
 // The review project notes service on the in-memory fixtures, for page tests and the demo. Same
-// exports as src/services/reviewProjectNotes.ts: one note per project per review, the company taken
-// from the review, and a signed-off review keeps its notes until it is reopened, as the database
-// does (0035).
+// exports as src/services/reviewProjectNotes.ts: one note per project per review (a review in a
+// cycle or a GSR on demand), the company taken from the review, and a signed-off review keeps its
+// notes until it is reopened, as the database does (0035).
 import type { ReviewProjectNote } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 import { getReview } from "./gsr.ts";
+import { getGsr } from "./gsrOnDemand.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const notes = fromAll((b) => b.reviewProjectNotes).map((x) => ({ ...x }));
@@ -15,6 +16,9 @@ const now = () => new Date().toISOString();
 
 const SIGNED_OFF = "This review is signed off. Reopen it to change it.";
 
+// The review a note hangs on: one in a cycle, or a GSR on demand (0047), which the GSRs mock holds.
+const reviewOf = (id: string) => getReview(id).catch(() => getGsr(id));
+
 export async function listReviewProjectNotes(reviewId: string): Promise<ReviewProjectNote[]> {
   return notes
     .filter((n) => n.review_id === reviewId)
@@ -23,7 +27,7 @@ export async function listReviewProjectNotes(reviewId: string): Promise<ReviewPr
 }
 
 export async function upsertReviewProjectNote(input: { company_id: string; review_id: string; project_id: string; note: string | null }): Promise<ReviewProjectNote> {
-  const review = await getReview(input.review_id);
+  const review = await reviewOf(input.review_id);
   if (review.status === "complete") throw new Error(SIGNED_OFF);
   const note = input.note?.trim() || null;
   const existing = notes.find((n) => n.review_id === input.review_id && n.project_id === input.project_id);
@@ -39,6 +43,6 @@ export async function upsertReviewProjectNote(input: { company_id: string; revie
 export async function deleteReviewProjectNote(id: string): Promise<void> {
   const note = notes.find((n) => n.id === id);
   if (!note) throw new Error(NOT_CHANGED_MESSAGE);
-  if ((await getReview(note.review_id)).status === "complete") throw new Error(SIGNED_OFF);
+  if ((await reviewOf(note.review_id)).status === "complete") throw new Error(SIGNED_OFF);
   notes.splice(notes.indexOf(note), 1);
 }

@@ -27,6 +27,11 @@
 // by an admin, and so are the project notes. A scored review is read-only apart from their
 // reflection and the opening discussion. Every change saves on its own, so there is no save
 // button to forget.
+//
+// In a company whose GSRs are on demand (companies.gsr_mode, 0047) there are no GSR months: a
+// scored review's Monthly GSRs pillar reads the person's GSRs done inside the cycle's period
+// (scoreGsrsInPeriod, lib/gsr/onDemand.ts) and lists them, each linking to its own page. Sign-off
+// writes the same one line item. A company on periods reads its months exactly as before.
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Plus, RotateCcw } from "lucide-react";
@@ -68,16 +73,19 @@ import { listMetricEntries, listRoleMetrics } from "../../services/scorecards.ts
 import { listProjectAssignments } from "../../services/projectAssignments.ts";
 import { listProjects } from "../../services/projects.ts";
 import { listReviewProjectNotes } from "../../services/reviewProjectNotes.ts";
+import { listPersonGsrs } from "../../services/gsrOnDemand.ts";
 import { monthOf } from "../../lib/scorecard.ts";
 import { computeReviewScore, countCriteria, hasScoredItem, lineItemPercent, pillarsForReview, scoreInputsForReview, signedOffBarDetail, weightTotal, type ScoreInput } from "../../lib/gsr/scoring.ts";
 import { SECTION_MY, cyclePath, cycleSettled, cycleYear, monthsWithin, omittedCycleIdsFor, previousCycle, reviewPath, sectionOf } from "../../lib/gsr/cycles.ts";
 import { goalOutcome, hitCount, lockedMonthsIn, monthLocked, monthTotal, scoreGsrMonths, scoreMonth, type GsrMonthsFigure } from "../../lib/gsr/goals.ts";
+import { gsrsCountedIn, scoreGsrsInPeriod } from "../../lib/gsr/onDemand.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import { displayName, formatDateTime, formatNumber, formatPeriod, moneyFieldError, parseMoney, pluralize } from "../../lib/format.ts";
+import { displayName, formatDate, formatDateTime, formatNumber, formatPeriod, moneyFieldError, parseMoney, pluralize } from "../../lib/format.ts";
 import {
   PREVIOUS_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   keysOf,
+  type Gsr,
   type GsrCriterion,
   type GsrPillar,
   type PreviousStatus,
@@ -149,6 +157,53 @@ function GsrPillarBody({
   );
 }
 
+type GsrPeriodFigure = ReturnType<typeof scoreGsrsInPeriod<Gsr>>;
+
+// The GSRs a scored review reads in a company on demand: each one done inside the period, with the
+// day it was done and its score, then each one open now, which is not counted yet. Each opens its
+// own page. The figures come from scoreGsrsInPeriod (lib/gsr/onDemand.ts).
+function GsrsInPeriodList({ figure }: { figure: GsrPeriodFigure }) {
+  return (
+    <ul className="divide-y divide-line">
+      {figure.gsrs.map(({ gsr, counted }) => (
+        <li key={gsr.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+          <div className="min-w-0">
+            <Link to={`/gsr/reviews/${gsr.id}`} className={`text-sm text-link hover:underline ${tapTargetClass}`}>GSR · {formatDate(gsr.started_on)}</Link>
+            <p className="tnum text-[12px] text-ink-3">
+              {gsr.done_on === null ? "Not counted yet" : counted ? `Done ${formatDate(gsr.done_on)}` : `Done ${formatDate(gsr.done_on)}, with no score`}
+            </p>
+          </div>
+          {counted ? <span className="tnum text-sm text-ink">{gsr.gsr_score}%</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// A Monthly GSRs pillar on a scored review in a company on demand: the GSRs done inside the period,
+// each counted at the score it was marked done with, and those still open, which are not; after
+// sign-off, the figure the review was signed off with.
+function OnDemandGsrPillarBody({ figure, signedOff }: { figure: GsrPeriodFigure | null; signedOff: ReviewScore | null | undefined }) {
+  if (signedOff !== undefined) {
+    if (!signedOff?.target) return <p className="text-sm text-ink-2">No GSR inside this period was done when it was signed off, so this pillar was left out and the other pillars carried its weight.</p>;
+    return <p className="text-sm text-ink-2">{lineItemPercent({ target: signedOff.target, actual: signedOff.actual ?? 0 })}% across {pluralize(gsrsCountedIn(signedOff.target), "GSR")}, as signed off.</p>;
+  }
+  if (!figure || figure.gsrs.length === 0) {
+    return <p className="text-sm text-ink-2">No GSR was done inside this period, so this pillar is left out and the other pillars carry its weight.</p>;
+  }
+  const counted = figure.gsrs.filter((g) => g.counted).length;
+  return (
+    <div>
+      <GsrsInPeriodList figure={figure} />
+      <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">
+        {counted === 0
+          ? "No GSR in this period is done with a score yet. A GSR counts once it is marked done. If none counts when this review is signed off, this pillar is left out and the other pillars carry its weight."
+          : `${lineItemPercent(figure)}% across ${pluralize(counted, "GSR")} done in this period. Each counts equally; one still open is not counted. Frozen into this review when it is marked complete.`}
+      </p>
+    </div>
+  );
+}
+
 // Mounted by the router with the id in the URL, and by My GSR with the id as a prop so the
 // employee's own month renders under their own sidebar entry and tabs. Embedded, it has no back
 // link: the tabs above are the way around.
@@ -158,6 +213,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   const { company, profile, isAdmin } = useHub();
   const tasksOn = hasModule(company, "tasks");
   const companyId = company!.id;
+  // GSRs that stand on their own (0047): only behind the company's own setting.
+  const onDemand = company!.gsr_mode === "on_demand";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // A deliverable line carries its target, actual and notes, and removing it changes the
@@ -216,7 +273,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     // The tasks on this month's and last month's goals, open and done, where the company runs tasks.
     const shownMonths = cycle.cadence === "monthly" ? [cycle.id, previousCycle(cycles, cycle)?.id].filter((id): id is string => Boolean(id)) : [];
     const shownGoalIds = goals.filter((g) => g.scope === "cycle" && g.cycle_id !== null && shownMonths.includes(g.cycle_id)).map((g) => g.id);
-    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks] = await Promise.all([
+    const [kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, personGsrs] = await Promise.all([
       listEmployeeKpis(review.company_id, review.employee_id, year),
       listCompanyGoals(review.company_id, year),
       listImpactScores(review.company_id, review.employee_id),
@@ -244,9 +301,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       reviewMonth ? listRoleMetrics(review.company_id, true) : Promise.resolve([]),
       reviewMonth ? listMetricEntries(review.company_id, { employeeId: review.employee_id, year: Number(reviewMonth.slice(0, 4)) }) : Promise.resolve([]),
       tasksOn && cycle.cadence === "monthly" ? listTasksForGoals(review.company_id, shownGoalIds) : Promise.resolve<TaskWithSteps[] | null>(null),
+      // In a company on demand, the person's GSRs, for a scored review to read those done in its period.
+      onDemand && cycle.cadence !== "monthly" ? listPersonGsrs(review.company_id, review.employee_id) : Promise.resolve<Gsr[]>([]),
     ]);
-    return { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, reviewMonth, year };
-  }, [reviewId, companyId, tasksOn]);
+    return { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, personGsrs, reviewMonth, year };
+  }, [reviewId, companyId, tasksOn, onDemand]);
 
   // The panel is handed the person and year of the review on screen, so every figure it reports
   // is stamped with the same two. Stable between renders, because the panel reports again
@@ -263,7 +322,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, reviewMonth, year } = state.data;
+  const { review, cycle, cycles, pillars, criteria, scores, people, goals, directory, kpis, companyGoals, impact, personReviews, roleGoals, notes, omissions, assignments, projects, projectNotes, metrics, entries, goalTasks, personGsrs, reviewMonth, year } = state.data;
   const employee = people.find((p) => p.id === review.employee_id) ?? null;
   // Full names by profile id, from the directory, for everyone the page names who is not its subject.
   const names = new Map(directory.map((entry) => [entry.id, entry.full_name?.trim() || "Unnamed"] as const));
@@ -302,11 +361,15 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
   // A Monthly GSRs pillar is scored from those same months, each at the score an admin locked it
   // in at; sign-off writes the period's figure as one line item (lib/gsr/goals.ts).
   const gsrPillars = pillars.filter((p) => p.scoring_type === "gsr_goals" && p.is_active);
-  const gsrFigures = new Map(monthly ? [] : gsrPillars.map((p) => [p.id, scoreGsrMonths(cycle, cycles, goals, personReviews, p.required_goals, omittedIds)] as const));
+  const gsrFigures = new Map(monthly || onDemand ? [] : gsrPillars.map((p) => [p.id, scoreGsrMonths(cycle, cycles, goals, personReviews, p.required_goals, omittedIds)] as const));
+  // In a company on demand there are no months: the GSRs done inside this period, each at the score
+  // it was marked done with (lib/gsr/onDemand.ts). One figure, whatever the pillar.
+  const gsrPeriod = onDemand && !monthly ? scoreGsrsInPeriod(cycle, personGsrs) : null;
+  const gsrLine = (pillarId: string): { target: number; actual: number } | undefined => gsrPeriod ?? gsrFigures.get(pillarId);
   // With no month locked in, sign-off leaves Monthly GSRs out of this review (scoring.ts), and
   // the admin is told before it happens.
-  const gsrLeftOut = !monthly && gsrPillars.length > 0 && gsrPillars.every((p) => (gsrFigures.get(p.id)?.target ?? 0) === 0);
-  const months = monthly
+  const gsrLeftOut = !monthly && gsrPillars.length > 0 && gsrPillars.every((p) => (gsrLine(p.id)?.target ?? 0) === 0);
+  const months = monthly || onDemand
     ? []
     : monthsWithin(cycle, cycles).map((month) => {
         const own = goals.filter((g) => g.scope === "cycle" && g.cycle_id === month.id);
@@ -339,7 +402,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         ...scores.filter((s) => !signedOffLater(s.pillar_id)),
         ...(rollup && rollup.target > 0 ? modulePillars.map((p) => ({ pillar_id: p.id, criterion_id: null, target: rollup.target, actual: rollup.actual })) : []),
         ...gsrPillars.flatMap((p) => {
-          const figure = gsrFigures.get(p.id);
+          const figure = gsrLine(p.id);
           return figure && figure.target > 0 ? [{ pillar_id: p.id, criterion_id: null, target: figure.target, actual: figure.actual }] : [];
         }),
       ];
@@ -571,6 +634,18 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
     else setError("");
     try {
       if (!monthly) {
+        // In a company on demand, the person's GSRs as they stand now, not as this page loaded
+        // them: a GSR marked done or reopened since counts as it is. With none done in the period,
+        // the admin is asked first, as when the page already showed none.
+        const fresh = onDemand ? await listPersonGsrs(review.company_id, review.employee_id) : null;
+        const period = fresh ? scoreGsrsInPeriod(cycle, fresh) : null;
+        if (fresh && period) {
+          state.setData((prev) => (prev ? { ...prev, personGsrs: fresh } : prev));
+          if (gsrPillars.length > 0 && period.target === 0 && !confirmLeftOut) {
+            setConfirmLeftOut(true);
+            return;
+          }
+        }
         // The line items as the database holds them now, not as this page last rendered them.
         const current = await listReviewScores(review.id);
         for (const pillar of modulePillars) {
@@ -583,11 +658,11 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
         // The months' figure, the same way: one line item, so a slider moved after sign-off moves
         // nothing on the review.
         for (const pillar of gsrPillars) {
-          const figure = gsrFigures.get(pillar.id);
+          const figure = period ?? gsrLine(pillar.id);
           await writeSignedOffLine(
             current,
             pillar.id,
-            figure && figure.target > 0 ? { label: `Monthly GSRs, ${cycle.name}`, target: figure.target, actual: figure.actual } : null,
+            figure && figure.target > 0 ? { label: `${onDemand ? "GSRs" : "Monthly GSRs"}, ${cycle.name}`, target: figure.target, actual: figure.actual } : null,
           );
         }
       }
@@ -662,6 +737,8 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                 onClick={() => {
                   setLockError("");
                   if (monthScore) void startLock();
+                  // On demand, sign-off reads the GSRs again and asks about leaving them out itself.
+                  else if (onDemand && !monthly) void markComplete();
                   else if (gsrLeftOut) setConfirmLeftOut(true);
                   else void markComplete();
                 }}
@@ -817,7 +894,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     label={p.leftOut ? `${p.name} (left out)` : `${p.name} (${formatNumber(p.weight)}%)`}
                     percent={p.score}
                     // Signed off with no month locked in, the pillar sat out; its card says so.
-                    detail={signedOffBarDetail(review, p)}
+                    detail={signedOffBarDetail(review, p, company!.gsr_mode)}
                   />
                 ))}
                 {shownPillars.length === 0 ? <p className="text-sm text-ink-2">No pillars configured yet.</p> : null}
@@ -828,6 +905,15 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
             ) : null}
           </Section>
 
+          {onDemand ? (
+            // The GSRs read back where the pillar does not list them: a company that does not score
+            // its GSRs, or a review signed off with what it had.
+            gsrPeriod && !(gsrPillars.length > 0 && !frozen) ? (
+              <Section eyebrow="Goal Setting Reviews" title="The GSRs in this period" description="Each GSR done inside this period, and any still open.">
+                {gsrPeriod.gsrs.length === 0 ? <p className="text-sm text-ink-2">No GSR was done inside this period.</p> : <GsrsInPeriodList figure={gsrPeriod} />}
+              </Section>
+            ) : null
+          ) : (
           <Section eyebrow="Goal Setting Reviews" title="The months in this period" description="Each month's goals as they were read back.">
             {months.length === 0 ? (
               <p className="text-sm text-ink-2">No Goal Setting Review ran inside this period.</p>
@@ -852,6 +938,7 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
               </ul>
             )}
           </Section>
+          )}
           </div>
 
           <div className="space-y-6 lg:col-span-2">
@@ -877,7 +964,9 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
                     </span>
                   }
                 >
-                  {pillar.scoring_type === "gsr_goals" ? (
+                  {pillar.scoring_type === "gsr_goals" && onDemand ? (
+                    <OnDemandGsrPillarBody figure={gsrPeriod} signedOff={frozen ? (lineItems[0] ?? null) : undefined} />
+                  ) : pillar.scoring_type === "gsr_goals" ? (
                     <GsrPillarBody figure={gsrFigures.get(pillar.id) ?? null} signedOff={frozen ? (lineItems[0] ?? null) : undefined} />
                   ) : pillar.scoring_type === "rating" ? (
                     pillarCriteria.length === 0 ? (
@@ -1068,8 +1157,12 @@ export default function ReviewPage({ reviewId: reviewIdProp, embedded = false }:
       ) : null}
       {confirmLeftOut ? (
         <ConfirmDialog
-          title="Sign off without Monthly GSRs?"
-          body={`No month in ${cycle.name} is locked in, so Monthly GSRs is left out of this review and the other pillars carry its weight. Lock a month in first if it should count.`}
+          title={onDemand ? "Sign off without GSRs?" : "Sign off without Monthly GSRs?"}
+          body={
+            onDemand
+              ? `No scored GSR was done in ${cycle.name}, so ${gsrPillars[0]?.name ?? "the GSR pillar"} is left out of this review and the other pillars carry its weight. Mark a GSR done first if it should count.`
+              : `No month in ${cycle.name} is locked in, so Monthly GSRs is left out of this review and the other pillars carry its weight. Lock a month in first if it should count.`
+          }
           confirmLabel="Mark complete"
           tone="primary"
           busy={busy}

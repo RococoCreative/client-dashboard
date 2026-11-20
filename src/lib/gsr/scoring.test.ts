@@ -242,4 +242,13 @@ describe("signedOffBarDetail", () => {
     expect(signedOffBarDetail({ status: "complete" }, { scoringType: "rating", score: null })).toBeUndefined();
     expect(signedOffBarDetail({ status: "complete" }, { score: null })).toBeUndefined();
   });
+
+  it("says No GSR done for a company on demand, and keeps the month wording for periods", () => {
+    const left = { scoringType: "gsr_goals" as const, score: null };
+    expect(signedOffBarDetail({ status: "complete" }, left, "on_demand")).toBe("No GSR done");
+    expect(signedOffBarDetail({ status: "complete" }, left, "periods")).toBe("No month locked in");
+    expect(signedOffBarDetail({ status: "complete" }, left)).toBe("No month locked in");
+    expect(signedOffBarDetail({ status: "in_progress" }, left, "on_demand")).toBeUndefined();
+    expect(signedOffBarDetail({ status: "complete" }, { scoringType: "gsr_goals", score: 80 }, "on_demand")).toBeUndefined();
+  });
 });

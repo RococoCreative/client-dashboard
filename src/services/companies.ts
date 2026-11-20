@@ -6,7 +6,8 @@ import { db } from "./supabase.ts";
 import { requireRows } from "../lib/errors.ts";
 import type { Company, CompanyDomain, ThemeKey } from "../types/database.ts";
 
-const COLUMNS = "id, slug, name, theme_key, logo_url, modules, time_zone, wins_home_days, manual_financials, created_at, updated_at";
+// gsr_mode is read here and never patched: no signed-in account changes it (0047).
+const COLUMNS = "id, slug, name, theme_key, logo_url, modules, time_zone, wins_home_days, manual_financials, gsr_mode, created_at, updated_at";
 const DOMAIN_COLUMNS = "domain, company_id, created_at";
 
 export async function listCompanies(): Promise<Company[]> {

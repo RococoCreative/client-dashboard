@@ -7,6 +7,11 @@
 // two divisions counts in each; an admin who sees only some divisions gets chips for those alone,
 // and the company-wide tiles say they cover the people in your divisions. With no links yet, the
 // links card gives way to one line at the end of the page.
+//
+// In a company whose GSRs are on demand (companies.gsr_mode, 0047) there are no GSR months: the GSR
+// month card and the GSRs complete tile give way to GsrWeekCard (this week's GSRs and who is overdue
+// one), no GSR month's reviews are read, and the scored review cards and tiles stay as they are. A
+// company on periods reads exactly what it always has.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
@@ -20,6 +25,7 @@ import ShortcutsCard from "./ShortcutsCard.tsx";
 import WinsCard from "./WinsCard.tsx";
 import WhereWorkLivesCard from "./WhereWorkLivesCard.tsx";
 import NoLinksLine from "./NoLinksLine.tsx";
+import GsrWeekCard from "./GsrWeekCard.tsx";
 import DivisionCompare from "../people/DivisionCompare.tsx";
 import DivisionSwitch from "../people/DivisionSwitch.tsx";
 import { COMBINED, divisionCompareRows, latestResultMonth, monthCycle, peopleInScope } from "../scorecards/compare.ts";
@@ -30,6 +36,8 @@ import { CAMPAIGN_STATUS_TONE } from "../status.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCompanyGoals, listCycleOmissions, listCycleReviews, listCycles, listPillars, listScoresForReviews } from "../../services/gsr.ts";
+import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
+import { windowRange } from "../../lib/gsr/onDemand.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listRecentSops, listSops } from "../../services/sops.ts";
 import { listResources } from "../../services/resources.ts";
@@ -57,6 +65,7 @@ export default function AdminHome() {
   const showManualFinancials = company!.manual_financials;
   const year = new Date().getFullYear();
   const links = useHomeLinks(company!);
+  const onDemand = company!.gsr_mode === "on_demand";
 
   const state = useAsync(async () => {
     const [people, cycles, pillars, companyGoals, recentSops, allSops, resources, snapshots, campaigns, own, omissions] = await Promise.all([
@@ -76,7 +85,8 @@ export default function AdminHome() {
     // runs inside a quarterly scored review, so both are live) and any open cycle whose period
     // has ended but which nobody has closed yet. Reading fewer is how a finished review goes
     // missing from this page.
-    const live = cyclesInPlay(cycles);
+    // A company on demand has no GSR months, so only its scored cycles are live here.
+    const live = onDemand ? cyclesInPlay(cycles).filter((c) => sectionOf(c.cadence) !== "gsr") : cyclesInPlay(cycles);
     let reviews: Review[] = [];
     let scores: ReviewScore[] = [];
     if (live.length > 0) {
@@ -84,7 +94,7 @@ export default function AdminHome() {
       scores = await listScoresForReviews(reviews.map((r) => r.id));
     }
     return { people, cycles, live, pillars, reviews, scores, companyGoals, recentSops, allSops, resources, snapshots, campaigns, omissions, ...own };
-  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year]);
+  }, [companyId, showManualFinancials, profile.id, profile.job_role_id, year, onDemand]);
 
   // The division split, read only for someone allowed to see it, and only past the divisions
   // themselves when the company has some. Null means the combined picture alone.
@@ -107,8 +117,11 @@ export default function AdminHome() {
     const month = latestResultMonth(entries, today);
     const cycle = monthCycle(cycles, month);
     const monthReviews = cycle ? await listCycleReviews(cycle.id) : [];
-    return { divisions, metrics, entries, month, cycle, monthReviews };
-  }, [companyId, allowed, viewKey]);
+    // A company whose GSRs are on demand: the GSRs done in the strip's month, which it counts instead.
+    const range = windowRange("month", month);
+    const monthGsrs = onDemand ? { rows: await listGsrsForLog(companyId, range), range } : undefined;
+    return { divisions, metrics, entries, month, cycle, monthReviews, monthGsrs };
+  }, [companyId, allowed, viewKey, onDemand]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) {
@@ -129,7 +142,7 @@ export default function AdminHome() {
   const activeScope = splitData && (scope === COMBINED || splitData.divisions.some((d) => d.id === scope)) ? scope : COMBINED;
   const people = peopleInScope(everyone, activeScope);
   const compare = splitData
-    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions, combinedLabel })
+    ? divisionCompareRows({ people: everyone, divisions: splitData.divisions, metrics: splitData.metrics, entries: splitData.entries, month: splitData.month, cycle: splitData.cycle, reviews: splitData.monthReviews, omissions, combinedLabel, ...(splitData.monthGsrs ? { gsrs: splitData.monthGsrs } : {}) })
     : [];
   const activePeople = people.filter((p) => p.is_active);
   // Reviews cover the whole active roster. Someone set up but not invited yet is reviewed like
@@ -183,7 +196,7 @@ export default function AdminHome() {
         eyebrow="Goal Setting and Review"
         title="Review cycles"
         actions={
-          <Link to="/gsr">
+          <Link to={onDemand ? "/reviews" : "/gsr"}>
             <Button size="sm">Start a cycle</Button>
           </Link>
         }
@@ -220,16 +233,19 @@ export default function AdminHome() {
           none of its calls is made) and every open cycle, then the tiles, then the rest. */}
       <div className="space-y-6">
         {hasModule(company, "switchboard") ? <AttentionCard company={company!} /> : null}
+        {onDemand ? <GsrWeekCard companyId={companyId} /> : null}
         {cycleCards}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+      <div className={`mt-6 grid grid-cols-2 gap-3 sm:gap-4 ${onDemand ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
         <Stat label={limited ? "People in your divisions" : "People"} value={activePeople.length} hint={notInvited > 0 ? `${notInvited} not signed in yet` : pluralize(activePeople.filter((p) => isCompanyAdminRole(p.role)).length, "admin")} />
-        <Stat
-          label="GSRs complete"
-          value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
-          hint={gsrs.cycles.length > 0 ? gsrs.cycles.join(" · ") : "No month open"}
-        />
+        {onDemand ? null : (
+          <Stat
+            label="GSRs complete"
+            value={gsrs.cycles.length > 0 ? `${gsrs.complete}/${gsrs.total}` : "-"}
+            hint={gsrs.cycles.length > 0 ? gsrs.cycles.join(" · ") : "No month open"}
+          />
+        )}
         <Stat
           label="Reviews complete"
           value={scoredCycles.cycles.length > 0 ? `${scoredCycles.complete}/${scoredCycles.total}` : "-"}

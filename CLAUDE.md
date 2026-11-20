@@ -100,7 +100,18 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    A month's GSR score is locked in by an admin marking the month complete: the app writes
    `reviews.gsr_score` from `scoreMonth`, only an admin can write it, and a locked month's goals and
    notes are frozen until the review is reopened (0023). Only locked months reach a scored review;
-   an open month is shown, never applied.
+   an open month is shown, never applied. That is a company on periods.
+   A company whose `gsr_mode` is `'on_demand'` (0047) has no GSR months. A GSR on demand is a
+   `reviews` row with no cycle, and its goals point at it through `goals.review_id`. Anyone who leads
+   the person, or an admin who manages them, marks it done, writing `gsr_score` from `scoreMonth`
+   over its own goals, and reopens it; nobody marks their own GSR done or reopens it, whatever their
+   role, and the database holds that, not only the screen. An admin who manages the person, or anyone
+   who leads them, deletes it, open or done; nobody deletes their own once it is done. Who marked it done is stamped by the database as the
+   signed-in writer, never taken from what the app sends. It counts on the day it was marked done
+   (`done_on`, the company's date, stamped by the database); an open one is shown, never counted. A
+   scored review's Monthly GSRs pillar reads those done inside its period (`scoreGsrsInPeriod`) and
+   signs off the same one line item. `src/lib/gsr/onDemand.ts` is the only place its window figures,
+   its due rule and that period score live.
 8. **Migrations are append-only once applied.** Numbered idempotent SQL in
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
@@ -126,14 +137,16 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
     how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at
     all), SOPs, resources, financial snapshots, marketing, email domains, connections to outside
-    systems.
+    systems, and the GSR format (`gsr_mode`, 0047: by month or on demand, changed only by hand in
+    the database, never from a screen or by a signed-in account).
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a
     task) and its four-step scale, the pillar weighting math, who a cycle covers (`cycleRoster`,
     the one roster every count and score of a cycle reads), what a monthly cycle shows, which
     section a cadence belongs to (`sectionOf`), the order a month's goals are read in (`rankGoals`:
     the focus topic's GSR, role, professional, personal), how a scored month adds up
-    (`requiredAndStretch`, `monthTotal`, `scoreMonth`), the module set on a person page and a
-    review, and
+    (`requiredAndStretch`, `monthTotal`, `scoreMonth`), the window figures a GSR on demand is
+    counted by (`windowFigures`, `figuresByPerson`), the due rule (`dueFor`), the module set on a
+    person page and a review, and
     `SUGGESTED_CATEGORIES`. Changing one of those
     for one company means making it configurable first, not editing the shared value.
 13. **Design execution is quiet.** Hairline borders, dense rhythm, skeleton loading, 150ms

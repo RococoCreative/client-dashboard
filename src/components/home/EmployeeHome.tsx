@@ -2,6 +2,11 @@
 // (for a manager) their direct reports (TeamBlock), then their own open tasks, their goals, scores,
 // figures and scorecard, and what changed in the SOP library. With no links yet, the links card
 // gives way to one line at the end of the page.
+//
+// In a company whose GSRs are on demand (companies.gsr_mode, 0047) there are no months: the GSR card
+// is GsrCardOnDemand, the team block TeamBlockOnDemand, and the line under the impact score reads the
+// GSRs done inside the open scored review (GsrPeriodLine). A company on periods reads exactly what it
+// always has.
 import { Link } from "react-router-dom";
 import Badge from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
@@ -10,6 +15,9 @@ import PageHeader from "../ui/PageHeader.tsx";
 import ScoreRing from "../ui/ScoreRing.tsx";
 import Section from "../ui/Section.tsx";
 import GsrQuarterLine from "../gsr/GsrQuarterLine.tsx";
+import GsrPeriodLine from "../gsr/onDemand/GsrPeriodLine.tsx";
+import GsrCardOnDemand from "./GsrCardOnDemand.tsx";
+import TeamBlockOnDemand from "./TeamBlockOnDemand.tsx";
 import ShortcutsCard from "./ShortcutsCard.tsx";
 import WinsCard from "./WinsCard.tsx";
 import WhereWorkLivesCard from "./WhereWorkLivesCard.tsx";
@@ -29,6 +37,7 @@ import { gsrCycleInPlay, omittedCycleIdsFor, reviewPath, scoredCycleInPlay } fro
 import { goalOutcome, goalPeriodLabel, goalSettled, rankGoals, scoreGsrMonths, stepsTaken } from "../../lib/gsr/goals.ts";
 import { latestScoredReview, previousCompletedReview, reviewHistory } from "../../lib/gsr/history.ts";
 import { displayName, formatPeriod, pluralize } from "../../lib/format.ts";
+import { directReports } from "../../lib/people.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { GOAL_KIND_LABELS, GOAL_STATUS_LABELS, REVIEW_STATUS_LABELS, type Profile } from "../../types/database.ts";
 import MyScorecard from "./MyScorecard.tsx";
@@ -43,6 +52,7 @@ export default function EmployeeHome() {
   const links = useHomeLinks(company!);
   // A manager gets their team under their own GSR. Admins never reach this dashboard.
   const lead = isLead && !isAdmin;
+  const onDemand = company!.gsr_mode === "on_demand";
 
   const state = useAsync(async () => {
     const [reviews, pillars, criteria, impact, goals, recentSops, cycles, companyGoals, own, omissions, people] = await Promise.all([
@@ -132,49 +142,59 @@ export default function EmployeeHome() {
       {/* Read in the order the person needs it: their own GSR first, with the one primary button
           on the page, then (for a manager) their team, then their goals, scores and the rest. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Section
-          eyebrow="Goal Setting Review"
-          title={gsrCycle ? gsrCycle.name : "No month open"}
-          className="lg:col-span-3"
-          actions={
-            gsrCycle && !gsrOmitted ? (
-              <Link to="/my/gsr">
-                <Button size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
-              </Link>
-            ) : undefined
-          }
-        >
-          {!gsrCycle ? (
-            <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
-          ) : gsrOmitted ? (
-            <p className="text-sm text-ink-2">You're not part of the {gsrCycle.name} GSRs. Nothing is needed from you this month.</p>
-          ) : !gsrReview ? (
-            <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Start it to fill in your goals before the meeting.</p>
-          ) : monthGoals.length === 0 ? (
-            <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. Add yours on the GSR tab before the meeting.</p>
-          ) : (
-            <ul className="divide-y divide-line">
-              {monthGoals.map((goal) => {
-                const steps = stepsTaken(goal);
-                return (
-                  <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-ink">{goal.title}</p>
-                      <p className="text-[12px] text-ink-3">
-                        {goal.is_focus ? "Focus topic GSR · " : ""}
-                        {GOAL_KIND_LABELS[goal.kind]}
-                        {steps.total > 0 ? ` · ${steps.done}/${steps.total} steps done` : ""}
-                      </p>
-                    </div>
-                    <span className="tnum w-12 text-right text-sm text-ink">{goal.progress}%</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Section>
+        {onDemand ? (
+          <GsrCardOnDemand person={profile} className="lg:col-span-3" />
+        ) : (
+          <Section
+            eyebrow="Goal Setting Review"
+            title={gsrCycle ? gsrCycle.name : "No month open"}
+            className="lg:col-span-3"
+            actions={
+              gsrCycle && !gsrOmitted ? (
+                <Link to="/my/gsr">
+                  <Button size="sm">{gsrReview ? "Open my GSR" : "Start my GSR"}</Button>
+                </Link>
+              ) : undefined
+            }
+          >
+            {!gsrCycle ? (
+              <p className="text-sm text-ink-2">Your manager opens each month's GSR. This month's goals appear here the moment they do.</p>
+            ) : gsrOmitted ? (
+              <p className="text-sm text-ink-2">You're not part of the {gsrCycle.name} GSRs. Nothing is needed from you this month.</p>
+            ) : !gsrReview ? (
+              <p className="text-sm text-ink-2">Your GSR for {gsrCycle.name} is not started yet. Start it to fill in your goals before the meeting.</p>
+            ) : monthGoals.length === 0 ? (
+              <p className="text-sm text-ink-2">No goals set for {gsrCycle.name} yet. Add yours on the GSR tab before the meeting.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {monthGoals.map((goal) => {
+                  const steps = stepsTaken(goal);
+                  return (
+                    <li key={goal.id} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-ink">{goal.title}</p>
+                        <p className="text-[12px] text-ink-3">
+                          {goal.is_focus ? "Focus topic GSR · " : ""}
+                          {GOAL_KIND_LABELS[goal.kind]}
+                          {steps.total > 0 ? ` · ${steps.done}/${steps.total} steps done` : ""}
+                        </p>
+                      </div>
+                      <span className="tnum w-12 text-right text-sm text-ink">{goal.progress}%</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Section>
+        )}
 
-        {lead ? <TeamBlock companyId={companyId} viewer={profile} people={people} cycles={cycles} omissions={omissions} className="lg:col-span-3" /> : null}
+        {lead ? (
+          onDemand ? (
+            <TeamBlockOnDemand reports={directReports(profile, people).sort((a, b) => displayName(a).localeCompare(displayName(b)))} className="lg:col-span-3" />
+          ) : (
+            <TeamBlock companyId={companyId} viewer={profile} people={people} cycles={cycles} omissions={omissions} className="lg:col-span-3" />
+          )
+        ) : null}
 
         {/* Their own next few open tasks, the ones Tasks lists as theirs, when the company runs tasks.
             No add control here: the GSR button stays the page's one primary action. */}
@@ -255,7 +275,11 @@ export default function EmployeeHome() {
               ) : (
                 <p className="text-sm text-ink-2">Your manager sets your ratings on your profile. They show here, with how they move review to review.</p>
               )}
-              {gsrQuarter && scoredCycle ? <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} /> : null}
+              {onDemand ? (
+                gsrPillar && scoredCycle ? <GsrPeriodLine companyId={companyId} personId={profile.id} cycle={scoredCycle} /> : null
+              ) : gsrQuarter && scoredCycle ? (
+                <GsrQuarterLine cycle={scoredCycle} figure={gsrQuarter} />
+              ) : null}
             </Section>
           ) : null}
 

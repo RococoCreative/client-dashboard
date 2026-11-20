@@ -1,6 +1,6 @@
 // In-memory stand-in for services/companies.ts, same exports, so page tests and `npm run demo`
 // run against the seeded companies and their domains and never touch the network.
-import type { Company, CompanyDomain, ThemeKey } from "../../types/database.ts";
+import type { Company, CompanyDomain, GsrMode, ThemeKey } from "../../types/database.ts";
 import { COMPANIES, DOMAINS } from "../fixtures.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
@@ -11,6 +11,21 @@ const domains: CompanyDomain[] = DOMAINS.map((d) => ({ ...d }));
 // from the zone an admin set during a demo session, as recur_task does (0037).
 export function timeZoneOf(companyId: string): string {
   return companies.find((c) => c.id === companyId)?.time_zone ?? "America/New_York";
+}
+
+// The company's GSR format, read live by the GSRs on demand mock. setCompanyGsrMode is how a test
+// (through setMockGsrMode) puts a company on demand, so every company row this mock returns agrees
+// with it; resetCompanyGsrModes puts each back to what its fixture says. Test-only extras: no
+// signed-in account changes gsr_mode (0047), so the service has neither.
+export function gsrModeOf(companyId: string): GsrMode {
+  return companies.find((c) => c.id === companyId)?.gsr_mode ?? "periods";
+}
+export function setCompanyGsrMode(companyId: string, mode: GsrMode): void {
+  const index = companies.findIndex((c) => c.id === companyId);
+  if (index !== -1) companies[index] = { ...companies[index], gsr_mode: mode };
+}
+export function resetCompanyGsrModes(): void {
+  for (const fixture of COMPANIES) setCompanyGsrMode(fixture.id, fixture.gsr_mode);
 }
 
 // guard_company_time_zone, near enough: a zone the browser cannot read is refused.
@@ -34,7 +49,7 @@ export async function getCompany(id: string): Promise<Company> {
 
 export async function createCompany(input: { slug: string; name: string; theme_key: ThemeKey }): Promise<Company> {
   const now = new Date().toISOString();
-  const created: Company = { id: `co-${input.slug}`, logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, created_at: now, updated_at: now, ...input };
+  const created: Company = { id: `co-${input.slug}`, logo_url: null, modules: [], time_zone: "America/New_York", wins_home_days: null, manual_financials: true, gsr_mode: "periods", created_at: now, updated_at: now, ...input };
   companies.push(created);
   return created;
 }

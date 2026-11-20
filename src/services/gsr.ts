@@ -11,13 +11,14 @@ const PILLAR_COLUMNS =
   "id, company_id, name, description, weight, scoring_type, rating_scale_max, required_goals, sort_order, is_active, created_at, updated_at";
 const CRITERION_COLUMNS = "id, pillar_id, company_id, name, description, sort_order, is_active, created_at, updated_at";
 const CYCLE_COLUMNS =
-  "id, company_id, name, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
-const REVIEW_COLUMNS =
-  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, support_discussion, created_at, updated_at";
+  "id, company_id, name, kind, cadence, period_start, period_end, theme, theme_description, status, created_by, created_at, updated_at";
+// Shared with services/gsrOnDemand.ts, which reads the same rows when they stand on their own.
+export const REVIEW_COLUMNS =
+  "id, cycle_id, company_id, employee_id, status, previous_status, manager_feedback, peer_feedback, client_feedback, employee_reflection, reviewer_id, completed_at, pillar_snapshot, gsr_score, support_discussion, started_on, done_on, created_at, updated_at";
 const SCORE_COLUMNS =
   "id, review_id, company_id, pillar_id, criterion_id, label, rating, target, actual, notes, sort_order, created_at, updated_at";
 const GOAL_COLUMNS =
-  "id, company_id, employee_id, cycle_id, kind, is_focus, title, description, status, action_steps, progress, scope, year, carried_from_goal_id, outcome_note, sort_order, created_by, created_at, updated_at";
+  "id, company_id, employee_id, cycle_id, review_id, kind, is_focus, title, description, status, action_steps, progress, scope, year, carried_from_goal_id, outcome_note, sort_order, created_by, created_at, updated_at";
 const COMPANY_GOAL_COLUMNS =
   "id, company_id, year, name, target_display, current_display, target_numeric, current_numeric, is_hit, sort_order, created_at, updated_at";
 
@@ -136,26 +137,32 @@ export async function listCycleReviews(cycleId: string): Promise<Review[]> {
 
 // One person's reviews in one company. A person who moves company leaves their reviews with the
 // old one (they belong to its cycles), and RLS still lets them and Rococo read those, so the
-// history asks for this company's rather than everything the caller can see.
+// history asks for this company's rather than everything the caller can see. Only reviews in a
+// cycle: a GSR that stands on its own is read through services/gsrOnDemand.ts, so period code
+// never meets one.
 export async function listEmployeeReviews(companyId: string, employeeId: string): Promise<Review[]> {
   const { data, error } = await db()
     .from("reviews")
     .select(REVIEW_COLUMNS)
     .eq("company_id", companyId)
     .eq("employee_id", employeeId)
+    .not("cycle_id", "is", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data as Review[]) ?? [];
 }
 
+// A company's reviews in a cycle, as listEmployeeReviews.
 export async function listCompanyReviews(companyId: string): Promise<Review[]> {
-  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("company_id", companyId);
+  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("company_id", companyId).not("cycle_id", "is", null);
   if (error) throw error;
   return (data as Review[]) ?? [];
 }
 
+// A review in a cycle only: a GSR that stands on its own is loaded through services/gsrOnDemand.ts,
+// so period code can never open one by its id.
 export async function getReview(id: string): Promise<Review> {
-  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("id", id).single();
+  const { data, error } = await db().from("reviews").select(REVIEW_COLUMNS).eq("id", id).not("cycle_id", "is", null).single();
   if (error) throw error;
   return data as Review;
 }
@@ -290,6 +297,7 @@ function normalizeGoal(goal: Goal): Goal {
     progress: Math.min(100, Math.max(0, Number(goal.progress ?? 0))),
     scope: goal.scope === "year" || goal.scope === "bhag" ? goal.scope : "cycle",
     is_focus: Boolean(goal.is_focus),
+    review_id: goal.review_id ?? null,
     year: goal.year ?? null,
     carried_from_goal_id: goal.carried_from_goal_id ?? null,
     outcome_note: goal.outcome_note ?? null,
@@ -304,6 +312,8 @@ export type GoalInput = {
   kind: GoalKind;
   is_focus?: boolean;
   cycle_id?: string | null;
+  // The GSR the goal belongs to in a company on demand (0047), in place of a cycle.
+  review_id?: string | null;
   description?: string | null;
   status?: GoalStatus;
   action_steps?: ActionStep[];

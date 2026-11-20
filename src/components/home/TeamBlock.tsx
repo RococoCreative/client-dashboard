@@ -21,7 +21,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { cycleRoster, gsrCycleInPlay } from "../../lib/gsr/cycles.ts";
 import { displayName, todayIso } from "../../lib/format.ts";
 import { hasModule } from "../../lib/modules.ts";
-import { hasAccount, ledBy } from "../../lib/people.ts";
+import { directReports, hasAccount } from "../../lib/people.ts";
 import { isOverdue } from "../../lib/tasks.ts";
 import { listCycleReviews } from "../../services/gsr.ts";
 import { listTasks } from "../../services/tasks.ts";
@@ -84,9 +84,7 @@ export default function TeamBlock({
   const { company } = useHub();
   const withTasks = hasModule(company, "tasks");
   // Direct reports only, out of the people the viewer leads. A past employee is not current team.
-  const reports = ledBy(viewer, people)
-    .filter((p) => p.reports_to === viewer.id && p.id !== viewer.id && p.is_active)
-    .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+  const reports = directReports(viewer, people).sort((a, b) => displayName(a).localeCompare(displayName(b)));
   // The same month My GSR and the GSR card open: the one covering today, else the latest still open.
   const cycle = gsrCycleInPlay([...cycles]);
   const any = reports.length > 0;

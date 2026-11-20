@@ -112,6 +112,7 @@ export function applyDenseLoad(bundle: CompanyBundle): void {
       can_view_divisions: false,
       view_all_divisions: false,
       view_division_ids: [],
+      gsr_cadence: "monthly",
       created_at: STAMP,
       updated_at: STAMP,
     });

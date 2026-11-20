@@ -3,7 +3,8 @@
 // the task (an admin, a leader of the assignee, or an employee on a task they made for themselves)
 // edits it, and deletes it when the database would let them. A finished copy of a repeating task
 // whose next one is open is locked, and the page links to the next one. A task on a monthly GSR
-// goal says whose goal and which month, and links to that GSR when it is known. Loaded by the id in
+// goal says whose goal and which month, and links to that GSR when it is known; one on a goal of a
+// GSR on demand links to its GSR. Loaded by the id in
 // the URL, so it must belong to the active company (lib/tenancy.ts). Who it is for and who assigned
 // it are named from the company directory, which everyone reads, so an employee sees the name of
 // the admin who assigned their task; the assignee picker stays on the profiles the viewer may see.
@@ -237,6 +238,13 @@ export default function TaskPage() {
                       <>
                         {" "}
                         <Link to={reviewPath(linked.data.review.id, linked.data.cycle.cadence)} className="text-link hover:underline">Open the GSR</Link>
+                      </>
+                    ) : null}
+                    {/* A goal on a GSR on demand names its GSR itself (goals.review_id, 0047). */}
+                    {company?.gsr_mode === "on_demand" && !linked.data.cycle && linked.data.goal.review_id ? (
+                      <>
+                        {" "}
+                        <Link to={`/gsr/reviews/${linked.data.goal.review_id}`} className="text-link hover:underline">Open the GSR</Link>
                       </>
                     ) : null}
                   </span>

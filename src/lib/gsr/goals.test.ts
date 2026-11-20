@@ -1,7 +1,7 @@
 // The Goal Setting Review rules: progress to status, hit or miss, the order goals are read in,
 // carry forward, splitting, and the period a yearly goal belongs to.
 import { describe, expect, it } from "vitest";
-import { carryForward, goalLockedFor, goalOutcome, goalPeriodLabel, goalSettled, hitCount, lockedMonthsIn, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals } from "./goals.ts";
+import { carryForward, goalLockedFor, goalOutcome, goalPeriodLabel, goalSettled, hitCount, lockedMonthsIn, monthLocked, monthTotal, progressPatch, rankGoals, requiredAndStretch, scoreGsrMonths, scoreMonth, splitGoals, unfiledRoleGoals } from "./goals.ts";
 import type { Goal } from "../../types/database.ts";
 
 function goal(over: Partial<Goal>): Goal {
@@ -10,6 +10,7 @@ function goal(over: Partial<Goal>): Goal {
     company_id: "c",
     employee_id: "e",
     cycle_id: "cycle-1",
+    review_id: null,
     kind: "professional",
     is_focus: false,
     title: "Ship it",
@@ -245,6 +246,22 @@ describe("a month's GSRs, for a company that scores them", () => {
     expect(monthLocked({ status: "complete", gsr_score: null })).toBe(false);
     expect(monthLocked({ status: "in_progress", gsr_score: null })).toBe(false);
     expect(monthLocked(null)).toBe(false);
+  });
+});
+
+describe("unfiledRoleGoals", () => {
+  const templates = [{ id: "t1", title: "Walk every site weekly" }, { id: "t2", title: "Close out change orders" }];
+  it("offers every role goal while none is on the list", () => {
+    expect(unfiledRoleGoals(templates, [])).toEqual(templates);
+  });
+  it("counts a role goal filed once a goal with its title is on the list, whoever typed it, ignoring case and outer spaces", () => {
+    expect(unfiledRoleGoals(templates, [{ title: "  walk EVERY site weekly " }])).toEqual([templates[1]]);
+  });
+  it("keeps a role goal whose title only resembles a goal on the list", () => {
+    expect(unfiledRoleGoals(templates, [{ title: "Walk every site" }, { title: "Close out change orders by Friday" }])).toEqual(templates);
+  });
+  it("keeps the template order", () => {
+    expect(unfiledRoleGoals([...templates].reverse(), []).map((t) => t.id)).toEqual(["t2", "t1"]);
   });
 });
 

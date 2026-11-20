@@ -20,6 +20,8 @@ import type {
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
+import { mockGsrStatus, patchMockGsrDiscussion } from "./gsrOnDemand.ts";
+import { gsrModeOf } from "./companies.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -55,16 +57,32 @@ function removeFrom<T extends { id: string }>(list: T[], id: string): void {
 // review starts in one, and a signed-off review stays signed off while it is closed.
 export const CLOSED_CYCLE_MESSAGE = "This review cycle is closed. Reopen the cycle first.";
 
+// A goal of a GSR that stands on its own (0047) goes when its GSR is deleted. The GSRs live in
+// mocks/gsrOnDemand.ts, so the goals here let go of any whose GSR is gone before they are read.
+function dropGoalsOfDeletedGsrs(): void {
+  for (let i = goals.length - 1; i >= 0; i--) {
+    const reviewId = goals[i].review_id;
+    if (reviewId != null && mockGsrStatus(reviewId) === null) goals.splice(i, 1);
+  }
+}
+
+// A done GSR's goals and notes are frozen until it is reopened (0047), with these words.
+const GSR_DONE_GOALS = "This GSR is done. Reopen it to change its goals.";
+const GSR_DONE_NOTES = "This GSR is done. Reopen it to change its notes.";
+const inDoneGsr = (reviewId: string | null | undefined) => reviewId != null && mockGsrStatus(reviewId) === "complete";
+
 // The task link rule of 0039, for the tasks mock: a task may be linked only to a monthly goal of
 // its own assignee in its own company, and only while that month is open, not complete and the
-// person is not omitted. Returns the refusal, or null when the link is fine. Unlinking never
-// reaches here.
+// person is not omitted. A goal of a GSR on its own takes a task only while that GSR is open
+// (0047). Returns the refusal, or null when the link is fine. Unlinking never reaches here.
 export function goalLinkProblem(task: { company_id: string; assignee_id: string | null; goal_id: string | null }): string | null {
   if (task.goal_id === null) return null;
+  dropGoalsOfDeletedGsrs();
   const goal = goals.find((g) => g.id === task.goal_id);
   if (!goal || goal.company_id !== task.company_id) return "That goal is not here any more.";
-  if (goal.scope !== "cycle" || goal.cycle_id === null) return "Only a monthly GSR goal can have tasks.";
+  if (goal.scope !== "cycle" || (goal.cycle_id === null && goal.review_id === null)) return "Only a monthly GSR goal can have tasks.";
   if (goal.employee_id !== task.assignee_id) return "A task on a goal belongs to that goal's person. Unlink it before assigning it to someone else.";
+  if (goal.review_id !== null) return inDoneGsr(goal.review_id) ? "That GSR is done, so its goals take no new tasks." : null;
   const cycle = cycles.find((c) => c.id === goal.cycle_id);
   const review = reviews.find((r) => r.cycle_id === goal.cycle_id && r.employee_id === goal.employee_id);
   const omitted = cycleOmissions.some((o) => o.cycle_id === goal.cycle_id && o.employee_id === goal.employee_id);
@@ -112,8 +130,13 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   return found;
 }
 export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
+// guard_review_cycle_period (0047): a company on demand opens no GSR month, by insert or by turning
+// a review cycle into one (updateCycle). A company on periods is never reached.
+const NO_GSR_MONTH = "This company has GSRs on demand, so it opens no GSR months.";
+
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
-  const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), ...input };
+  if (input.cadence === "monthly" && gsrModeOf(input.company_id) === "on_demand") throw new Error(NO_GSR_MONTH);
+  const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), kind: input.cadence === "monthly" ? "gsr" : "review", ...input };
   cycles.push(created);
   return created;
 }
@@ -121,6 +144,11 @@ export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "c
   // Only a full-scope admin changes a cycle (0038, "Full-scope admins change cycles"); anyone else's
   // update matches no row, and the service's .single() reports it as not changed.
   if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
+  const cycle = cycles.find((c) => c.id === id);
+  // Only the turn into a month is refused here. The database refuses any write to a GSR month in a
+  // company on demand, but a moved company has none left; the fixtures keep RBA's months for the
+  // tests that switch RBA's format, and those still open and close them.
+  if (cycle && patch.cadence === "monthly" && cycle.cadence !== "monthly" && gsrModeOf(cycle.company_id) === "on_demand") throw new Error(NO_GSR_MONTH);
   return patchIn(cycles, id, { ...patch, updated_at: now() } as Partial<ReviewCycle>);
 }
 export async function deleteCycle(id: string): Promise<void> {
@@ -146,13 +174,18 @@ export async function ensureReview(cycleId: string, companyId: string, employeeI
   if (existing) return existing;
   if (cycles.find((c) => c.id === cycleId)?.status === "closed") throw new Error(CLOSED_CYCLE_MESSAGE);
   if (omitted(cycleId, employeeId)) throw new Error("This person is not part of this cycle. Add them back on the cycle page first.");
-  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, created_at: now(), updated_at: now() };
+  const created: Review = { id: nextId("review"), cycle_id: cycleId, company_id: companyId, employee_id: employeeId, status: "not_started", previous_status: null, manager_feedback: null, peer_feedback: null, client_feedback: null, employee_reflection: null, reviewer_id: null, completed_at: null, pillar_snapshot: null, gsr_score: null, support_discussion: null, started_on: null, done_on: null, created_at: now(), updated_at: now() };
   reviews.push(created);
   return created;
 }
 export type ReviewPatch = Partial<Pick<Review, "status" | "previous_status" | "manager_feedback" | "peer_feedback" | "client_feedback" | "employee_reflection" | "reviewer_id" | "completed_at" | "gsr_score" | "support_discussion">>;
 export async function updateReview(id: string, patch: ReviewPatch): Promise<Review> {
   const before = reviews.find((r) => r.id === id);
+  // A GSR on demand (0047) is a reviews row too, held by mocks/gsrOnDemand.ts; its page writes only
+  // its opening discussion here.
+  if (!before && mockGsrStatus(id) !== null && Object.keys(patch).every((key) => key === "support_discussion")) {
+    return patchMockGsrDiscussion(id, patch.support_discussion ?? null) as unknown as Review;
+  }
   // A signed-off review stays signed off while its cycle is closed (0039).
   if (before?.status === "complete" && patch.status !== undefined && patch.status !== "complete" && cycles.find((c) => c.id === before.cycle_id)?.status === "closed") {
     throw new Error(CLOSED_CYCLE_MESSAGE);
@@ -213,21 +246,29 @@ export async function deleteScore(id: string): Promise<void> {
 }
 
 export async function listGoals(companyId: string, employeeId?: string): Promise<Goal[]> {
+  dropGoalsOfDeletedGsrs();
   return goals.filter((g) => g.company_id === companyId && (!employeeId || g.employee_id === employeeId));
 }
-export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
+export type GoalInput = { company_id: string; employee_id: string; title: string; kind: GoalKind; is_focus?: boolean; cycle_id?: string | null; review_id?: string | null; description?: string | null; status?: GoalStatus; action_steps?: ActionStep[]; progress?: number; scope?: GoalScope; year?: number | null; carried_from_goal_id?: string | null; outcome_note?: string | null; sort_order?: number };
 export async function createGoal(input: GoalInput): Promise<Goal> {
-  const created: Goal = { id: nextId("goal"), is_focus: false, cycle_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
+  if (inDoneGsr(input.review_id)) throw new Error(GSR_DONE_GOALS);
+  const created: Goal = { id: nextId("goal"), is_focus: false, cycle_id: null, review_id: null, description: null, status: "not_started", action_steps: [], progress: 0, scope: "cycle", year: null, carried_from_goal_id: null, outcome_note: null, sort_order: 0, created_by: null, created_at: now(), updated_at: now(), ...input };
   goals.push(created);
   return created;
 }
 export async function updateGoal(id: string, patch: Partial<Omit<GoalInput, "company_id" | "employee_id">>): Promise<Goal> {
+  if (inDoneGsr(goals.find((g) => g.id === id)?.review_id) || inDoneGsr(patch.review_id)) throw new Error(GSR_DONE_GOALS);
   return patchIn(goals, id, { ...patch, updated_at: now() } as Partial<Goal>);
 }
 export async function deleteGoal(id: string): Promise<void> {
+  if (inDoneGsr(goals.find((g) => g.id === id)?.review_id)) throw new Error(GSR_DONE_GOALS);
   removeFrom(goals, id);
 }
 
+function refuseNoteOfDoneGsr(noteId: string): void {
+  const note = goalNotes.find((n) => n.id === noteId);
+  if (note && inDoneGsr(goals.find((g) => g.id === note.goal_id)?.review_id)) throw new Error(GSR_DONE_NOTES);
+}
 export async function listGoalNotes(companyId: string, employeeId: string): Promise<GoalNote[]> {
   return goalNotes
     .filter((n) => n.company_id === companyId && n.employee_id === employeeId)
@@ -239,6 +280,7 @@ export type GoalNoteInput = { goal_id: string; company_id: string; employee_id: 
 export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
   const goal = goals.find((g) => g.id === input.goal_id);
   if (!goal) throw new Error("That goal does not exist.");
+  if (inDoneGsr(goal.review_id)) throw new Error(GSR_DONE_NOTES);
   const stamp = now();
   const created: GoalNote = { id: nextId("goal-note"), ...input, company_id: goal.company_id, employee_id: goal.employee_id, created_at: stamp, updated_at: stamp };
   goalNotes.push(created);
@@ -247,9 +289,11 @@ export async function createGoalNote(input: GoalNoteInput): Promise<GoalNote> {
 // The suite's clock stands still, so an edit is stamped a second on to read as later than the
 // note it changes, the way it always is in the database.
 export async function updateGoalNote(id: string, body: string): Promise<GoalNote> {
+  refuseNoteOfDoneGsr(id);
   return patchIn(goalNotes, id, { body, updated_at: new Date(Date.now() + 1000).toISOString() });
 }
 export async function deleteGoalNote(id: string): Promise<void> {
+  refuseNoteOfDoneGsr(id);
   removeFrom(goalNotes, id);
 }
 

@@ -137,6 +137,12 @@ export function ledBy<T extends Pick<Profile, "id" | "reports_to" | "role">>(vie
   return people.filter((p) => chain.has(p.id) && ROLE_RANK[p.role] < ROLE_RANK[viewer.role]);
 }
 
+// A viewer's direct reports, out of the people they lead: active, reporting straight to them, never
+// themselves. A past employee is not current team. Home's team blocks read it, on periods and on demand.
+export function directReports<T extends Pick<Profile, "id" | "reports_to" | "role" | "is_active">>(viewer: Viewer, people: readonly T[]): T[] {
+  return ledBy(viewer, people).filter((p) => p.reports_to === viewer.id && p.id !== viewer.id && p.is_active);
+}
+
 // The company's divisions a person works in, in the company's order. Ids that are not one of the
 // company's divisions (one just deleted, say) are left out.
 function placedIn<D extends Pick<CompanyDivision, "id">>(divisionIds: readonly string[], divisions: readonly D[]): D[] {

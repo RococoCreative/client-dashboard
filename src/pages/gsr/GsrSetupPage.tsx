@@ -2,6 +2,8 @@
 // sit in Goals) and, for a company that scores its GSRs, how many goals each GSR requires (it used
 // to sit inside the Monthly GSRs pillar on Reviews). Which pillars exist is the company's own data,
 // never a branch on its name (rule 12): no active Monthly GSRs pillar means GSRs are not scored here.
+// A company whose GSRs are on demand (companies.gsr_mode, 0047) has no months: its tabs and its
+// description speak of GSRs; the focus topic calendar stays by calendar month.
 import FocusTopicCalendar from "../../components/gsr/FocusTopicCalendar.tsx";
 import RequiredGoalsField from "../../components/gsr/RequiredGoalsField.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -14,7 +16,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listPillars } from "../../services/gsr.ts";
 import { secondaryClass } from "../../components/ui/type.ts";
 import { SECTION_LABEL } from "../../lib/gsr/cycles.ts";
-import { GSR_TABS } from "./gsrTabs.ts";
+import { gsrTabsFor } from "./gsrTabs.ts";
 
 export default function GsrSetupPage() {
   const { company } = useHub();
@@ -27,9 +29,13 @@ export default function GsrSetupPage() {
       <PageHeader
         eyebrow={current.name}
         title={SECTION_LABEL.gsr}
-        description="What shapes every month: the focus topic each GSR is built on, and how many goals each one requires."
+        description={
+          current.gsr_mode === "on_demand"
+            ? "What shapes every GSR: the focus topic each GSR is built on, and how many goals each one requires."
+            : "What shapes every month: the focus topic each GSR is built on, and how many goals each one requires."
+        }
       />
-      <Tabs items={GSR_TABS} label="GSRs" />
+      <Tabs items={gsrTabsFor(current.gsr_mode)} label="GSRs" />
       <div className="space-y-6">
         <Section eyebrow="Scoring" title="How GSRs are scored" padded={false}>
           <div className="px-4 pb-1 sm:px-6">
@@ -46,7 +52,11 @@ export default function GsrSetupPage() {
             ))}
           </div>
         </Section>
-        <FocusTopicCalendar companyId={current.id} />
+        {current.gsr_mode === "on_demand" ? (
+          <FocusTopicCalendar companyId={current.id} description="One topic a month, such as a core value or a process push. A GSR is built on the topic of the month it is started in." />
+        ) : (
+          <FocusTopicCalendar companyId={current.id} />
+        )}
       </div>
     </>
   );
