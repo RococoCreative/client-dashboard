@@ -27,7 +27,8 @@ One person's goal setting review, started when someone decides to hold one.
 - It belongs to one person. Nobody else is in it and nothing about it depends on anyone else's.
 - It is started on demand: someone clicks "New GSR". Nothing opens GSRs on a schedule.
 - It stays open while the work happens. The person sets goals when it starts, progress is updated
-  as they work, and at the next check-in it is marked done, which locks its score.
+  as they work, and at the next check-in someone in leadership marks it done, which locks its
+  score.
 - Its score is for its own goals, by the rule every company shares today (`scoreMonth` in
   `src/lib/gsr/goals.ts`: completion of all its goals against 100 for each mandatory goal, the
   focus topic's goal first). The number of mandatory goals is the company's one number, the same
@@ -46,8 +47,8 @@ Cycles stay exactly as they are for scored reviews (quarterly, yearly, custom da
 | Starting | On demand, by a click. No schedule creates GSRs. |
 | Rhythm | Optional per person: none, daily, weekly and longer. It only flags a person as due or overdue. Some people never have a GSR. |
 | Life of a GSR | Open while the work happens; marked done at the next check-in (option A of the two the owner was shown). |
-| Who marks it done | Anyone in it: the person, their managers, admins, owners. |
-| Who reopens | Managers, admins and owners. Not the person. |
+| Who marks it done | Leadership only: someone who leads the person, or an admin or owner. Never the person themself. "Keeps leadership accountable." |
+| Who reopens | The same people. Never the person themself. |
 | The last GSR | A new GSR always pulls in the person's last one, whatever the gap, so the meeting goes from the last GSR to the new one. Unfinished goals carry forward in one click. |
 | Closing the last one | The last GSR can be marked done from its own page or from the pulled-in module inside the new one. |
 | History | A person sees all their own past GSRs, read only. |
@@ -56,7 +57,7 @@ Cycles stay exactly as they are for scored reviews (quarterly, yearly, custom da
 | Mandatory goals | The company's required number, the same for every GSR. |
 | Left out of a cycle | Has no meaning for a GSR and disappears from GSRs. |
 | The GSRs screen | A log with a window picker, a headline (done, average, in progress) and a people table (last GSR, rhythm, done, average, overdue). Approved from a text sketch. |
-| Trial | RBA only first, through a setting every company carries. |
+| Trial | RBA only. The format stays walled off to RBA until the owner has approval from Klasik and Kingdom. |
 | Existing GSRs | When a company moves over, each past monthly GSR becomes a standalone GSR dated at the start of its month. |
 
 ## Goals, non-goals, anti-goals
@@ -67,7 +68,8 @@ Cycles stay exactly as they are for scored reviews (quarterly, yearly, custom da
 - Any window (this week, this month, this quarter, custom dates) gives a count and an average for
   the company, a division, a team or a person, and the same aggregate feeds a scored review's GSR
   pillar.
-- The move is one setting per company, enforced by the database, off by default.
+- The move is one setting per company, enforced by the database, off by default, and not
+  changeable from any screen.
 - A company with the setting off sees and does exactly what it does today.
 
 **Non-goals**
@@ -82,6 +84,9 @@ Cycles stay exactly as they are for scored reviews (quarterly, yearly, custom da
 
 **Anti-goals (a failure even if it works)**
 
+- Klasik or Kingdom seeing, or being held to, any part of this before the owner has their
+  approval.
+- A person closing their own GSR.
 - A GSR that pulls in people who are not in it, or any company-wide container behind a GSR.
 - Code that asks which company it is by name, slug or theme (rule 12). The difference is the
   setting.
@@ -117,16 +122,34 @@ is small.
 Everything below is added by one new migration, `0047`. Migration `0046_gsr_rhythms.sql` is
 already applied in production and is never edited (rule 8).
 
+### Walled off to RBA
+
+The owner's rule: this format stays with RBA until Klasik and Kingdom have approved it. Four
+things hold that wall, and each is tested:
+
+1. **The setting is off for every company and no screen can turn it on.** No signed-in account can
+   change it either, Rococo admins included. Turning a company on is a database change made by
+   hand, with the owner's say-so, one company at a time.
+2. **The database refuses the new format in a company on periods**, whatever the app sends: no
+   standalone GSR, no goal attached to one, no manager closing a GSR, no manager setting a rhythm.
+3. **The app shows the new screens only where the setting says so.** Every on-demand screen and
+   query sits behind `company.gsr_mode`. The period code paths are not edited beyond that one
+   branch point, and their tests pass unchanged, which is the proof nothing moved.
+4. **0047 takes back what 0046 put on every company** (see "What 0047 changes in 0046"), so a
+   company on periods is under exactly the rules it had before 0046.
+
 ### The setting
 
 - `companies.gsr_mode`: `'periods'` (the default, today's behaviour) or `'on_demand'`.
-- Only Rococo changes it, the way only Rococo changes modules and display settings
-  (`guard_company_fields`), and the change is audited. It is edited on Rococo, Companies beside the
-  other Rococo-only settings.
+- Nobody changes it from the app. `guard_company_fields` refuses a change to it from any
+  signed-in account, Rococo admins included, so the only way to turn a company on is a statement
+  run by hand in the database with the owner's say-so. There is no switch on any screen. Rococo,
+  Companies shows which format each company is on, read only.
 - In the app it is the only thing screens branch on: `company.gsr_mode`.
-- It moves one way in the app: from periods to on demand. Moving back is refused once the company
-  has moved, because a standalone GSR has no period to go back to. Undoing a trial is a job done by
-  hand in the database. (Builder's call; cost if wrong: a reverse conversion has to be written.)
+- It moves one way: from periods to on demand. Moving back is refused by the database once the
+  company has a standalone GSR, because a standalone GSR has no period to go back to. Undoing a
+  trial is a job done by hand. (Builder's call; cost if wrong: a reverse conversion has to be
+  written.)
 
 ### A standalone GSR
 
@@ -180,18 +203,24 @@ For a standalone GSR the freeze reads the GSR itself, where today it reads the c
 |---|---|---|
 | Start a GSR for a person | The person, anyone who leads them, admins who manage them, Rococo | A blank GSR, as the open policies require today |
 | Work its goals, notes, tasks | As today | Unchanged policies |
-| Mark it done | The person, anyone who leads them, admins who manage them | Sets status, completion time, score, and who marked it done |
-| Reopen it | Anyone who leads them, admins who manage them | Not the person |
+| Mark it done | Anyone who leads them, admins who manage them | Never the person themself. Sets status, completion time, score, and who marked it done |
+| Reopen it | The same people | Never the person themself |
 | Delete it | Admins who manage the person, as today | Removes its goals with it |
 | See it | The person and those who can see them, as today | The existing reviews wall |
 | Set a person's rhythm | Admins who manage them; managers for the people they lead | Already live in 0046. Nobody below admin sets their own |
 
 "Leads" is `private.led_person_ids()`, the whole chain below a person, as everywhere else.
 
-The score a person locks on their own GSR is whatever their own progress entries add up to. The
-database holds it to 0 to 100 and does not recompute it, because the math lives only in the app
-(rule 7). The checks on it are that the page always shows the goals beside the locked score, that
-the GSR records who marked it done and when, and that managers and admins can reopen.
+Nobody marks their own GSR done or reopens it, whatever their role: an admin's or an owner's GSR
+is closed by someone else in leadership. The database enforces it, not only the screen. The
+owner's words were that employees cannot close their own; holding every role to it is the
+builder's reading, so the rule means the same for everyone. (Cost if wrong: one exception for
+owners.) Rococo admins have no GSRs in a company and are not affected. The person still starts
+their own GSR and works its goals.
+
+The score is written by whoever marks the GSR done. The database holds it to 0 to 100 and does not
+recompute it, because the math lives only in the app (rule 7), exactly as when an admin locks a
+month today. The GSR records who marked it done and when.
 
 ### Rhythm
 
@@ -200,18 +229,31 @@ the GSR records who marked it done and when, and that managers and admins can re
   sets None for people who never have one. (Builder's call.)
 - It decides nothing about who may have a GSR. It only feeds the due flag.
 
-### What 0047 removes from 0046
+### What 0047 changes in 0046
 
-0046 was written for self-opening periods. Two of its pieces have no use now and are removed:
+0046 was written for self-opening periods and is live for all three companies. 0047 takes back
+every part of it that a company on periods would otherwise be held to or allowed, so Klasik and
+Kingdom are under exactly the rules they had before it.
+
+Removed:
 
 - The policy "Members open a GSR period" on `review_cycles`. No screen uses it, and it lets any
   member add a GSR cycle to their own company.
 - The trigger `reviews_guard_rhythm` and its function. A person's rhythm no longer decides whose
   GSR a cycle holds.
+- The rule that a monthly GSR cycle must be a whole calendar month (and the weekly, two-week and
+  quarterly period rules with it). An admin sets a month's dates as freely as before 0046.
 
-What stays from 0046: `review_cycles.kind`, the rule that a monthly GSR cycle is a whole calendar
-month, `profiles.gsr_cadence` with its policy and guard branch, the leaders' lock and reopen branch,
-and the audit of rhythm changes.
+Narrowed to companies on demand:
+
+- Managers locking and reopening a GSR. It applies to standalone GSRs only. In a company on
+  periods only admins lock a month, as their screens say.
+- Managers setting a person's rhythm. Rhythm means nothing on periods and no screen shows it there.
+
+Kept for everyone, because the live schema is built on it and it changes nothing a person can see
+or do: `review_cycles.kind` (how the database tells a GSR month from a scored review cycle, set
+from the cadence), the duplicate-cycle key that includes it, and `profiles.gsr_cadence`, which is
+monthly for everyone on periods, with the audit of its changes.
 
 ### Moving a company over
 
@@ -264,8 +306,9 @@ All of this is pure code in `src/lib/gsr`, shared by every company and tested th
   the rhythm: the next working day (Monday to Friday) for daily, 7 days, 14 days, one calendar
   month, three calendar months. With no GSR yet they are due now. "Due" on the day, "Overdue"
   after it. A person with rhythm None is never flagged.
-- **Today.** Every "today" in GSR code is the company's today (`companyToday(company.time_zone)`,
-  which exists in `src/lib/wins.ts`), never the browser's.
+- **Today.** Every "today" in the on-demand code is the company's today
+  (`companyToday(company.time_zone)`, which exists in `src/lib/wins.ts`), never the browser's. The
+  period code keeps reading the date as it does now; it is not touched.
 
 Rule 7 in `CLAUDE.md` says only an admin writes `gsr_score`; it is updated to say who marks a GSR
 done in a company on demand. Rule 12's lists gain `gsr_mode` (configured per company) and the due
@@ -306,8 +349,9 @@ GSRs                                    [This week v] [All divisions v]
 
 - A title that says when it was started, and a status that reads "In progress" or "Done" with the
   date, the score, and who marked it done.
-- "Mark done" as the page's primary action for anyone allowed, with today's confirm showing the
-  score before it locks. "Reopen" for managers and admins.
+- "Mark done" as the page's primary action for the people who lead the person and for admins,
+  with today's confirm showing the score before it locks. "Reopen" for the same people. The person
+  themself sees no button: a quiet line says their manager marks it done.
 - **Last GSR**, where "Last month at a glance" is today: the person's previous GSR by start date,
   whatever the gap. It shows its dates, its goals with their completion, its notes and its score.
   If it is still open, its goals' completion can be settled right there and it can be marked done
@@ -341,8 +385,7 @@ the months list inside a scored review's GSR pillar): the screen shows the same 
 GSRs in its window instead. Inside a scored review, the pillar lists the GSRs done in the period
 with their dates and scores, and any still open as not counted.
 
-**Rococo, Companies.** The setting, with a line saying it moves the company's past GSRs and cannot
-be switched back from here.
+**Rococo, Companies.** Which format each company is on, as read-only text. No switch.
 
 All of it follows the hub clarity rules already in force: setup reads first, one primary action a
 page, 44px tap targets that never overlap, no sideways scroll from 390px, theme tokens only.
@@ -363,8 +406,10 @@ page, 44px tap targets that never overlap, no sideways scroll from 390px, theme 
    database built from the files, object by object.
 2. The app ships with every company on periods. The other companies' tests pass unchanged, which is
    the proof nothing moved for them.
-3. Rococo sets RBA to on demand. Its two past GSRs convert and RBA sees the new screens.
-4. Later: the same flip for the others, then a cleanup that removes the period code for GSRs.
+3. With the owner's say-so, RBA's setting is changed by hand in the database. Its two past GSRs
+   convert and RBA sees the new screens. Klasik and Kingdom see nothing.
+4. Later, and only when the owner has Klasik's or Kingdom's approval: the same change for that
+   company. Once all three are over, a cleanup removes the period code for GSRs.
 
 ## Constraints
 
@@ -373,7 +418,11 @@ page, 44px tap targets that never overlap, no sideways scroll from 390px, theme 
 - Tests stay hermetic: every new service function has its mock (`src/test/mocks/`), and `npm run
   demo` can show a company on demand.
 - SQL tests (`npm run test:sql`) cover every new policy and trigger with its denial paths, the
-  conversion, and that a company on periods is refused a standalone GSR and behaves as before.
+  conversion, that nobody closes or reopens their own GSR, that no signed-in account can change
+  `gsr_mode`, and that a company on periods is refused every part of the new format and behaves as
+  it did before 0046.
+- Page tests render each GSR screen for a company on periods and for one on demand, so a change to
+  one format that leaks into the other fails a test.
 - No service-role key, no new public database function: the conversion runs inside the write that
   flips the setting.
 - Copy is calm and plain, with no em dashes and no "month" where a GSR has none.
