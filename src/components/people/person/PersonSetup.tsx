@@ -9,7 +9,8 @@
 // Rococo admin, account or not: an address on one of the company's sign-in domains gets in without
 // an invitation, so switching the row off is what keeps a person out, and it keeps everything set
 // up for them on record. Remove deletes the profile and all of it, so it is offered only for
-// someone who has never signed in and has no pending invitation. Anything to do with someone ranked
+// someone who has never signed in and has no pending invitation. Someone who has signed in gets
+// Delete person instead (0049), which also removes their sign-in, behind a typed confirmation. Anything to do with someone ranked
 // above the viewer is refused by the database (0033), so none of it is offered. A Rococo admin placed
 // on the roster keeps their role, divisions and access with Rococo (0029): their details are the
 // company's to edit, but the role and divisions read only and there are no account actions.
@@ -92,6 +93,10 @@ export default function PersonSetup({ companyId, data, person, update, onError, 
   const self = person.id === me.id;
   const canChangeRole = canGrantRole(me, person.role);
   const tenure = formatTenure(person.hire_date);
+  // What Delete person says goes: their reviews, their months' GSRs and their goals, as loaded.
+  const gsrCycleIds = new Set(data.cycles.filter((c) => c.kind === "gsr").map((c) => c.id));
+  const monthGsrs = data.reviews.filter((r) => r.cycle_id !== null && gsrCycleIds.has(r.cycle_id)).length;
+  const counts = { reviews: data.reviews.length - monthGsrs, gsrs: monthGsrs, goals: data.goals.length };
   const manager = reportsTo(data, person);
   const managerChoices = people.filter((p) => p.id !== person.id && p.is_active);
   const keepCurrentManager = person.reports_to !== null && !managerChoices.some((p) => p.id === person.reports_to);
@@ -212,7 +217,7 @@ export default function PersonSetup({ companyId, data, person, update, onError, 
             <DivisionsRow companyId={companyId} person={person} me={me} {...row("divisions")} onPatch={patch} />
           </div>
         </Section>
-        {person.is_rococo_admin ? null : <AccountActions companyId={companyId} person={person} onPatch={patch} />}
+        {person.is_rococo_admin ? null : <AccountActions companyId={companyId} person={person} counts={counts} onPatch={patch} />}
       </div>
 
       {canSeePay ? (

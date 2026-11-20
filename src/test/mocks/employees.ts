@@ -2,12 +2,24 @@
 // run against seeded KPIs, figures and compensation and never touch the network.
 import type { CompensationItem, EmployeeFinancial, EmployeeKpi } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
-import { companyOf } from "./profiles.ts";
+import { companyOf, onPersonDeleted } from "./profiles.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 
 const kpis = fromAll((b) => b.kpis).map((x) => ({ ...x }));
 const compensation = fromAll((b) => b.compensation).map((x) => ({ ...x }));
 const financials = fromAll((b) => b.financials).map((x) => ({ ...x }));
+
+// Keeps only the rows that pass, in place, so every reader of the store sees the change.
+function keepWhere<T>(rows: T[], keep: (row: T) => boolean): void {
+  rows.splice(0, rows.length, ...rows.filter(keep));
+}
+
+// A deleted person's KPIs, pay and figures go with them (0049).
+onPersonDeleted((profileId) => {
+  keepWhere(kpis, (x) => x.employee_id !== profileId);
+  keepWhere(compensation, (x) => x.employee_id !== profileId);
+  keepWhere(financials, (x) => x.employee_id !== profileId);
+});
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-new-${++counter}`;

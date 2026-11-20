@@ -9,10 +9,24 @@ import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { goalLinkProblem } from "./gsr.ts";
 import { timeZoneOf } from "./companies.ts";
-import { companyOf } from "./profiles.ts";
+import { companyOf, onPersonDeleted } from "./profiles.ts";
 
 const tasks: Task[] = fromAll((b) => b.tasks).map((x) => ({ ...x }));
 const steps: TaskStep[] = fromAll((b) => b.taskSteps).map((x) => ({ ...x }));
+
+// A deleted person's tasks stay, without their name (0049).
+onPersonDeleted((profileId) => {
+  for (const t of tasks) {
+    // The goal link goes with the person it belonged to, as guard_task clears it (0039).
+    if (t.assignee_id === profileId) {
+      t.assignee_id = null;
+      t.goal_id = null;
+    }
+    if (t.created_by === profileId) t.created_by = null;
+    if (t.completed_by === profileId) t.completed_by = null;
+    if (t.notified_assignee_id === profileId) t.notified_assignee_id = null;
+  }
+});
 
 export type TaskInput = {
   company_id: string;

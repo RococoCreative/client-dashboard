@@ -4,8 +4,12 @@
 // A person's GSR rhythm (gsr_cadence) is refused as the database refuses it (guard_profile_fields
 // and the policy "Leaders set the GSR rhythm of the people they lead", 0047), acting as personaIn
 // in fixtures.ts, as mocks/gsrOnDemand.ts does. Every other field is taken as given.
+//
+// Deleting a person who has signed in (deletePerson, 0049) is refused as the delete policy and
+// guard_profile_delete refuse it, with the same words, and then cascades: every mock that keeps
+// rows of a person registers with onPersonDeleted and drops or blanks them, as the foreign keys do.
 import type { Profile, Role } from "../../types/database.ts";
-import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
+import { ROLE_RANK, isCompanyAdminRole, ledBy } from "../../lib/people.ts";
 import { ALL_PROFILES, personaFromLocation, personaIn } from "../fixtures.ts";
 import type { ProfilePatch as RealProfilePatch } from "../../services/profiles.ts";
 import { gsrModeOf } from "./companies.ts";
@@ -72,6 +76,47 @@ export async function deleteStaffProfile(id: string): Promise<void> {
   const index = profiles.findIndex((p) => p.id === id && p.user_id === null);
   if (index === -1) throw new Error("That person was not removed. They may have signed in, or they are not yours to remove.");
   profiles.splice(index, 1);
+  forgetPerson(id);
+}
+
+export const PERSON_NOT_DELETED = "That person was not deleted. They may be gone already, or they are not yours to delete.";
+
+// The mocks holding a person's rows, each dropping or blanking them as the foreign keys do.
+const forgetters: Array<(profileId: string) => void> = [];
+
+export function onPersonDeleted(forget: (profileId: string) => void): void {
+  forgetters.push(forget);
+}
+
+function forgetPerson(profileId: string): void {
+  for (const forget of forgetters) forget(profileId);
+  for (const p of profiles) if (p.reports_to === profileId) p.reports_to = null;
+}
+
+// The delete policy (an admin of the company over the people they manage, or Rococo) and then the
+// guard, in the order 0049 checks them.
+export async function deletePerson(profileId: string): Promise<void> {
+  const index = profiles.findIndex((p) => p.id === profileId);
+  if (index === -1) throw new Error(PERSON_NOT_DELETED);
+  const target = profiles[index];
+  const companyId = target.company_id;
+  const me = companyId ? personaIn(companyId) : null;
+  if (!me || !companyId) throw new Error(PERSON_NOT_DELETED);
+  const manages =
+    me.is_rococo_admin ||
+    (isCompanyAdminRole(me.role) && me.company_id === companyId && ledBy(me, peopleOf(companyId)).some((p) => p.id === target.id));
+  if (!manages) throw new Error(PERSON_NOT_DELETED);
+  if (target.user_id === null) {
+    if (!me.is_rococo_admin && ROLE_RANK[target.role] > ROLE_RANK[me.role]) throw new Error("You cannot remove someone ranked above you.");
+  } else {
+    if (target.id === me.id) throw new Error("You cannot delete yourself.");
+    if (target.is_rococo_admin && !me.is_rococo_admin) throw new Error("A Rococo admin is removed by Rococo.");
+    if (!me.is_rococo_admin && ROLE_RANK[target.role] > ROLE_RANK[me.role]) throw new Error("You cannot delete someone ranked above you.");
+    const otherOwner = profiles.some((p) => p.company_id === companyId && p.id !== target.id && p.role === "owner" && p.is_active);
+    if (target.role === "owner" && target.is_active && !otherOwner) throw new Error("This is the company's only owner. Make someone else an owner first.");
+  }
+  profiles.splice(index, 1);
+  forgetPerson(profileId);
 }
 
 export async function updateMyProfile(patch: { full_name?: string | null; title?: string | null; phone?: string | null }): Promise<Profile> {

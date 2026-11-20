@@ -16,7 +16,9 @@
 //
 // A row carries the invitation actions only: Send invite, then Copy link, Email again and cancelling
 // an invitation.
-// Deactivate, Reactivate and Remove live on the person's Setup tab, with the same rules. A Rococo
+// Deactivate, Reactivate, Remove and Delete person live on the person's Setup tab, with the same
+// rules. A delete lands back here with a line saying who was deleted, read once from the address's
+// state and cleared from it, so a reload does not say it again. A Rococo
 // admin placed with the company shows on the roster too, but their role and access are Rococo's to
 // manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
 // no invite.
@@ -26,8 +28,8 @@
 // the invitation actions for a person who has them. It is the same table underneath, with explicit
 // table roles and each cell's column name (data-label) so a screen reader still reads rows and
 // columns.
-import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Check, Copy, Search, Send, UserPlus } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
@@ -244,6 +246,14 @@ export default function PeoplePage() {
   const [division, setDivision] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
+  // Who a delete on the Setup tab just removed, carried here in the address's state.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const arrivedDeleted = (location.state as { deleted?: unknown } | null)?.deleted;
+  const [deletedLine] = useState(typeof arrivedDeleted === "string" ? `${arrivedDeleted} was deleted.` : null);
+  useEffect(() => {
+    if (typeof arrivedDeleted === "string") navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [arrivedDeleted, location.pathname, location.search, navigate]);
 
   const state = useAsync(async () => {
     const [people, invitations, divisions, directory] = await Promise.all([
@@ -480,6 +490,7 @@ export default function PeoplePage() {
           )
         }
       />
+      {deletedLine ? <Notice tone="success" className="mb-4">{deletedLine}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {emailLine ? <Notice tone={emailLine.tone} className="mb-4">{emailLine.text}</Notice> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
