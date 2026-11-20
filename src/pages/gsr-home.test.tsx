@@ -50,7 +50,7 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { setActingPerson } from "../test/actingPerson.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
-import { createGoal, createPillar, deleteGoal, deletePillar } from "../services/gsr.ts";
+import { createGoal, createPillar, deleteGoal, deletePillar, updateCycle } from "../services/gsr.ts";
 import { listGsrsForLog, listLastGsrDates, listPersonGsrs } from "../services/gsrOnDemand.ts";
 import { listCompanyProfiles, updateProfile } from "../services/profiles.ts";
 import { listGsrsForLog as readLog, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
@@ -79,6 +79,8 @@ const PERIOD_WORDS = /month|review|period|signed off|locked in/i;
 
 const sectionOf = (heading: HTMLElement) => heading.closest("section") as HTMLElement;
 const sections = (container: HTMLElement) => Array.from(container.querySelectorAll("section"));
+// Wording that belongs to a company on periods' months, never to a GSR on demand.
+const LOCKED_WORDS = /locked in|month is locked/i;
 const gsrCard = async () => sectionOf(await screen.findByRole("heading", { name: "Your GSR" }));
 const weekCard = async () => sectionOf(await screen.findByRole("heading", { name: "GSRs this week" }));
 
@@ -183,7 +185,6 @@ describe("an employee's Home on demand", () => {
     expect(await within(impact).findByText(`GSRs, ${q3.name}`)).toBeInTheDocument();
     expect(within(impact).getByText("80%")).toBeInTheDocument();
     expect(screen.queryByText(/Monthly GSRs/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/locked in/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/No month open/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: september.name })).not.toBeInTheDocument();
     expect(within(card).queryByText(PERIOD_WORDS)).not.toBeInTheDocument();
@@ -237,6 +238,14 @@ describe("a manager's Home on demand", () => {
     // Each row is the target of its name on a phone, and its control sits above that.
     expect(rowanRow.className.split(/\s+/)).toContain("relative");
     expect(within(rowanRow).getByRole("link", { name: "Rowan Ellis" }).className).toContain("tap:after:absolute tap:after:inset-0");
+    // Only the control sits above the stretched name: the line that holds it does not, so a tap
+    // anywhere else on that line still opens the person.
+    const openLink = within(rowanRow).getByRole("link", { name: /Open/ });
+    expect((openLink.parentElement as HTMLElement).className.split(/\s+/)).not.toContain("relative");
+    expect(openLink.className.split(/\s+/)).toContain("relative");
+    const startButton = within(kaiRow).getByRole("button", { name: /Start/ });
+    expect((startButton.parentElement as HTMLElement).className.split(/\s+/)).not.toContain("relative");
+    expect(startButton.className.split(/\s+/)).toContain("relative");
     expect(within(team).queryByText(PERIOD_WORDS)).not.toBeInTheDocument();
   });
 
@@ -342,6 +351,61 @@ describe("an admin's Home on demand", () => {
     const card = await weekCard();
     expect(await within(card).findByText(/The connection dropped\./)).toBeInTheDocument();
     expect(within(card).queryByText(/GSRs? done/)).not.toBeInTheDocument();
+  });
+});
+
+describe("the whole Home of a company on demand", () => {
+  it("tells an employee nothing about months being locked in", async () => {
+    await scoredGsrs();
+    done(jamie.id, "2026-09-02", 80);
+    const { container } = renderWithHub(<DashboardPage />, employee);
+    await screen.findByText(`GSRs, ${q3.name}`);
+    await screen.findByRole("heading", { name: /open goal/ });
+    expect(container.textContent).not.toMatch(LOCKED_WORDS);
+  });
+
+  it("tells a manager nothing about months being locked in", async () => {
+    await scoredGsrs();
+    const { container } = renderWithHub(<DashboardPage />, manager);
+    const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
+    await within(team).findByRole("link", { name: "Rowan Ellis" });
+    await screen.findByRole("heading", { name: /open goal/ });
+    expect(container.textContent).not.toMatch(LOCKED_WORDS);
+  });
+
+  it("tells an admin nothing about months being locked in", async () => {
+    await scoredGsrs();
+    const { container } = renderWithHub(<DashboardPage />, admin);
+    const card = await weekCard();
+    await within(card).findByTestId("gsr-week-headline");
+    await screen.findByRole("heading", { name: q3.name });
+    expect(container.textContent).not.toMatch(LOCKED_WORDS);
+  });
+});
+
+describe("an admin's Home with no review cycle open", () => {
+  // Closes every open RBA cycle for one test and opens them again after.
+  async function closeAll() {
+    const open = RBA.cycles.filter((c) => c.status === "open");
+    for (const cycle of open) await updateCycle(cycle.id, { status: "closed" });
+    onTestFinished(async () => {
+      for (const cycle of open) await updateCycle(cycle.id, { status: "open" });
+    });
+  }
+
+  it("starts a cycle on the reviews page in a company on demand, where /gsr is the GSRs log", async () => {
+    await closeAll();
+    renderWithHub(<DashboardPage />, admin);
+    const start = await screen.findByRole("button", { name: "Start a cycle" });
+    expect(start.closest("a")).toHaveAttribute("href", "/reviews");
+  });
+
+  it("starts a cycle where it always has in a company on periods", async () => {
+    await closeAll();
+    setMockGsrMode(RBA.company.id, "periods");
+    renderWithHub(<DashboardPage />, makeHub("admin", RBA.company));
+    const start = await screen.findByRole("button", { name: "Start a cycle" });
+    expect(start.closest("a")).toHaveAttribute("href", "/gsr");
   });
 });
 
