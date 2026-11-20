@@ -32,8 +32,10 @@
 --      marks their own GSR done or reopens it, whatever their role.
 --   6. Its dates and limits. The database stamps both dates in the company's time zone, starts
 --      one only in a company on demand, one a person a day and two open at most.
---   7. Who starts one: the person, anyone who leads them, an admin who manages them. Nobody
---      deletes their own once it is done.
+--   7. Who starts one: the person, anyone who leads them, an admin who manages them. Who deletes
+--      one: an admin who manages the person, or anyone who leads them, through the policy "Leaders
+--      delete a GSR for the people they lead", which reaches only a GSR with no cycle in a company
+--      on demand. Nobody deletes their own once it is done.
 --   8. public.gsr_last_started, the day each person's last GSR began, read through the wall.
 --   9. Its goals. goals.review_id points a GSR goal at its GSR. A GSR goal has one home, a cycle
 --      or a GSR; a goal on a GSR is that GSR's person's, in their company, one focus goal a GSR,
@@ -885,8 +887,9 @@ create trigger reviews_stamp_gsr
 --
 -- Marking done and reopening: a leader through "Leaders lock and reopen a GSR for the people
 -- they lead" (section 4), an admin through 0038's update policy, never the person themself
--- (section 4's guard). Deleting is an admin's, as for every review (0038), with one exception
--- below: nobody deletes their own GSR once it is done.
+-- (section 4's guard). Deleting is an admin's, as for every review (0038), and, for a GSR with no
+-- cycle only, also anyone's who leads the person (the delete policy below), with one exception:
+-- nobody deletes their own GSR once it is done.
 drop policy if exists "People start their own GSR" on public.reviews;
 create policy "People start their own GSR"
   on public.reviews for insert to authenticated
@@ -922,9 +925,28 @@ create policy "Leaders start a GSR for the people they lead"
     and gsr_score is null
   );
 
+-- Anyone who leads the person deletes their GSR, open or done, the same test the start policy above
+-- makes, in a company on demand. Only a GSR with no cycle is reached: a review in a cycle, a GSR
+-- month or a scored review, is still deleted by an admin alone (0038), so a company on periods,
+-- which holds no GSR without a cycle, is held to exactly what it was. led_person_ids never holds a
+-- manager themself (team_ids walks the chain below them), and an admin's own GSR is theirs to
+-- delete already through 0038's policy; either way the guard below keeps a done one. What goes
+-- with it (its goals and their notes, its task links, score rows and project notes) goes by the
+-- cascade, which no guard judges by who deleted the GSR.
+drop policy if exists "Leaders delete a GSR for the people they lead" on public.reviews;
+create policy "Leaders delete a GSR for the people they lead"
+  on public.reviews for delete to authenticated
+  using (
+    cycle_id is null
+    and company_id = private.auth_company_id()
+    and private.gsr_on_demand(company_id)
+    and employee_id in (select private.led_person_ids())
+  );
+
 -- Nobody deletes their own GSR once it is done, whatever their role: a score someone else locked
 -- in stays on the record, as nobody reopens their own. An admin still deletes their own open GSR
--- (one started on themself by mistake) and anyone's GSR they manage, done or not. A review in a
+-- (one started on themself by mistake) and anyone's GSR they manage, done or not, and anyone who
+-- leads the person deletes theirs, done or not. A review in a
 -- cycle is not reached. Neither is a delete with no signed-in user (the SQL editor, the put-back)
 -- nor one that reaches the GSR because its person or its company is being deleted.
 create or replace function public.guard_own_done_gsr_delete()

@@ -1,5 +1,6 @@
 // Pins that the GSRs on demand mock behaves as 0047 does: no GSR in a company on periods, one a
-// person a day, two open at most when one is started, nobody marking their own done, a done GSR's
+// person a day, two open at most when one is started, nobody marking their own done, deleting by
+// an admin or someone who leads the person and nobody their own once done, a done GSR's
 // goals and notes frozen until it is reopened, and standalone GSRs never showing up where period
 // code reads reviews. Every page test for a company on demand leans on this mock telling the same
 // story the database would.
@@ -166,14 +167,41 @@ describe("GSRs on demand mock", () => {
     expect((await listPersonGsrs(rba, noor)).map((g) => g.status)).toEqual(["in_progress", "complete"]);
   });
 
-  it("lets a leader two levels up start and close a GSR, but not delete it", async () => {
+  it("lets a leader two levels up start, close and delete a GSR", async () => {
     setMockGsrMode(rba, "on_demand");
     viaAddress("manager");
     const { gsr } = await startGsr(rba, kai);
     expect(gsr.employee_id).toBe(kai);
     expect((await markGsrDone(gsr.id, 75, harper)).status).toBe("complete");
     expect((await reopenGsr(gsr.id)).status).toBe("in_progress");
-    await expect(deleteGsr(gsr.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    await deleteGsr(gsr.id);
+    expect(await listPersonGsrs(rba, kai)).toEqual([]);
+  });
+
+  it("lets a manager delete only the GSRs of the people they lead, as 0047 does", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const kaisDone = seedMockGsr({ company_id: rba, employee_id: kai, started_on: "2026-09-01", status: "in_progress" });
+    const goal = await createGoal({ company_id: rba, employee_id: kai, title: "Walk every site", kind: "role", review_id: kaisDone.id });
+    actAs(admin);
+    expect((await markGsrDone(kaisDone.id, 70, admin)).status).toBe("complete");
+    const jamies = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    const harpersOpen = seedMockGsr({ company_id: rba, employee_id: harper, started_on: "2026-09-08", status: "in_progress" });
+    const harpersDone = seedMockGsr({ company_id: rba, employee_id: harper, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
+    actAs(harper);
+    // Someone she does not lead, and her own, open or done: no row reached.
+    await expect(deleteGsr(jamies.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    await expect(deleteGsr(harpersOpen.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    await expect(deleteGsr(harpersDone.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    // A done GSR of someone she leads goes, with its goals.
+    await deleteGsr(kaisDone.id);
+    expect((await listGoals(rba, kai)).some((g) => g.id === goal.id)).toBe(false);
+    // An employee who leads nobody deletes no colleague's GSR.
+    actAs(noor);
+    await expect(deleteGsr(jamies.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    actAs(admin);
+    expect((await listPersonGsrs(rba, kai)).map((g) => g.id)).toEqual([]);
+    expect((await listPersonGsrs(rba, jamie)).map((g) => g.id)).toEqual([jamies.id]);
+    expect((await listPersonGsrs(rba, harper)).map((g) => g.id)).toEqual([harpersOpen.id, harpersDone.id]);
   });
 
   it("lets an admin delete a GSR, and its goals go with it", async () => {

@@ -9,9 +9,9 @@
 // person a page test rendered (renderWithHub records it) or one set with setActingPerson in
 // src/test/actingPerson.ts; else the demo persona of the address, resolved in the GSR's company;
 // else that company's admin. A person reads and starts their own; someone who
-// leads them (ledBy, the whole chain) reads, starts, marks done and reopens theirs; an admin or
-// owner of the company does all that for anyone in it and alone deletes; a Rococo admin does
-// everything. Every read and write hands out a copy, never the stored row, as the service does.
+// leads them (ledBy, the whole chain) reads, starts, marks done, reopens and deletes theirs in a
+// company on demand; an admin or owner of the company does all that for anyone in it; a Rococo
+// admin does everything. Nobody deletes their own once it is done. Every read and write hands out a copy, never the stored row, as the service does.
 //
 // resetMockGsrs, setMockGsrMode and seedMockGsr are test-only extras; src/test/setup.ts resets
 // after every test, which also puts every company's format back to what its fixture says.
@@ -208,13 +208,16 @@ export async function reopenGsr(id: string): Promise<Gsr> {
   return replace(index, { status: "in_progress", completed_at: null, gsr_score: null, done_on: null });
 }
 
-// An admin's or a Rococo admin's alone (0038), never their own once it is done (0047). Its goals
-// go with it: the goals mock drops a goal whose GSR is gone.
+// An admin's or a Rococo admin's (0038), or that of someone who leads the person in a company on
+// demand (0047, "Leaders delete a GSR for the people they lead"), never their own once it is done
+// (0047). Anyone else reaches no row. Its goals go with it: the goals mock drops a goal whose GSR
+// is gone.
 export async function deleteGsr(id: string): Promise<void> {
   const found = stored(id);
   if (!found) throw new Error(NOT_CHANGED_MESSAGE);
   const r = reach(found.gsr.company_id, found.gsr.employee_id);
-  if (!r.admin) throw new Error(NOT_CHANGED_MESSAGE);
+  const leader = r.leads && !r.own && gsrModeOf(found.gsr.company_id) === "on_demand";
+  if (!r.admin && !leader) throw new Error(NOT_CHANGED_MESSAGE);
   if (found.gsr.status === "complete" && personaIn(found.gsr.company_id).id === found.gsr.employee_id) throw new Error(OWN_DONE_DELETE_MESSAGE);
   gsrs.splice(found.index, 1);
 }

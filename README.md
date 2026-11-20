@@ -549,8 +549,9 @@ Rococo, Companies shows each company's format as text, By month or On demand.
   its own goals, where the company scores its GSRs) and reopens it. Nobody marks their own GSR done
   or reopens it, whatever their role, and the database holds that, not only the screen. The
   database records who marked it done as whoever was signed in, whatever the app sent. A done GSR's
-  goals and notes are frozen until it is reopened. Deleting one stays with an admin, and nobody
-  deletes their own once it is done: someone who leads them can. A person with nobody above them
+  goals and notes are frozen until it is reopened. An admin who manages the person, or anyone who
+  leads them, deletes one, open or done, and nobody deletes their own once it is done. A review in a
+  cycle is still deleted by an admin alone. A person with nobody above them
   in the company and no other admin (an owner who is the only admin) has their GSRs closed by
   Rococo, and until Rococo closes one, their open ones count toward the limit of two.
 - **Counting.** A GSR counts on the day it was marked done, in the company's time zone. One done with

@@ -11,8 +11,9 @@
 // which locks its score (scoreMonth over its own goals, against the company's number of mandatory
 // goals); "Mark done" is the page's one primary action. Nobody marks their own GSR done or reopens
 // it, whatever their role: the person sees a quiet line instead, and the database refuses it too.
-// A done GSR is read only until the same people reopen it. An admin may delete it, from the foot
-// of the page, away from the everyday controls; never their own once it is done.
+// A done GSR is read only until the same people reopen it. An admin, or someone who leads the
+// person, may delete it, from the foot of the page, away from the everyday controls; never their
+// own once it is done.
 //
 // Arriving from a start that found two GSRs open already (useStartGsr, router state atLimit), the
 // page says so once: which GSR to close first, where to do it, or, for the person themself, that
@@ -169,7 +170,9 @@ export default function GsrPage() {
   // project notes an admin's.
   const canDiscuss = (isAdmin || isOwn) && open;
   const canEnter = isAdmin && open;
-  const canDelete = isAdmin && (open || !isOwn);
+  // Deleting: an admin, never on their own GSR once it is done, or someone who leads the person
+  // (never themself), as the reviews delete policies hold it (0038, 0047).
+  const canDelete = (isAdmin && (open || !isOwn)) || leads;
   const required = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active)?.required_goals ?? null;
   const markedBy = gsr.reviewer_id ? (names.get(gsr.reviewer_id) ?? (gsr.reviewer_id === profile.id && profile.is_rococo_admin ? "Rococo" : "someone no longer listed")) : null;
   // The GSR before this one, however long ago and whatever its state.
@@ -347,8 +350,8 @@ export default function GsrPage() {
       </div>
 
       {/* Deleting is rare and takes the goals with it, so it sits at the foot, worded, away from the
-          everyday controls. An admin's alone, as for every review, and never on their own GSR once
-          it is done: a score someone else locked stays (the database refuses it too). */}
+          everyday controls. An admin's, or that of someone who leads the person, and never on one's
+          own GSR once it is done: a score someone else locked stays (the database refuses it too). */}
       {canDelete ? (
         <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="text-[12.5px] text-ink-3">Deleting a GSR removes it and its goals for good.</p>

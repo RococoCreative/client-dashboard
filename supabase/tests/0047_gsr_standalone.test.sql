@@ -2,8 +2,9 @@
 -- Proves a GSR that stands on its own, with no cycle, in a company on demand: only such a company
 -- holds one, the person, anyone who leads them and an admin who manages them start it, the
 -- database stamps its dates in the company's time zone, a person has one a day and two open at
--- most, a leader marks it done and reopens it and changes nothing else on it, nobody closes their
--- own whatever their role (nor takes someone else's to close it), it stays with its person and
+-- most, a leader marks it done and reopens it and changes nothing else on it, a leader deletes it
+-- as an admin does (and nothing beyond it), nobody closes their own whatever their role (nor takes
+-- someone else's to close it) or deletes their own once it is done, it stays with its person and
 -- its company, a writer refused by row level security learns nothing first, it is read through
 -- the same wall as every review, and a review in a
 -- cycle in a company on periods is exactly what it was.
@@ -997,6 +998,166 @@ select tests.assert(
   'cycle_delete: an admin could not delete their own signed-off review in a cycle'
 );
 reset role; select set_config('request.jwt.claims', '', true);
+
+-- case: a_leader_deletes_a_gsr_of_someone_they_lead
+-- d_mgr, a manager and no admin, leads d_r1 and d_r2. They delete d_r1's open GSR, which takes its
+-- goal, the goal's note, its task link and its project note, and d_r1's done GSR with its goal. They
+-- reach nothing else: d_r1's review in a cycle, a GSR of someone they do not lead, a GSR in another
+-- company, or their own GSR, done or open (led_person_ids never holds them). d_peer, an employee
+-- who leads nobody, deletes nothing. The GSRs are dated as a conversion dates them, so no day
+-- collides.
+select tests.create_person('d_mgr', tests.company('rba'), 'manager');
+select tests.create_person('d_r1', tests.company('rba'));
+select tests.create_person('d_r2', tests.company('rba'));
+select tests.create_person('d_peer', tests.company('rba'));
+select tests.create_person('d_stranger', tests.company('rba'));
+update public.profiles set reports_to = tests.id('d_mgr') where id in (tests.id('d_r1'), tests.id('d_r2'));
+select set_config('hub.gsr_on_demand_for', 'sample-other-47s', true);
+insert into public.companies (slug, name, gsr_mode) values ('sample-other-47s', 'Sample other 47s', 'on_demand');
+select set_config('hub.gsr_on_demand_for', '', true);
+select tests.create_person('d_elsewhere', (select id from public.companies where slug = 'sample-other-47s'));
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.reviews (company_id, employee_id, status, started_on) values
+  (tests.company('rba'), tests.id('d_r1'), 'in_progress', '2030-04-01'),
+  (tests.company('rba'), tests.id('d_r2'), 'in_progress', '2030-04-01'),
+  (tests.company('rba'), tests.id('d_stranger'), 'in_progress', '2030-04-01'),
+  (tests.company('rba'), tests.id('d_mgr'), 'in_progress', '2030-04-01');
+insert into public.reviews (company_id, employee_id, status, started_on, done_on, completed_at, gsr_score) values
+  (tests.company('rba'), tests.id('d_r1'), 'complete', '2030-04-02', '2030-04-03', '2030-04-03 12:00+00', 70),
+  (tests.company('rba'), tests.id('d_mgr'), 'complete', '2030-04-02', '2030-04-03', '2030-04-03 12:00+00', 70),
+  ((select id from public.companies where slug = 'sample-other-47s'), tests.id('d_elsewhere'), 'complete', '2030-04-02', '2030-04-03', '2030-04-03 12:00+00', 70);
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select case when r.employee_id = tests.id('d_r1') and r.status = 'complete' then 'gd_r1_done'
+            when r.employee_id = tests.id('d_r1') then 'gd_r1_open'
+            when r.employee_id = tests.id('d_r2') then 'gd_r2_open'
+            when r.employee_id = tests.id('d_stranger') then 'gd_stranger'
+            when r.employee_id = tests.id('d_mgr') and r.status = 'complete' then 'gd_mgr_done'
+            when r.employee_id = tests.id('d_mgr') then 'gd_mgr_open'
+            else 'gd_elsewhere' end, r.id
+  from public.reviews r
+ where r.cycle_id is null
+   and r.employee_id in (tests.id('d_r1'), tests.id('d_r2'), tests.id('d_stranger'), tests.id('d_mgr'), tests.id('d_elsewhere'));
+-- What hangs off d_r1's GSRs: a goal on each, a note and a task on the open one's goal, and a
+-- project note on the open one. The done one's goal goes on under the conversion flag, as a done
+-- GSR's goals are frozen.
+insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+values (tests.company('rba'), tests.id('d_r1'), tests.id('gd_r1_open'), 'cycle', 'role', 'Sample leader delete open 47s');
+select set_config('hub.gsr_conversion', '1', true);
+insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+values (tests.company('rba'), tests.id('d_r1'), tests.id('gd_r1_done'), 'cycle', 'role', 'Sample leader delete done 47s');
+select set_config('hub.gsr_conversion', '', true);
+insert into tests.fixture (name, id)
+select case title when 'Sample leader delete open 47s' then 'gl_open' else 'gl_done' end, id
+  from public.goals where title like 'Sample leader delete % 47s';
+insert into public.goal_notes (goal_id, body) values (tests.id('gl_open'), 'Sample leader delete note 47s');
+insert into public.tasks (company_id, title, assignee_id, goal_id)
+values (tests.company('rba'), 'Sample leader delete task 47s', tests.id('d_r1'), tests.id('gl_open'));
+insert into tests.fixture (name, id)
+select 'tl_open', id from public.tasks where title = 'Sample leader delete task 47s';
+insert into public.review_project_notes (review_id, project_id, note)
+values (tests.id('gd_r1_open'), tests.id('p_one'), 'Sample leader delete project note 47s');
+-- d_r1's review in rba's scored quarter.
+insert into public.reviews (cycle_id, company_id, employee_id)
+values (tests.id('c_quarter'), tests.company('rba'), tests.id('d_r1'));
+insert into tests.fixture (name, id)
+select 'rd_r1_quarter', id from public.reviews where cycle_id = tests.id('c_quarter') and employee_id = tests.id('d_r1');
+select tests.assert(
+  (select count(*) = 2 from public.goals where review_id in (tests.id('gd_r1_open'), tests.id('gd_r1_done')))
+  and exists (select 1 from public.goal_notes where goal_id = tests.id('gl_open'))
+  and (select goal_id = tests.id('gl_open') from public.tasks where id = tests.id('tl_open'))
+  and exists (select 1 from public.review_project_notes where review_id = tests.id('gd_r1_open')),
+  'leader_delete: the setup is not as the case needs it'
+);
+-- led_person_ids holds the people d_mgr leads and never d_mgr.
+select tests.act_as(tests.id('d_mgr'));
+select tests.assert(
+  (select array_agg(l.id order by l.id) from private.led_person_ids() as l (id))
+    = (select array_agg(x order by x) from unnest(array[tests.id('d_r1'), tests.id('d_r2')]) as x),
+  'leader_delete: led_person_ids is not exactly the manager''s two reports'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+-- The leader deletes a report's open GSR and a report's done GSR.
+select tests.act_as(tests.id('d_mgr'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_r1_open'))) = 1,
+  'leader_delete: a manager could not delete the open GSR of someone they lead'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_r1_done'))) = 1,
+  'leader_delete: a manager could not delete the done GSR of someone they lead'
+);
+-- And nothing they do not reach.
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('rd_r1_quarter'))) = 0,
+  'leader_delete: a manager deleted a review in a cycle'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_stranger'))) = 0,
+  'leader_delete: a manager deleted the GSR of someone they do not lead'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_elsewhere'))) = 0,
+  'leader_delete: a manager deleted a GSR in another company'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_mgr_done'))) = 0,
+  'leader_delete: a manager deleted their own done GSR'
+);
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_mgr_open'))) = 0,
+  'leader_delete: a manager who is not an admin deleted their own open GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+-- An employee who leads nobody deletes no colleague's GSR.
+select tests.act_as(tests.id('d_peer'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where id = %L$q$, tests.id('gd_r2_open'))) = 0,
+  'leader_delete: an employee deleted a colleague''s GSR'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+-- A leader in a company on periods deletes nothing: k_mgr leads k_e1, whose month review stands.
+select tests.act_as(tests.id('k_mgr'));
+select tests.assert(
+  tests.rows_of(format($q$delete from public.reviews where employee_id = %L$q$, tests.id('k_e1'))) = 0,
+  'leader_delete: a manager in a company on periods deleted a review'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
+select tests.assert(
+  not exists (select 1 from public.reviews where id in (tests.id('gd_r1_open'), tests.id('gd_r1_done'))),
+  'leader_delete: a GSR the leader deleted stayed'
+);
+select tests.assert(
+  not exists (select 1 from public.goals where id in (tests.id('gl_open'), tests.id('gl_done')))
+  and not exists (select 1 from public.goal_notes where goal_id = tests.id('gl_open'))
+  and (select goal_id is null from public.tasks where id = tests.id('tl_open'))
+  and not exists (select 1 from public.review_project_notes where review_id = tests.id('gd_r1_open')),
+  'leader_delete: the goals, their note, the task link or the project note stayed'
+);
+select tests.assert(
+  (select count(*) = 5 from public.reviews
+    where id in (tests.id('rd_r1_quarter'), tests.id('gd_stranger'), tests.id('gd_elsewhere'),
+                 tests.id('gd_mgr_done'), tests.id('gd_mgr_open')))
+  and exists (select 1 from public.reviews where id = tests.id('gd_r2_open'))
+  and exists (select 1 from public.reviews where id = tests.id('r_k_month')),
+  'leader_delete: a review the delete should not reach went'
+);
+-- Their own done GSR is refused by the guard too, in its own words, even past a policy that would
+-- admit the delete. The policy is gone again before the next case.
+create policy "Sample admit any delete 47s" on public.reviews for delete to authenticated using (true);
+select tests.act_as(tests.id('d_mgr'));
+select tests.assert_raises(
+  format($q$delete from public.reviews where id = %L$q$, tests.id('gd_mgr_done')),
+  'Your own GSR stays once it is done. Someone who leads you can delete it.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+drop policy "Sample admit any delete 47s" on public.reviews;
+select tests.assert(
+  exists (select 1 from public.reviews where id = tests.id('gd_mgr_done')),
+  'leader_delete: the manager''s own done GSR went past the guard'
+);
 
 -- case: deleting_the_person_takes_their_gsrs
 -- The person goes, and their done GSR with them. And a Rococo admin who deletes a company

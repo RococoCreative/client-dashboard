@@ -1,8 +1,9 @@
 // The page for one GSR in a company on demand: its goals, the focus topic of the month it began in,
 // who may mark it done or reopen it (those who lead the person and admins, never the person
-// themself), the score it locks, deleting it, the company wall, and that a company on periods keeps
-// the monthly review page at the same address. Each test reads the in-memory data layer the way the
-// page does, acting as the person the hub was rendered for.
+// themself), the score it locks, deleting it (an admin, or someone who leads the person), the
+// company wall, and that a company on periods keeps the monthly review page at the same address.
+// Each test reads the in-memory data layer the way the page does, acting as the person the hub was
+// rendered for.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
@@ -43,8 +44,8 @@ import App from "../App.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import { createGoal, createPillar, deletePillar, listGoals } from "../services/gsr.ts";
 import { deleteFocusTopic, upsertFocusTopic } from "../services/focusTopics.ts";
-import { OWN_DONE_DELETE_MESSAGE, OWN_GSR_MESSAGE, listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
-import { errorMessage } from "../lib/errors.ts";
+import { OWN_DONE_DELETE_MESSAGE, OWN_GSR_MESSAGE, deleteGsr, listPersonGsrs, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
+import { NOT_CHANGED_MESSAGE, errorMessage } from "../lib/errors.ts";
 import { setActingPerson } from "../test/actingPerson.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
@@ -257,12 +258,12 @@ describe("one GSR's page", () => {
     expect(errorMessage(new Error(OWN_DONE_DELETE_MESSAGE))).toBe("Your own GSR stays once it is done. Someone who leads you can delete it.");
   });
 
-  it("lets an admin delete a GSR after a confirm, and offers it to nobody else", async () => {
+  it("lets an admin delete a GSR after a confirm, and offers it to nobody else but those who lead the person", async () => {
     const gsr = seed(rowan.id);
     await goal(gsr, "Walk every site on Fridays", 50);
     const { unmount } = renderGsr(gsr, manager);
     await title(/^GSR · /);
-    expect(screen.queryByRole("button", { name: "Delete GSR" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete GSR" })).toBeInTheDocument();
     unmount();
     const own = seed(jamie.id);
     const second = renderGsr(own, employee);
@@ -288,6 +289,53 @@ describe("one GSR's page", () => {
     expect(await screen.findByText("The person's GSRs")).toBeInTheDocument();
     expect(await listPersonGsrs(RBA.company.id, rowan.id)).toEqual([]);
     expect((await listGoals(RBA.company.id, rowan.id)).some((g) => g.review_id === gsr.id)).toBe(false);
+  });
+
+  it("lets a manager who leads the person delete their GSR, done or open, after a confirm", async () => {
+    const done = seed(rowan.id, { started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70, reviewer_id: harper.id });
+    const gsr = seed(rowan.id);
+    await goal(gsr, "Walk every site on Fridays", 50);
+    const first = renderGsr(done, manager);
+    expect(await screen.findByRole("button", { name: "Delete GSR" })).toBeInTheDocument();
+    first.unmount();
+
+    setActingPerson(manager.profile);
+    render(
+      <HubContext value={manager}>
+        <MemoryRouter initialEntries={[`/gsr/reviews/${gsr.id}`]}>
+          <Routes>
+            <Route path="/gsr/reviews/:reviewId" element={<GsrPage />} />
+            <Route path="/people/:profileId/gsr" element={<div>The person's GSRs</div>} />
+          </Routes>
+        </MemoryRouter>
+      </HubContext>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Delete GSR" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete GSR" }));
+    expect(await screen.findByText("The person's GSRs")).toBeInTheDocument();
+    expect((await listPersonGsrs(RBA.company.id, rowan.id)).map((g) => g.id)).toEqual([done.id]);
+    expect((await listGoals(RBA.company.id, rowan.id)).some((g) => g.review_id === gsr.id)).toBe(false);
+  });
+
+  it("offers Delete GSR to no manager who does not lead the person, and to no employee", async () => {
+    // Harper leads Rowan and Kai, not Jamie, so Jamie's GSR is not hers to read or delete.
+    const theirs = seed(jamie.id);
+    const { unmount } = renderGsr(theirs, manager);
+    expect(await screen.findByText("Review not found.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete GSR" })).not.toBeInTheDocument();
+    await expect(deleteGsr(theirs.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
+    unmount();
+    // The employee on their own GSR, open and done.
+    setActingPerson(null);
+    const second = renderGsr(theirs, employee);
+    await title(/^GSR · /);
+    expect(screen.queryByRole("button", { name: "Delete GSR" })).not.toBeInTheDocument();
+    second.unmount();
+    renderGsr(seed(jamie.id, { started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70, reviewer_id: alex.id }), employee);
+    await title(/^GSR · /);
+    expect(screen.queryByRole("button", { name: "Delete GSR" })).not.toBeInTheDocument();
+    expect((await listPersonGsrs(RBA.company.id, jamie.id))).toHaveLength(2);
   });
 
   it("says a GSR from another company is not here", async () => {
