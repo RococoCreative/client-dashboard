@@ -191,7 +191,21 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   address check. It does not depend on `0047`. The order: apply `0048`, then deploy `notify`, then
   merge the app (the app and the function both read `last_emailed_at`).
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Next free number:** `0049`.
+- **Written, not applied yet:** `0049_delete_people`. An owner or admin deletes a person who has
+  signed in (see The roster and accounts): a delete policy, the ranked guard rebuilt with the
+  refusals for a signed-in person, the private block list `private.blocked_signups`, a trigger that
+  blocks the address and deletes the person's `auth.users` row, the signup gate refusing a blocked
+  address without a pending invitation, and `handle_new_user` lifting the block at an invited
+  sign-in. It also lets the cascade through guards and stamps that refused or undid it (goals and
+  notes in a closed or locked month, a note's author, who created a project, who reviewed a review,
+  who entered a figure). It redefines functions from `0002`, `0021`, `0026`, `0028`, `0033`,
+  `0035` and `0047`; if any of those is pasted again after `0049`, paste `0049` straight after it.
+  Before applying, check that nothing outside Supabase's own auth tables points at `auth.users`
+  without `on delete cascade` or `set null` (`select conrelid::regclass, confdeltype from
+  pg_constraint where confrelid = 'auth.users'::regclass`), or the account delete fails and so does
+  the whole delete. The hook needs no change in the dashboard: it is the same function. Apply it
+  before merging the app, which offers Delete person.
+- **Next free number:** `0050`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -260,6 +274,10 @@ columns on the company, and each defaults to what every company has today.
 - **Deactivating** a person on the People page removes all access immediately, including
   editing their own profile; their account can be reactivated later. A Rococo admin's profile
   is Rococo's to change, even when it sits on a company's roster.
+- **Deleted, then invited again:** a person deleted after signing in is on a private block list,
+  and the signup gate refuses their address, even on a company domain, with "This address was
+  removed from the hub. Ask an owner or admin to invite you again." A pending invitation opens the
+  gate as it does for any personal address, and signing in through it lifts the block (0049).
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
   compensation and deliverables with them and leaves their months with the old company. Their
   ratings start over in the new company, since criteria are each company's own, and their
@@ -284,6 +302,18 @@ never change after the fact. Sending an invitation creates the invitation row, p
 profile, and emails the person through the `notify` function. If the email does not go out, the
 invitation stands anyway and its sign-in link is copied to the clipboard instead. A waiting
 invitation keeps Copy link and Email again on its row until the person signs in.
+
+Deleting goes further than deactivating. Someone who never signed in is removed with Remove on
+their Setup tab, as before. Someone who has signed in gets Delete person there instead, offered to
+an owner or admin who manages them and to Rococo, never on yourself, on someone ranked above you or
+on a Rococo admin's profile (0049). It deletes everything on their profile: reviews and scores,
+GSRs, goals and their notes, ratings, KPIs, compensation and deliverables. Tasks, goals, notes and
+reviews they assigned, set, wrote, completed or signed off for other people stay, without their
+name. Their sign-in is deleted with them and their address is blocked until an owner or admin
+invites it again. The dialog says all of that, offers Deactivate as the way to keep their history,
+and holds its button until the person's full name is typed exactly. The database refuses the same
+cases the screen does not offer, and also the company's only active owner ("Make someone else an
+owner first").
 
 Signing in claims the profile that is already there rather than creating a second one, whether
 the person arrives through an invitation or through a company sign-in domain. Policies find the

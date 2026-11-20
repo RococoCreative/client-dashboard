@@ -58,6 +58,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    is precisely the state every new company starts in. So no feature filters people by whether
    they have an account: `hasAccount()` marks a row ("not signed in yet"), it never removes one.
    Everything attaches to `profiles.id`, so it is all waiting for them the moment they arrive.
+   Deleting a person who has signed in deletes their history and their sign-in, and their address
+   can only return through a new invitation (0049).
 6. **Sign-in is magic link, gated server-side.** The login screen may create users
    (`shouldCreateUser: true`) only because the "Before User Created" hook in
    `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and
