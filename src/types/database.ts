@@ -121,7 +121,8 @@ export interface Profile {
   // owner or Rococo sets these; owners always see everyone.
   view_all_divisions: boolean;
   view_division_ids: string[];
-  // The rhythm their Goal Setting Review runs at (0046). Nothing reads it yet.
+  // The rhythm their Goal Setting Review runs at (0046): how often one is due, read in a company
+  // whose GSRs are on demand (0047) by the due flag (dueFor, lib/gsr/onDemand.ts).
   gsr_cadence: GsrCadence;
   created_at: string;
   updated_at: string;

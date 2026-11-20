@@ -16,7 +16,7 @@
 // resetMockGsrs, setMockGsrMode and seedMockGsr are test-only extras; src/test/setup.ts resets
 // after every test, which also puts every company's format back to what its fixture says.
 import { companyToday } from "../../lib/wins.ts";
-import type { DateRange } from "../../lib/gsr/onDemand.ts";
+import { newestFirst, type DateRange } from "../../lib/gsr/onDemand.ts";
 import type { Gsr, GsrLastStarted, GsrMode } from "../../types/database.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
@@ -41,8 +41,6 @@ const nextId = () => `gsr-new-${++counter}`;
 const now = () => new Date().toISOString();
 const today = (companyId: string) => companyToday(timeZoneOf(companyId));
 
-// Newest start first; the later-created row wins a tie, as the service orders them.
-const newestFirst = (a: Gsr, b: Gsr) => b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at);
 
 // What the signed-in person may do with one person's GSRs in one company.
 function reach(companyId: string, employeeId: string): { own: boolean; leads: boolean; admin: boolean } {

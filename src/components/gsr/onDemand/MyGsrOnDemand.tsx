@@ -17,6 +17,7 @@ import MyTabs from "../../../pages/gsr/MyTabs.tsx";
 import { useHub } from "../../../context/HubContext.tsx";
 import { useAsync } from "../../../hooks/useAsync.ts";
 import { currentGsr, dueFor } from "../../../lib/gsr/onDemand.ts";
+import { lastStartedOn } from "../../../lib/gsr/gsrStanding.ts";
 import { formatDate } from "../../../lib/format.ts";
 import { companyToday } from "../../../lib/wins.ts";
 import { listDirectory } from "../../../services/directory.ts";
@@ -34,8 +35,7 @@ export default function MyGsrOnDemand() {
 
   const gsrs = state.data?.gsrs ?? [];
   const current = currentGsr(gsrs);
-  const lastStartedOn = gsrs.reduce<string | null>((latest, g) => (latest === null || g.started_on > latest ? g.started_on : latest), null);
-  const due = dueFor(profile.gsr_cadence, lastStartedOn, companyToday(company!.time_zone)).state;
+  const due = dueFor(profile.gsr_cadence, lastStartedOn(gsrs), companyToday(company!.time_zone)).state;
   const isDue = due === "due" || due === "overdue";
 
   return (

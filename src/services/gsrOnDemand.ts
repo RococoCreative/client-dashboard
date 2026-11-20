@@ -6,7 +6,7 @@
 // done or reopening it. A review in a cycle is read through services/gsr.ts, never here.
 import { requireRows } from "../lib/errors.ts";
 import { readAllByKey } from "../lib/paging.ts";
-import type { DateRange } from "../lib/gsr/onDemand.ts";
+import { newestFirst, type DateRange } from "../lib/gsr/onDemand.ts";
 import type { Gsr, GsrLastStarted } from "../types/database.ts";
 import { REVIEW_COLUMNS } from "./gsr.ts";
 import { db } from "./supabase.ts";
@@ -22,11 +22,6 @@ export async function getGsr(id: string): Promise<Gsr> {
   return data as Gsr;
 }
 
-// Newest start first; the later-created row wins a tie, and the id settles the rest. The order
-// every caller of the two lists below sees.
-const newestFirst = (a: Gsr, b: Gsr) =>
-  b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
-
 // The part of a query builder the paging below uses. The builders the two lists pass are typed
 // to their select; this is the shape they share.
 interface GsrQuery extends PromiseLike<{ data: unknown; error: unknown }> {
@@ -36,7 +31,8 @@ interface GsrQuery extends PromiseLike<{ data: unknown; error: unknown }> {
 }
 
 // Every page of a GSR query, read by id (readAllByKey: a key that never changes, so a GSR started
-// or deleted between two requests is never read twice or missed), then put newest first.
+// or deleted between two requests is never read twice or missed), then put newest first
+// (newestFirst, lib/gsr/onDemand.ts: the order every caller of the two lists below sees).
 async function readAllGsrs(query: () => unknown): Promise<Gsr[]> {
   const rows = await readAllByKey<Gsr, string>(
     async (after, limit) => {

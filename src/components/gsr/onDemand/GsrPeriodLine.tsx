@@ -2,6 +2,7 @@
 // the figure that review signs off (scoreGsrsInPeriod). A GSR still open is never applied. Sits on
 // the impact score cards (the person's Reviews tab and their Home) under the ratings, without
 // changing the ratings' number, in place of the locked-in months a company on periods reads there.
+// A read that fails says so there rather than leaving the line out.
 import { pluralize } from "../../../lib/format.ts";
 import { scoreGsrsInPeriod } from "../../../lib/gsr/onDemand.ts";
 import { lineItemPercent } from "../../../lib/gsr/scoring.ts";
@@ -11,6 +12,10 @@ import type { ReviewCycle } from "../../../types/database.ts";
 
 export default function GsrPeriodLine({ companyId, personId, cycle }: { companyId: string; personId: string; cycle: ReviewCycle }) {
   const state = useAsync(() => listPersonGsrs(companyId, personId), [companyId, personId]);
+  // A failed read says so in the card's own place, in the friendly words (lib/errors.ts).
+  if (state.error && !state.data) {
+    return <p role="alert" className="mt-4 border-t border-line pt-3 text-[12.5px] text-danger">{`The GSRs for ${cycle.name} did not load. ${state.error}`}</p>;
+  }
   if (!state.data) return null;
   const figure = scoreGsrsInPeriod(cycle, state.data);
   const counted = figure.gsrs.filter((g) => g.counted).length;

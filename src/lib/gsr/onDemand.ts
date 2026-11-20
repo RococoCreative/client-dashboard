@@ -110,9 +110,11 @@ export function dueFor(cadence: GsrCadence, lastStartedOn: string | null, today:
   return { state: today < dueOn ? "ok" : today === dueOn ? "due" : "overdue", dueOn };
 }
 
-// Newest start first; the later-created row wins a tie.
-const newestFirst = (a: Pick<Gsr, "started_on" | "created_at">, b: Pick<Gsr, "started_on" | "created_at">) =>
-  b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at);
+// Newest start first; the later-created row wins a tie, and the id, where both rows carry one,
+// settles the rest. The one order every list of GSRs reads: the service, the lists, the mock.
+type Ordered = Pick<Gsr, "started_on" | "created_at"> & Partial<Pick<Gsr, "id">>;
+export const newestFirst = (a: Ordered, b: Ordered): number =>
+  b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at) || (a.id && b.id ? b.id.localeCompare(a.id) : 0);
 
 export function currentGsr<T extends Pick<Gsr, "status" | "started_on" | "created_at">>(gsrs: T[]): T | null {
   return gsrs.filter(isOpen).sort(newestFirst)[0] ?? null;

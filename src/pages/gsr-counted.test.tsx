@@ -39,6 +39,8 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 
 import { createPillar, deletePillar, deleteScore, ensureReview, listReviewScores, updateReview } from "../services/gsr.ts";
 import { markGsrDone, reopenGsr, seedMockGsr, setMockGsrMode } from "../test/mocks/gsrOnDemand.ts";
+import * as gsrOnDemandService from "../services/gsrOnDemand.ts";
+import GsrPeriodLine from "../components/gsr/onDemand/GsrPeriodLine.tsx";
 import { COMPANIES, RBA, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import type { Gsr } from "../types/database.ts";
@@ -274,6 +276,16 @@ describe("a person's Reviews tab in a company on demand", () => {
     expect(within(line).getByText("80%")).toBeInTheDocument();
     expect(within(line).getByText("2 GSRs done so far; written into the review when it is signed off.")).toBeInTheDocument();
     expect(screen.queryByText(`Monthly GSRs, ${q3.name}`)).not.toBeInTheDocument();
+  });
+});
+
+describe("the GSR line on an impact card", () => {
+  it("says so when the GSRs fail to load, instead of showing nothing", async () => {
+    setMockGsrMode(RBA.company.id, "on_demand");
+    const spy = vi.spyOn(gsrOnDemandService, "listPersonGsrs").mockRejectedValue(new Error("Failed to fetch"));
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<GsrPeriodLine companyId={RBA.company.id} personId={jamie.id} cycle={q3} />, admin);
+    expect(await screen.findByText(`The GSRs for ${q3.name} did not load. The connection dropped. Check your signal and try again.`)).toBeInTheDocument();
   });
 });
 

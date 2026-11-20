@@ -390,4 +390,21 @@ describe("GSRs, Setup", () => {
     const nav = screen.getByRole("navigation", { name: "GSRs" });
     expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Periods", "Setup"]);
   });
+
+  it("describes the focus topic calendar by the month a GSR is started in, in a company on demand", async () => {
+    setup(admin);
+    const calendar = (await screen.findByRole("heading", { name: "Focus topic calendar" })).closest("section") as HTMLElement;
+    expect(within(calendar).getByText("One topic a month, such as a core value or a process push. A GSR is built on the topic of the month it is started in.")).toBeInTheDocument();
+    expect(calendar.textContent).not.toMatch(/#1 GSR|month's GSR/);
+  });
+
+  it("describes the focus topic calendar as it always has for a company on periods", async () => {
+    setup(makeHub("admin", KLASIK.company));
+    const calendar = (await screen.findByRole("heading", { name: "Focus topic calendar" })).closest("section") as HTMLElement;
+    expect(
+      within(calendar).getByText(
+        "The topic each month's #1 GSR is built on, such as a core value or a process push. When a month's GSR opens, it starts with that month's topic. A GSR already open with no theme picks the topic up when you save it here; a theme typed on the GSR stays as it is.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

@@ -52,7 +52,11 @@ export default function GsrSetupPage() {
             ))}
           </div>
         </Section>
-        <FocusTopicCalendar companyId={current.id} />
+        {current.gsr_mode === "on_demand" ? (
+          <FocusTopicCalendar companyId={current.id} description="One topic a month, such as a core value or a process push. A GSR is built on the topic of the month it is started in." />
+        ) : (
+          <FocusTopicCalendar companyId={current.id} />
+        )}
       </div>
     </>
   );

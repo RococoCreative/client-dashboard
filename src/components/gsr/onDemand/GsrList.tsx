@@ -5,12 +5,9 @@
 import { Link } from "react-router-dom";
 import Badge from "../../ui/Badge.tsx";
 import { tapTargetClass } from "../../ui/tap.ts";
-import { isOpen } from "../../../lib/gsr/onDemand.ts";
+import { isOpen, newestFirst } from "../../../lib/gsr/onDemand.ts";
 import { formatDate } from "../../../lib/format.ts";
 import type { Gsr } from "../../../types/database.ts";
-
-// Newest start first; the later-created row wins a tie, as the service orders them.
-const newestFirst = (a: Gsr, b: Gsr) => b.started_on.localeCompare(a.started_on) || b.created_at.localeCompare(a.created_at);
 
 export default function GsrList({ gsrs, names }: { gsrs: Gsr[]; names: ReadonlyMap<string, string> }) {
   if (gsrs.length === 0) return <p className="text-[13px] text-ink-2">No GSRs yet.</p>;
