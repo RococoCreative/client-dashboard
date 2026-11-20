@@ -105,7 +105,9 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    `reviews` row with no cycle, and its goals point at it through `goals.review_id`. Anyone who leads
    the person, or an admin who manages them, marks it done, writing `gsr_score` from `scoreMonth`
    over its own goals, and reopens it; nobody marks their own GSR done or reopens it, whatever their
-   role, and the database holds that, not only the screen. It counts on the day it was marked done
+   role, and the database holds that, not only the screen. Nobody deletes their own GSR once it is
+   done either; someone who leads them can. Who marked it done is stamped by the database as the
+   signed-in writer, never taken from what the app sends. It counts on the day it was marked done
    (`done_on`, the company's date, stamped by the database); an open one is shown, never counted. A
    scored review's Monthly GSRs pillar reads those done inside its period (`scoreGsrsInPeriod`) and
    signs off the same one line item. `src/lib/gsr/onDemand.ts` is the only place its window figures,

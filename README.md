@@ -169,14 +169,18 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
 - **Applied 2026-11-20:** `0046_gsr_rhythms`. It adds `review_cycles.kind` (a Goal Setting
   Review period or a scored review) and `profiles.gsr_cadence` (the rhythm a person's Goal
   Setting Review runs at, monthly by default), with the guards and function bodies that read
-  them. Every company is on the defaults, so nothing visible changed, and no screen reads
-  either column yet.
-- **Written, not applied yet:** `0047_gsr_on_demand` (see GSRs on demand). It adds
-  `companies.gsr_mode`, GSRs with no cycle and their goals, the wall that keeps all of it out of a
-  company on periods, the move of one company over, and takes back what `0046` put on every
-  company. Every company stays on periods when it goes in, so nothing visible changes. It
-  redefines `guard_signed_off_review`: if `0029` is ever pasted again after it, paste `0047`
-  straight after that.
+  them. Every company is on the defaults, so nothing visible changed. No live screen reads either
+  column; the app that ships with `0047` reads both.
+- **Written, not applied yet:** `0047_gsr_on_demand` (see GSRs on demand, and its release order
+  there). It adds `companies.gsr_mode`, GSRs with no cycle and their goals, the wall that keeps all
+  of it out of a company on periods, the move of one company over, and takes back what `0046` put
+  on every company. Every company stays on periods when it goes in, so nothing visible changes. It
+  redefines functions, triggers, policies and checks that these earlier migrations define:
+  `0001`, `0003`, `0009`, `0011`, `0012`, `0013`, `0014`, `0018`, `0021`, `0023`, `0024`,
+  `0025`, `0028`, `0029`, `0033`, `0034`, `0035`, `0036`, `0037`, `0038`, `0039`, `0042` and
+  `0046`. If any of them is ever pasted again after `0047`, paste `0047` straight after it.
+  `0046` matters most: pasted again on its own it puts members opening cycles, the rhythm
+  trigger and whole-month dates back on every company.
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
 - **Next free number:** `0048`.
 
@@ -543,12 +547,20 @@ Rococo, Companies shows each company's format as text, By month or On demand.
 - **Who does what.** The person, anyone who leads them, the admins who manage them and Rococo start
   one. Anyone who leads the person, or an admin who manages them, marks it done (with the score from
   its own goals, where the company scores its GSRs) and reopens it. Nobody marks their own GSR done
-  or reopens it, whatever their role, and the database holds that, not only the screen. A done GSR's
-  goals and notes are frozen until it is reopened. Deleting one stays with an admin.
+  or reopens it, whatever their role, and the database holds that, not only the screen. The
+  database records who marked it done as whoever was signed in, whatever the app sent. A done GSR's
+  goals and notes are frozen until it is reopened. Deleting one stays with an admin, and nobody
+  deletes their own once it is done: someone who leads them can. A person with nobody above them
+  in the company and no other admin (an owner who is the only admin) has their GSRs closed by
+  Rococo, and until Rococo closes one, their open ones count toward the limit of two.
 - **Counting.** A GSR counts on the day it was marked done, in the company's time zone. One done with
   no score (a company that does not score its GSRs) is counted as done and adds nothing to an
-  average. One still open is shown, never counted. In progress, last GSR, due and overdue always read
-  as of today. A person's rhythm (`profiles.gsr_cadence`) only says when their next one is due.
+  average. One still open is shown, never counted. A done GSR counts whether or not its person is
+  still active, so the record does not change when someone leaves: an admin's GSRs log and Home's
+  week card count every GSR in the window (and say how many are from people no longer active), the
+  division comparison and the Rococo portfolio count the same way, and a manager's count stays the
+  people they lead. In progress, last GSR, due and overdue always read as of today. A person's
+  rhythm (`profiles.gsr_cadence`) only says when their next one is due.
 - **Where a month used to be counted.** A scored review's Monthly GSRs pillar reads the person's GSRs
   done inside the review cycle's period, lists them with their dates and scores (an open one as not
   counted yet), and is their average: 100 for each one counted as the target and their scores as the
@@ -561,15 +573,52 @@ Rococo, Companies shows each company's format as text, By month or On demand.
 The window figures, the due rule and the score a scored review reads are in
 `src/lib/gsr/onDemand.ts`, the one place they live.
 
+### Releasing GSRs on demand
+
+`0047` goes in before the app that needs it is deployed, never after. The app selects
+`companies.gsr_mode` every time it loads a company, `reviews.started_on` and `reviews.done_on` with
+every review, and `goals.review_id` with every goal; until `0047` adds them, those reads fail, and
+the company row fails to load for every company, on periods or not.
+
+1. Before pasting `0047`, run this in the SQL editor. It must return 0: `0047` checks every goal
+   has one home as it goes in, and a monthly goal with no month stops the paste with a bare
+   constraint error.
+
+   ```sql
+   select count(*) from public.goals where scope = 'cycle' and cycle_id is null;
+   ```
+
+2. Paste `0047` once, in the SQL editor. It is idempotent; go forwards only.
+3. Merge and deploy the app only after that.
+
+Keep the project's API "Max rows" setting (Supabase, Settings, API) at 1,000 or above. The GSR
+reads page through a long list 1,000 rows at a time and take a short page as the end, so a lower
+cap would cut a busy company's GSRs short without a word.
+
+Rolling the app back stays a plain redeploy for every company on periods: their screens and rules
+are what they were. A company that has moved over is different. The previous release expects every
+review to have a cycle and every GSR goal a month, so it cannot serve that company: it would show
+GSRs with no cycle in histories, fail to open them, and offer no way to start one. Rolling the app
+back after a move therefore means putting that company back first (below), or accepting that its
+GSR screens are down until the app comes forward again.
+
 ### Moving a company to GSRs on demand
 
-Only once `0047` is applied, and only with the owner's say-so, one company at a time.
+Only once `0047` is applied and the app that reads it is live, and only with the owner's say-so,
+one company at a time. After a move, rolling the app back means putting that company back first
+(above).
 
 Before the move:
 
 1. Run `supabase/tests/fingerprint.sql` in the SQL editor and keep the result. It reads out only
    slugs, table names, counts and hashes.
 2. Pick a quiet moment, when nobody at the company is working a GSR.
+3. Check who closes the owner's GSRs. Nobody closes their own, so a person with nobody above them
+   and no other admin in the company (often the owner) has their GSRs closed by Rococo, and their
+   open ones count toward the limit of two. Agree that with the owner, or set that person's rhythm
+   to None if they have no GSRs.
+4. Know the one refusal the move can give: if someone at the company already has a GSR dated the
+   first day of a month being converted, it stops with a plain message and changes nothing.
 
 The move is one transaction in the SQL editor, with the company's slug in place of `<slug>` in both
 places:
@@ -597,14 +646,22 @@ After the move:
 2. Confirm the company has no GSR month left (no `review_cycles` row of kind `gsr` for it).
 
 Putting a move back is a job done by hand, and the steps are in the comment above
-`private.gsr_conversion_backup` in `supabase/migrations/0047_gsr_on_demand.sql`, run as one
-transaction. They put each row back where it lived and leave anything changed since as it is now.
-They stop with nothing changed when anything added since the move would be lost (a GSR started on
-demand after the move must be deleted first), and a person who has changed company since blocks
-them.
+`private.gsr_conversion_backup` in `supabase/migrations/0047_gsr_on_demand.sql`: take the lines
+between its two marker lines, drop the leading `--   `, put the company's slug in place of `rba`,
+and run the result in the SQL editor as one statement. It puts each row back where it lived and
+leaves anything changed since as it is now. It deletes nothing made after the move: it stops with
+nothing changed, saying what it found and what to do about each, when something would be lost.
+A GSR started on demand after the move must be deleted first (an admin's Delete GSR, or Rococo's
+for an admin's own done one), so the put-back cannot run while any such GSR exists. A GSR the move
+made that holds something put on it since is set back from its `created_gsr` row in the copy, as
+the stop's message says. A person who has changed company since blocks it.
 
-`0047` redefines `guard_signed_off_review`. If `0029` is ever pasted again, paste `0047` straight
-after it.
+The private copy is kept until someone removes it by hand, once the owner has confirmed the move:
+`delete from private.gsr_conversion_backup where company_id = (select id from public.companies where slug = '<slug>');`.
+The app never reads it, and a company's copy goes with the company.
+
+`0047` redefines what many earlier migrations define (the list is under What is applied live). If
+any of them is ever pasted again, paste `0047` straight after it.
 
 ## Goals beyond the month
 

@@ -67,8 +67,10 @@
 --
 -- Paste after 0046. Re-pasting 0046 after this brings back everything section 3 removes and
 -- section 4 narrows, and re-pasting 0028, 0029 or 0039 takes back what sections 9 to 12 add to
--- goals, tasks and signed-off reviews; pasting this again puts it right. Idempotent: pasting it
--- again converts nothing, since only a change of gsr_mode does.
+-- goals, tasks and signed-off reviews; pasting this again puts it right. The same holds for any
+-- earlier migration that defines something this one redefines (the README lists them under What
+-- is applied live). Idempotent: pasting it again converts nothing, since only a change of
+-- gsr_mode does.
 
 -- ---------------------------------------------------------------------------------------
 -- 1. The setting
