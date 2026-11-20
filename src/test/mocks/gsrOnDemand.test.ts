@@ -4,11 +4,16 @@
 // code reads reviews. Every page test for a company on demand leans on this mock telling the same
 // story the database would.
 //
-// Who is acting is the demo persona in the address (?persona=admin|employee|manager|owner|rococo),
-// resolved in the GSR's company the way makeHub(persona, company) resolves it; with none, the admin.
+// Who is acting is the person the test rendered the hub with (renderWithHub records it), or one a
+// unit test sets with setActingPerson; failing both, the demo persona in the address; failing that,
+// the company's admin.
+import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
-import { KLASIK, RBA, type Persona } from "../fixtures.ts";
+import type { Profile } from "../../types/database.ts";
+import { actingPerson, setActingPerson } from "../actingPerson.ts";
+import { KLASIK, RBA, makeHub } from "../fixtures.ts";
+import { renderWithHub } from "../renderWithHub.tsx";
 import { getCompany } from "./companies.ts";
 import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote } from "./gsr.ts";
 import {
@@ -34,7 +39,10 @@ const harper = RBA.profiles.find((p) => p.role === "manager")!.id;
 const kai = RBA.profiles.find((p) => p.id === "rba-crew")!.id;
 const RLS = /row-level security/;
 
-const actAs = (persona: Persona) => window.history.pushState({}, "", `/?persona=${persona}&company=rba`);
+const person = (id: string): Profile => RBA.profiles.find((p) => p.id === id)!;
+const actAs = (id: string) => setActingPerson(person(id));
+// The demo's path: the persona in the address, with nobody recorded.
+const viaAddress = (persona: string) => window.history.pushState({}, "", `/?persona=${persona}&company=rba`);
 
 afterEach(() => {
   window.history.pushState({}, "", "/");
@@ -79,10 +87,10 @@ describe("GSRs on demand mock", () => {
     setMockGsrMode(rba, "on_demand");
     const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
     const doneBefore = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
-    actAs("employee");
+    actAs(jamie);
     await expect(markGsrDone(gsr.id, 80, jamie)).rejects.toThrow(OWN_GSR_MESSAGE);
     await expect(reopenGsr(doneBefore.id)).rejects.toThrow(OWN_GSR_MESSAGE);
-    actAs("admin");
+    actAs(admin);
     const done = await markGsrDone(gsr.id, 80, admin);
     expect(done).toMatchObject({ status: "complete", gsr_score: 80, reviewer_id: admin, done_on: "2026-09-15" });
     expect(done.completed_at).not.toBeNull();
@@ -147,20 +155,20 @@ describe("GSRs on demand mock", () => {
     setMockGsrMode(rba, "on_demand");
     const open = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-08", status: "in_progress" });
     const done = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-01", status: "complete", done_on: "2026-09-04", gsr_score: 70 });
-    actAs("employee");
+    actAs(jamie);
     await expect(startGsr(rba, noor)).rejects.toThrow(RLS);
     await expect(markGsrDone(open.id, 80, jamie)).rejects.toThrow(NOT_CHANGED_MESSAGE);
     await expect(reopenGsr(done.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
     await expect(deleteGsr(open.id)).rejects.toThrow(NOT_CHANGED_MESSAGE);
     // Their own they start.
     expect((await startGsr(rba, jamie)).gsr.employee_id).toBe(jamie);
-    actAs("admin");
+    actAs(admin);
     expect((await listPersonGsrs(rba, noor)).map((g) => g.status)).toEqual(["in_progress", "complete"]);
   });
 
   it("lets a leader two levels up start and close a GSR, but not delete it", async () => {
     setMockGsrMode(rba, "on_demand");
-    actAs("manager");
+    viaAddress("manager");
     const { gsr } = await startGsr(rba, kai);
     expect(gsr.employee_id).toBe(kai);
     expect((await markGsrDone(gsr.id, 75, harper)).status).toBe("complete");
@@ -172,7 +180,7 @@ describe("GSRs on demand mock", () => {
     setMockGsrMode(rba, "on_demand");
     const gsr = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
     const goal = await createGoal({ company_id: rba, employee_id: jamie, title: "Walk every site", kind: "role", review_id: gsr.id });
-    actAs("admin");
+    actAs(admin);
     await deleteGsr(gsr.id);
     await expect(getGsr(gsr.id)).rejects.toThrow();
     expect((await listGoals(rba, jamie)).some((g) => g.id === goal.id)).toBe(false);
@@ -182,10 +190,45 @@ describe("GSRs on demand mock", () => {
     setMockGsrMode(rba, "on_demand");
     const theirs = seedMockGsr({ company_id: rba, employee_id: noor, started_on: "2026-09-08", status: "in_progress" });
     const mine = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-09", status: "in_progress" });
-    actAs("employee");
+    actAs(jamie);
     expect(await listPersonGsrs(rba, noor)).toEqual([]);
     await expect(getGsr(theirs.id)).rejects.toThrow("Review not found.");
     expect((await listGsrsForLog(rba, { from: "2026-09-01", to: "2026-09-30" })).map((g) => g.id)).toEqual([mine.id]);
     expect(await listLastGsrDates(rba)).toEqual([{ employee_id: jamie, last_started_on: "2026-09-09" }]);
+  });
+
+  it("acts as the person the hub was rendered with, with nothing in the address", async () => {
+    setMockGsrMode(rba, "on_demand");
+    const mine = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    renderWithHub(createElement("div"), makeHub("employee", { ...RBA.company, gsr_mode: "on_demand" }));
+    expect(actingPerson()?.id).toBe(jamie);
+    await expect(markGsrDone(mine.id, 80, jamie)).rejects.toThrow(OWN_GSR_MESSAGE);
+    await expect(startGsr(rba, noor)).rejects.toThrow(RLS);
+  });
+
+  it("forgets the acting person after each test, so the next acts as the admin", async () => {
+    expect(actingPerson()).toBeNull();
+    setMockGsrMode(rba, "on_demand");
+    const mine = seedMockGsr({ company_id: rba, employee_id: jamie, started_on: "2026-09-08", status: "in_progress" });
+    expect((await markGsrDone(mine.id, 80, admin)).status).toBe("complete");
+  });
+
+  it("names an address persona that matches nobody instead of acting as someone else", async () => {
+    setMockGsrMode(rba, "on_demand");
+    viaAddress("wizard");
+    await expect(startGsr(rba, jamie)).rejects.toThrow('The demo persona "wizard" matches nobody at RBA Projects.');
+  });
+
+  it("answers the wall only to those the database admits, in a company on periods", async () => {
+    // RBA is on periods here. The person, a leader and an admin hear the wall; a peer is refused by
+    // row level security before the database says anything about the company.
+    actAs(noor);
+    await expect(startGsr(rba, jamie)).rejects.toThrow(RLS);
+    actAs(jamie);
+    await expect(startGsr(rba, jamie)).rejects.toThrow("GSRs on demand are not turned on for this company.");
+    actAs(harper);
+    await expect(startGsr(rba, kai)).rejects.toThrow("GSRs on demand are not turned on for this company.");
+    actAs(admin);
+    await expect(startGsr(rba, noor)).rejects.toThrow("GSRs on demand are not turned on for this company.");
   });
 });

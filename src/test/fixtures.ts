@@ -12,6 +12,7 @@ import { meets } from "../lib/capabilities.ts";
 import { mockCapabilityMap } from "./mocks/capabilities.ts";
 import { applyDenseLoad } from "./denseLoad.ts";
 import { applyOnDemandDemo } from "./onDemandDemo.ts";
+import { actingPerson } from "./actingPerson.ts";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 const EARLIER = "2026-08-04T15:30:00.000Z";
@@ -1632,15 +1633,25 @@ export function personaFromLocation(): { profile: Profile; company: Company } {
   return { profile: personaProfile(persona, bundle), company };
 }
 
-// The demo persona of the address, as the person holding that role in a given company, the way
-// makeHub(persona, company) picks them. With no persona in the address it is the admin, so a page
-// test that renders makeHub("admin", company) acts as that same person here. The mocks that judge
-// who may act on a company's rows (mocks/gsrOnDemand.ts) read it; a test sets the acting person with
-// window.history.pushState({}, "", "/?persona=manager&company=rba").
+// Who is acting on a company's rows, for the mocks that judge who may do what (mocks/gsrOnDemand.ts).
+// First the person recorded in src/test/actingPerson.ts: the hub a page test rendered (renderWithHub
+// records it) or one a unit test set. Failing that, the demo persona of the address, as the person
+// holding that role in the company the way makeHub(persona, company) picks them; that is the demo's
+// path, which never renders through renderWithHub. Failing both, the company's admin. A persona
+// string that is not one of the five, or a company with no sample data, is an error rather than
+// someone else quietly acting. A documented persona a company lacks keeps makeHub's stand-in: the
+// owner at Klasik and RBA is the admin, the manager at Klasik is the employee.
+const PERSONAS: readonly Persona[] = ["admin", "employee", "rococo", "owner", "manager"];
 export function personaIn(companyId: string): Profile {
+  const recorded = actingPerson();
+  if (recorded) return recorded;
   const remembered = readRemembered();
-  const persona = (new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("persona") ?? remembered.persona ?? "admin") as Persona;
-  return personaProfile(persona, bundleFor(companyId) ?? KLASIK);
+  const persona = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("persona") ?? remembered.persona ?? "admin";
+  const bundle = bundleFor(companyId);
+  if (!PERSONAS.includes(persona as Persona) || !bundle) {
+    throw new Error(`The demo persona "${persona}" matches nobody at ${bundle?.company.name ?? companyId}.`);
+  }
+  return personaProfile(persona as Persona, bundle);
 }
 
 // The demo's in-app redirects drop the query string, so the last persona is kept for the tab.

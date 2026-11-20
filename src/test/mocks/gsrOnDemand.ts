@@ -5,9 +5,10 @@
 // the wall for a company on periods, one GSR a person a day, two open at most when one is started,
 // and nobody marking their own done or reopening it. "Today" is the company's.
 //
-// Who may act mirrors the reviews policies: the acting person is the demo persona of the address,
-// resolved in the GSR's company (personaIn in fixtures.ts, the person makeHub(persona, company)
-// picks; the admin when the address names none). A person reads and starts their own; someone who
+// Who may act mirrors the reviews policies. The acting person is personaIn in fixtures.ts: the hub's
+// person a page test rendered (renderWithHub records it) or one set with setActingPerson in
+// src/test/actingPerson.ts; else the demo persona of the address, resolved in the GSR's company;
+// else that company's admin. A person reads and starts their own; someone who
 // leads them (ledBy, the whole chain) reads, starts, marks done and reopens theirs; an admin or
 // owner of the company does all that for anyone in it and alone deletes; a Rococo admin does
 // everything. Every read and write hands out a copy, never the stored row, as the service does.
@@ -154,6 +155,9 @@ export async function listLastGsrDates(companyId: string): Promise<Array<Pick<Gs
 
 // As the service: the insert ignores a duplicate on the person's day, the two-open refusal comes
 // back as atLimit, and either way the person's newest is returned. The company is the person's.
+// stamp_standalone_gsr answers only a caller a policy would admit (the person, those who lead or
+// manage them, Rococo): they hear the wall in a company on periods. Anyone else is refused by row
+// level security without learning anything about the company, so that check comes first here.
 export async function startGsr(companyId: string, employeeId: string): Promise<{ gsr: Gsr; atLimit: boolean }> {
   const company = companyOf(employeeId) ?? companyId;
   const r = reach(company, employeeId);
