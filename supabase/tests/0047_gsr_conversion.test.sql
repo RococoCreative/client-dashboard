@@ -734,3 +734,43 @@ select tests.assert(
   and current_setting('hub.gsr_conversion', true) is distinct from '1',
   'nothing_to_convert: the move failed, wrote a backup row, or changed a row'
 );
+
+rollback to savepoint before_any_move;
+
+-- =======================================================================================
+-- Run 4: done dates at the edges of a month
+-- =======================================================================================
+-- A month that has not ended, around the company's today: e1 marked complete with no completion
+-- time, e2 marked complete before the month began. A converted GSR's done date stays inside its
+-- month and is never later than today.
+insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+select tests.company('rba'), 'Sample rba running month 47c', 'monthly', d - 5, d + 20
+  from (select (now() at time zone 'America/New_York')::date as d) t;
+insert into tests.fixture (name, id)
+select 'r_run', id from public.review_cycles where name = 'Sample rba running month 47c';
+insert into public.reviews (cycle_id, company_id, employee_id, status, completed_at, gsr_score)
+select tests.id('r_run'), tests.company('rba'), tests.id(p), 'complete', a, g
+  from (values
+    ('c_e1', null::timestamptz, 55),
+    ('c_e2', now() - interval '12 days', 45)
+  ) as v (p, a, g);
+insert into tests.fixture (name, id)
+select case employee_id when tests.id('c_e1') then 'rv_run_e1' else 'rv_run_e2' end, id
+  from public.reviews where cycle_id = tests.id('r_run');
+select tests.move_rba();
+
+-- case: done_before_its_month_is_dated_its_first_day
+select tests.assert(
+  (select done_on = started_on and started_on = (now() at time zone 'America/New_York')::date - 5
+          and status = 'complete' and gsr_score = 45
+     from public.reviews where id = tests.id('rv_run_e2')),
+  'done_before: a GSR marked complete before its month began is not dated its first day'
+);
+
+-- case: done_with_no_time_in_a_running_month_is_dated_today
+select tests.assert(
+  (select done_on = (now() at time zone 'America/New_York')::date and completed_at is null
+          and status = 'complete' and gsr_score = 55
+     from public.reviews where id = tests.id('rv_run_e1')),
+  'done_no_time: a GSR complete with no completion time in a running month is not dated today'
+);

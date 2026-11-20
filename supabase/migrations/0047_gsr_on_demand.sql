@@ -1090,7 +1090,10 @@ revoke execute on function public.guard_goal_owner() from public, anon, authenti
 -- GSR itself is being deleted its goals go with it. The done-GSR branch matches only a GSR of the
 -- goal's own person, as the cycle branch's lock does, so a write that names someone else's GSR by
 -- id (another company's included) is answered by inherit_goal_company's person refusal, never by
--- whether that GSR is done.
+-- whether that GSR is done. And the done refusals are worded only for someone in the GSR's company,
+-- a Rococo admin (private.is_company_member counts both) or the SQL editor; any other signed-in
+-- writer is refused in row level security's words, so naming a person and their GSR from outside
+-- tells nothing, whatever the policies say.
 --
 -- While a company moves over (hub.gsr_conversion is '1', section 12) both guards stand aside, so
 -- the SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
@@ -1108,6 +1111,8 @@ declare
   v_gsr_from uuid := case when tg_op = 'INSERT' then null else old.review_id end;
   v_gsr_to   uuid := case when tg_op = 'DELETE' then null else new.review_id end;
   v_probe    public.goals%rowtype;
+  v_done     boolean;
+  v_outside  boolean;
 begin
   if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
     if tg_op = 'DELETE' then
@@ -1167,13 +1172,18 @@ begin
     raise exception 'This person is not part of this month''s GSRs. Add them back to change its goals.'
       using errcode = 'check_violation';
   end if;
-  if exists (
-    select 1 from public.reviews r
-    where r.id in (v_gsr_from, v_gsr_to)
-      and r.cycle_id is null
-      and r.employee_id = v_whose
-      and r.status = 'complete'
-  ) then
+  select bool_or(true), bool_or(not private.is_company_member(r.company_id))
+    into v_done, v_outside
+    from public.reviews r
+   where r.id in (v_gsr_from, v_gsr_to)
+     and r.cycle_id is null
+     and r.employee_id = v_whose
+     and r.status = 'complete';
+  if v_done then
+    if (select auth.uid()) is not null and v_outside then
+      raise exception 'new row violates row-level security policy for table "goals"'
+        using errcode = 'insufficient_privilege';
+    end if;
     raise exception 'This GSR is done. Reopen it to change its goals.'
       using errcode = 'check_violation';
   end if;
@@ -1192,8 +1202,10 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_from uuid := case when tg_op = 'INSERT' then null else old.goal_id end;
-  v_to   uuid := case when tg_op = 'DELETE' then null else new.goal_id end;
+  v_from    uuid := case when tg_op = 'INSERT' then null else old.goal_id end;
+  v_to      uuid := case when tg_op = 'DELETE' then null else new.goal_id end;
+  v_done    boolean;
+  v_outside boolean;
 begin
   if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
     if tg_op = 'DELETE' then
@@ -1234,14 +1246,18 @@ begin
     raise exception 'This person is not part of this month''s GSRs. Add them back to change its notes.'
       using errcode = 'check_violation';
   end if;
-  if exists (
-    select 1
-      from public.goals g
-      join public.reviews r on r.id = g.review_id
-     where g.id in (v_from, v_to)
-       and r.cycle_id is null
-       and r.status = 'complete'
-  ) then
+  select bool_or(true), bool_or(not private.is_company_member(r.company_id))
+    into v_done, v_outside
+    from public.goals g
+    join public.reviews r on r.id = g.review_id
+   where g.id in (v_from, v_to)
+     and r.cycle_id is null
+     and r.status = 'complete';
+  if v_done then
+    if (select auth.uid()) is not null and v_outside then
+      raise exception 'new row violates row-level security policy for table "goal_notes"'
+        using errcode = 'insufficient_privilege';
+    end if;
     raise exception 'This GSR is done. Reopen it to change its notes.'
       using errcode = 'check_violation';
   end if;
@@ -1258,7 +1274,9 @@ revoke execute on function public.guard_goal_note_frozen() from public, anon, au
 -- ---------------------------------------------------------------------------------------
 -- The 0046 body with two changes in the goal link. A goal carries tasks when it is a GSR goal in
 -- a GSR cycle, as before, or a GSR goal on a GSR with no cycle. And a new link to a goal whose GSR
--- is done is refused, as a new link into a closed month is. A link already made is left alone,
+-- is done is refused, as a new link into a closed month is, in so many words only to someone in the
+-- GSR's company, a Rococo admin or the SQL editor (anyone else gets row level security's words, as
+-- in section 10). A link already made is left alone,
 -- unlinking always passes, and the goal's person is the task's assignee, as before. Everything
 -- else, and every message, is as it was.
 create or replace function public.guard_task()
@@ -1409,6 +1427,11 @@ begin
                       where r.id = v_goal.review_id
                         and r.cycle_id is null
                         and r.status = 'complete') then
+        if (select auth.uid()) is not null
+           and not private.is_company_member(v_goal.company_id) then
+          raise exception 'new row violates row-level security policy for table "tasks"'
+            using errcode = 'insufficient_privilege';
+        end if;
         raise exception 'That GSR is done, so its goals take no new tasks.'
           using errcode = 'check_violation';
       end if;
@@ -1434,10 +1457,11 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 -- its past GSR months are converted in the same write:
 --   * every review in one of its GSR months becomes a GSR on its own: started_on is the month's
 --     first day, and status, score, completion time, feedback and pillar snapshot stay as they
---     are. A complete one is done on the day it was marked complete or on the month's last day,
---     whichever came first (the last day when it carries no completion time), so a month locked
---     after it ended stays in its month and a GSR marked done inside a running month counts on
---     that day. One not complete is an open GSR,
+--     are. A complete one is done on the day it was marked complete (today, in the company's time
+--     zone, when it carries no completion time), held inside its month: never after the month's
+--     last day and never before its first. So a month locked after it ended stays in its month, a
+--     GSR marked done inside a running month counts on that day, and one with no completion time
+--     in a running month is not dated ahead of today. One not complete is an open GSR,
 --     whatever the state of its month;
 --   * that person's goals in that month move onto it, their notes with them;
 --   * a goal in a month whose person has no review there gets a not-started GSR of its own, dated
@@ -1517,6 +1541,7 @@ set search_path = ''
 as $$
 declare
   v_tz     text;
+  v_today  date;
   v_row    record;
   v_review uuid;
 begin
@@ -1527,6 +1552,7 @@ begin
     raise exception 'GSRs on demand are not turned on for this company.'
       using errcode = 'check_violation';
   end if;
+  v_today := (now() at time zone v_tz)::date;
 
   -- Deleting a month deletes whatever still points at it. Only a monthly goal can move onto a
   -- GSR, so any other goal in a month stops the move before anything changes.
@@ -1579,8 +1605,9 @@ begin
          set cycle_id   = null,
              started_on = v_row.period_start,
              done_on    = case when r.status = 'complete'
-                               then least(v_row.period_end,
-                                          coalesce((r.completed_at at time zone v_tz)::date, v_row.period_end))
+                               then greatest(v_row.period_start,
+                                             least(v_row.period_end,
+                                                   coalesce((r.completed_at at time zone v_tz)::date, v_today)))
                           end
        where r.id = v_row.id;
       update public.goals g

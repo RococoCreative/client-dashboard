@@ -551,6 +551,93 @@ select tests.assert(
   'done_by_id: a goal landed on another company''s done GSR'
 );
 
+-- case: outsiders_learn_nothing_of_a_done_gsr
+-- Another company's admin, naming the done GSR's own person, is refused in row level security's
+-- words and never told the GSR is done: a goal onto it, a note on its goal, a task on its goal.
+-- Updating its goal reaches no row at all (the update policy hides it), so nothing is said.
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+            values (%L, %L, %L, 'cycle', 'role', 'Sample outsider onto done 47g')$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('gsr_e1_old')),
+  'new row violates row-level security policy for table "goals"'
+);
+select tests.assert(
+  tests.rows_of(format($q$update public.goals set title = 'Sample outsider edit' where id = %L$q$,
+                       tests.id('g_focus'))) = 0,
+  'outsider_done: another company''s admin reached a goal on a done GSR'
+);
+select tests.assert_raises(
+  format($q$insert into public.goal_notes (goal_id, body) values (%L, 'Sample outsider note 47g')$q$,
+         tests.id('g_focus')),
+  'new row violates row-level security policy for table "goal_notes"'
+);
+select tests.assert_raises(
+  format($q$insert into public.tasks (company_id, title, assignee_id, goal_id)
+            values (%L, 'Sample outsider task 47g', %L, %L)$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('g_focus')),
+  'new row violates row-level security policy for table "tasks"'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+-- An admin of the GSR's company is told why, as before.
+select tests.act_as(tests.id('q_admin'));
+select tests.assert_raises(
+  format($q$insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+            values (%L, %L, %L, 'cycle', 'role', 'Sample admin onto done 47g')$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('gsr_e1_old')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+select tests.assert_raises(
+  format($q$update public.goals set title = 'Sample admin edit' where id = %L$q$, tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+select tests.assert_raises(
+  format($q$insert into public.goal_notes (goal_id, body) values (%L, 'Sample admin note 47g')$q$,
+         tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its notes.'
+);
+select tests.assert_raises(
+  format($q$insert into public.tasks (company_id, title, assignee_id, goal_id)
+            values (%L, 'Sample admin task 47g', %L, %L)$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('g_focus')),
+  'That GSR is done, so its goals take no new tasks.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.goals where title like 'Sample % onto done 47g')
+  and not exists (select 1 from public.goal_notes where body in ('Sample outsider note 47g', 'Sample admin note 47g'))
+  and not exists (select 1 from public.tasks where title in ('Sample outsider task 47g', 'Sample admin task 47g'))
+  and (select title = 'Sample focus 47g' from public.goals where id = tests.id('g_focus')),
+  'outsider_done: a refused write landed'
+);
+
+-- case: outsiders_learn_nothing_of_an_open_gsr
+-- The same writes onto an open GSR pass the guards and are refused by row level security alone.
+select tests.act_as(tests.id('q_admin'));
+insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+values (tests.company('rba'), tests.id('q_e1'), tests.id('gsr_e1_third'), 'cycle', 'role', 'Sample open goal 47g');
+reset role; select set_config('request.jwt.claims', '', true);
+insert into tests.fixture (name, id) select 'g_open', id from public.goals where title = 'Sample open goal 47g';
+select tests.act_as(tests.id('k_admin'));
+select tests.assert_raises(
+  format($q$insert into public.goals (company_id, employee_id, review_id, scope, kind, title)
+            values (%L, %L, %L, 'cycle', 'role', 'Sample outsider onto open 47g')$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('gsr_e1_third')),
+  'new row violates row-level security policy for table "goals"'
+);
+select tests.assert_raises(
+  format($q$insert into public.goal_notes (goal_id, body) values (%L, 'Sample outsider open note 47g')$q$,
+         tests.id('g_open')),
+  'new row violates row-level security policy for table "goal_notes"'
+);
+select tests.assert_raises(
+  format($q$insert into public.tasks (company_id, title, assignee_id, goal_id)
+            values (%L, 'Sample outsider open task 47g', %L, %L)$q$,
+         tests.company('rba'), tests.id('q_e1'), tests.id('g_open')),
+  'new row violates row-level security policy for table "tasks"'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+
 -- ---------------------------------------------------------------------------------------
 -- A company on periods, as before
 -- ---------------------------------------------------------------------------------------
