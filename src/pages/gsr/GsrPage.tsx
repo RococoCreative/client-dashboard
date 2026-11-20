@@ -4,6 +4,9 @@
 // in one click, notes, tasks on goals), the focus topic of the month it began in, the role
 // scorecard for that month and project notes.
 //
+// The person's last GSR, whatever its state and however long ago, reads back beside the goals
+// (LastGsrPanel), so the meeting talks it through while it sets this one, and can mark it done there.
+//
 // It stays open while the work happens. Someone who leads the person, or an admin, marks it done,
 // which locks its score (scoreMonth over its own goals, against the company's number of mandatory
 // goals); "Mark done" is the page's one primary action. Nobody marks their own GSR done or reopens
@@ -16,8 +19,10 @@
 // in the sidebar is told it is not here rather than shown another tenant's GSR.
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircle2, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import GsrGoalsPanel from "../../components/gsr/onDemand/GsrGoalsPanel.tsx";
+import LastGsrPanel from "../../components/gsr/onDemand/LastGsrPanel.tsx";
+import MarkGsrDone from "../../components/gsr/onDemand/MarkGsrDone.tsx";
 import ReviewPerformance from "../../components/gsr/ReviewPerformance.tsx";
 import ReviewProjects from "../../components/gsr/ReviewProjects.tsx";
 import SupportDiscussionCard from "../../components/gsr/SupportDiscussionCard.tsx";
@@ -33,12 +38,11 @@ import { hasModule } from "../../lib/modules.ts";
 import { ledBy } from "../../lib/people.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
 import { monthOf } from "../../lib/scorecard.ts";
-import { monthTotal, scoreMonth } from "../../lib/gsr/goals.ts";
-import { gsrGoals, isOpen } from "../../lib/gsr/onDemand.ts";
+import { gsrGoals, isOpen, previousGsr } from "../../lib/gsr/onDemand.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
 import { listGoalNotes, listGoals, listPillars, updateReview } from "../../services/gsr.ts";
-import { deleteGsr, getGsr, listPersonGsrs, markGsrDone, reopenGsr } from "../../services/gsrOnDemand.ts";
+import { deleteGsr, getGsr, listPersonGsrs, reopenGsr } from "../../services/gsrOnDemand.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { listFocusTopics } from "../../services/focusTopics.ts";
@@ -59,10 +63,6 @@ const GSR_PROJECT_WORDING: ProjectNotesWording = {
   other: "The note on each project from this GSR.",
 };
 
-// What the Mark done dialog shows and writes: the score of the goals as they were read again when it
-// opened, or no score where the company does not score its GSRs.
-type Closing = { score: number; total: number; cap: number } | { score: null };
-
 export default function GsrPage() {
   const { reviewId = "" } = useParams();
   const navigate = useNavigate();
@@ -71,7 +71,6 @@ export default function GsrPage() {
   const tasksOn = hasModule(company, "tasks");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [closing, setClosing] = useState<Closing | null>(null);
   const [deleting, setDeleting] = useState(false);
   // The dialogs' own failure line, so an earlier failure on the page never shows inside one.
   const [dialogError, setDialogError] = useState("");
@@ -113,7 +112,7 @@ export default function GsrPage() {
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
-  const { gsr, people, goals, notes, directory, pillars, topic, assignments, projects, projectNotes, metrics, roleGoals, entries, goalTasks, month } = state.data;
+  const { gsr, personGsrs, people, goals, notes, directory, pillars, topic, assignments, projects, projectNotes, metrics, roleGoals, entries, goalTasks, month } = state.data;
   const employee = people.find((p) => p.id === gsr.employee_id) ?? null;
   const names = new Map(directory.map((entry) => [entry.id, entry.full_name?.trim() || "Unnamed"] as const));
   const personName = employee ? displayName(employee) : (names.get(gsr.employee_id) ?? "Person");
@@ -125,13 +124,16 @@ export default function GsrPage() {
   const canClose = !isOwn && (isAdmin || leads);
   const open = isOpen(gsr);
   // The person, those who lead them and admins work an open GSR's goals; RLS keeps it to them.
-  const canEdit = (isAdmin || isOwn || leads) && open;
+  const canWork = isAdmin || isOwn || leads;
+  const canEdit = canWork && open;
   // As on a monthly GSR: the opening discussion is the person's and an admin's, the scorecard and
   // project notes an admin's.
   const canDiscuss = (isAdmin || isOwn) && open;
   const canEnter = isAdmin && open;
   const required = pillars.find((p) => p.scoring_type === "gsr_goals" && p.is_active)?.required_goals ?? null;
   const markedBy = gsr.reviewer_id ? (names.get(gsr.reviewer_id) ?? (gsr.reviewer_id === profile.id && profile.is_rococo_admin ? "Rococo" : "someone no longer listed")) : null;
+  // The GSR before this one, however long ago and whatever its state.
+  const last = previousGsr(personGsrs, gsr);
   const back = isOwn ? { to: "/my/gsr", label: "My GSR" } : { to: `/people/${gsr.employee_id}/gsr`, label: personName };
 
   const setData = (update: (prev: NonNullable<typeof state.data>) => NonNullable<typeof state.data>) => state.setData((prev) => (prev ? update(prev) : prev));
@@ -145,39 +147,6 @@ export default function GsrPage() {
     } catch (err) {
       setError(errorMessage(err));
       return false;
-    }
-  }
-
-  // The goals are read again before the dialog opens, so it shows, and Mark done writes, the score
-  // of the goals on record now.
-  async function startDone() {
-    setBusy(true);
-    setDialogError("");
-    try {
-      const fresh = await listGoals(companyId, gsr.employee_id);
-      setData((prev) => ({ ...prev, goals: fresh }));
-      const own = gsrGoals(fresh, gsr.id);
-      setClosing(required ? { ...monthTotal(own, required), score: scoreMonth(own, required) } : { score: null });
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function markDone() {
-    if (!closing) return;
-    setBusy(true);
-    setDialogError("");
-    try {
-      const next = await markGsrDone(gsr.id, closing.score, profile.id);
-      setData((prev) => ({ ...prev, gsr: next }));
-      setClosing(null);
-      setError("");
-    } catch (err) {
-      setDialogError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -228,9 +197,14 @@ export default function GsrPage() {
         actions={
           canClose ? (
             open ? (
-              <Button size="sm" disabled={busy} onClick={() => void startDone()}>
-                <CheckCircle2 size={14} aria-hidden /> Mark done
-              </Button>
+              <MarkGsrDone
+                gsr={gsr}
+                required={required}
+                disabled={busy}
+                onGoals={(fresh) => setData((prev) => ({ ...prev, goals: fresh }))}
+                onDone={(next) => setData((prev) => ({ ...prev, gsr: next }))}
+                onError={setError}
+              />
             ) : (
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => void reopen()}>
                 <RotateCcw size={14} aria-hidden /> Reopen
@@ -249,32 +223,49 @@ export default function GsrPage() {
         <SupportDiscussionCard value={gsr.support_discussion} canWrite={canDiscuss} isOwn={isOwn} signedOff={!open} onSave={saveDiscussion} signedOffLine="As it was discussed when this GSR was marked done." />
       </div>
 
-      {/* Last GSR, the person's previous GSR read back, takes its place here beside the goals. */}
-
-      <div className="mb-6">
-        <GsrGoalsPanel
-          gsr={gsr}
-          goals={goals}
-          notes={notes}
-          names={names}
-          roleGoals={roleGoals}
-          required={required}
-          topic={topic}
-          canEdit={canEdit}
-          taskLinks={
-            goalTasks
-              ? {
-                  tasks: goalTasks,
-                  people,
-                  viewerProfileId: profile.id,
-                  onTasks: (update) => setData((prev) => ({ ...prev, goalTasks: update(prev.goalTasks ?? []) })),
-                }
-              : null
-          }
-          onGoals={(update) => setData((prev) => ({ ...prev, goals: update(prev.goals) }))}
-          onNotes={(update) => setData((prev) => ({ ...prev, notes: update(prev.notes) }))}
-          onError={setError}
-        />
+      {/* The last GSR beside the goals, as last month sits beside a monthly GSR's; stacked above them
+          on a narrow screen. */}
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-1">
+          <LastGsrPanel
+            current={gsr}
+            last={last}
+            goals={goals}
+            notes={notes}
+            names={names}
+            required={required}
+            canClose={canClose}
+            canEdit={canWork}
+            onGoals={(update) => setData((prev) => ({ ...prev, goals: update(prev.goals) }))}
+            onClosed={(next) => setData((prev) => ({ ...prev, personGsrs: prev.personGsrs.map((g) => (g.id === next.id ? next : g)) }))}
+            onError={setError}
+          />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
+          <GsrGoalsPanel
+            gsr={gsr}
+            goals={goals}
+            notes={notes}
+            names={names}
+            roleGoals={roleGoals}
+            required={required}
+            topic={topic}
+            canEdit={canEdit}
+            taskLinks={
+              goalTasks
+                ? {
+                    tasks: goalTasks,
+                    people,
+                    viewerProfileId: profile.id,
+                    onTasks: (update) => setData((prev) => ({ ...prev, goalTasks: update(prev.goalTasks ?? []) })),
+                  }
+                : null
+            }
+            onGoals={(update) => setData((prev) => ({ ...prev, goals: update(prev.goals) }))}
+            onNotes={(update) => setData((prev) => ({ ...prev, notes: update(prev.notes) }))}
+            onError={setError}
+          />
+        </div>
       </div>
 
       {/* The role scorecard for the month the GSR began in, for a company that keeps scorecards. */}
@@ -319,22 +310,6 @@ export default function GsrPage() {
         </div>
       ) : null}
 
-      {closing ? (
-        <ConfirmDialog
-          title={closing.score !== null ? `Mark this GSR done at ${closing.score}%?` : "Mark this GSR done?"}
-          body={
-            closing.score !== null
-              ? `Its goals add up to ${closing.total}% of ${closing.cap}%, as they stand now. Marking it done locks that score in, with its goals and notes. Reopen it to change them.`
-              : "Marking it done puts its goals and notes on record as they stand now. Reopen it to change them."
-          }
-          confirmLabel="Mark done"
-          tone="primary"
-          busy={busy}
-          error={dialogError}
-          onConfirm={() => void markDone()}
-          onCancel={() => setClosing(null)}
-        />
-      ) : null}
       {deleting ? (
         <ConfirmDialog
           title="Delete this GSR and its goals?"
