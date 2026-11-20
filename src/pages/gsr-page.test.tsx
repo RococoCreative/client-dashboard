@@ -225,6 +225,7 @@ describe("one GSR's page", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog");
     // The write reaches the database as Rowan himself, which it refuses.
+    onTestFinished(() => setActingPerson(manager.profile));
     setActingPerson(rowan);
     await userEvent.click(within(dialog).getByRole("button", { name: "Mark done" }));
     expect(await within(dialog).findByText(OWN_GSR_MESSAGE)).toBeInTheDocument();

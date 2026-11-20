@@ -25,6 +25,7 @@ export default function MarkGsrDone({
   required,
   variant = "primary",
   disabled = false,
+  onBusy,
   onGoals,
   onDone,
   onError,
@@ -36,6 +37,8 @@ export default function MarkGsrDone({
   // The page's one primary action is its own GSR's; anywhere else this reads as secondary.
   variant?: "primary" | "secondary";
   disabled?: boolean;
+  // Told when a read or a write starts and ends, so the caller can hold its other controls still.
+  onBusy?: (busy: boolean) => void;
   // The person's goals as read again, every GSR's, for the caller to take what it shows.
   onGoals: (fresh: Goal[]) => void;
   onDone: (next: Gsr) => void;
@@ -47,9 +50,13 @@ export default function MarkGsrDone({
   const [closing, setClosing] = useState<Closing | null>(null);
   // The dialog's own failure line, so an earlier failure on the page never shows inside it.
   const [dialogError, setDialogError] = useState("");
+  const working = (next: boolean) => {
+    setBusy(next);
+    onBusy?.(next);
+  };
 
   async function start() {
-    setBusy(true);
+    working(true);
     setDialogError("");
     try {
       const fresh = await listGoals(gsr.company_id, gsr.employee_id);
@@ -59,13 +66,13 @@ export default function MarkGsrDone({
     } catch (err) {
       onError(errorMessage(err));
     } finally {
-      setBusy(false);
+      working(false);
     }
   }
 
   async function confirm() {
     if (!closing) return;
-    setBusy(true);
+    working(true);
     setDialogError("");
     try {
       const next = await markGsrDone(gsr.id, closing.score, profile.id);
@@ -75,7 +82,7 @@ export default function MarkGsrDone({
     } catch (err) {
       setDialogError(errorMessage(err));
     } finally {
-      setBusy(false);
+      working(false);
     }
   }
 

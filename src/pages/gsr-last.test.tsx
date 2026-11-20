@@ -4,7 +4,7 @@
 // it is open, and never closes it. An unfinished goal carries forward into the new GSR once. Each
 // test reads the in-memory data layer the way the page does, acting as the person the hub was
 // rendered for.
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -13,7 +13,11 @@ vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
 vi.mock("../services/profiles.ts", () => import("../test/mocks/profiles.ts"));
 vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
-vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
+// listGoals is wrapped so one test can hold a read open; it reads the mock as ever otherwise.
+vi.mock("../services/gsr.ts", async () => {
+  const mock = await import("../test/mocks/gsr.ts");
+  return { ...mock, listGoals: vi.fn(mock.listGoals) };
+});
 vi.mock("../services/gsrOnDemand.ts", () => import("../test/mocks/gsrOnDemand.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
@@ -70,6 +74,13 @@ async function goal(gsr: Gsr, title: string, progress: number): Promise<Goal> {
 async function markDone(gsr: Gsr, by: Profile, score: number | null): Promise<Gsr> {
   setActingPerson(by);
   return markGsrDone(gsr.id, score, by.id);
+}
+// What the database says to a change on a done GSR's goals (0047).
+const GSR_DONE_GOALS = "This GSR is done. Reopen it to change its goals.";
+// Moves a completion slider and lets it go, which commits the value.
+function slide(slider: HTMLElement, value: number) {
+  fireEvent.change(slider, { target: { value: String(value) } });
+  fireEvent.keyUp(slider);
 }
 // A Monthly GSRs pillar asking two goals of every GSR, gone after the test.
 async function scoresGsrs() {
@@ -186,6 +197,7 @@ describe("the last GSR inside the new one", () => {
   it("shows the last GSR to someone opening a done GSR", async () => {
     const last = seed(rowan.id, { started_on: "2026-08-03" });
     await goal(last, "Finish the estimating course", 60);
+    await goal(last, "Walk every site on Fridays", 100);
     await markDone(last, harper, 55);
     const current = seed(rowan.id);
     await markDone(current, harper, 70);
@@ -194,6 +206,9 @@ describe("the last GSR inside the new one", () => {
     expect(within(box).getByText("Started Aug 3, 2026")).toBeInTheDocument();
     expect(within(box).getByText("Finish the estimating course")).toBeInTheDocument();
     expect(within(box).getByText("55%")).toBeInTheDocument();
+    // A finished goal reads as the monthly page reads it, an unfinished one as missed.
+    expect(within(box).getByText("Hit")).toBeInTheDocument();
+    expect(within(box).getByText("Missed at 60%")).toBeInTheDocument();
     // Nothing carries into a done GSR, and a done last GSR is read only.
     expect(within(box).queryByRole("button", { name: /^Carry forward/ })).not.toBeInTheDocument();
     expect(within(box).queryByRole("slider")).not.toBeInTheDocument();
@@ -215,10 +230,68 @@ describe("the last GSR inside the new one", () => {
     await userEvent.click(within(box).getByRole("button", { name: "Mark done" }));
     const dialog = await screen.findByRole("dialog");
     // The write reaches the database as Rowan himself, which it refuses.
+    onTestFinished(() => setActingPerson(harper));
     setActingPerson(rowan);
     await userEvent.click(within(dialog).getByRole("button", { name: "Mark done" }));
     expect(await within(dialog).findByText(OWN_GSR_MESSAGE)).toBeInTheDocument();
     setActingPerson(harper);
     expect((await getGsr(last.id)).status).toBe("in_progress");
+  });
+
+  it("saves a completion changed in the panel to the last GSR's goal", async () => {
+    const last = seed(jamie.id, { started_on: "2026-08-03" });
+    const course = await goal(last, "Learn the takeoff software", 40);
+    renderGsr(seed(jamie.id), employee);
+    const box = await panel();
+    slide(within(box).getByRole("slider", { name: "Agreed completion for Learn the takeoff software on the last GSR" }), 70);
+    await waitFor(async () => expect((await listGoals(RBA.company.id, jamie.id)).find((g) => g.id === course.id)?.progress).toBe(70));
+    expect(within(box).getByText("70%")).toBeInTheDocument();
+  });
+
+  it("says a refused completion and leaves the value as it was", async () => {
+    const last = seed(jamie.id, { started_on: "2026-08-03" });
+    const course = await goal(last, "Learn the takeoff software", 40);
+    renderGsr(seed(jamie.id), employee);
+    const box = await panel();
+    const slider = within(box).getByRole("slider", { name: "Agreed completion for Learn the takeoff software on the last GSR" });
+    // Someone who leads Jamie marks the last GSR done in another window, which freezes its goals.
+    await markDone(last, alex, null);
+    onTestFinished(() => setActingPerson(jamie));
+    setActingPerson(jamie);
+    slide(slider, 70);
+    expect(await screen.findByText(GSR_DONE_GOALS)).toBeInTheDocument();
+    await waitFor(() => expect(slider).toHaveValue("40"));
+    expect(within(box).getByText("Not saved")).toBeInTheDocument();
+    expect((await listGoals(RBA.company.id, jamie.id)).find((g) => g.id === course.id)?.progress).toBe(40);
+  });
+
+  it("keeps Carried forward on a goal raised to 100 after it was carried", async () => {
+    const last = seed(rowan.id, { started_on: "2026-08-03" });
+    await goal(last, "Finish the estimating course", 60);
+    renderGsr(seed(rowan.id), manager);
+    const box = await panel();
+    await userEvent.click(within(box).getByRole("button", { name: "Carry forward Finish the estimating course" }));
+    expect(await within(box).findByText("Carried forward")).toBeInTheDocument();
+    slide(within(box).getByRole("slider", { name: "Agreed completion for Finish the estimating course on the last GSR" }), 100);
+    await waitFor(() => expect(within(box).getByText("Complete")).toBeInTheDocument());
+    expect(within(box).getByText("Carried forward")).toBeInTheDocument();
+    expect(within(box).queryByRole("button", { name: /^Carry forward/ })).not.toBeInTheDocument();
+  });
+
+  it("holds Delete GSR still while Mark done reads the goals again", async () => {
+    renderGsr(seed(rowan.id), admin);
+    const markDoneButton = await screen.findByRole("button", { name: "Mark done" });
+    let release: () => void = () => undefined;
+    const read = vi.mocked(listGoals);
+    read.mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return (await vi.importActual<typeof import("../test/mocks/gsr.ts")>("../test/mocks/gsr.ts")).listGoals(...args);
+    });
+    await userEvent.click(markDoneButton);
+    expect(screen.getByRole("button", { name: "Delete GSR" })).toBeDisabled();
+    release();
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Delete GSR" })).toBeEnabled();
   });
 });

@@ -201,6 +201,7 @@ export default function GsrPage() {
                 gsr={gsr}
                 required={required}
                 disabled={busy}
+                onBusy={setBusy}
                 onGoals={(fresh) => setData((prev) => ({ ...prev, goals: fresh }))}
                 onDone={(next) => setData((prev) => ({ ...prev, gsr: next }))}
                 onError={setError}

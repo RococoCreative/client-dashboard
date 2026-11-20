@@ -72,7 +72,7 @@ function LastGoal({
         {canTick ? null : (
           <Badge tone={GOAL_OUTCOME_TONE[outcome]}>
             {outcome === "hit" ? <Check size={11} aria-hidden /> : null}
-            {outcome === "hit" ? "Complete" : outcome === "miss" ? `Missed at ${goal.progress}%` : `${goal.progress}% so far`}
+            {outcome === "hit" ? "Hit" : outcome === "miss" ? `Missed at ${goal.progress}%` : `${goal.progress}% so far`}
           </Badge>
         )}
       </div>
@@ -83,18 +83,18 @@ function LastGoal({
           <GoalNotes goal={goal} notes={notes} names={names} canWrite={false} onNotes={keepNotes} onError={onError} />
         </div>
       ) : null}
-      {goal.progress < 100 ? (
-        carried ? (
-          <p className="mt-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
-            <ArrowRight size={12} aria-hidden /> Carried forward
-          </p>
-        ) : canCarry ? (
-          <div className="mt-2">
-            <Button variant="secondary" size="sm" disabled={carrying} aria-label={`Carry forward ${goal.title}`} onClick={onCarry}>
-              <ArrowRight size={13} aria-hidden /> Carry forward
-            </Button>
-          </div>
-        ) : null
+      {/* A goal with a copy in the GSR on the page reads as carried whatever its completion since;
+          the way to carry it is offered only under 100 and only while there is no copy. */}
+      {carried ? (
+        <p className="mt-2 inline-flex items-center gap-1 text-[12px] text-ink-3">
+          <ArrowRight size={12} aria-hidden /> Carried forward
+        </p>
+      ) : canCarry && goal.progress < 100 ? (
+        <div className="mt-2">
+          <Button variant="secondary" size="sm" disabled={carrying} aria-label={`Carry forward ${goal.title}`} onClick={onCarry}>
+            <ArrowRight size={13} aria-hidden /> Carry forward
+          </Button>
+        </div>
       ) : null}
     </li>
   );
