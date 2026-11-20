@@ -171,8 +171,14 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   Setting Review runs at, monthly by default), with the guards and function bodies that read
   them. Every company is on the defaults, so nothing visible changed, and no screen reads
   either column yet.
+- **Written, not applied yet:** `0047_gsr_on_demand` (see GSRs on demand). It adds
+  `companies.gsr_mode`, GSRs with no cycle and their goals, the wall that keeps all of it out of a
+  company on periods, the move of one company over, and takes back what `0046` put on every
+  company. Every company stays on periods when it goes in, so nothing visible changes. It
+  redefines `guard_signed_off_review`: if `0029` is ever pasted again after it, paste `0047`
+  straight after that.
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Next free number:** `0047`.
+- **Next free number:** `0048`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -520,6 +526,86 @@ started, with no feedback or sign-off). Status, feedback and sign-off stay with 
 Quarterly, annual, and custom cycles keep the scoring-first layout for now. The rules are in
 `src/lib/gsr/goals.ts`.
 
+## GSRs on demand
+
+A company can run its Goal Setting Reviews on demand instead of by month: a GSR is started for a
+person whenever it is needed, and marked done when the meeting is over. Which way a company works
+is its own setting, `companies.gsr_mode` (`0047`): `periods`, the default, is everything above, and
+`on_demand` is this. Every screen that differs reads that setting and nothing else, and a company
+on periods sees exactly what it saw before. No screen and no signed-in account can change it, Rococo
+admins included: a company is moved by hand in the database, with the owner's say-so (below).
+Rococo, Companies shows each company's format as text, By month or On demand.
+
+- **A GSR** is a `reviews` row with no cycle. The database stamps the company's date on it when it
+  is started (`started_on`) and when it is marked done (`done_on`); the app never sends either. Its
+  goals point at it through `goals.review_id`. One a person a day, and at most two open when one is
+  started.
+- **Who does what.** The person, anyone who leads them, the admins who manage them and Rococo start
+  one. Anyone who leads the person, or an admin who manages them, marks it done (with the score from
+  its own goals, where the company scores its GSRs) and reopens it. Nobody marks their own GSR done
+  or reopens it, whatever their role, and the database holds that, not only the screen. A done GSR's
+  goals and notes are frozen until it is reopened. Deleting one stays with an admin.
+- **Counting.** A GSR counts on the day it was marked done, in the company's time zone. One done with
+  no score (a company that does not score its GSRs) is counted as done and adds nothing to an
+  average. One still open is shown, never counted. In progress, last GSR, due and overdue always read
+  as of today. A person's rhythm (`profiles.gsr_cadence`) only says when their next one is due.
+- **Where a month used to be counted.** A scored review's Monthly GSRs pillar reads the person's GSRs
+  done inside the review cycle's period, lists them with their dates and scores (an open one as not
+  counted yet), and is their average: 100 for each one counted as the target and their scores as the
+  actual, written into the review as one line item on sign-off, as before. With none done the pillar
+  sits out of that review. A signed-off review keeps the number it was signed off with, whatever
+  happens to a GSR afterwards. A person's Reviews tab reads the same figure, the division comparison
+  counts the GSRs done in its month, and the Rococo portfolio shows the GSRs done this week and their
+  average.
+
+The window figures, the due rule and the score a scored review reads are in
+`src/lib/gsr/onDemand.ts`, the one place they live.
+
+### Moving a company to GSRs on demand
+
+Only once `0047` is applied, and only with the owner's say-so, one company at a time.
+
+Before the move:
+
+1. Run `supabase/tests/fingerprint.sql` in the SQL editor and keep the result. It reads out only
+   slugs, table names, counts and hashes.
+2. Pick a quiet moment, when nobody at the company is working a GSR.
+
+The move is one transaction in the SQL editor, with the company's slug in place of `<slug>` in both
+places:
+
+```sql
+begin;
+select set_config('hub.gsr_on_demand_for', '<slug>', true);
+update public.companies set gsr_mode = 'on_demand' where slug = '<slug>';
+commit;
+```
+
+The database refuses the change for any company not named in the same transaction, so a statement
+that would reach two companies, or all of them, changes nothing. The same write converts the
+company's past monthly GSRs: each review in one of its GSR months becomes a GSR of its own, dated
+from its month, done on the day it was marked complete and never outside its month; that person's
+goals in the month move onto it; and the company's GSR months and their left-out rows are removed.
+Scored review cycles, their reviews and their line items are not touched. A private copy of every
+row it removes or re-points is kept in `private.gsr_conversion_backup`, which no signed-in account
+can read. If someone at the company already has a GSR dated the first day of a month being
+converted, the move stops with a plain message and nothing is changed.
+
+After the move:
+
+1. Run the fingerprint again and compare: only the moved company's rows differ.
+2. Confirm the company has no GSR month left (no `review_cycles` row of kind `gsr` for it).
+
+Putting a move back is a job done by hand, and the steps are in the comment above
+`private.gsr_conversion_backup` in `supabase/migrations/0047_gsr_on_demand.sql`, run as one
+transaction. They put each row back where it lived and leave anything changed since as it is now.
+They stop with nothing changed when anything added since the move would be lost (a GSR started on
+demand after the move must be deleted first), and a person who has changed company since blocks
+them.
+
+`0047` redefines `guard_signed_off_review`. If `0029` is ever pasted again, paste `0047` straight
+after it.
+
 ## Goals beyond the month
 
 A person's goals outside the GSR belong to this year, next year, or their BHAG, the big goal three
@@ -568,7 +654,8 @@ defines pillars, each with a weight and a scoring type:
   omitted from all of them, or none has been marked complete yet), the pillar sits out of that
   review and the other pillars carry its weight, since a GSR score is never applied before it is
   locked in; sign-off says so before it happens. A company without such a pillar sees none of
-  this. The rule is in `src/lib/gsr/goals.ts`.
+  this. The rule is in `src/lib/gsr/goals.ts`. In a company whose GSRs are on demand the pillar
+  reads the GSRs done inside the period instead (see GSRs on demand).
 
 Overall = sum(pillar score x weight) / sum(weights). An unscored pillar counts as zero, so
 an incomplete review reads low, never high; the one exception is the Monthly GSRs pillar
