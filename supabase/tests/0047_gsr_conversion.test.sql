@@ -996,6 +996,59 @@ select tests.assert(
 );
 rollback to savepoint put_back_case;
 
+-- case: a_gsr_the_move_made_marked_done_and_reopened_is_no_change
+-- Marked done and reopened, with nothing else left on it: the put-back goes through.
+select tests.act_as(tests.id('c_admin'));
+update public.reviews set status = 'complete', completed_at = now(), gsr_score = 40, reviewer_id = tests.id('c_admin')
+ where id = tests.id('gsr_o1');
+update public.reviews set status = 'in_progress', completed_at = null where id = tests.id('gsr_o1');
+reset role; select set_config('request.jwt.claims', '', true);
+:put_back_sql
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'rba')
+  and not exists (select 1 from public.reviews where company_id = tests.company('rba') and cycle_id is null)
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_reopened: a GSR the move made, marked done and reopened, stopped the put-back'
+);
+rollback to savepoint put_back_case;
+
+-- case: a_discussion_on_a_gsr_the_move_made_stops_it_and_the_message_is_followable
+-- A discussion written on it stops the put-back. Doing what the message says, in the SQL editor
+-- (set it back to its created_gsr row in the copy, with the flag up in the same transaction),
+-- lets it through.
+select tests.act_as(tests.id('c_admin'));
+update public.reviews set support_discussion = 'Sample discussion 47c' where id = tests.id('gsr_o1');
+reset role; select set_config('request.jwt.claims', '', true);
+create temp table s_before as select * from tests.rows_now(tests.company('rba'));
+select tests.assert_raises(:'put_back_sql',
+  'This move cannot be put back yet, and nothing was changed. Goals added to its GSRs since the move: 0.%GSRs the move made that changed since: 1. Set each back to how the move made it: its created_gsr row in private.gsr_conversion_backup shows that state, and the update needs select set_config(''hub.gsr_conversion'', ''1'', true) first, in the same transaction.%Score rows on GSRs the%move made: 0.%Project notes on GSRs%the move made: 0. Delete them.');
+select tests.assert(
+  (select gsr_mode = 'on_demand' from public.companies where slug = 'rba')
+  and not exists ((select * from s_before except all select * from tests.rows_now(tests.company('rba')))
+                  union all (select * from tests.rows_now(tests.company('rba')) except all select * from s_before))
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_discussion: a discussion on a GSR the move made did not stop it with nothing changed'
+);
+select set_config('hub.gsr_conversion', '1', true);
+update public.reviews r
+   set status = x.status, completed_at = x.completed_at, gsr_score = x.gsr_score, reviewer_id = x.reviewer_id,
+       previous_status = x.previous_status, manager_feedback = x.manager_feedback,
+       peer_feedback = x.peer_feedback, client_feedback = x.client_feedback,
+       employee_reflection = x.employee_reflection, support_discussion = x.support_discussion,
+       pillar_snapshot = x.pillar_snapshot
+  from private.gsr_conversion_backup b
+       cross join lateral jsonb_populate_record(null::public.reviews, b.payload) x
+ where b.what = 'created_gsr' and r.id = x.id;
+select set_config('hub.gsr_conversion', '', true);
+:put_back_sql
+select tests.assert(
+  (select gsr_mode = 'periods' from public.companies where slug = 'rba')
+  and not exists (select 1 from public.reviews where company_id = tests.company('rba') and cycle_id is null)
+  and current_setting('hub.gsr_conversion', true) is distinct from '1',
+  'put_back_discussion: following the message did not let the put-back through'
+);
+rollback to savepoint put_back_case;
+
 -- case: the_put_back_holds_after_later_columns
 -- A column added since the move, to reviews (nullable, with a default) and to the months and
 -- left-out rows (required, with a default), changes nothing: the put-back still runs, and the

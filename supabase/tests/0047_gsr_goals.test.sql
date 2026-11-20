@@ -546,6 +546,43 @@ select tests.assert(
   'leave_done: a goal left a done GSR, or changed'
 );
 
+-- case: the_conversion_flag_is_the_editors_alone
+-- A signed-in admin who has hub.gsr_conversion set in their own transaction gets no guard
+-- standing aside: a review still stays in its cycle, a done GSR's goals and notes stay frozen, a
+-- signed-off GSR stays signed off, and its date stays the company's.
+select tests.act_as(tests.id('q_admin'));
+select set_config('hub.gsr_conversion', '1', true);
+select tests.assert_raises(
+  format($q$update public.reviews set cycle_id = null, started_on = '2031-05-01' where id = %L$q$,
+         tests.id('r_r_month')),
+  'A review in a cycle stays in a cycle, and a GSR on its own stays on its own.'
+);
+select tests.assert_raises(
+  format($q$update public.goals set title = 'Sample flagged 47g' where id = %L$q$, tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its goals.'
+);
+select tests.assert_raises(
+  format($q$insert into public.goal_notes (goal_id, body) values (%L, 'Sample flagged note 47g')$q$,
+         tests.id('g_focus')),
+  'This GSR is done. Reopen it to change its notes.'
+);
+select tests.assert_raises(
+  format($q$update public.reviews set gsr_score = 99 where id = %L$q$, tests.id('gsr_e1_old')),
+  'This review is signed off. Reopen it to change it.'
+);
+update public.reviews set started_on = '2020-01-01' where id = tests.id('gsr_peer');
+select set_config('hub.gsr_conversion', '', true);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select cycle_id = tests.id('c_r_month') and started_on is null from public.reviews where id = tests.id('r_r_month'))
+  and (select title = 'Sample focus 47g' from public.goals where id = tests.id('g_focus'))
+  and not exists (select 1 from public.goal_notes where body = 'Sample flagged note 47g')
+  and (select gsr_score = 60 from public.reviews where id = tests.id('gsr_e1_old'))
+  and (select started_on = (now() at time zone c.time_zone)::date
+         from public.reviews r join public.companies c on c.id = r.company_id where r.id = tests.id('gsr_peer')),
+  'flag: a signed-in writer with the flag set got a guard to stand aside'
+);
+
 -- case: another_companys_done_gsr_by_id
 -- Naming another company's done GSR for one of your own people is the person refusal: it never
 -- says whether that GSR is done.

@@ -49,12 +49,14 @@
 --      go. Scored review cycles are not touched. A private copy of every row removed or
 --      re-pointed is kept (private.gsr_conversion_backup), so a move made in error can be put
 --      back by hand. The guards stand aside for it only while the flag hub.gsr_conversion is
---      '1', which only the conversion sets and clears. supabase/tests/fingerprint.sql, run before
---      and after, proves no other company's rows moved.
+--      '1' and nobody is signed in, and only the conversion sets and clears it.
+--      supabase/tests/fingerprint.sql, run before and after, proves no other company's rows
+--      moved.
 --
 -- Kept for everyone from 0046, because the live schema is built on it and it changes nothing a
--- person can see or do: review_cycles.kind, the duplicate-cycle key that includes it, and
--- profiles.gsr_cadence with the audit of its changes.
+-- person can see or do: review_cycles.kind, the duplicate-cycle key that includes it,
+-- profiles.gsr_cadence with the audit of its changes, and guard_task's narrowing of the goal
+-- link (no task links to a goal with scope 'cycle' in a scored cycle, which no screen makes).
 --
 -- Rebuilt functions are copied from their latest bodies (guard_company_fields from 0042;
 -- guard_review_cycle_period, guard_review_employee_fields and guard_profile_fields from 0046;
@@ -301,7 +303,7 @@ declare
   v_probe public.reviews%rowtype;
   v_me    uuid;
 begin
-  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+  if (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
     return new;
   end if;
   v_me := private.auth_profile_id();
@@ -630,7 +632,7 @@ begin
       return new;
     end if;
     if new.company_id is not null
-       and coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+       and (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
       return new;
     end if;
     select company_id into new.company_id from public.profiles where id = new.employee_id;
@@ -670,7 +672,7 @@ begin
   end if;
   if tg_op = 'UPDATE'
      and new.cycle_id is null
-     and coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+     and (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
     return new;
   end if;
   if tg_op = 'UPDATE'
@@ -772,7 +774,7 @@ declare
   v_today date;
 begin
   if new.cycle_id is not null
-     or coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+     or (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
     return new;
   end if;
 
@@ -973,8 +975,10 @@ create unique index if not exists goals_one_focus_per_gsr on public.goals (revie
 -- The 0028 body with one branch put first: a goal on a GSR takes its GSR's company. When it is
 -- put on the GSR (or its person changes) the GSR must be one with no cycle, for the goal's own
 -- person, in the company that person is in. Anything else, a review in a cycle, another person's
--- GSR, a GSR in another company or none at all, gets the one message, so it tells nobody what
--- sits on the other side of the wall. A company on periods holds no GSR with no cycle, so none of
+-- GSR, a GSR in another company or none at all, gets the one message, so it says nothing of what
+-- the GSR is or holds. Someone outside who already holds both a person's id and a GSR's id can
+-- confirm they belong together (the pair that does gets row level security's words instead), and
+-- nothing else. A company on periods holds no GSR with no cycle, so none of
 -- its goals can carry a review_id. While a company moves over (hub.gsr_conversion is '1', section
 -- 12) the GSR need not be in the company its person is in now: a person moved to another company
 -- since their month keeps that month's goals on its GSR, in the company it was in. After that,
@@ -1001,7 +1005,7 @@ begin
          and r.cycle_id is null
          and r.employee_id = new.employee_id
          and (r.company_id = v_person_company
-              or coalesce(current_setting('hub.gsr_conversion', true), '') = '1');
+              or (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null));
       if not found then
         raise exception 'A goal on a GSR belongs to that GSR''s person.'
           using errcode = 'check_violation';
@@ -1126,7 +1130,8 @@ revoke execute on function public.guard_goal_owner() from public, anon, authenti
 -- whether that GSR is done, and a goal cannot leave a done GSR by changing its person. And the done refusals are worded only for someone in the GSR's company,
 -- a Rococo admin (private.is_company_member counts both) or the SQL editor; any other signed-in
 -- writer is refused in row level security's words, so naming a person and their GSR from outside
--- tells nothing, whatever the policies say.
+-- never tells whether that GSR is done, whatever the policies say. What it can tell someone who
+-- already holds both ids is that they belong together (section 9), and nothing else.
 --
 -- While a company moves over (hub.gsr_conversion is '1', section 12) both guards stand aside, so
 -- the SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
@@ -1148,7 +1153,7 @@ declare
   v_done     boolean;
   v_outside  boolean;
 begin
-  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+  if (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
     if tg_op = 'DELETE' then
       return old;
     end if;
@@ -1241,7 +1246,7 @@ declare
   v_done    boolean;
   v_outside boolean;
 begin
-  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+  if (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
     if tg_op = 'DELETE' then
       return old;
     end if;
@@ -1508,8 +1513,10 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 -- was ('goal_cycle') and each GSR the conversion created ('created_gsr').
 --
 -- The guards that would refuse this stand aside only while the transaction-local flag
--- hub.gsr_conversion is '1' (the pattern of hub.task_internal and hub.division_cleanup): the
--- review guards (guard_review_cycle, guard_review_employee_fields, guard_signed_off_review,
+-- hub.gsr_conversion is '1' (the pattern of hub.task_internal and hub.division_cleanup), and
+-- only with no signed-in user, so the flag is the SQL editor's alone: a signed-in account that
+-- somehow held it would still be judged as usual. They are the review guards
+-- (guard_review_cycle, guard_review_employee_fields, guard_signed_off_review,
 -- stamp_standalone_gsr), the goal and note freeze guards, and the company a GSR and its goals
 -- take (inherit_company_from_cycle, inherit_goal_company). Only
 -- private.convert_gsrs_to_on_demand sets it, and it puts it back to '' before it returns, on
@@ -1525,7 +1532,9 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 -- marked done or reopened) goes back as it is now, and the month takes it as a month review.
 -- Step 1 stops it when it would delete or strand something made after the move: a GSR started
 -- on demand (an admin deletes it first), a goal added to one of the move's GSRs, or a GSR the
--- move made that was changed, scored or given a project note since. A person moved to another
+-- move made that holds something put on it since (opening one, or marking it done and reopening
+-- it, is no change), a score row or a project note. Each stop says what to do about it. A person
+-- moved to another
 -- company since their month also stops it: guard_review_cycle, inherit_goal_company or
 -- stamp_cycle_omission refuses their row, and the whole statement rolls back, changing nothing.
 -- supabase/tests/0047_gsr_conversion.test.sql runs exactly these lines, read from this file.
@@ -1565,18 +1574,25 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --                             where p.what in ('review_cycle', 'created_gsr'))
 --        and g.id not in (select (p.payload->>'id')::uuid from put_back p
 --                          where p.what = 'goal_cycle');
---     -- A GSR the move made counts as changed when a column it was made with differs. Both sides
---     -- are typed rows rendered here, so the session's time zone and later columns do not count.
+--     -- A GSR the move made counts as changed when something a person put on it differs from
+--     -- how the move made it: its status (opened reads as not started), completion, score, who
+--     -- marked it done while it is done, and every feedback, reflection, discussion and snapshot
+--     -- column. So one only opened, or marked done and reopened with nothing else left on it, is
+--     -- no change. Both sides are typed values, so the session's time zone does not count.
 --     select count(*) into v_changed
 --       from put_back p
 --       join public.reviews r on r.id = (p.payload->>'id')::uuid
 --       cross join lateral jsonb_populate_record(null::public.reviews, p.payload) x
 --      where p.what = 'created_gsr'
---        and (select jsonb_object_agg(e.key, e.value) from jsonb_each(to_jsonb(r)) e
---              where p.payload ? e.key and e.key <> 'updated_at')
+--        and (case when r.status = 'in_progress' then 'not_started' else r.status end,
+--             r.completed_at, r.gsr_score, case when r.status = 'complete' then r.reviewer_id end,
+--             r.previous_status, r.manager_feedback, r.peer_feedback, r.client_feedback,
+--             r.employee_reflection, r.support_discussion, r.pillar_snapshot)
 --            is distinct from
---            (select jsonb_object_agg(e.key, e.value) from jsonb_each(to_jsonb(x)) e
---              where p.payload ? e.key and e.key <> 'updated_at');
+--            (case when x.status = 'in_progress' then 'not_started' else x.status end,
+--             x.completed_at, x.gsr_score, case when x.status = 'complete' then x.reviewer_id end,
+--             x.previous_status, x.manager_feedback, x.peer_feedback, x.client_feedback,
+--             x.employee_reflection, x.support_discussion, x.pillar_snapshot);
 --     select count(*) into v_scores
 --       from put_back p join public.review_scores s on s.review_id = (p.payload->>'id')::uuid
 --      where p.what = 'created_gsr';
@@ -1588,8 +1604,10 @@ revoke execute on function public.guard_task() from public, anon, authenticated;
 --       raise exception using errcode = 'check_violation', message = format(
 --         'This move cannot be put back yet, and nothing was changed. '
 --         || 'Goals added to its GSRs since the move: %s. Delete them, as they have no month '
---         || 'to go back to. GSRs the move made that changed since: %s. Set each back to not '
---         || 'started, with no completion, score, reviewer or feedback. Score rows on GSRs the '
+--         || 'to go back to. GSRs the move made that changed since: %s. Set each back to how the '
+--         || 'move made it: its created_gsr row in private.gsr_conversion_backup shows that '
+--         || 'state, and the update needs select set_config(''hub.gsr_conversion'', ''1'', true) '
+--         || 'first, in the same transaction. Score rows on GSRs the '
 --         || 'move made: %s. Delete them once their GSR is no longer done. Project notes on GSRs '
 --         || 'the move made: %s. Delete them.', v_goals, v_changed, v_scores, v_notes);
 --     end if;
@@ -1654,6 +1672,12 @@ create table if not exists private.gsr_conversion_backup (
   what         text not null,
   payload      jsonb not null
 );
+-- The copies are kept until someone removes them by hand, once a move is confirmed, and the app
+-- never reads them. A company's copies go with the company. Dropped and added, so applying this
+-- twice is safe.
+alter table private.gsr_conversion_backup drop constraint if exists gsr_conversion_backup_company_id_fkey;
+alter table private.gsr_conversion_backup add constraint gsr_conversion_backup_company_id_fkey
+  foreign key (company_id) references public.companies (id) on delete cascade;
 alter table private.gsr_conversion_backup drop constraint if exists gsr_conversion_backup_what_check;
 alter table private.gsr_conversion_backup add constraint gsr_conversion_backup_what_check
   check (what in ('cycle', 'omission', 'review_cycle', 'goal_cycle', 'created_gsr'));
@@ -1672,7 +1696,7 @@ as $$
 declare
   v_probe public.reviews%rowtype;
 begin
-  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then return new; end if;
+  if (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then return new; end if;
   if old.status <> 'complete' or new.status <> 'complete' then
     return new;
   end if;
