@@ -85,6 +85,9 @@ const sections = (container: HTMLElement) => Array.from(container.querySelectorA
 const LOCKED_WORDS = /locked in|month is locked/i;
 const gsrCard = async () => sectionOf(await screen.findByRole("heading", { name: "Your GSR" }));
 const weekCard = async () => sectionOf(await screen.findByRole("heading", { name: "GSRs this week" }));
+// Waits until nothing inside an element still draws its Loading skeleton, so an assertion that
+// something is absent there reads loaded content and cannot pass while a read is still out.
+const loaded = (el: HTMLElement) => waitFor(() => expect(within(el).queryAllByRole("status", { name: "Loading" })).toHaveLength(0));
 
 function seed(employeeId: string, row: Partial<Gsr> = {}): Gsr {
   return seedMockGsr({ company_id: RBA.company.id, employee_id: employeeId, started_on: "2026-09-01", status: "in_progress", ...row });
@@ -141,7 +144,7 @@ describe("an employee's Home on demand", () => {
     const { container } = renderWithHub(<DashboardPage />, employee);
     const card = await gsrCard();
     await waitFor(() => expect(sections(container)[0]).toBe(card));
-    expect(within(card).getByText(/Started Sep 10, 2026/)).toBeInTheDocument();
+    expect(await within(card).findByText(/Started Sep 10, 2026/)).toBeInTheDocument();
     expect(within(card).getByText("In progress")).toBeInTheDocument();
     expect(within(card).getByText(/150% of 200%/)).toBeInTheDocument();
     // Not due yet: the last one began on the 10th, on a monthly rhythm.
@@ -189,6 +192,7 @@ describe("an employee's Home on demand", () => {
     expect(screen.queryByText(/Monthly GSRs/)).not.toBeInTheDocument();
     expect(screen.queryByText(/No month open/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: september.name })).not.toBeInTheDocument();
+    await loaded(card);
     expect(within(card).queryByText(PERIOD_WORDS)).not.toBeInTheDocument();
   });
 
@@ -363,6 +367,7 @@ describe("the whole Home of a company on demand", () => {
     const { container } = renderWithHub(<DashboardPage />, employee);
     await screen.findByText(`GSRs, ${q3.name}`);
     await screen.findByRole("heading", { name: /open goal/ });
+    await loaded(container);
     expect(container.textContent).not.toMatch(LOCKED_WORDS);
   });
 
@@ -372,6 +377,7 @@ describe("the whole Home of a company on demand", () => {
     const team = sectionOf(await screen.findByRole("heading", { name: "Your team" }));
     await within(team).findByRole("link", { name: "Rowan Ellis" });
     await screen.findByRole("heading", { name: /open goal/ });
+    await loaded(container);
     expect(container.textContent).not.toMatch(LOCKED_WORDS);
   });
 

@@ -415,6 +415,8 @@ describe("GSRs, Setup", () => {
     setup(admin);
     const calendar = (await screen.findByRole("heading", { name: "Focus topic calendar" })).closest("section") as HTMLElement;
     expect(within(calendar).getByText("One topic a month, such as a core value or a process push. A GSR is built on the topic of the month it is started in.")).toBeInTheDocument();
+    // The months and their notes load after the heading; read the whole card only once they have.
+    await waitFor(() => expect(within(calendar).queryByRole("status", { name: "Loading" })).not.toBeInTheDocument());
     expect(calendar.textContent).not.toMatch(/#1 GSR|month's GSR/);
   });
 
