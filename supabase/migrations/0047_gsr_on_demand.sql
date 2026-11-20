@@ -34,6 +34,13 @@
 --      one only in a company on demand, one a person a day and two open at most.
 --   7. Who starts one: the person, anyone who leads them, an admin who manages them.
 --   8. public.gsr_last_started, the day each person's last GSR began, read through the wall.
+--   9. Its goals. goals.review_id points a GSR goal at its GSR. A GSR goal has one home, a cycle
+--      or a GSR; a goal on a GSR is that GSR's person's, in their company, one focus goal a GSR,
+--      and goes when the GSR is deleted. The person cannot move a goal someone else set for them
+--      to another GSR. Who reads and writes goals does not change.
+--  10. Frozen when done. A done GSR's goals and notes cannot change until it is reopened, with
+--      the exemptions a locked month has.
+--  11. A task links to a goal of an open GSR, and to no goal of a done one.
 --
 -- Kept for everyone from 0046, because the live schema is built on it and it changes nothing a
 -- person can see or do: review_cycles.kind, the duplicate-cycle key that includes it, and
@@ -41,11 +48,14 @@
 --
 -- Rebuilt functions are copied from their latest bodies (guard_company_fields from 0042;
 -- guard_review_cycle_period, guard_review_employee_fields and guard_profile_fields from 0046;
--- inherit_company_from_cycle from 0003; guard_review_cycle from 0039) and changed only on the
--- lines named here. The messages people already see stay word for word.
+-- inherit_company_from_cycle from 0003; guard_review_cycle from 0039; inherit_goal_company from
+-- 0028; guard_goal_owner from 0039; guard_goal_frozen, guard_goal_note_frozen and guard_task from
+-- 0046) and changed only on the lines named here. The messages people already see stay word for
+-- word.
 --
 -- Paste after 0046. Re-pasting 0046 after this brings back everything section 3 removes and
--- section 4 narrows; pasting this again puts it right. Idempotent.
+-- section 4 narrows, and re-pasting 0028, 0029 or 0039 takes back what sections 9 to 11 add to
+-- goals and tasks; pasting this again puts it right. Idempotent.
 
 -- ---------------------------------------------------------------------------------------
 -- 1. The setting
@@ -874,3 +884,508 @@ as
 
 revoke all on public.gsr_last_started from public, anon, authenticated;
 grant select on public.gsr_last_started to authenticated;
+
+-- ---------------------------------------------------------------------------------------
+-- 9. Its goals
+-- ---------------------------------------------------------------------------------------
+-- A GSR goal (scope 'cycle', the value every goal and note policy is keyed on for all three
+-- companies) lives in a cycle (a company on periods) or on a GSR with no cycle (a company on
+-- demand), never both and never neither. Any other goal lives on neither. Deleting a GSR takes
+-- its goals, and their notes with them, as deleting a cycle does (0029).
+alter table public.goals add column if not exists review_id uuid references public.reviews (id) on delete cascade;
+create index if not exists goals_review_id_idx on public.goals (review_id);
+
+-- 0029's check said a GSR goal names its cycle; this one says it names one home. Every live row
+-- passes: every live goal has no review_id, and 0029 validated every GSR goal has its cycle.
+-- Re-pasting 0029 after this adds its check back (it adds it only when missing), which refuses
+-- every goal on a GSR; pasting this again takes it away.
+alter table public.goals drop constraint if exists goals_cycle_scope_check;
+alter table public.goals drop constraint if exists goals_home_check;
+alter table public.goals add constraint goals_home_check
+  check ((scope = 'cycle' and (cycle_id is null) <> (review_id is null))
+         or (scope <> 'cycle' and review_id is null));
+
+-- One focus goal a GSR, as 0023 holds one a month. 0023's index leaves goals with no cycle alone.
+create unique index if not exists goals_one_focus_per_gsr on public.goals (review_id) where is_focus;
+
+-- The 0028 body with one branch put first: a goal on a GSR takes its GSR's company. When it is
+-- put on the GSR (or its person changes) the GSR must be one with no cycle, for the goal's own
+-- person, in the company that person is in. Anything else, a review in a cycle, another person's
+-- GSR, a GSR in another company or none at all, gets the one message, so it tells nobody what
+-- sits on the other side of the wall. A company on periods holds no GSR with no cycle, so none of
+-- its goals can carry a review_id. After that, word for word.
+create or replace function public.inherit_goal_company()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_person_company uuid;
+  v_cycle_company  uuid;
+  v_gsr_company    uuid;
+begin
+  select company_id into v_person_company from public.profiles where id = new.employee_id;
+  if new.review_id is not null then
+    if tg_op = 'INSERT'
+       or new.review_id is distinct from old.review_id
+       or new.employee_id is distinct from old.employee_id then
+      select r.company_id into v_gsr_company
+        from public.reviews r
+       where r.id = new.review_id
+         and r.cycle_id is null
+         and r.employee_id = new.employee_id
+         and r.company_id = v_person_company;
+      if not found then
+        raise exception 'A goal on a GSR belongs to that GSR''s person.'
+          using errcode = 'check_violation';
+      end if;
+    else
+      select r.company_id into v_gsr_company from public.reviews r where r.id = new.review_id;
+    end if;
+    new.company_id := v_gsr_company;
+    return new;
+  end if;
+
+  if new.cycle_id is null then
+    if v_person_company is null then
+      raise exception 'This person is not placed with a company yet.';
+    end if;
+    new.company_id := v_person_company;
+    return new;
+  end if;
+
+  select company_id into v_cycle_company from public.review_cycles where id = new.cycle_id;
+  -- Checked when the goal is put in a month, not on every edit after: OLD is only read on an
+  -- update.
+  if tg_op = 'INSERT' then
+    if v_person_company is distinct from v_cycle_company then
+      raise exception 'That month belongs to another company.'
+        using errcode = 'check_violation';
+    end if;
+  elsif new.cycle_id is distinct from old.cycle_id or new.employee_id is distinct from old.employee_id then
+    if v_person_company is distinct from v_cycle_company then
+      raise exception 'That month belongs to another company.'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+  new.company_id := v_cycle_company;
+  return new;
+end;
+$$;
+revoke execute on function public.inherit_goal_company() from public, anon, authenticated;
+
+-- Who reads and writes goals and notes does not change. The four goal policies (0038) and the
+-- note policies are keyed on the person, the company and scope = 'cycle', never on the cycle, so
+-- a goal on a GSR is the person's, their leaders' and their admins' exactly as a month's goal is.
+-- goal_private (0021) still refuses any goal with scope 'cycle'.
+
+-- The 0039 body with one change: review_id joins the fields a person cannot change on a goal
+-- someone else set for them, beside cycle_id. Everything else, and every message, is as it was.
+create or replace function public.guard_goal_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_source_creator uuid;
+begin
+  if tg_op = 'INSERT' then
+    if (select auth.uid()) is not null then
+      new.created_by := private.auth_profile_id();
+      if new.carried_from_goal_id is not null then
+        select g.created_by into v_source_creator
+          from public.goals g
+         where g.id = new.carried_from_goal_id
+           and g.employee_id = new.employee_id;
+        if found then
+          new.created_by := v_source_creator;
+        end if;
+      end if;
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and (select auth.uid()) is not null then
+    if not private.is_rococo_admin() then
+      new.employee_id := old.employee_id;
+    end if;
+    if new.created_by is distinct from old.created_by
+       and not (new.created_by is null
+                and old.created_by is not null
+                and not exists (select 1 from public.profiles p where p.id = old.created_by)) then
+      new.created_by := old.created_by;
+    end if;
+  end if;
+
+  if (select auth.uid()) is null
+     or private.auth_profile_id() is distinct from old.employee_id
+     or private.can_manage_company(old.company_id)
+     or old.created_by is null
+     or old.created_by = old.employee_id then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    raise exception 'This goal was set for you, so only an admin can remove it.'
+      using errcode = 'check_violation';
+  end if;
+  if row(new.title, new.description, new.kind, new.is_focus, new.cycle_id, new.scope, new.year, new.review_id)
+     is distinct from
+     row(old.title, old.description, old.kind, old.is_focus, old.cycle_id, old.scope, old.year, old.review_id) then
+    raise exception 'This goal was set for you, so only an admin can change what it is. You can still move its completion, tick its steps and add notes.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_goal_owner() from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------------------
+-- 10. Frozen when done
+-- ---------------------------------------------------------------------------------------
+-- The 0046 bodies with a branch for a GSR with no cycle, read from the goal's review_id (before
+-- and after the write) where the cycle branch reads its cycle: a done GSR's goals and notes
+-- cannot change until it is reopened. A goal on a GSR has no cycle, so the cycle branch never
+-- reaches it, and a goal in a cycle has no review_id, so this branch never reaches a month. The
+-- update exemptions sit before both branches and so hold for both: the why (outcome_note),
+-- updated_at, and a carried-from goal that is gone. So does the delete pass-through: when the
+-- GSR itself is being deleted its goals go with it.
+--
+-- While a company moves over (hub.gsr_conversion is '1', Task 5) both guards stand aside, so the
+-- SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
+-- cycle branch, and every message, is as it was.
+create or replace function public.guard_goal_frozen()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_from     uuid := case when tg_op = 'INSERT' then null else old.cycle_id end;
+  v_to       uuid := case when tg_op = 'DELETE' then null else new.cycle_id end;
+  v_whose    uuid := case when tg_op = 'DELETE' then old.employee_id else new.employee_id end;
+  v_gsr_from uuid := case when tg_op = 'INSERT' then null else old.review_id end;
+  v_gsr_to   uuid := case when tg_op = 'DELETE' then null else new.review_id end;
+  v_probe    public.goals%rowtype;
+begin
+  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE'
+     and old.cycle_id is not null
+     and not exists (select 1 from public.review_cycles c where c.id = old.cycle_id) then
+    return old;
+  end if;
+  if tg_op = 'DELETE'
+     and old.review_id is not null
+     and not exists (select 1 from public.reviews r where r.id = old.review_id) then
+    return old;
+  end if;
+  if tg_op = 'UPDATE' then
+    v_probe := new;
+    v_probe.outcome_note := old.outcome_note;
+    v_probe.updated_at := old.updated_at;
+    if new.carried_from_goal_id is null
+       and old.carried_from_goal_id is not null
+       and not exists (select 1 from public.goals g where g.id = old.carried_from_goal_id) then
+      v_probe.carried_from_goal_id := old.carried_from_goal_id;
+    end if;
+    if v_probe is not distinct from old then
+      return new;
+    end if;
+  end if;
+  if exists (
+    select 1 from public.review_cycles c
+    where c.id in (v_from, v_to) and c.status = 'closed'
+  ) then
+    raise exception 'This review cycle is closed. Reopen it to change its goals.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1
+      from public.reviews r
+      join public.review_cycles c on c.id = r.cycle_id
+    where r.cycle_id in (v_from, v_to)
+      and r.employee_id = v_whose
+      and r.status = 'complete'
+      and (r.gsr_score is not null or c.kind = 'gsr')
+  ) then
+    raise exception 'This month''s GSR is locked in. Reopen the review to change its goals.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1 from public.cycle_omissions o
+    where o.cycle_id in (v_from, v_to)
+      and o.employee_id = v_whose
+      and exists (select 1 from public.profiles p where p.id = o.employee_id)
+      and exists (select 1 from public.companies co where co.id = o.company_id)
+  ) then
+    raise exception 'This person is not part of this month''s GSRs. Add them back to change its goals.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1 from public.reviews r
+    where r.id in (v_gsr_from, v_gsr_to)
+      and r.cycle_id is null
+      and r.status = 'complete'
+  ) then
+    raise exception 'This GSR is done. Reopen it to change its goals.'
+      using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_goal_frozen() from public, anon, authenticated;
+
+create or replace function public.guard_goal_note_frozen()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_from uuid := case when tg_op = 'INSERT' then null else old.goal_id end;
+  v_to   uuid := case when tg_op = 'DELETE' then null else new.goal_id end;
+begin
+  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    return new;
+  end if;
+  if exists (
+    select 1
+      from public.goals g
+      join public.review_cycles c on c.id = g.cycle_id
+     where g.id in (v_from, v_to)
+       and c.status = 'closed'
+  ) then
+    raise exception 'This review cycle is closed. Reopen it to change its notes.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1
+      from public.goals g
+      join public.reviews r on r.cycle_id = g.cycle_id and r.employee_id = g.employee_id
+      join public.review_cycles c on c.id = r.cycle_id
+     where g.id in (v_from, v_to)
+       and r.status = 'complete'
+       and (r.gsr_score is not null or c.kind = 'gsr')
+  ) then
+    raise exception 'This month''s GSR is locked in. Reopen the review to change its notes.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1
+      from public.goals g
+      join public.cycle_omissions o on o.cycle_id = g.cycle_id and o.employee_id = g.employee_id
+      join public.profiles p on p.id = o.employee_id
+      join public.companies co on co.id = o.company_id
+     where g.id in (v_from, v_to)
+  ) then
+    raise exception 'This person is not part of this month''s GSRs. Add them back to change its notes.'
+      using errcode = 'check_violation';
+  end if;
+  if exists (
+    select 1
+      from public.goals g
+      join public.reviews r on r.id = g.review_id
+     where g.id in (v_from, v_to)
+       and r.cycle_id is null
+       and r.status = 'complete'
+  ) then
+    raise exception 'This GSR is done. Reopen it to change its notes.'
+      using errcode = 'check_violation';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_goal_note_frozen() from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------------------
+-- 11. A task links to a goal of an open GSR
+-- ---------------------------------------------------------------------------------------
+-- The 0046 body with two changes in the goal link. A goal carries tasks when it is a GSR goal in
+-- a GSR cycle, as before, or a GSR goal on a GSR with no cycle. And a new link to a goal whose GSR
+-- is done is refused, as a new link into a closed month is. A link already made is left alone,
+-- unlinking always passes, and the goal's person is the task's assignee, as before. Everything
+-- else, and every message, is as it was.
+create or replace function public.guard_task()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_internal  boolean := coalesce(current_setting('hub.task_internal', true), '') = '1';
+  v_checks    boolean := not v_internal and auth.uid() is not null;
+  v_me        uuid := private.auth_profile_id();
+  v_leads_old boolean;
+  v_leads_new boolean;
+  v_goal      record;
+begin
+  if not v_internal then
+    if tg_op = 'INSERT' then
+      new.created_by := coalesce(v_me, new.created_by);
+    else
+      new.company_id := old.company_id;
+      new.created_by := case
+        when exists (select 1 from public.profiles where id = old.created_by) then old.created_by
+      end;
+    end if;
+
+    -- Who completed it follows completed_at: the person who set it, and nobody once it clears.
+    if new.completed_at is null then
+      new.completed_by := null;
+    elsif tg_op = 'INSERT' or old.completed_at is null then
+      new.completed_by := coalesce(v_me, new.completed_by);
+    elsif v_checks then
+      new.completed_by := case
+        when exists (select 1 from public.profiles where id = old.completed_by) then old.completed_by
+      end;
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' and old.next_task_id is not null
+     and old.completed_at is not null and new.completed_at is null then
+    raise exception 'The next one is already open.';
+  end if;
+
+  if new.assignee_id is not null
+     and (tg_op = 'INSERT' or new.assignee_id is distinct from old.assignee_id)
+     and (select company_id from public.profiles where id = new.assignee_id)
+         is distinct from new.company_id then
+    raise exception 'That person belongs to another company.';
+  end if;
+
+  if new.campaign_id is not null
+     and (tg_op = 'INSERT' or new.campaign_id is distinct from old.campaign_id)
+     and (select company_id from public.marketing_campaigns where id = new.campaign_id)
+         is distinct from new.company_id then
+    raise exception 'That campaign belongs to another company.';
+  end if;
+
+  if v_checks then
+    if tg_op = 'INSERT' then
+      new.next_task_id := null;
+      new.notified_assignee_id := null;
+    else
+      new.next_task_id := old.next_task_id;
+      new.notified_assignee_id := case
+        when exists (select 1 from public.profiles where id = old.notified_assignee_id)
+          then old.notified_assignee_id
+      end;
+
+      if not private.can_manage_company(old.company_id) then
+        v_leads_old := old.assignee_id is not null
+          and exists (select 1 from private.led_person_ids() l (id) where l.id = old.assignee_id);
+        v_leads_new := new.assignee_id is not null
+          and (new.assignee_id = v_me
+               or exists (select 1 from private.led_person_ids() l (id) where l.id = new.assignee_id));
+        if v_leads_old and v_leads_new then
+          if new.campaign_id is distinct from old.campaign_id then
+            raise exception 'Only an admin can change a task''s campaign.';
+          end if;
+        elsif old.created_by = v_me and old.assignee_id = v_me then
+          if new.campaign_id is distinct from old.campaign_id
+             or (new.assignee_id is distinct from old.assignee_id
+                 and not (new.assignee_id is not null
+                          and exists (select 1 from private.led_person_ids() l (id)
+                                       where l.id = new.assignee_id))) then
+            raise exception 'Only the person who assigned this task can change it.';
+          end if;
+        elsif (new.id, new.title, new.description, new.assignee_id, new.due_date, new.priority,
+               new.recurrence, new.campaign_id, new.created_at)
+              is distinct from
+              (old.id, old.title, old.description, old.assignee_id, old.due_date, old.priority,
+               old.recurrence, old.campaign_id, old.created_at) then
+          raise exception 'Only the person who assigned this task can change it.';
+        end if;
+      end if;
+    end if;
+  end if;
+
+  -- The goal link.
+  if not v_internal then
+    if tg_op = 'UPDATE' and old.goal_id is not null
+       and new.goal_id is not distinct from old.goal_id
+       and (not exists (select 1 from public.goals g where g.id = old.goal_id)
+            or (old.assignee_id is not null
+                and not exists (select 1 from public.profiles p where p.id = old.assignee_id))) then
+      new.goal_id := null;
+    end if;
+
+    if new.goal_id is not null
+       and (tg_op = 'INSERT'
+            or new.goal_id is distinct from old.goal_id
+            or new.assignee_id is distinct from old.assignee_id) then
+      select g.company_id, g.employee_id, g.scope, g.cycle_id, c.kind, g.review_id into v_goal
+        from public.goals g
+        left join public.review_cycles c on c.id = g.cycle_id
+       where g.id = new.goal_id;
+      if not found then
+        raise exception 'That goal is not here any more.'
+          using errcode = 'check_violation';
+      end if;
+      if v_goal.company_id is distinct from new.company_id then
+        raise exception 'That goal belongs to another company.'
+          using errcode = 'check_violation';
+      end if;
+      if v_goal.scope <> 'cycle'
+         or ((v_goal.cycle_id is null or v_goal.kind is distinct from 'gsr') and v_goal.review_id is null) then
+        raise exception 'Only a monthly GSR goal can have tasks.'
+          using errcode = 'check_violation';
+      end if;
+      if v_goal.employee_id is distinct from new.assignee_id then
+        raise exception 'A task on a goal belongs to that goal''s person. Unlink it before assigning it to someone else.'
+          using errcode = 'check_violation';
+      end if;
+      if (tg_op = 'INSERT' or new.goal_id is distinct from old.goal_id)
+         and (exists (select 1 from public.review_cycles c
+                       where c.id = v_goal.cycle_id and c.status = 'closed')
+              or exists (select 1 from public.reviews r
+                          where r.cycle_id = v_goal.cycle_id
+                            and r.employee_id = v_goal.employee_id
+                            and r.status = 'complete')
+              or exists (select 1 from public.cycle_omissions o
+                          where o.cycle_id = v_goal.cycle_id
+                            and o.employee_id = v_goal.employee_id)) then
+        raise exception 'That month is closed, so its goals take no new tasks.'
+          using errcode = 'check_violation';
+      end if;
+      if (tg_op = 'INSERT' or new.goal_id is distinct from old.goal_id)
+         and exists (select 1 from public.reviews r
+                      where r.id = v_goal.review_id
+                        and r.cycle_id is null
+                        and r.status = 'complete') then
+        raise exception 'That GSR is done, so its goals take no new tasks.'
+          using errcode = 'check_violation';
+      end if;
+    end if;
+  end if;
+
+  -- The next copy of this series is gone: the series ends here.
+  if tg_op = 'UPDATE' and old.next_task_id is not null
+     and not exists (select 1 from public.tasks where id = old.next_task_id) then
+    new.next_task_id := null;
+    new.recurrence := null;
+  end if;
+
+  return new;
+end;
+$$;
+revoke execute on function public.guard_task() from public, anon, authenticated;
