@@ -41,6 +41,15 @@
 --  10. Frozen when done. A done GSR's goals and notes cannot change until it is reopened, with
 --      the exemptions a locked month has.
 --  11. A task links to a goal of an open GSR, and to no goal of a done one.
+--  12. Moving a company over. When a company's gsr_mode moves from periods to on demand, its past
+--      GSR months become GSRs on their own in the same write: each review keeps its status,
+--      score and completion and takes its month's dates, its person's goals in that month follow
+--      it, a goal with no review gets a not-started GSR, and the months and their left-out rows
+--      go. Scored review cycles are not touched. A private copy of every row removed or
+--      re-pointed is kept (private.gsr_conversion_backup), so a move made in error can be put
+--      back by hand. The guards stand aside for it only while the flag hub.gsr_conversion is
+--      '1', which only the conversion sets and clears. supabase/tests/fingerprint.sql, run before
+--      and after, proves no other company's rows moved.
 --
 -- Kept for everyone from 0046, because the live schema is built on it and it changes nothing a
 -- person can see or do: review_cycles.kind, the duplicate-cycle key that includes it, and
@@ -50,12 +59,13 @@
 -- guard_review_cycle_period, guard_review_employee_fields and guard_profile_fields from 0046;
 -- inherit_company_from_cycle from 0003; guard_review_cycle from 0039; inherit_goal_company from
 -- 0028; guard_goal_owner from 0039; guard_goal_frozen, guard_goal_note_frozen and guard_task from
--- 0046) and changed only on the lines named here. The messages people already see stay word for
--- word.
+-- 0046; guard_signed_off_review from 0029) and changed only on the lines named here. The messages
+-- people already see stay word for word.
 --
 -- Paste after 0046. Re-pasting 0046 after this brings back everything section 3 removes and
--- section 4 narrows, and re-pasting 0028, 0029 or 0039 takes back what sections 9 to 11 add to
--- goals and tasks; pasting this again puts it right. Idempotent.
+-- section 4 narrows, and re-pasting 0028, 0029 or 0039 takes back what sections 9 to 12 add to
+-- goals, tasks and signed-off reviews; pasting this again puts it right. Idempotent: pasting it
+-- again converts nothing, since only a change of gsr_mode does.
 
 -- ---------------------------------------------------------------------------------------
 -- 1. The setting
@@ -277,7 +287,9 @@ create policy "Leaders lock and reopen a GSR for the people they lead"
 -- score, who marked it done), whatever their role. Their own is the GSR's person before the write
 -- or after it, so nobody makes someone else's GSR theirs and closes it in one write (section 6
 -- refuses the change of person on its own). v_me is read before that check rather than
--- after the admin pass. Everything else, and every message, is as it was.
+-- after the admin pass. While a company moves over (hub.gsr_conversion is '1', section 12) it
+-- stands aside, so the conversion can take a review out of its month. Everything else, and every
+-- message, is as it was.
 create or replace function public.guard_review_employee_fields()
 returns trigger
 language plpgsql
@@ -288,6 +300,9 @@ declare
   v_probe public.reviews%rowtype;
   v_me    uuid;
 begin
+  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
+    return new;
+  end if;
   v_me := private.auth_profile_id();
   if old.cycle_id is null
      and v_me in (old.employee_id, new.employee_id)
@@ -595,10 +610,12 @@ alter table public.reviews add constraint reviews_home_check
 create unique index if not exists reviews_person_day_key on public.reviews (employee_id, started_on);
 
 -- The 0003 body with a GSR's company added: with no cycle, a new GSR takes its person's company,
--- and a review the SQL editor takes out of its cycle (Task 5's conversion) keeps the company it
--- had, so a person who has since moved company does not carry it across the wall. A person who is
+-- and a review the SQL editor takes out of its cycle (section 12's conversion) keeps the company
+-- it had, so a person who has since moved company does not carry it across the wall. A person who is
 -- not there is named only to the SQL editor and a Rococo admin; anyone else is left to row level
--- security, which refuses a GSR with no company. With a cycle, unchanged.
+-- security, which refuses a GSR with no company. While a company moves over (hub.gsr_conversion is
+-- '1', section 12) a GSR the conversion creates keeps the company it is given, the converting
+-- company, for the same reason. With a cycle, unchanged.
 create or replace function public.inherit_company_from_cycle()
 returns trigger
 language plpgsql
@@ -609,6 +626,10 @@ begin
   if new.cycle_id is null then
     if tg_op = 'UPDATE' then
       new.company_id := old.company_id;
+      return new;
+    end if;
+    if new.company_id is not null
+       and coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
       return new;
     end if;
     select company_id into new.company_id from public.profiles where id = new.employee_id;
@@ -627,9 +648,10 @@ end;
 $$;
 revoke all on function public.inherit_company_from_cycle() from public, anon, authenticated;
 
--- The 0039 body with two checks put first. A review that has no cycle and had none has nothing
--- here to judge, so it passes at once. A signed-in writer never moves a review between having a
--- cycle and having none, either way; only the SQL editor does, when a company moves over (Task 5).
+-- The 0039 body with three checks put first. A review that has no cycle and had none has nothing
+-- here to judge, so it passes at once. While a company moves over (hub.gsr_conversion is '1',
+-- section 12) a review leaving its cycle for none passes too, a closed month's included. A
+-- signed-in writer never moves a review between having a cycle and having none, either way.
 -- Everything after is the 0039 body, line for line, with its messages.
 create or replace function public.guard_review_cycle()
 returns trigger
@@ -643,6 +665,11 @@ declare
   v_old_status    text;
 begin
   if new.cycle_id is null and (tg_op = 'INSERT' or old.cycle_id is null) then
+    return new;
+  end if;
+  if tg_op = 'UPDATE'
+     and new.cycle_id is null
+     and coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then
     return new;
   end if;
   if tg_op = 'UPDATE'
@@ -726,8 +753,8 @@ revoke execute on function public.guard_review_cycle() from public, anon, authen
 --     and tells them nothing else: the mode, the limit and an unknown person
 --     (inherit_company_from_cycle, section 5) are answered only to a writer with a say over the
 --     person.
--- While a company moves over (hub.gsr_conversion is '1', Task 5) the dates are kept as given and
--- the mode and the limit are not judged.
+-- While a company moves over (hub.gsr_conversion is '1', section 12) the dates are kept as given
+-- and the mode and the limit are not judged.
 --
 -- BEFORE triggers on reviews fire in name order: reviews_guard_cycle,
 -- reviews_guard_employee_fields, reviews_guard_omitted, reviews_guard_signed_off,
@@ -915,7 +942,10 @@ create unique index if not exists goals_one_focus_per_gsr on public.goals (revie
 -- person, in the company that person is in. Anything else, a review in a cycle, another person's
 -- GSR, a GSR in another company or none at all, gets the one message, so it tells nobody what
 -- sits on the other side of the wall. A company on periods holds no GSR with no cycle, so none of
--- its goals can carry a review_id. After that, word for word.
+-- its goals can carry a review_id. While a company moves over (hub.gsr_conversion is '1', section
+-- 12) the GSR need not be in the company its person is in now: a person moved to another company
+-- since their month keeps that month's goals on its GSR, in the company it was in. After that,
+-- word for word.
 create or replace function public.inherit_goal_company()
 returns trigger
 language plpgsql
@@ -937,7 +967,8 @@ begin
        where r.id = new.review_id
          and r.cycle_id is null
          and r.employee_id = new.employee_id
-         and r.company_id = v_person_company;
+         and (r.company_id = v_person_company
+              or coalesce(current_setting('hub.gsr_conversion', true), '') = '1');
       if not found then
         raise exception 'A goal on a GSR belongs to that GSR''s person.'
           using errcode = 'check_violation';
@@ -1061,8 +1092,8 @@ revoke execute on function public.guard_goal_owner() from public, anon, authenti
 -- id (another company's included) is answered by inherit_goal_company's person refusal, never by
 -- whether that GSR is done.
 --
--- While a company moves over (hub.gsr_conversion is '1', Task 5) both guards stand aside, so the
--- SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
+-- While a company moves over (hub.gsr_conversion is '1', section 12) both guards stand aside, so
+-- the SQL editor can move a locked month's goals and notes onto its GSR. Otherwise every line of the
 -- cycle branch, and every message, is as it was.
 create or replace function public.guard_goal_frozen()
 returns trigger
@@ -1395,3 +1426,229 @@ begin
 end;
 $$;
 revoke execute on function public.guard_task() from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------------------
+-- 12. Moving a company over
+-- ---------------------------------------------------------------------------------------
+-- When a company's gsr_mode moves from 'periods' to 'on_demand' (section 2's hand-run change),
+-- its past GSR months are converted in the same write:
+--   * every review in one of its GSR months becomes a GSR on its own: started_on is the month's
+--     first day, and status, score, completion time, feedback and pillar snapshot stay as they
+--     are. A complete one is done on the day it was marked complete or on the month's last day,
+--     whichever came first (the last day when it carries no completion time), so a month locked
+--     after it ended stays in its month and a GSR marked done inside a running month counts on
+--     that day. One not complete is an open GSR,
+--     whatever the state of its month;
+--   * that person's goals in that month move onto it, their notes with them;
+--   * a goal in a month whose person has no review there gets a not-started GSR of its own, dated
+--     the month's first day, in the company the month was in;
+--   * the company's GSR months are deleted, and their left-out rows with them. Scored review
+--     cycles, their reviews and their line items are not touched.
+-- Before any of it, a private copy of every row removed or re-pointed is kept, whole, so a move
+-- made in error can be put back by hand: each month ('cycle'), each left-out row ('omission'),
+-- each converted review as it was ('review_cycle', which names its month) and each moved goal as
+-- it was ('goal_cycle'). A GSR the conversion created is one a goal now points at with no
+-- 'review_cycle' row of its own.
+--
+-- The guards that would refuse this stand aside only while the transaction-local flag
+-- hub.gsr_conversion is '1' (the pattern of hub.task_internal and hub.division_cleanup): the
+-- review guards (guard_review_cycle, guard_review_employee_fields, guard_signed_off_review,
+-- stamp_standalone_gsr), the goal and note freeze guards, and the company a GSR and its goals
+-- take (inherit_company_from_cycle, inherit_goal_company). Only
+-- private.convert_gsrs_to_on_demand sets it, and it puts it back to '' before it returns, on
+-- every path, so a later statement in the same transaction is judged as usual. No signed-in
+-- account can run the conversion, its trigger, or read the copy.
+
+create table if not exists private.gsr_conversion_backup (
+  id           bigint generated always as identity primary key,
+  company_id   uuid not null,
+  converted_at timestamptz not null default now(),
+  what         text not null,
+  payload      jsonb not null
+);
+alter table private.gsr_conversion_backup drop constraint if exists gsr_conversion_backup_what_check;
+alter table private.gsr_conversion_backup add constraint gsr_conversion_backup_what_check
+  check (what in ('cycle', 'omission', 'review_cycle', 'goal_cycle'));
+alter table private.gsr_conversion_backup enable row level security;
+revoke all on table private.gsr_conversion_backup from public, anon, authenticated;
+
+-- The 0029 body with one line added first: while a company moves over it stands aside, so a
+-- signed-off GSR month can be taken out of its month with its sign-off as it was. Re-pasting 0029
+-- after this takes the line back; pasting this again puts it right.
+create or replace function public.guard_signed_off_review()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_probe public.reviews%rowtype;
+begin
+  if coalesce(current_setting('hub.gsr_conversion', true), '') = '1' then return new; end if;
+  if old.status <> 'complete' or new.status <> 'complete' then
+    return new;
+  end if;
+  v_probe := new;
+  v_probe.employee_reflection := old.employee_reflection;
+  v_probe.updated_at := old.updated_at;
+  v_probe.pillar_snapshot := old.pillar_snapshot;
+  if new.reviewer_id is null
+     and old.reviewer_id is not null
+     and not exists (select 1 from public.profiles p where p.id = old.reviewer_id) then
+    v_probe.reviewer_id := old.reviewer_id;
+  end if;
+  if v_probe is distinct from old then
+    raise exception 'This review is signed off. Reopen it to change it.'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_signed_off_review() from public, anon, authenticated;
+
+-- The conversion. It runs only for a company already on demand, so it can never reach a company
+-- on periods, and running it again finds no month and changes nothing. It works with no signed-in
+-- user: the SQL editor's change of gsr_mode is what calls it.
+create or replace function private.convert_gsrs_to_on_demand(p_company uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_tz     text;
+  v_row    record;
+  v_review uuid;
+begin
+  select c.time_zone into v_tz
+    from public.companies c
+   where c.id = p_company and c.gsr_mode = 'on_demand';
+  if not found then
+    raise exception 'GSRs on demand are not turned on for this company.'
+      using errcode = 'check_violation';
+  end if;
+
+  -- Deleting a month deletes whatever still points at it. Only a monthly goal can move onto a
+  -- GSR, so any other goal in a month stops the move before anything changes.
+  if exists (
+    select 1
+      from public.goals g
+      join public.review_cycles c on c.id = g.cycle_id
+     where c.company_id = p_company and c.kind = 'gsr' and g.scope <> 'cycle'
+  ) then
+    raise exception 'A goal in one of this company''s GSR months is not a monthly goal, so it cannot move onto a GSR. Settle it by hand first.'
+      using errcode = 'check_violation';
+  end if;
+
+  perform set_config('hub.gsr_conversion', '1', true);
+  begin
+    -- The private copy, whole rows as they are now.
+    insert into private.gsr_conversion_backup (company_id, what, payload)
+    select p_company, 'cycle', to_jsonb(c)
+      from public.review_cycles c
+     where c.company_id = p_company and c.kind = 'gsr'
+     order by c.period_start, c.id;
+    insert into private.gsr_conversion_backup (company_id, what, payload)
+    select p_company, 'omission', to_jsonb(o)
+      from public.cycle_omissions o
+      join public.review_cycles c on c.id = o.cycle_id
+     where c.company_id = p_company and c.kind = 'gsr'
+     order by c.period_start, o.employee_id;
+    insert into private.gsr_conversion_backup (company_id, what, payload)
+    select p_company, 'review_cycle', to_jsonb(r)
+      from public.reviews r
+      join public.review_cycles c on c.id = r.cycle_id
+     where c.company_id = p_company and c.kind = 'gsr'
+     order by c.period_start, r.id;
+    insert into private.gsr_conversion_backup (company_id, what, payload)
+    select p_company, 'goal_cycle', to_jsonb(g)
+      from public.goals g
+      join public.review_cycles c on c.id = g.cycle_id
+     where c.company_id = p_company and c.kind = 'gsr'
+     order by c.period_start, g.id;
+
+    -- Each month's reviews, and with each its person's goals in that month.
+    for v_row in
+      select r.id, r.employee_id, r.cycle_id, c.period_start, c.period_end
+        from public.reviews r
+        join public.review_cycles c on c.id = r.cycle_id
+       where c.company_id = p_company and c.kind = 'gsr'
+       order by c.period_start, r.id
+    loop
+      update public.reviews r
+         set cycle_id   = null,
+             started_on = v_row.period_start,
+             done_on    = case when r.status = 'complete'
+                               then least(v_row.period_end,
+                                          coalesce((r.completed_at at time zone v_tz)::date, v_row.period_end))
+                          end
+       where r.id = v_row.id;
+      update public.goals g
+         set review_id = v_row.id,
+             cycle_id  = null
+       where g.cycle_id = v_row.cycle_id
+         and g.employee_id = v_row.employee_id;
+    end loop;
+
+    -- Goals left in a month belong to someone with no review there: a not-started GSR each.
+    for v_row in
+      select distinct g.cycle_id, g.employee_id, c.company_id, c.period_start
+        from public.goals g
+        join public.review_cycles c on c.id = g.cycle_id
+       where c.company_id = p_company and c.kind = 'gsr'
+       order by c.period_start, g.employee_id
+    loop
+      insert into public.reviews (company_id, employee_id, status, started_on)
+      values (v_row.company_id, v_row.employee_id, 'not_started', v_row.period_start)
+      returning id into v_review;
+      update public.goals g
+         set review_id = v_review,
+             cycle_id  = null
+       where g.cycle_id = v_row.cycle_id
+         and g.employee_id = v_row.employee_id;
+    end loop;
+
+    -- Nothing but left-out rows may go with the months.
+    if exists (
+         select 1 from public.reviews r join public.review_cycles c on c.id = r.cycle_id
+          where c.company_id = p_company and c.kind = 'gsr'
+       )
+       or exists (
+         select 1 from public.goals g join public.review_cycles c on c.id = g.cycle_id
+          where c.company_id = p_company and c.kind = 'gsr'
+       ) then
+      raise exception 'A review or goal is still in one of this company''s GSR months, so the move stops here.';
+    end if;
+
+    delete from public.review_cycles c
+     where c.company_id = p_company and c.kind = 'gsr';
+  exception when others then
+    perform set_config('hub.gsr_conversion', '', true);
+    raise;
+  end;
+  perform set_config('hub.gsr_conversion', '', true);
+end;
+$$;
+revoke all on function private.convert_gsrs_to_on_demand(uuid) from public, anon, authenticated;
+
+-- The trigger: after the change of gsr_mode from periods to on demand, convert that company. What
+-- reaches here has passed section 2, so it is the SQL editor naming the company.
+create or replace function private.convert_gsrs_on_gsr_mode()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform private.convert_gsrs_to_on_demand(new.id);
+  return null;
+end;
+$$;
+revoke all on function private.convert_gsrs_on_gsr_mode() from public, anon, authenticated;
+
+drop trigger if exists companies_convert_gsrs on public.companies;
+create trigger companies_convert_gsrs
+  after update of gsr_mode on public.companies
+  for each row
+  when (old.gsr_mode = 'periods' and new.gsr_mode = 'on_demand')
+  execute function private.convert_gsrs_on_gsr_mode();
