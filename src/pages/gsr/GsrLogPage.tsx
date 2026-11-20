@@ -67,15 +67,21 @@ const cellClass =
   `${tdClass} py-2 max-md:flex max-md:items-center max-md:justify-between max-md:gap-3 max-md:border-b-0 max-md:px-0 max-md:py-1 ` +
   "max-md:before:text-[12.5px] max-md:before:text-ink-2 max-md:before:content-[attr(data-label)]";
 
+// From md to xl the table sits beside the sidebar or fills a tablet, and a long name or meta line
+// (divisions and title) would hold the person column wide enough to push the row's control past the
+// edge. There the name and meta wrap inside 14rem instead, so the table fits and nothing is cut; a
+// phone (stacked rows) and a wide screen draw them as before.
+const personFitClass = "md:max-xl:max-w-56 md:max-xl:whitespace-normal md:max-xl:break-words";
+
 function PersonRow({ row, meta, busy, onStart }: { row: GsrStandingRow; meta: string; busy: boolean; onStart: (id: string) => void }) {
   const name = displayName(row.person);
   return (
     <tr role="row" className="hover:bg-surface-2/40 max-md:block max-md:border-b max-md:border-line max-md:px-4 max-md:py-3 max-md:last:border-b-0 md:[&>*:first-child]:pl-6 md:[&>*:last-child]:pr-6">
       <th scope="row" role="rowheader" className="relative border-b border-line px-3 py-2 text-left align-middle font-normal max-md:block max-md:border-b-0 max-md:px-0 max-md:py-0 max-md:pb-1 tap:min-h-11">
-        <Link to={`/people/${row.person.id}/gsr`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
+        <Link to={`/people/${row.person.id}/gsr`} className={`block truncate text-sm text-ink hover:text-link ${personFitClass} ${tapStretchClass}`}>
           {name}
         </Link>
-        {meta ? <p className={`truncate ${metaClass}`}>{meta}</p> : null}
+        {meta ? <p className={`truncate ${metaClass} ${personFitClass}`}>{meta}</p> : null}
       </th>
       <td role="cell" data-label="Last GSR" className={`${cellClass} tnum text-[13px]`}>{row.last ? formatDate(row.last) : "Never"}</td>
       <td role="cell" data-label="Rhythm" className={`${cellClass} text-[13px]`}>{GSR_RHYTHM_LABELS[row.person.gsr_cadence]}</td>
@@ -95,7 +101,7 @@ function PersonRow({ row, meta, busy, onStart }: { row: GsrStandingRow; meta: st
             Open<span className="sr-only">{` the GSR in progress for ${name}`}</span>
           </Link>
         ) : row.canStart ? (
-          <Button variant="link" disabled={busy} onClick={() => onStart(row.person.id)}>
+          <Button variant="link" className="relative tap:min-w-11" disabled={busy} onClick={() => onStart(row.person.id)}>
             Start<span className="sr-only">{` a GSR for ${name}`}</span>
           </Button>
         ) : null}

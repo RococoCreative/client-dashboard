@@ -54,6 +54,7 @@ import type { Gsr, GsrCadence, Profile } from "../types/database.ts";
 import GsrLogPage from "./gsr/GsrLogPage.tsx";
 import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import { tapTargetClass } from "../components/ui/tap.ts";
 
 const onDemand = { ...RBA.company, gsr_mode: "on_demand" as const };
 const admin = makeHub("admin", onDemand);
@@ -306,6 +307,25 @@ describe("the GSRs log", () => {
     expect(screen.queryByRole("table", { name: "People and their GSRs" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await headline()).toHaveTextContent("2 GSRs done · Average 85 · 1 in progress");
+  });
+});
+
+describe("the GSRs log at phone and tablet width", () => {
+  it("sizes each row's Start and Open for a finger, 44 by 44 under the tap variant", async () => {
+    seed(kai.id, { started_on: "2026-09-12" });
+    renderLog(admin);
+    const start = within(await rowOf("Jamie Fox")).getByRole("button", { name: /^Start/ });
+    expect(start.className).toMatch(/(^|\s)tap:min-w-11(\s|$)/);
+    // The link-styled Button is already 44 tall under the tap variant; the width is what it lacked.
+    expect(start.className).toMatch(/(^|\s)tap:min-h-11(\s|$)/);
+    const open = within(await rowOf("Kai Bennett")).getByRole("link", { name: /^Open/ });
+    for (const cls of tapTargetClass.split(" ")) expect(open.className.split(/\s+/)).toContain(cls);
+  });
+
+  it("lets a long name and meta line wrap inside the person column from md to xl, so the table fits", async () => {
+    renderLog(admin);
+    const name = within(await rowOf("Jamie Fox")).getByRole("link", { name: "Jamie Fox" });
+    for (const cls of ["md:max-xl:max-w-56", "md:max-xl:whitespace-normal", "md:max-xl:break-words"]) expect(name.className.split(/\s+/)).toContain(cls);
   });
 });
 
