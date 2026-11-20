@@ -14,11 +14,16 @@
 // A done GSR is read only until the same people reopen it. An admin may delete it, from the foot
 // of the page, away from the everyday controls.
 //
+// Arriving from a start that found two GSRs open already (useStartGsr, router state atLimit), the
+// page says so once: which GSR to close first, where to do it, or, for the person themself, that
+// their manager does it. The state is taken off the address as it is read, so a reload or a later
+// visit does not say it again.
+//
 // A company on periods never reaches this page: the route renders ReviewPage there. The GSR is
 // loaded by its id and checked against the active company, so a Rococo admin who switches company
 // in the sidebar is told it is not here rather than shown another tenant's GSR.
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { RotateCcw } from "lucide-react";
 import GsrGoalsPanel from "../../components/gsr/onDemand/GsrGoalsPanel.tsx";
 import LastGsrPanel from "../../components/gsr/onDemand/LastGsrPanel.tsx";
@@ -30,6 +35,7 @@ import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Notice from "../../components/ui/Notice.tsx";
+import { tapTargetClass } from "../../components/ui/tap.ts";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { useHub } from "../../context/HubContext.tsx";
@@ -52,7 +58,7 @@ import { listProjectAssignments } from "../../services/projectAssignments.ts";
 import { listProjects } from "../../services/projects.ts";
 import { listReviewProjectNotes } from "../../services/reviewProjectNotes.ts";
 import { listTasksForGoals } from "../../services/tasks.ts";
-import type { TaskWithSteps } from "../../types/database.ts";
+import type { Gsr, TaskWithSteps } from "../../types/database.ts";
 import type { ProjectNotesWording } from "../../components/gsr/ReviewProjects.tsx";
 
 // The project notes' lines on a GSR, which is marked done rather than signed off.
@@ -63,9 +69,35 @@ const GSR_PROJECT_WORDING: ProjectNotesWording = {
   other: "The note on each project from this GSR.",
 };
 
+// The notice for a GSR opened at the limit: the other open GSR is the one to close first. It is
+// closed right here when the Last GSR panel is showing it; otherwise the notice links to it. The
+// person themself hears only that their manager closes it, since they never close their own.
+function LimitNotice({ gsr, personGsrs, last, personName, isOwn }: { gsr: Gsr; personGsrs: Gsr[]; last: Gsr | null; personName: string; isOwn: boolean }) {
+  const earlier = personGsrs.filter((g) => g.id !== gsr.id && isOpen(g)).sort((a, b) => a.started_on.localeCompare(b.started_on) || a.created_at.localeCompare(b.created_at))[0];
+  if (!earlier) return null;
+  if (isOwn) return <Notice className="mb-4">You already have two GSRs open. Your manager marks the earlier one done first.</Notice>;
+  const said = `${personName.split(" ")[0]} already has two GSRs open. Mark the earlier one done first.`;
+  if (earlier.id === last?.id) return <Notice className="mb-4">{`${said} You can do it here, in Last GSR.`}</Notice>;
+  return (
+    <Notice className="mb-4">
+      {`${said} `}
+      <Link to={`/gsr/reviews/${earlier.id}`} className={`font-medium underline ${tapTargetClass}`}>Open the GSR from {formatDate(earlier.started_on)}</Link>
+    </Notice>
+  );
+}
+
 export default function GsrPage() {
   const { reviewId = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const arrivedAtLimit = (location.state as { atLimit?: boolean } | null)?.atLimit === true;
+  // The GSR the limit notice belongs to, kept once the address's state is cleared, and only for
+  // that GSR: following the notice's link to the earlier one does not carry it along.
+  const [limitFor, setLimitFor] = useState<string | null>(arrivedAtLimit ? reviewId : null);
+  if (arrivedAtLimit && limitFor !== reviewId) setLimitFor(reviewId);
+  useEffect(() => {
+    if (arrivedAtLimit) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [arrivedAtLimit, location.pathname, location.search, navigate]);
   const { company, profile, isAdmin } = useHub();
   const companyId = company!.id;
   const tasksOn = hasModule(company, "tasks");
@@ -217,6 +249,7 @@ export default function GsrPage() {
         }
       />
 
+      {limitFor === gsr.id ? <LimitNotice gsr={gsr} personGsrs={personGsrs} last={last} personName={personName} isOwn={isOwn} /> : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
 

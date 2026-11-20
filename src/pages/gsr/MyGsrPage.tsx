@@ -20,10 +20,11 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { ensureReview, listCycleOmissions, listCycles, listEmployeeReviews } from "../../services/gsr.ts";
 import { gsrCycleInPlay, omittedCycleIdsFor } from "../../lib/gsr/cycles.ts";
 import { errorMessage } from "../../lib/errors.ts";
+import MyGsrOnDemand from "../../components/gsr/onDemand/MyGsrOnDemand.tsx";
 import MyTabs from "./MyTabs.tsx";
 import ReviewPage from "./ReviewPage.tsx";
 
-export default function MyGsrPage() {
+function MyGsrOnPeriods() {
   const { company, profile } = useHub();
   const companyId = company!.id;
   const [starting, setStarting] = useState(false);
@@ -89,4 +90,11 @@ export default function MyGsrPage() {
       )}
     </>
   );
+}
+
+// A company on demand has no months: My GSR there is the person's own GSRs (MyGsrOnDemand). A
+// company on periods gets the page above, unchanged.
+export default function MyGsrPage() {
+  const { company } = useHub();
+  return company?.gsr_mode === "on_demand" ? <MyGsrOnDemand /> : <MyGsrOnPeriods />;
 }

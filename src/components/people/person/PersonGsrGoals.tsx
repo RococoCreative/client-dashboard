@@ -12,6 +12,7 @@ import Section from "../../ui/Section.tsx";
 import { tapTargetClass } from "../../ui/tap.ts";
 import { sectionEyebrowClass, sectionTitleClass } from "../../ui/type.ts";
 import GoalsPanel from "../../gsr/GoalsPanel.tsx";
+import PersonGsrs from "../../gsr/onDemand/PersonGsrs.tsx";
 import { REVIEW_STATUS_TONE } from "../../status.ts";
 import { useHub } from "../../../context/HubContext.tsx";
 import { ensureReview } from "../../../services/gsr.ts";
@@ -104,7 +105,7 @@ export function ThisMonthGsr({ companyId, data, person }: { companyId: string; d
   return <ThisMonthGsrCard companyId={companyId} person={person} cycles={data.cycles} reviews={data.reviews} omittedCycleIds={data.omittedCycleIds} />;
 }
 
-export default function PersonGsrGoals({ companyId, data, person }: PersonTabProps) {
+function PersonGsrGoalsOnPeriods({ companyId, data, person }: PersonTabProps) {
   const { isAdmin } = useHub();
   return (
     <div className="space-y-6">
@@ -118,4 +119,11 @@ export default function PersonGsrGoals({ companyId, data, person }: PersonTabPro
       </section>
     </div>
   );
+}
+
+// A company on demand has no months: the tab there is the person's GSRs and rhythm (PersonGsrs),
+// with the same goals below. A company on periods gets the tab above, unchanged.
+export default function PersonGsrGoals(props: PersonTabProps) {
+  const { company } = useHub();
+  return company?.gsr_mode === "on_demand" ? <PersonGsrs {...props} /> : <PersonGsrGoalsOnPeriods {...props} />;
 }

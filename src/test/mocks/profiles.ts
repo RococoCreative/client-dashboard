@@ -1,8 +1,14 @@
 // In-memory stand-in for services/profiles.ts, same exports, so page tests and `npm run demo`
 // run against the seeded roster and never touch the network.
+//
+// A person's GSR rhythm (gsr_cadence) is refused as the database refuses it (guard_profile_fields
+// and the policy "Leaders set the GSR rhythm of the people they lead", 0047), acting as personaIn
+// in fixtures.ts, as mocks/gsrOnDemand.ts does. Every other field is taken as given.
 import type { Profile, Role } from "../../types/database.ts";
-import { ALL_PROFILES, personaFromLocation } from "../fixtures.ts";
+import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
+import { ALL_PROFILES, personaFromLocation, personaIn } from "../fixtures.ts";
 import type { ProfilePatch as RealProfilePatch } from "../../services/profiles.ts";
+import { gsrModeOf } from "./companies.ts";
 
 const profiles: Profile[] = ALL_PROFILES.map((p) => ({ ...p }));
 
@@ -83,9 +89,32 @@ export async function listAllProfiles(): Promise<Profile[]> {
 
 export type ProfilePatch = RealProfilePatch;
 
+// What the client says when no policy lets the update reach the row: .single() finds nothing.
+const NO_ROW = "JSON object requested, multiple (or no) rows returned";
+
+// A change of rhythm, as 0047 holds it: Rococo and an admin of the company set anyone's; someone who
+// leads the person sets it in a company on demand and changes nothing else; the person themself is
+// refused by the guard, and anyone else reaches no row.
+function guardRhythm(target: Profile, patch: ProfilePatch): void {
+  if (patch.gsr_cadence === undefined || patch.gsr_cadence === target.gsr_cadence || !target.company_id) return;
+  const me = personaIn(target.company_id);
+  if (me.is_rococo_admin) return;
+  if (me.company_id !== target.company_id) throw new Error(NO_ROW);
+  if (isCompanyAdminRole(me.role)) return;
+  const leads = me.id !== target.id && ledBy(me, peopleOf(target.company_id)).some((p) => p.id === target.id);
+  if (leads && gsrModeOf(target.company_id) === "on_demand") {
+    const others = (Object.keys(patch) as Array<keyof ProfilePatch>).filter((key) => key !== "gsr_cadence" && patch[key] !== target[key]);
+    if (others.length > 0) throw new Error("A manager can change only the GSR rhythm of the people they lead.");
+    return;
+  }
+  if (me.id === target.id) throw new Error("Only admins can change employment details.");
+  throw new Error(NO_ROW);
+}
+
 export async function updateProfile(id: string, patch: ProfilePatch): Promise<Profile> {
   const index = profiles.findIndex((p) => p.id === id);
   if (index === -1) throw new Error("Profile not found.");
+  guardRhythm(profiles[index], patch);
   const next = { ...profiles[index], ...patch, updated_at: new Date().toISOString() };
   // division_id mirrors division_ids: the one division, or null for none or several (0038).
   if (patch.division_ids !== undefined) {
