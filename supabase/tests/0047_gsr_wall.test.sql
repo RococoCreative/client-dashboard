@@ -290,3 +290,57 @@ select tests.assert(
   and (select gsr_cadence = 'monthly' from public.profiles where id = tests.id('g_mgr')),
   'on_demand_manager: the rhythm did not land, or another column or person moved'
 );
+
+-- ---------------------------------------------------------------------------------------
+-- No GSR month in a company on demand
+-- ---------------------------------------------------------------------------------------
+
+-- case: on_demand_opens_no_gsr_month
+-- rba is on demand from case a_named_company_moves. Its admin is refused a month, and opens a
+-- quarter as before; the SQL editor without the conversion flag is refused too; turning a review
+-- cycle into a month is refused; klasik, on periods, opens a month as before.
+select tests.create_person('w_k_admin', tests.company('klasik'), 'admin');
+update public.profiles set view_all_divisions = true where id = tests.id('w_k_admin');
+select tests.act_as(tests.id('g_admin'));
+select tests.assert_raises(
+  format($q$insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+            values (%L, 'Sample on demand month 47', 'monthly', '2031-10-01', '2031-10-31')$q$, tests.company('rba')),
+  'This company has GSRs on demand, so it opens no GSR months.'
+);
+select tests.assert(
+  tests.rows_of(format($q$insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+                          values (%L, 'Sample on demand quarter 47', 'quarterly', '2031-10-01', '2031-12-31')$q$,
+                       tests.company('rba'))) = 1,
+  'no_month: an admin of a company on demand could not open a quarterly review cycle'
+);
+select tests.assert_raises(
+  format($q$update public.review_cycles set cadence = 'monthly', period_end = '2031-10-31' where id = %L$q$,
+         (select id from public.review_cycles where name = 'Sample on demand quarter 47')),
+  'This company has GSRs on demand, so it opens no GSR months.'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert_raises(
+  format($q$insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+            values (%L, 'Sample editor month 47', 'monthly', '2031-11-01', '2031-11-30')$q$, tests.company('rba')),
+  'This company has GSRs on demand, so it opens no GSR months.'
+);
+select tests.assert_raises(
+  format($q$update public.review_cycles set cadence = 'monthly' where name = 'Sample year 47' and company_id = %L$q$,
+         tests.company('rba')),
+  'This company has GSRs on demand, so it opens no GSR months.'
+);
+select tests.act_as(tests.id('w_k_admin'));
+select tests.assert(
+  tests.rows_of(format($q$insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
+                          values (%L, 'Sample periods month 47', 'monthly', '2031-10-01', '2031-10-31')$q$,
+                       tests.company('klasik'))) = 1,
+  'no_month: a company on periods could not open a month'
+);
+reset role; select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  not exists (select 1 from public.review_cycles where company_id = tests.company('rba') and kind = 'gsr')
+  and (select kind = 'review' and cadence = 'quarterly' from public.review_cycles where name = 'Sample on demand quarter 47')
+  and (select kind = 'review' and cadence = 'annual' from public.review_cycles where name = 'Sample year 47')
+  and (select kind = 'gsr' from public.review_cycles where name = 'Sample periods month 47'),
+  'no_month: a GSR month reached a company on demand, or a review cycle or a periods month did not land as before'
+);

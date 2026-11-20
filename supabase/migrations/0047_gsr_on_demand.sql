@@ -201,6 +201,10 @@ drop function if exists private.person_gsr_cadence(uuid);
 -- The 0046 trigger function reduced to one job: on every insert and update, a cycle's kind is
 -- set from its cadence, monthly a GSR and anything else a review. The period rules, the kind
 -- lock, the cadence messages and the naming of a member's period are gone with what they served.
+-- One check follows for a company on demand only (gsr_on_demand is false for a company on
+-- periods, so it never reaches one): it opens no GSR month, by insert or by turning a review cycle
+-- into one, whoever writes, except the put-back (section 12), which re-inserts a moved company's
+-- months under hub.gsr_conversion with nobody signed in before it returns the setting.
 create or replace function public.guard_review_cycle_period()
 returns trigger
 language plpgsql
@@ -209,6 +213,12 @@ set search_path = ''
 as $$
 begin
   new.kind := case when new.cadence = 'monthly' then 'gsr' else 'review' end;
+  if new.kind = 'gsr'
+     and private.gsr_on_demand(new.company_id)
+     and not (coalesce(current_setting('hub.gsr_conversion', true), '') = '1' and (select auth.uid()) is null) then
+    raise exception 'This company has GSRs on demand, so it opens no GSR months.'
+      using errcode = 'check_violation';
+  end if;
   return new;
 end;
 $$;

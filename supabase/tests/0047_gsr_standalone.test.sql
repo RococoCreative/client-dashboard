@@ -793,9 +793,11 @@ select tests.assert_raises(
   '%reviews_home_check%'
 );
 reset role; select set_config('request.jwt.claims', '', true);
-select tests.act_as(tests.id('s_admin'));
+select set_config('hub.gsr_conversion', '1', true);
 insert into public.review_cycles (company_id, name, cadence, period_start, period_end)
 values (tests.company('rba'), 'Sample rba month 47', 'monthly', '2031-07-01', '2031-07-31');
+select set_config('hub.gsr_conversion', '', true);
+select tests.act_as(tests.id('s_admin'));
 select tests.assert_raises(
   format($q$update public.reviews set cycle_id = (select id from public.review_cycles where name = 'Sample rba month 47')
             where id = %L$q$, tests.id('g_e2')),

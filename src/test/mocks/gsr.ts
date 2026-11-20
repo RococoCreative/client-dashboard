@@ -21,6 +21,7 @@ import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
 import { mockGsrStatus, patchMockGsrDiscussion } from "./gsrOnDemand.ts";
+import { gsrModeOf } from "./companies.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -129,7 +130,12 @@ export async function getCycle(id: string): Promise<ReviewCycle> {
   return found;
 }
 export type CycleInput = Pick<ReviewCycle, "company_id" | "name" | "cadence" | "period_start" | "period_end"> & Partial<Pick<ReviewCycle, "theme" | "theme_description" | "status">>;
+// guard_review_cycle_period (0047): a company on demand opens no GSR month, by insert or by turning
+// a review cycle into one (updateCycle). A company on periods is never reached.
+const NO_GSR_MONTH = "This company has GSRs on demand, so it opens no GSR months.";
+
 export async function createCycle(input: CycleInput): Promise<ReviewCycle> {
+  if (input.cadence === "monthly" && gsrModeOf(input.company_id) === "on_demand") throw new Error(NO_GSR_MONTH);
   const created: ReviewCycle = { id: nextId("cycle"), theme: null, theme_description: null, status: "open", created_by: null, created_at: now(), updated_at: now(), kind: input.cadence === "monthly" ? "gsr" : "review", ...input };
   cycles.push(created);
   return created;
@@ -138,6 +144,11 @@ export async function updateCycle(id: string, patch: Partial<Omit<CycleInput, "c
   // Only a full-scope admin changes a cycle (0038, "Full-scope admins change cycles"); anyone else's
   // update matches no row, and the service's .single() reports it as not changed.
   if (!hasFullScope(personaFromLocation().profile)) throw new Error(NOT_CHANGED_MESSAGE);
+  const cycle = cycles.find((c) => c.id === id);
+  // Only the turn into a month is refused here. The database refuses any write to a GSR month in a
+  // company on demand, but a moved company has none left; the fixtures keep RBA's months for the
+  // tests that switch RBA's format, and those still open and close them.
+  if (cycle && patch.cadence === "monthly" && cycle.cadence !== "monthly" && gsrModeOf(cycle.company_id) === "on_demand") throw new Error(NO_GSR_MONTH);
   return patchIn(cycles, id, { ...patch, updated_at: now() } as Partial<ReviewCycle>);
 }
 export async function deleteCycle(id: string): Promise<void> {

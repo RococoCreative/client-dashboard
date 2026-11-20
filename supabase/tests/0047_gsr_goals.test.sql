@@ -60,9 +60,11 @@ select 'gsr_e1_old', id from public.reviews
 
 -- A month in each company, each with a review for its person: rba's to prove a review in a cycle
 -- is no GSR for review_id, klasik's for the periods rules.
+select set_config('hub.gsr_conversion', '1', true);
 insert into public.review_cycles (company_id, name, cadence, period_start, period_end) values
   (tests.company('rba'), 'Sample rba month 47g', 'monthly', '2031-05-01', '2031-05-31'),
   (tests.company('klasik'), 'Sample klasik month 47g', 'monthly', '2031-05-01', '2031-05-31');
+select set_config('hub.gsr_conversion', '', true);
 insert into tests.fixture (name, id)
 select case name when 'Sample rba month 47g' then 'c_r_month' else 'c_k_month' end, id
   from public.review_cycles where name like 'Sample % month 47g';

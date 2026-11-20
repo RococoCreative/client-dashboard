@@ -9,14 +9,13 @@
 // the company's admin.
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
+import { NOT_CHANGED_MESSAGE, errorMessage } from "../../lib/errors.ts";
 import type { Profile } from "../../types/database.ts";
 import { actingPerson, setActingPerson } from "../actingPerson.ts";
 import { KLASIK, RBA, makeHub } from "../fixtures.ts";
 import { renderWithHub } from "../renderWithHub.tsx";
 import { getCompany } from "./companies.ts";
-import { createGoal, createGoalNote, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateGoal, updateGoalNote, updateReview } from "./gsr.ts";
-import {
+import { createCycle, createGoal, createGoalNote, deleteCycle, deleteGoal, deleteGoalNote, goalLinkProblem, listCompanyReviews, listEmployeeReviews, listGoals, updateCycle, updateGoal, updateGoalNote, updateReview } from "./gsr.ts";import {
   OWN_DONE_DELETE_MESSAGE,
   OWN_GSR_MESSAGE,
   deleteGsr,
@@ -262,6 +261,22 @@ describe("GSRs on demand mock", () => {
     const done = await markGsrDone(gsr.id, 70, admin);
     await expect(markGsrDone(gsr.id, 95, admin)).rejects.toThrow("This review is signed off. Reopen it to change it.");
     expect(await getGsr(gsr.id)).toMatchObject({ status: "complete", gsr_score: 70, completed_at: done.completed_at });
+  });
+
+  it("opens no GSR month in a company on demand, as 0047 does, and leaves review cycles and periods as they were", async () => {
+    const message = "This company has GSRs on demand, so it opens no GSR months.";
+    setMockGsrMode(rba, "on_demand");
+    actAs(admin);
+    const month = { company_id: rba, name: "October 2031", cadence: "monthly" as const, period_start: "2031-10-01", period_end: "2031-10-31", theme: null, theme_description: null };
+    await expect(createCycle(month)).rejects.toThrow(message);
+    const quarter = await createCycle({ ...month, name: "Q4 2031", cadence: "quarterly", period_end: "2031-12-31" });
+    expect(quarter.kind).toBe("review");
+    await expect(updateCycle(quarter.id, { cadence: "monthly" })).rejects.toThrow(message);
+    expect(errorMessage(new Error(message))).toBe(message);
+    const klasikMonth = await createCycle({ ...month, company_id: KLASIK.company.id });
+    expect(klasikMonth.kind).toBe("gsr");
+    await deleteCycle(quarter.id);
+    await deleteCycle(klasikMonth.id);
   });
 
   it("lets only an admin and the person write a GSR's opening discussion, and freezes a done one", async () => {
