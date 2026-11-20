@@ -5,6 +5,7 @@
 // wall: it refuses a GSR in a company on periods, a third open one, and anyone marking their own
 // done or reopening it. A review in a cycle is read through services/gsr.ts, never here.
 import { requireRows } from "../lib/errors.ts";
+import { readAllPages } from "../lib/paging.ts";
 import type { DateRange } from "../lib/gsr/onDemand.ts";
 import type { Gsr, GsrLastStarted } from "../types/database.ts";
 import { REVIEW_COLUMNS } from "./gsr.ts";
@@ -20,33 +21,41 @@ export async function getGsr(id: string): Promise<Gsr> {
   return data as Gsr;
 }
 
-// One person's GSRs in one company, newest start first; the later-created row wins a tie.
+// One person's GSRs in one company, newest start first; the later-created row wins a tie. Every
+// row, a page at a time (readAllPages): id ends the order so no row is skipped or repeated.
 export async function listPersonGsrs(companyId: string, employeeId: string): Promise<Gsr[]> {
-  const { data, error } = await db()
-    .from("reviews")
-    .select(REVIEW_COLUMNS)
-    .eq("company_id", companyId)
-    .eq("employee_id", employeeId)
-    .is("cycle_id", null)
-    .order("started_on", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as Gsr[]) ?? [];
+  return readAllPages<Gsr>((from, to) =>
+    db()
+      .from("reviews")
+      .select(REVIEW_COLUMNS)
+      .eq("company_id", companyId)
+      .eq("employee_id", employeeId)
+      .is("cycle_id", null)
+      .order("started_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to)
+      .then(({ data, error }) => ({ data: data as Gsr[] | null, error })),
+  );
 }
 
-// The GSRs a log over a date range reads, in one query: those marked done inside the range, and
-// every one open now, whenever it began.
+// The GSRs a log over a date range reads: those marked done inside the range, and every one open
+// now, whenever it began. Every row, a page at a time, in the same total order as above, so a
+// company doing fifty GSRs a day is never undercounted.
 export async function listGsrsForLog(companyId: string, range: DateRange): Promise<Gsr[]> {
-  const { data, error } = await db()
-    .from("reviews")
-    .select(REVIEW_COLUMNS)
-    .eq("company_id", companyId)
-    .is("cycle_id", null)
-    .or(`and(done_on.gte.${range.from},done_on.lte.${range.to}),status.neq.complete`)
-    .order("started_on", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as Gsr[]) ?? [];
+  return readAllPages<Gsr>((from, to) =>
+    db()
+      .from("reviews")
+      .select(REVIEW_COLUMNS)
+      .eq("company_id", companyId)
+      .is("cycle_id", null)
+      .or(`and(done_on.gte.${range.from},done_on.lte.${range.to}),status.neq.complete`)
+      .order("started_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to)
+      .then(({ data, error }) => ({ data: data as Gsr[] | null, error })),
+  );
 }
 
 // The day each person's last GSR began, for the due flag (view gsr_last_started, read through the

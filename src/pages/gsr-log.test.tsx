@@ -52,6 +52,8 @@ import { setActingPerson } from "../test/actingPerson.ts";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import type { Gsr, GsrCadence, Profile } from "../types/database.ts";
 import GsrLogPage from "./gsr/GsrLogPage.tsx";
+import GsrSetupPage from "./gsr/GsrSetupPage.tsx";
+import { renderWithHub } from "../test/renderWithHub.tsx";
 
 const onDemand = { ...RBA.company, gsr_mode: "on_demand" as const };
 const admin = makeHub("admin", onDemand);
@@ -360,5 +362,24 @@ describe("the GSRs address", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { level: 1, name: month.name }, { timeout: 4000 })).toBeInTheDocument();
     expect(window.location.pathname).toBe(`/gsr/cycles/${month.id}`);
+  });
+});
+
+describe("GSRs, Setup", () => {
+  const setup = (hub: HubValue) => renderWithHub(<GsrSetupPage />, hub, { path: "/gsr/setup", pattern: "/gsr/setup" });
+
+  it("describes itself by GSR, not by month, in a company on demand", async () => {
+    setup(admin);
+    expect(await screen.findByText("What shapes every GSR: the focus topic each GSR is built on, and how many goals each one requires.")).toBeInTheDocument();
+    expect(screen.queryByText(/What shapes every month/)).not.toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "GSRs" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["GSRs", "Setup"]);
+  });
+
+  it("reads as it always has for a company on periods", async () => {
+    setup(makeHub("admin", KLASIK.company));
+    expect(await screen.findByText("What shapes every month: the focus topic each GSR is built on, and how many goals each one requires.")).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "GSRs" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Periods", "Setup"]);
   });
 });

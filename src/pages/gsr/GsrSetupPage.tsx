@@ -2,6 +2,8 @@
 // sit in Goals) and, for a company that scores its GSRs, how many goals each GSR requires (it used
 // to sit inside the Monthly GSRs pillar on Reviews). Which pillars exist is the company's own data,
 // never a branch on its name (rule 12): no active Monthly GSRs pillar means GSRs are not scored here.
+// A company whose GSRs are on demand (companies.gsr_mode, 0047) has no months: its tabs and its
+// description speak of GSRs; the focus topic calendar stays by calendar month.
 import FocusTopicCalendar from "../../components/gsr/FocusTopicCalendar.tsx";
 import RequiredGoalsField from "../../components/gsr/RequiredGoalsField.tsx";
 import Notice from "../../components/ui/Notice.tsx";
@@ -27,7 +29,11 @@ export default function GsrSetupPage() {
       <PageHeader
         eyebrow={current.name}
         title={SECTION_LABEL.gsr}
-        description="What shapes every month: the focus topic each GSR is built on, and how many goals each one requires."
+        description={
+          current.gsr_mode === "on_demand"
+            ? "What shapes every GSR: the focus topic each GSR is built on, and how many goals each one requires."
+            : "What shapes every month: the focus topic each GSR is built on, and how many goals each one requires."
+        }
       />
       <Tabs items={gsrTabsFor(current.gsr_mode)} label="GSRs" />
       <div className="space-y-6">
