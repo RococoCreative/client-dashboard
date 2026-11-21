@@ -142,12 +142,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
-  set up yet." until all three are set. Live is version 4 (2026-11-18), the task email only: it
-  sends only for the task's creator, an owner or admin, or Rococo. The version in this repo also
-  sends the invitation email and is not deployed yet; until it is, Send invite on the People
-  page reports that the email did not go out and copies the link instead. It needs `0048` first.
-  Redeploy it with `supabase functions deploy notify` (JWT check on, no new secrets) after
-  applying `0048` and before merging the app, and record the version here.
+  set up yet." until all three are set. Live is version 5 (found deployed 2026-11-21, after `0048`): the task email, sent only for
+  the task's creator, an owner or admin, or Rococo, and the invitation email.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
   (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
@@ -175,7 +171,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   Setting Review runs at, monthly by default), with the guards and function bodies that read
   them. Every company is on the defaults, so nothing visible changed. No live screen reads either
   column; the app that ships with `0047` reads both.
-- **Written, not applied yet:** `0047_gsr_on_demand` (see GSRs on demand, and its release order
+- **Applied (found in the live database 2026-11-21; RBA is on demand, Kingdom and Klasik on periods):** `0047_gsr_on_demand` (see GSRs on demand, and its release order
   there). It adds `companies.gsr_mode`, GSRs with no cycle and their goals, the wall that keeps all
   of it out of a company on periods, the move of one company over, and takes back what `0046` put
   on every company. Every company stays on periods when it goes in, so nothing visible changes. It
@@ -185,13 +181,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `0046`. If any of them is ever pasted again after `0047`, paste `0047` straight after it.
   `0046` matters most: pasted again on its own it puts members opening cycles, the rhythm
   trigger and whole-month dates back on every company.
-- **Written, not applied yet:** `0048_invitation_emails`. It holds `invitations.email` to one
+- **Applied (found in the live database 2026-11-21):** `0048_invitation_emails`. It holds `invitations.email` to one
   plain address and adds `invitations.last_emailed_at`, the invitation email's 10 minute pace,
   which no signed-in writer can set or change. Every live invitation row already matches the
   address check. It does not depend on `0047`. The order: apply `0048`, then deploy `notify`, then
   merge the app (the app and the function both read `last_emailed_at`).
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Written, not applied yet:** `0049_delete_people`. An owner or admin deletes a person who has
+- **Applied (found in the live database 2026-11-21):** `0049_delete_people`. An owner or admin deletes a person who has
   signed in (see The roster and accounts): a delete policy, the ranked guard rebuilt with the
   refusals for a signed-in person, the private block list `private.blocked_signups`, a trigger that
   blocks the address and deletes the person's `auth.users` row, the signup gate refusing a blocked
