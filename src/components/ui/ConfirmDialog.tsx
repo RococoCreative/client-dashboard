@@ -9,6 +9,11 @@
 // While `busy`, the dialog holds still: Cancel is disabled, and Escape and the backdrop do nothing.
 // An action already sent cannot be called back, so closing then would only hide its answer, or
 // let it land in whatever dialog opened next.
+//
+// An action that cannot be undone can ask for more before it goes: `children` sit under the body
+// (a typed confirmation, a softer option), and `confirmDisabled` holds the confirm button until
+// they are satisfied.
+import type { ReactNode } from "react";
 import Modal from "./Modal.tsx";
 import Button from "./Button.tsx";
 import Notice from "./Notice.tsx";
@@ -20,6 +25,8 @@ export default function ConfirmDialog({
   busy = false,
   error = "",
   tone = "danger",
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }: {
@@ -29,6 +36,8 @@ export default function ConfirmDialog({
   busy?: boolean;
   error?: string;
   tone?: "danger" | "primary";
+  confirmDisabled?: boolean;
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -42,12 +51,13 @@ export default function ConfirmDialog({
           {title}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-2">{body}</p>
+        {children ? <div className="mt-4 space-y-4">{children}</div> : null}
         {error ? <Notice tone="error" className="mt-4">{error}</Notice> : null}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={cancel} disabled={busy}>
             Cancel
           </Button>
-          <Button variant={tone === "primary" ? "primary" : "danger-solid"} onClick={onConfirm} disabled={busy}>
+          <Button variant={tone === "primary" ? "primary" : "danger-solid"} onClick={onConfirm} disabled={busy || confirmDisabled}>
             {busy ? "Working..." : confirmLabel}
           </Button>
         </div>

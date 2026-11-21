@@ -22,7 +22,7 @@ import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
 import { isCompanyAdminRole, ledBy } from "../../lib/people.ts";
 import { fromAll, personaIn } from "../fixtures.ts";
 import { gsrModeOf, resetCompanyGsrModes, setCompanyGsrMode, timeZoneOf } from "./companies.ts";
-import { companyOf, peopleOf } from "./profiles.ts";
+import { companyOf, onPersonDeleted, peopleOf } from "./profiles.ts";
 
 export const TWO_OPEN_MESSAGE = "This person already has two GSRs open. Mark the earlier one done first.";
 export const OWN_GSR_MESSAGE = "Your own GSR is marked done and reopened by someone who leads you.";
@@ -35,6 +35,12 @@ const INSERT_REFUSED = 'new row violates row-level security policy for table "re
 
 const copy = (gsr: Gsr): Gsr => ({ ...gsr });
 const gsrs: Gsr[] = fromAll((b) => b.gsrs).map(copy);
+
+// A deleted person's GSRs go with them, and their name goes from the ones they marked done (0049).
+onPersonDeleted((profileId) => {
+  gsrs.splice(0, gsrs.length, ...gsrs.filter((g) => g.employee_id !== profileId));
+  for (const g of gsrs) if (g.reviewer_id === profileId) g.reviewer_id = null;
+});
 
 let counter = 0;
 const nextId = () => `gsr-new-${++counter}`;

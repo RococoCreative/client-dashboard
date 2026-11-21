@@ -126,3 +126,16 @@ export async function deleteStaffProfile(id: string): Promise<void> {
   if (error) throw error;
   requireRows(data, "That person was not removed. They may have signed in, or they are not yours to remove.");
 }
+
+// Deletes a person who has signed in, with everything on their profile (0049). The database
+// deletes their sign-in too and keeps their address out until someone invites it again. Its guard
+// refuses yourself, a Rococo admin's profile, someone ranked above you and a company's only owner,
+// each in its own words; a delete RLS filtered out (not yours to manage) returns no row. The
+// company is named, as every page names it (rule 4), so a stale page never deletes outside it.
+export const PERSON_NOT_DELETED = "That person was not deleted. They may be gone already, or they are not yours to delete.";
+
+export async function deletePerson(companyId: string, profileId: string): Promise<void> {
+  const { data, error } = await db().from("profiles").delete().eq("id", profileId).eq("company_id", companyId).select("id");
+  if (error) throw error;
+  requireRows(data, PERSON_NOT_DELETED);
+}

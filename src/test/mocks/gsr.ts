@@ -22,6 +22,7 @@ import { fromAll, personaFromLocation } from "../fixtures.ts";
 import { hasFullScope } from "../../lib/people.ts";
 import { mockGsrStatus, patchMockGsrDiscussion } from "./gsrOnDemand.ts";
 import { gsrModeOf } from "./companies.ts";
+import { onPersonDeleted } from "./profiles.ts";
 
 const pillars = fromAll((b) => b.pillars).map((x) => ({ ...x }));
 const criteria = fromAll((b) => b.criteria).map((x) => ({ ...x }));
@@ -34,6 +35,29 @@ const goalNotes = fromAll((b) => b.goalNotes).map((x) => ({ ...x }));
 const goalPrivate = fromAll((b) => b.goalPrivate).map((x) => ({ ...x, action_steps: x.action_steps.map((s) => ({ ...s })) }));
 const companyGoals = fromAll((b) => b.companyGoals).map((x) => ({ ...x }));
 const cycleOmissions = fromAll((b) => b.cycleOmissions).map((x) => ({ ...x }));
+
+// Keeps only the rows that pass, in place, so every reader of the store sees the change.
+function keepWhere<T>(rows: T[], keep: (row: T) => boolean): void {
+  rows.splice(0, rows.length, ...rows.filter(keep));
+}
+
+// A deleted person's reviews (and their scores), ratings, goals (and their notes and private rows)
+// and omissions go; their name goes from the reviews they signed off, the goals they set and the
+// notes they wrote for others (0049).
+onPersonDeleted((profileId) => {
+  const gone = new Set(reviews.filter((r) => r.employee_id === profileId).map((r) => r.id));
+  keepWhere(reviews, (r) => r.employee_id !== profileId);
+  keepWhere(scores, (s) => !gone.has(s.review_id));
+  keepWhere(impactScores, (i) => i.employee_id !== profileId);
+  const goneGoals = new Set(goals.filter((g) => g.employee_id === profileId).map((g) => g.id));
+  keepWhere(goals, (g) => g.employee_id !== profileId);
+  keepWhere(goalNotes, (n) => n.employee_id !== profileId && !goneGoals.has(n.goal_id));
+  keepWhere(goalPrivate, (x) => x.employee_id !== profileId);
+  keepWhere(cycleOmissions, (o) => o.employee_id !== profileId);
+  for (const r of reviews) if (r.reviewer_id === profileId) r.reviewer_id = null;
+  for (const g of goals) if (g.created_by === profileId) g.created_by = null;
+  for (const n of goalNotes) if (n.author_id === profileId) n.author_id = null;
+});
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-new-${++counter}`;
