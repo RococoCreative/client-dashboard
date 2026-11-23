@@ -517,8 +517,10 @@ off later, and Disconnect always works.
 What Rococo does for a sign-in tool: register the hub once per tool with the provider (a
 Marketplace app, a developer app or an OAuth client, with the redirect URL under The connections
 function), then add the two secrets the card names to the Supabase function secrets. Until both
-are present the card reads Not available yet. JobTread (an access key per company, entered by the
-company) and links tools such as Monday need nothing from Rococo.
+are present the card reads Not available yet. JobTread is not built yet: its card reads Coming next,
+and Rococo's line reads "Rococo: not built yet." Once it is built, each company pastes its own
+access key, so Rococo will have nothing to set up for it. Links tools such as Monday need nothing
+from Rococo today.
 
 
 ## Impact scores
