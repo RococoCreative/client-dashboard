@@ -65,14 +65,13 @@ function readOutcome(params: URLSearchParams): Outcome | null {
 // Rococo's side of a tool's setup, for a Rococo admin only. Secret names are not secret, but they
 // are Rococo's business, so a company admin never sees this line.
 function rococoLineFor(connector: Connector, setup: Record<ConnectionProvider, boolean> | null): string {
-  if (connector.availability === "live" && connector.provider) {
-    if (setup === null) return "Setup status unavailable.";
-    if (setup[connector.provider]) return "Rococo: app keys added.";
-    const [id, secret] = connector.secretNames ?? ["", ""];
-    return `Rococo: app keys missing. Add ${id} and ${secret}.`;
-  }
+  if (connector.availability === "next" || connector.availability === "soon") return "Rococo: not built yet.";
   if (connector.how === "access_key" || connector.how === "links") return "Rococo: nothing to set up.";
-  return "Rococo: not built yet.";
+  if (!connector.provider || !connector.secretNames) return "Rococo: nothing to set up.";
+  if (setup === null) return "Setup status unavailable.";
+  if (setup[connector.provider]) return "Rococo: app keys added.";
+  const [id, secret] = connector.secretNames;
+  return `Rococo: app keys missing. Add ${id} and ${secret}.`;
 }
 
 type Filter = "all" | ConnectorGroup | "connected";

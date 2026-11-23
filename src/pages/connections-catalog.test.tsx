@@ -182,7 +182,8 @@ describe("the connections catalog", () => {
     expect(within(card("GoHighLevel")).getByText("Rococo: app keys added.")).toBeInTheDocument();
     expect(within(card("Google Sheets")).getByText("Rococo: app keys added.")).toBeInTheDocument();
     expect(within(card("Monday.com")).getByText("Rococo: nothing to set up.")).toBeInTheDocument();
-    expect(within(card("JobTread")).getByText("Rococo: nothing to set up.")).toBeInTheDocument();
+    // A coming tool is not built, whatever way it will connect.
+    expect(within(card("JobTread")).getByText("Rococo: not built yet.")).toBeInTheDocument();
     expect(within(card("Xero")).getByText("Rococo: not built yet.")).toBeInTheDocument();
     unmount();
 
