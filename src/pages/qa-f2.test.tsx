@@ -32,6 +32,7 @@ vi.mock("../services/jobRoles.ts", async () => {
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
@@ -228,6 +229,6 @@ describe("connection outcome", () => {
   it("still says so when the row does read connected", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/?connected=gohighlevel" });
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Disconnect GoHighLevel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage GoHighLevel" })).toBeInTheDocument();
   });
 });

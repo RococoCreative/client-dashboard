@@ -25,6 +25,7 @@ vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
@@ -74,7 +75,7 @@ import ProjectPage from "./production/ProjectPage.tsx";
 import WinsPage from "./WinsPage.tsx";
 import SalesFinancePage from "./salesFinance/SalesFinancePage.tsx";
 import ControlsPage from "./salesFinance/ControlsPage.tsx";
-import ConnectionsPanel from "../components/settings/ConnectionsPanel.tsx";
+import ConnectionsCatalog from "../components/settings/ConnectionsCatalog.tsx";
 import MappedTable from "../components/sync/MappedTable.tsx";
 
 const admin = makeHub("admin");
@@ -1162,28 +1163,38 @@ describe("job roles", () => {
 });
 
 describe("connections", () => {
-  it("shows the company's own connections and disconnects one from settings", async () => {
+  const toolCard = (name: string) => screen.findByRole("article", { name });
+
+  it("shows the company's own connections on the catalog in settings", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin);
     expect(await screen.findByRole("heading", { name: "Connections" })).toBeInTheDocument();
     // HighLevel is connected by the owner, with the account it points at; QuickBooks is not.
-    expect(await screen.findByText("Klasik Construction (HighLevel)", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Disconnect GoHighLevel" }));
-    await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
-    expect(screen.getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+    const ghl = await toolCard("GoHighLevel");
+    expect(within(ghl).getByText("Klasik Construction (HighLevel)", { exact: false })).toBeInTheDocument();
+    expect(within(ghl).getByText("Connected")).toBeInTheDocument();
+    const qbo = await toolCard("QuickBooks Online");
+    expect(within(qbo).getByText("Not connected")).toBeInTheDocument();
+    expect(within(qbo).getByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
+    // The old pointer to Resources > Links is gone; Monday's card stands in for it.
+    expect(screen.queryByRole("heading", { name: "Links to outside tools" })).not.toBeInTheDocument();
   });
 
-  it("keeps Google Sheets off the Connections card until a page asks for it", async () => {
-    const { unmount } = renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} />, admin);
-    expect(await screen.findByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
-    expect(screen.queryByText("Google Sheets")).not.toBeInTheDocument();
+  it("offers Google Sheets only to a company with data sources", async () => {
+    const { unmount } = renderWithHub(<ConnectionsCatalog company={KLASIK.company} />, admin);
+    const off = await toolCard("Google Sheets");
+    expect(within(off).getByText("Not on for this company")).toBeInTheDocument();
+    expect(within(off).queryByRole("button", { name: "Connect Google Sheets" })).not.toBeInTheDocument();
     unmount();
 
-    renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} providers={["gohighlevel", "quickbooks", "google_sheets"]} />, admin);
-    expect(await screen.findByText("Google Sheets")).toBeInTheDocument();
-    expect(screen.getByText("Reporting tabs from the company's own spreadsheets, read-only, refreshed on a schedule.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect Google Sheets" })).toBeInTheDocument();
+    // With the module and no spreadsheet account yet, the card offers Connect.
+    const kingdomAdmin = makeHub("admin", KINGDOM.company);
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.filter((r) => r.provider !== "google_sheets"));
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<ConnectionsCatalog company={KINGDOM.company} />, kingdomAdmin);
+    const on = await toolCard("Google Sheets");
+    expect(within(on).getByText("Reporting tabs from the company's own spreadsheets.")).toBeInTheDocument();
+    expect(within(on).getByRole("button", { name: "Connect Google Sheets" })).toBeInTheDocument();
   });
 
   it("shows a connection's error line in the danger colour", async () => {
@@ -1193,7 +1204,7 @@ describe("connections", () => {
       rows.map((r) => (r === ghl ? { ...r, status: "error" as const, last_error: "The provider refused the saved sign-in." } : r)),
     );
     onTestFinished(() => spy.mockRestore());
-    renderWithHub(<ConnectionsPanel companyId={KLASIK.company.id} />, admin);
+    renderWithHub(<ConnectionsCatalog company={KLASIK.company} />, admin);
     const line = await screen.findByText("The provider refused the saved sign-in.");
     expect(line).toHaveClass("text-danger");
   });
@@ -1910,16 +1921,16 @@ describe("data sources", () => {
   it("shows the Google Sheets connection only to a company with data sources", async () => {
     const { unmount } = renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     await screen.findByRole("heading", { name: "Connections" });
-    const connections = card("Connections");
-    const row = (await within(connections).findByText("Google Sheets")).closest("li") as HTMLElement;
-    expect(within(row).getByText("Connected")).toBeInTheDocument();
-    expect(within(row).getByText((text) => text.includes("sample-reports@example.com"))).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Disconnect Google Sheets" })).toBeInTheDocument();
+    const sheets = await screen.findByRole("article", { name: "Google Sheets" });
+    expect(within(sheets).getByText("Connected")).toBeInTheDocument();
+    expect(within(sheets).getByText((text) => text.includes("sample-reports@example.com"))).toBeInTheDocument();
+    expect(within(sheets).getByRole("button", { name: "Manage Google Sheets" })).toBeInTheDocument();
     unmount();
 
     renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/settings/connections", pattern: "/settings/connections" });
-    expect(await screen.findByText("GoHighLevel")).toBeInTheDocument();
-    expect(screen.queryByText("Google Sheets")).not.toBeInTheDocument();
+    const off = await screen.findByRole("article", { name: "Google Sheets" });
+    expect(within(off).getByText("Not on for this company")).toBeInTheDocument();
+    expect(within(off).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("confirms a Google Sheets connection on the way back", async () => {

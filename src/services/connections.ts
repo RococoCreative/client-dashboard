@@ -2,7 +2,7 @@
 // starting a connection, finishing it, and disconnecting all go through the connections Edge
 // Function, which is the only thing that holds a provider token. Rule 6's posture, extended:
 // no provider secret and no provider token ever reaches the app or Vercel.
-import type { CompanyConnection, ConnectionProvider } from "../types/database.ts";
+import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type ConnectionProvider } from "../types/database.ts";
 import { invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
@@ -35,10 +35,17 @@ export async function loadConnectorSetup(companyId: string): Promise<Record<Conn
   try {
     const result = await invokeFunction<{ keys?: unknown }>("connections/status", { company_id: companyId });
     const keys = result?.keys;
-    if (!keys || typeof keys !== "object") return null;
-    const values = Object.values(keys as Record<string, unknown>);
-    if (values.some((v) => typeof v !== "boolean")) return null;
-    return keys as Record<ConnectionProvider, boolean>;
+    if (!keys || typeof keys !== "object" || Array.isArray(keys)) return null;
+    // Every provider needs its own boolean: one left out would read as keys missing and hide a
+    // Connect that works, so a partial answer is "cannot tell", not "missing".
+    const answer = keys as Record<string, unknown>;
+    const setup = {} as Record<ConnectionProvider, boolean>;
+    for (const provider of keysOf(CONNECTION_PROVIDER_LABELS)) {
+      const value = answer[provider];
+      if (typeof value !== "boolean") return null;
+      setup[provider] = value;
+    }
+    return setup;
   } catch {
     return null;
   }

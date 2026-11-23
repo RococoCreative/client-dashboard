@@ -27,6 +27,7 @@ vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
@@ -172,19 +173,23 @@ describe("Settings hub", () => {
     expect(screen.queryByRole("heading", { name: "Focus topic calendar" })).not.toBeInTheDocument();
   });
 
-  it("keeps connections and data sources on Connections, and points to Resources for links", async () => {
+  it("keeps connections and data sources on Connections, with Monday's links on its own card", async () => {
     renderWithHub(<SettingsPage tab="connections" />, kingdomAdmin, { path: "/settings/connections", pattern: "/settings/connections" });
     expect(tabsOf("Settings").current).toEqual(["Connections"]);
     expect(await screen.findByRole("heading", { name: "Connections" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Data sources" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Links" })).toHaveAttribute("href", "/resources/links");
-    expect(screen.getByRole("heading", { name: "Links to outside tools" })).toBeInTheDocument();
+    const monday = await screen.findByRole("article", { name: "Monday.com" });
+    expect(within(monday).getByText("Linked")).toBeInTheDocument();
+    // The old pointer to Resources is gone; the links themselves are still kept there.
+    expect(screen.queryByRole("link", { name: "Open Links" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Links to outside tools" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Label for Sample sales board")).not.toBeInTheDocument();
   });
 
-  it("leaves the links pointer off for a company without the module", async () => {
+  it("shows Monday as not on for a company without the module", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/settings/connections", pattern: "/settings/connections" });
-    expect(await screen.findByText("GoHighLevel")).toBeInTheDocument();
+    const monday = await screen.findByRole("article", { name: "Monday.com" });
+    expect(within(monday).getByText("Not on for this company")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open Links" })).not.toBeInTheDocument();
   });
 });

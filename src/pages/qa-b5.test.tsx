@@ -4,7 +4,7 @@
 // connected, and only the connection service's own words are shown as its outcome.
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { useState } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
@@ -35,6 +35,7 @@ vi.mock("../services/connections.ts", async () => {
   return { ...mock, startConnection: vi.fn(mock.startConnection) };
 });
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
@@ -42,7 +43,7 @@ vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { HubContext } from "../context/HubContext.tsx";
 import { listGoalPrivate, listGoals } from "../services/gsr.ts";
-import { startConnection } from "../services/connections.ts";
+import { disconnectConnection, startConnection } from "../services/connections.ts";
 import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import App from "../App.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
@@ -176,12 +177,19 @@ describe("connection outcome on settings", () => {
   });
 
   it("drops the connected notice once the provider is disconnected", async () => {
-    const user = userEvent.setup();
     renderSettings("/settings/connections?connected=gohighlevel");
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
-    await user.click(await screen.findByRole("button", { name: "Disconnect GoHighLevel" }));
-    await waitFor(() => expect(screen.getAllByText("Not connected")).toHaveLength(2));
+    // Disconnected elsewhere; the page reads its rows again when the tab comes back to the front,
+    // and the notice follows the row, which is the truth.
+    await disconnectConnection(KLASIK.company.id, "gohighlevel");
+    vi.setSystemTime(new Date("2026-09-15T12:00:10.000Z"));
+    onTestFinished(() => void vi.setSystemTime(new Date("2026-09-15T12:00:00.000Z")));
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    const ghl = screen.getByRole("article", { name: "GoHighLevel" });
+    await waitFor(() => expect(within(ghl).getByText("Not connected")).toBeInTheDocument());
     expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument();
   });
 });

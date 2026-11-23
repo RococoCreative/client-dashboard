@@ -50,6 +50,17 @@ describe("loadConnectorSetup", () => {
     expect(await loadConnectorSetup("c1")).toBeNull();
   });
 
+  // A partial answer would read every provider it leaves out as keys missing, and hide Connect on
+  // a tool that works, so anything short of a boolean for every provider is "cannot tell".
+  it("returns null unless every provider has a boolean", async () => {
+    const { invokeFunction } = await import("../../services/invoke.ts");
+    const { loadConnectorSetup } = await import("../../services/connections.ts");
+    for (const keys of [{}, { quickbooks: true, gohighlevel: true }, [true, true, true]]) {
+      vi.mocked(invokeFunction).mockResolvedValue({ keys });
+      expect(await loadConnectorSetup("c1")).toBeNull();
+    }
+  });
+
   it("returns the keys when the answer is well formed", async () => {
     const { invokeFunction } = await import("../../services/invoke.ts");
     const { loadConnectorSetup } = await import("../../services/connections.ts");
