@@ -134,11 +134,10 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
   after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
   again.
-- **The `connections` Edge Function** live is the build from before Phase 2 (deployed
-  2026-11-10): owners and admins manage connections, plus Google Sheets and the sync routes. It
-  reads only `sync_weekday`, not the Phase 2 `sync_weekdays`. The version in this repo is the
-  Phase 2 one and is not deployed; the last steps of Applying Phase 2 redeploy it and record it
-  here. Google Sheets and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`,
+- **The `connections` Edge Function** live is version 6 (deployed 2026-11-23 through the
+  Supabase connection, JWT check off, matching this repo): owners and admins manage connections,
+  Google Sheets and the sync routes, the Phase 2 multi-day schedule (`sync_weekdays`), and the
+  catalog's `POST /status` route. Google Sheets and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
@@ -155,7 +154,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `0042_company_display_settings`, `0043_milestone_status`,
   `0044_milestone_templates` and `0045_sync_weekdays` (Phase 2, see Applying Phase 2). Every
   company is on the defaults, so nothing visible changed. The app and `connections` function that
-  read them are not live yet. With
+  read them are live (the function since 2026-11-23). With
   them in, these re-pastes undo part of them (go forwards only; if one happens, paste the
   named Phase 2 file straight after it):
   - `0001`, `0009` or `0024` puts back an older `guard_company_fields`, and `0025` or `0037` an
@@ -1172,9 +1171,8 @@ until `0040` is pasted.
 
 Company display settings, milestone statuses and templates, and sync days. `0042` to `0045` went
 in on 2026-11-19 through the Supabase connection, with the schema reloaded, so steps 1 and 2 are
-done. The app from this branch is not live yet, and the `connections` function live is still the
-build from before this branch. What remains is the app merge and deploy, the function redeploy,
-setting each company's values, and recording it.
+done. The app is live, and the function went in on 2026-11-23 as `connections` version 6 (with
+the Connections catalog). What remains is setting each company's values.
 
 The order mattered. The new app loads the company with `wins_home_days` and `manual_financials`
 at sign-in, so deployed before `0042` every user of all three companies would see "Could not
@@ -1219,6 +1217,9 @@ function that lacks `/status`, but must not ship before `0050`.
    and add its two secrets (see The connections function). The Rococo setup line shows what is
    still missing.
 5. Record `0050` and the redeploy in What is applied live.
+
+Done 2026-11-23: `0050` pasted and checked live, `connections` redeployed as version 6, and the
+app merged and deployed. Step 4 waits on Rococo registering each provider.
 
 ## Deploy
 
