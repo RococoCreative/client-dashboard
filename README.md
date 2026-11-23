@@ -939,8 +939,10 @@ needs these secrets (Dashboard, Edge Functions, Secrets):
   tick sends it, and Vault keeps the same value as `sync_cron_secret`.
 
 All three provider apps (HighLevel, Intuit and Google) must list the same single redirect URL:
-`https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until the keys are in
-place, Connect answers with a plain "not set up yet" line and nothing else changes. Deploy with
+`https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until both of a tool's
+keys are in place, its card on Settings > Connections reads Not available yet and offers no
+Connect, once the function is deployed with `/status`. Before that redeploy the card treats the
+tool as available, and Connect answers with a plain "not set up yet" line. Deploy with
 `supabase functions deploy connections --no-verify-jwt`.
 
 ## The notify function

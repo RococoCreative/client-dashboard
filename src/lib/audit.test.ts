@@ -157,6 +157,11 @@ describe("describeAuditEventPlain", () => {
       on("connector_requests", "delete", { connector_key: { old: "jobtread", new: null } }, "req-1"),
       "Tool request removed (tool JobTread)",
     ],
+    [
+      "a tool request whose key shares a name with an Object property, as the bare key",
+      on("connector_requests", "insert", { connector_key: { old: null, new: "constructor" } }, "req-2"),
+      "Tool request added (tool constructor)",
+    ],
   ];
 
   it.each(PLAIN)("reads %s", (_name, input, expected) => {

@@ -257,7 +257,8 @@ function plainValue(value: unknown, kind: Kind, names: AuditNames): string {
   if (value === true) return "yes";
   if (value === false) return "no";
   const text = String(value);
-  if (typeof kind === "object") return kind.labels[text] ?? text;
+  // Own keys only: a free-text key such as "constructor" must not read a label off Object's prototype.
+  if (typeof kind === "object") return Object.hasOwn(kind.labels, text) ? kind.labels[text] : text;
   switch (kind) {
     case "role":
       return ROLE_LABELS[text as keyof typeof ROLE_LABELS] ?? text;
