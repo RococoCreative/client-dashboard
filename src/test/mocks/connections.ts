@@ -35,12 +35,27 @@ export function setMockConnectorSetup(value: Record<ConnectionProvider, boolean>
   setup = value ? { ...value } : null;
 }
 
-// Puts the answer back to all keys present. Called from src/test/setup.ts.
+// While set, loadConnectorSetup waits on this instead of answering at once, so a test can hold the
+// setup check back (a slow or stalled function) and let it land later, or never.
+let held: Promise<Record<ConnectionProvider, boolean> | null> | null = null;
+
+// Holds every setup check until the returned function is called with the answer it should give.
+export function holdMockConnectorSetup(): (value: Record<ConnectionProvider, boolean> | null) => void {
+  let release: (value: Record<ConnectionProvider, boolean> | null) => void = () => {};
+  held = new Promise((resolve) => {
+    release = resolve;
+  });
+  return (value) => release(value ? { ...value } : null);
+}
+
+// Puts the answer back to all keys present, answered at once. Called from src/test/setup.ts.
 export function resetMockConnectorSetup(): void {
   setup = { ...ALL_KEYS };
+  held = null;
 }
 
 export async function loadConnectorSetup(companyId: string): Promise<Record<ConnectionProvider, boolean> | null> {
   void companyId;
+  if (held) return held;
   return setup ? { ...setup } : null;
 }

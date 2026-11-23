@@ -116,7 +116,8 @@ export interface CardView {
 }
 
 const KEYS_MISSING = "Rococo is setting this up.";
-const turnOn = (m: ModuleKey) => `Turn on ${MODULE_LABELS[m]} to use this.`;
+// A company admin cannot turn a module on, so the line says who does.
+const needsModule = (m: ModuleKey) => `Needs ${MODULE_LABELS[m]}, which Rococo turns on.`;
 
 export function cardView(c: Connector, i: CardInputs): CardView {
   if (c.availability === "next") return { state: "coming_next", action: "ask", blocked: null };
@@ -125,7 +126,7 @@ export function cardView(c: Connector, i: CardInputs): CardView {
   const moduleOff = c.requiresModule !== undefined && !i.hasModule(c.requiresModule);
 
   if (c.availability === "links") {
-    if (moduleOff) return { state: "not_on", action: null, blocked: turnOn(c.requiresModule!) };
+    if (moduleOff) return { state: "not_on", action: null, blocked: needsModule(c.requiresModule!) };
     return i.linkCount > 0
       ? { state: "linked", action: "manage_links", blocked: null }
       : { state: "not_set_up", action: "add_link", blocked: null };
@@ -136,11 +137,11 @@ export function cardView(c: Connector, i: CardInputs): CardView {
   const keysMissing = i.keysIn === false;
   if (status === "connected") return { state: "connected", action: "manage", blocked: null };
   if (status === "error") {
-    if (moduleOff) return { state: "needs_attention", action: null, blocked: turnOn(c.requiresModule!) };
+    if (moduleOff) return { state: "needs_attention", action: null, blocked: needsModule(c.requiresModule!) };
     if (keysMissing) return { state: "needs_attention", action: null, blocked: KEYS_MISSING };
     return { state: "needs_attention", action: "reconnect", blocked: null };
   }
-  if (moduleOff) return { state: "not_on", action: null, blocked: turnOn(c.requiresModule!) };
+  if (moduleOff) return { state: "not_on", action: null, blocked: needsModule(c.requiresModule!) };
   if (keysMissing) return { state: "not_available", action: null, blocked: KEYS_MISSING };
   return { state: "not_connected", action: "connect", blocked: null };
 }

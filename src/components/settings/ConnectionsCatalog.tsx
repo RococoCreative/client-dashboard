@@ -89,7 +89,6 @@ interface CatalogData {
   requests: ConnectorRequest[];
   /** How many of the company's links each link tool has. */
   links: Partial<Record<LinkProvider, number>>;
-  setup: Record<ConnectionProvider, boolean> | null;
 }
 
 interface Card {
@@ -131,17 +130,21 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
   const { isRococo } = useHub();
   const idPrefix = useId();
   const linksOn = hasModule(company, "external_links");
-  // One load for the whole page. The setup check never throws: null means it could not tell, and
-  // every live tool is then treated as available, as the page did before the check existed.
+  // The company's own rows, which are all the cards need to show.
   const state = useAsync<CatalogData>(async () => {
-    const [connections, requests, links, setup] = await Promise.all([
+    const [connections, requests, links] = await Promise.all([
       listConnections(company.id),
       listConnectorRequests(company.id),
       linksOn ? listExternalLinks(company.id) : Promise.resolve([]),
-      loadConnectorSetup(company.id),
     ]);
-    return { companyId: company.id, connections, requests, links: countByProvider(links), setup };
+    return { companyId: company.id, connections, requests, links: countByProvider(links) };
   }, [company.id, linksOn]);
+  // Rococo's setup check is optional and goes through an Edge Function that may be cold or slow, so
+  // it never holds the cards up: they show from the rows straight away with setup unknown (every
+  // live tool treated as available, as the page did before the check existed), and take the answer
+  // when it lands. The check never throws and gives up after a few seconds: null means cannot tell.
+  const setupState = useAsync(() => loadConnectorSetup(company.id), [company.id]);
+  const setup = setupState.data ?? null;
 
   const [params, setParams] = useSearchParams();
   const [busy, setBusy] = useState<string | null>(null);
@@ -172,12 +175,12 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
     if (!data) return null;
     return CONNECTORS.map((connector, order) => {
       const row = connector.provider ? data.connections.find((c) => c.provider === connector.provider) ?? null : null;
-      const keysIn = connector.provider && data.setup !== null ? data.setup[connector.provider] : null;
+      const keysIn = connector.provider && setup !== null ? setup[connector.provider] : null;
       const linkCount = connector.linkProvider ? data.links[connector.linkProvider] ?? 0 : 0;
       const view = cardView(connector, { row, hasModule: (m) => hasModule(company, m), keysIn, linkCount });
       return { connector, view, row, keysIn, linkCount, order };
     });
-  }, [data, company]);
+  }, [data, setup, company]);
 
   const requested = useMemo(() => new Set((data?.requests ?? []).map((r) => r.connector_key)), [data]);
 
@@ -301,7 +304,7 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
                     view={view}
                     row={row}
                     requested={requested.has(connector.key)}
-                    rococoLine={isRococo ? rococoLineFor(connector, data!.setup) : null}
+                    rococoLine={isRococo ? rococoLineFor(connector, setup) : null}
                     linkCount={linkCount}
                     disabled={busy !== null}
                     onAction={(action) => void act(connector, action)}

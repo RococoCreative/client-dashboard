@@ -28,10 +28,26 @@ export async function disconnectConnection(companyId: string, provider: Connecti
   await invokeFunction<{ ok: boolean }>("connections/disconnect", { company_id: companyId, provider });
 }
 
+// How long the setup check may take before the catalog stops waiting for it.
+const SETUP_TIMEOUT_MS = 8_000;
+
 // Which providers have Rococo's app keys, or null when that cannot be known (an older function
-// without the route, a network failure, an unexpected answer). Never throws: the catalog falls
-// back to what a company's own connection row says.
+// without the route, a network failure, an unexpected answer, or no answer within
+// SETUP_TIMEOUT_MS). Never throws: the catalog falls back to what a company's own connection row
+// says.
 export async function loadConnectorSetup(companyId: string): Promise<Record<ConnectionProvider, boolean> | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const giveUp = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), SETUP_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([readConnectorSetup(companyId), giveUp]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readConnectorSetup(companyId: string): Promise<Record<ConnectionProvider, boolean> | null> {
   try {
     const result = await invokeFunction<{ keys?: unknown }>("connections/status", { company_id: companyId });
     const keys = result?.keys;

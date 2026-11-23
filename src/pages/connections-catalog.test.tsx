@@ -21,7 +21,7 @@ vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
-import { setMockConnectorSetup } from "../test/mocks/connections.ts";
+import { holdMockConnectorSetup, setMockConnectorSetup } from "../test/mocks/connections.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as requestsService from "../services/connectorRequests.ts";
 import * as linksService from "../services/externalLinks.ts";
@@ -145,11 +145,37 @@ describe("the connections catalog", () => {
     expect(within(card("GoHighLevel")).getByText("Setup status unavailable.")).toBeInTheDocument();
   });
 
+  // The setup check goes through an Edge Function that can be cold or stalled; the cards never wait on it.
+  it("shows the cards and reaches Manage and Disconnect while the setup check has not answered", async () => {
+    const user = userEvent.setup();
+    holdMockConnectorSetup();
+    renderCatalog(kingdomRococo);
+    const qbo = await findCard("QuickBooks Online");
+    // Unknown reads as keys in, and Rococo's line says it cannot tell yet.
+    expect(within(qbo).getByText("Not connected")).toBeInTheDocument();
+    expect(within(qbo).getByRole("button", { name: "Connect QuickBooks Online" })).toBeInTheDocument();
+    expect(within(qbo).getByText("Setup status unavailable.")).toBeInTheDocument();
+    await user.click(within(card("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(within(panel).getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+  });
+
+  it("turns a Not connected card into Not available yet when a late setup answer says its keys are missing", async () => {
+    const release = holdMockConnectorSetup();
+    renderCatalog();
+    const qbo = await findCard("QuickBooks Online");
+    expect(within(qbo).getByText("Not connected")).toBeInTheDocument();
+    release({ quickbooks: false, gohighlevel: true, google_sheets: true });
+    expect(await within(qbo).findByText("Not available yet")).toBeInTheDocument();
+    expect(within(qbo).getByText("Rococo is setting this up.")).toBeInTheDocument();
+    expect(within(qbo).queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("shows Google Sheets as Not on for this company without data_sources", async () => {
     renderCatalog(klasikAdmin);
     const sheets = await findCard("Google Sheets");
     expect(within(sheets).getByText("Not on for this company")).toBeInTheDocument();
-    expect(within(sheets).getByText("Turn on Data sources to use this.")).toBeInTheDocument();
+    expect(within(sheets).getByText("Needs Data sources, which Rococo turns on.")).toBeInTheDocument();
     expect(within(sheets).queryByRole("button")).not.toBeInTheDocument();
     // Monday follows its module the same way.
     expect(within(card("Monday.com")).getByText("Not on for this company")).toBeInTheDocument();
@@ -309,6 +335,49 @@ describe("the detail panel", () => {
     expect(within(panel).getByText(`Connected once for everyone at Kingdom Custom Construction. If ${name.split(" ")[0]} leaves or loses access to this account, reconnect with an account the company keeps.`)).toBeInTheDocument();
   });
 
+  it("names the signed-in person by their email when their name is blank", async () => {
+    const user = userEvent.setup();
+    const me = { ...kingdomRococo.profile, full_name: "  " };
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.map((r) => (r.provider === "gohighlevel" ? { ...r, connected_by: me.id } : r)));
+    onTestFinished(() => spy.mockRestore());
+    const directory = await directoryService.listDirectory(KINGDOM.company.id);
+    const dirSpy = vi.spyOn(directoryService, "listDirectory").mockResolvedValue(directory.filter((d) => d.id !== me.id));
+    onTestFinished(() => dirSpy.mockRestore());
+    renderCatalog({ ...kingdomRococo, profile: me });
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(await within(panel).findByText(me.email)).toBeInTheDocument();
+    expect(within(panel).queryByText("someone not on the People list")).not.toBeInTheDocument();
+  });
+
+  it("reads 'Not known right now' for who connected it when the directory cannot be read", async () => {
+    const user = userEvent.setup();
+    const dirSpy = vi.spyOn(directoryService, "listDirectory").mockRejectedValue(new Error("The directory could not be read."));
+    onTestFinished(() => dirSpy.mockRestore());
+    renderCatalog();
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(await within(panel).findByText("Not known right now")).toBeInTheDocument();
+    expect(within(panel).queryByText("someone not on the People list")).not.toBeInTheDocument();
+    expect(within(panel).getByText("Connected once for everyone at Kingdom Custom Construction. If the person who connected it leaves or loses access to this account, reconnect with an account the company keeps.")).toBeInTheDocument();
+  });
+
+  it("reads 'Not recorded' for the account when the row has neither an account name nor an id", async () => {
+    const user = userEvent.setup();
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(
+      rows.map((r) => (r.provider === "gohighlevel" ? { ...r, external_account_name: null, external_account_id: null } : r)),
+    );
+    onTestFinished(() => spy.mockRestore());
+    renderCatalog();
+    const ghl = await findCard("GoHighLevel");
+    expect(within(ghl).getByText("Account not recorded", { exact: false })).toBeInTheDocument();
+    await user.click(within(ghl).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(within(panel).getByText("Account").nextElementSibling).toHaveTextContent("Not recorded");
+  });
+
   it("shows the stored error first for a card that needs attention", async () => {
     const user = userEvent.setup();
     await ghlInError();
@@ -429,6 +498,8 @@ describe("Monday's links", () => {
     expect(within(monday).getByText("3 boards linked")).toBeInTheDocument();
     await user.click(within(monday).getByRole("button", { name: "Manage links for Monday.com" }));
     const panel = await screen.findByRole("dialog", { name: "Monday.com links" });
+    // A General link has no section page, so only another category puts a board there.
+    expect(within(panel).getByText("The company's Monday.com boards. Each shows on Home for whoever it is for; a category other than General also puts it on that section's page. People still sign in to Monday.com themselves.")).toBeInTheDocument();
     expect(await within(panel).findByText("Sample sales board")).toBeInTheDocument();
     expect(within(panel).getByText("Sample production board")).toBeInTheDocument();
     expect(within(panel).getByText("Sample schedule view")).toBeInTheDocument();

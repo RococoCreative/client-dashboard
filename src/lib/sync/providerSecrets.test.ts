@@ -61,6 +61,25 @@ describe("loadConnectorSetup", () => {
     }
   });
 
+  // A cold or stalled function must not keep the catalog guessing: after about eight seconds the
+  // check gives up and reads as "cannot tell".
+  it("returns null when the function has not answered within eight seconds", async () => {
+    // Keeps the fixed clock from src/test/setup.ts and fakes the timers too; its afterEach puts them back.
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], now: Date.now() });
+    const { invokeFunction } = await import("../../services/invoke.ts");
+    const { loadConnectorSetup } = await import("../../services/connections.ts");
+    vi.mocked(invokeFunction).mockReturnValue(new Promise(() => {}));
+    let settled: unknown = "pending";
+    const answer = loadConnectorSetup("c1").then((value) => {
+      settled = value;
+    });
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(settled).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1);
+    await answer;
+    expect(settled).toBeNull();
+  });
+
   it("returns the keys when the answer is well formed", async () => {
     const { invokeFunction } = await import("../../services/invoke.ts");
     const { loadConnectorSetup } = await import("../../services/connections.ts");

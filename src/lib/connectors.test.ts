@@ -59,9 +59,9 @@ describe("cardView, live tool", () => {
   it("reads Needs attention with no Reconnect and 'Rococo is setting this up.' when keys are missing", () =>
     expect(cardView(qbo, inputs({ row: rowOf("quickbooks", "error"), keysIn: false })))
       .toEqual({ state: "needs_attention", action: null, blocked: "Rococo is setting this up." }));
-  it("reads Needs attention with 'Turn on Data sources to use this.' when its module is off", () =>
+  it("reads Needs attention with 'Needs Data sources, which Rococo turns on.' when its module is off", () =>
     expect(cardView(sheets, inputs({ row: rowOf("google_sheets", "error"), hasModule: off })))
-      .toEqual({ state: "needs_attention", action: null, blocked: "Turn on Data sources to use this." }));
+      .toEqual({ state: "needs_attention", action: null, blocked: "Needs Data sources, which Rococo turns on." }));
   it("reads Not connected with Connect when keys are in and there is no row or a not_connected row", () => {
     const want = { state: "not_connected", action: "connect", blocked: null };
     expect(cardView(qbo, inputs({}))).toEqual(want);
@@ -74,7 +74,7 @@ describe("cardView, live tool", () => {
     expect(cardView(qbo, inputs({ keysIn: null }))).toEqual({ state: "not_connected", action: "connect", blocked: null }));
   it("reads Not on for this company when its module is off and there is no live row", () =>
     expect(cardView(sheets, inputs({ hasModule: off })))
-      .toEqual({ state: "not_on", action: null, blocked: "Turn on Data sources to use this." }));
+      .toEqual({ state: "not_on", action: null, blocked: "Needs Data sources, which Rococo turns on." }));
 });
 
 describe("cardView, links tool", () => {
@@ -84,7 +84,7 @@ describe("cardView, links tool", () => {
     expect(cardView(monday, inputs({}))).toEqual({ state: "not_set_up", action: "add_link", blocked: null }));
   it("reads Not on for this company when external_links is off", () =>
     expect(cardView(monday, inputs({ hasModule: off, linkCount: 3 })))
-      .toEqual({ state: "not_on", action: null, blocked: "Turn on External links to use this." }));
+      .toEqual({ state: "not_on", action: null, blocked: "Needs External links, which Rococo turns on." }));
 });
 
 describe("cardView, coming", () => {
