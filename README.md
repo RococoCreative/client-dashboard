@@ -483,6 +483,44 @@ Imported values land read-only in `sync_records`, written only by the `connectio
 failed sync keeps the last good values with their time, and a blank shows as "-", never 0.
 `docs/integrations.md` maps where each figure will come from.
 
+### The Connections catalog
+
+Settings > Connections is a catalog, the same for every company, grouped as Financials,
+Production, Marketing & Sales and Productivity. The list of tools lives in code
+(`src/lib/connectors.ts`); each company's own rows decide what each card shows. A card reads
+Connected, Needs attention, Not connected, Not available yet (Rococo has not added that tool's
+keys), Not on for this company (it needs a part of the hub the company does not have), Linked,
+Not set up, Coming next or Coming soon, and offers only the one action that will work. A company's
+own connection row always wins: a working connection stays visible even if its module was turned
+off later, and Disconnect always works.
+
+- **One connection per company per tool.** Any owner or admin connects it and it serves the whole
+  company. A connected card's panel names the account, who connected it, since when and what it
+  feeds. Someone who is not in the company's directory reads "someone not on the People list";
+  when the signed-in person made the connection themselves, their own name shows. The connect
+  panel advises signing in with a shared company login, so the connection does not break when one
+  person leaves.
+- **Monday** is a links tool. Its card opens the company's Monday board links in the panel, where
+  an admin adds, edits and removes them; they keep showing in their sidebar section and on Home.
+  The old "Links to outside tools" pointer on the Connections tab is gone.
+- **Asking for a tool.** On a Coming next or Coming soon card an admin presses Ask for this, which
+  records a row in `connector_requests` (0050) and turns the button to Requested; pressing it
+  again withdraws the ask. Members of the company and Rococo can read the requests. A Rococo admin
+  may ask or withdraw for a company, and the Rococo portfolio lists every company's requests under
+  "Tool requests".
+- **Rococo's setup line.** A Rococo admin stepped into a company sees a line under each card:
+  keys in, keys missing (naming the two secrets), nothing to set up, or not built yet. Company
+  admins never see secret names.
+- **Until `connections` is redeployed with `/status`,** every live tool reads as available, as it
+  did before the catalog, and a Rococo admin's line reads "Setup status unavailable."
+
+What Rococo does for a sign-in tool: register the hub once per tool with the provider (a
+Marketplace app, a developer app or an OAuth client, with the redirect URL under The connections
+function), then add the two secrets the card names to the Supabase function secrets. Until both
+are present the card reads Not available yet. JobTread (an access key per company, entered by the
+company) and links tools such as Monday need nothing from Rococo.
+
+
 ## Impact scores
 
 The ratings under the rating pillars (Klasik: Brand Impact, Character and Values) live on the
@@ -864,7 +902,9 @@ provider's callback arrives with no session. Its routes, all under
   admin, checked on their own JWT.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
 - `POST /status`: which providers have their app keys (names only, never a value). An active member
-  of the company of any role, or a Rococo admin, checked on their own JWT.
+  of the company of any role, or a Rococo admin, checked on their own JWT. The secret names are in
+  `_shared/providerSecrets.ts`. The catalog needs it to know a card is available; without it the
+  app treats every live tool as available.
 - `POST /sync/run`: Sync now, on the JWT of someone allowed to sync the source
   (`private.can_sync_source`, decided by row level security), for a company with `data_sources`
   on.
@@ -1161,6 +1201,20 @@ migrations are in; the app and function running today never read the new columns
    in Projects > Setup, and set sync days and weekdays-only staleness on each source.
 6. Record the app deploy and the `connections` redeploy in What is applied live (`0042` to `0045`
    are already recorded there).
+
+### Applying the Connections catalog
+
+The catalog reads `connector_requests`, so the order matters. The app copes with a `connections`
+function that lacks `/status`, but must not ship before `0050`.
+
+1. Apply `0050` and reload the schema (`notify pgrst, 'reload schema';`). Nothing visible changes.
+2. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. This also ships
+   the Phase 2 multi-day schedule code.
+3. Merge and deploy the app.
+4. For each sign-in tool a company should be able to connect, register the hub with the provider
+   and add its two secrets (see The connections function). The Rococo setup line shows what is
+   still missing.
+5. Record `0050` and the redeploy in What is applied live.
 
 ## Deploy
 
