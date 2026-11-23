@@ -131,8 +131,8 @@ Precedence (builder check; my calls):
   Needs attention even if its module was later turned off or Rococo's keys went missing, so a working
   connection is never hidden. Disconnect always works.
 - **Nothing offers an action that will fail.** On such a card, Reconnect is replaced by a line saying
-  why it cannot run now: "Rococo is setting this up" when keys are missing, or "Turn on {module} to
-  use this" when the module is off.
+  why it cannot run now: "Rococo is setting this up" when keys are missing, or "Needs {module},
+  which Rococo turns on" when the module is off.
 - **A links tool follows its module too.** With `external_links` off, Monday reads "Not on for this
   company", like a live tool.
 
