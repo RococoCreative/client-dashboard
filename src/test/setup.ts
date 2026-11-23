@@ -10,6 +10,7 @@
 import "@testing-library/jest-dom";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { resetMockCapabilities } from "./mocks/capabilities.ts";
+import { resetMockConnectorSetup } from "./mocks/connections.ts";
 import { resetMockConnectorRequests } from "./mocks/connectorRequests.ts";
 import { resetMockGsrs } from "./mocks/gsrOnDemand.ts";
 import { resetMockInvitationEmail } from "./mocks/invitations.ts";
@@ -24,6 +25,7 @@ beforeAll(() => {
 afterEach(() => {
   resetMockCapabilities();
   resetMockConnectorRequests();
+  resetMockConnectorSetup();
   resetMockGsrs();
   resetMockInvitationEmail();
   setActingPerson(null);

@@ -863,6 +863,8 @@ provider's callback arrives with no session. Its routes, all under
 - `POST /start` and `POST /disconnect`: an active Owner or Admin of the company, or a Rococo
   admin, checked on their own JWT.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
+- `POST /status`: which providers have their app keys (names only, never a value). An active member
+  of the company of any role, or a Rococo admin, checked on their own JWT.
 - `POST /sync/run`: Sync now, on the JWT of someone allowed to sync the source
   (`private.can_sync_source`, decided by row level security), for a company with `data_sources`
   on.

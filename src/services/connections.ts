@@ -27,3 +27,19 @@ export async function startConnection(companyId: string, provider: ConnectionPro
 export async function disconnectConnection(companyId: string, provider: ConnectionProvider): Promise<void> {
   await invokeFunction<{ ok: boolean }>("connections/disconnect", { company_id: companyId, provider });
 }
+
+// Which providers have Rococo's app keys, or null when that cannot be known (an older function
+// without the route, a network failure, an unexpected answer). Never throws: the catalog falls
+// back to what a company's own connection row says.
+export async function loadConnectorSetup(companyId: string): Promise<Record<ConnectionProvider, boolean> | null> {
+  try {
+    const result = await invokeFunction<{ keys?: unknown }>("connections/status", { company_id: companyId });
+    const keys = result?.keys;
+    if (!keys || typeof keys !== "object") return null;
+    const values = Object.values(keys as Record<string, unknown>);
+    if (values.some((v) => typeof v !== "boolean")) return null;
+    return keys as Record<ConnectionProvider, boolean>;
+  } catch {
+    return null;
+  }
+}

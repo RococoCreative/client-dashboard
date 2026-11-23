@@ -19,3 +19,21 @@ export async function disconnectConnection(companyId: string, provider: Connecti
   if (index === -1) throw new Error("Nothing to disconnect.");
   connections[index] = { ...connections[index], status: "not_connected", external_account_id: null, external_account_name: null, scopes: null, connected_by: null, connected_at: null, last_error: null, updated_at: now() };
 }
+
+const ALL_KEYS: Record<ConnectionProvider, boolean> = { gohighlevel: true, quickbooks: true, google_sheets: true };
+let setup: Record<ConnectionProvider, boolean> | null = { ...ALL_KEYS };
+
+// Chooses what loadConnectorSetup answers: a key map, or null for "cannot tell".
+export function setMockConnectorSetup(value: Record<ConnectionProvider, boolean> | null): void {
+  setup = value ? { ...value } : null;
+}
+
+// Puts the answer back to all keys present. Called from src/test/setup.ts.
+export function resetMockConnectorSetup(): void {
+  setup = { ...ALL_KEYS };
+}
+
+export async function loadConnectorSetup(companyId: string): Promise<Record<ConnectionProvider, boolean> | null> {
+  void companyId;
+  return setup ? { ...setup } : null;
+}
