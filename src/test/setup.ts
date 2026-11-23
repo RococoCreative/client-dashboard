@@ -10,7 +10,7 @@
 import "@testing-library/jest-dom";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { resetMockCapabilities } from "./mocks/capabilities.ts";
-import { resetMockConnectorSetup } from "./mocks/connections.ts";
+import { resetMockConnections, resetMockConnectorSetup } from "./mocks/connections.ts";
 import { resetMockConnectorRequests } from "./mocks/connectorRequests.ts";
 import { resetMockGsrs } from "./mocks/gsrOnDemand.ts";
 import { resetMockInvitationEmail } from "./mocks/invitations.ts";
@@ -21,10 +21,11 @@ beforeAll(() => {
 });
 
 // Capability overrides, standalone GSRs, a company put on demand, an invitation email told to fail,
-// tool requests and the acting person a test rendered or set do not leak into the next test.
+// tool requests, a disconnected connection and the acting person a test rendered or set do not leak into the next test.
 afterEach(() => {
   resetMockCapabilities();
   resetMockConnectorRequests();
+  resetMockConnections();
   resetMockConnectorSetup();
   resetMockGsrs();
   resetMockInvitationEmail();

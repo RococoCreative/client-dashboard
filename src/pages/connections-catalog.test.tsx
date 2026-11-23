@@ -1,23 +1,33 @@
 // Settings > Connections as a catalog of tool cards: every company sees the same tools, grouped by
 // what they are for, each card reading its state from the company's own rows, modules, links,
 // requests and whether Rococo's keys are in. These pin what the page shows and the actions it
-// offers, the tool requests, Rococo's setup line, and the return trip from a provider's sign-in.
-import { screen, waitFor, within } from "@testing-library/react";
+// offers, the tool requests, Rococo's setup line, the return trip from a provider's sign-in, and the
+// two panels: the detail panel a connected tool opens, and the one before the provider's sign-in.
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
+// Settings' other panels, for the test that renders the whole tab.
+vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
+vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
+vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
+import { HubContext, type HubValue } from "../context/HubContext.tsx";
+import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import { setMockConnectorSetup } from "../test/mocks/connections.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as requestsService from "../services/connectorRequests.ts";
+import * as linksService from "../services/externalLinks.ts";
 import ConnectionsCatalog from "../components/settings/ConnectionsCatalog.tsx";
+import SettingsPage from "./settings/SettingsPage.tsx";
+import { formatDate } from "../lib/format.ts";
 
 // Kingdom carries every module; Klasik carries none, which is where a company starts.
 const kingdomAdmin = makeHub("admin", KINGDOM.company);
@@ -231,5 +241,230 @@ describe("the connections catalog", () => {
     renderCatalog(kingdomAdmin, `/settings/connections?connect_error=${encodeURIComponent("Send your password to someone.")}`);
     expect(await screen.findByText("The connection did not finish. Try again.")).toBeInTheDocument();
     expect(screen.queryByText("Send your password to someone.")).not.toBeInTheDocument();
+  });
+});
+
+// Puts GoHighLevel's row for Kingdom in error with a stored line, for the rest of the test.
+async function ghlInError(patch: Record<string, unknown> = {}) {
+  const rows = await connectionsService.listConnections(KINGDOM.company.id);
+  const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(
+    rows.map((r) => (r.provider === "gohighlevel" ? { ...r, status: "error" as const, last_error: "The provider refused the saved sign-in.", ...patch } : r)),
+  );
+  onTestFinished(() => spy.mockRestore());
+}
+
+describe("the detail panel", () => {
+  it("Manage opens the panel with account, connected by name, since, last read, Read only, and what it feeds", async () => {
+    const user = userEvent.setup();
+    renderCatalog();
+    const ghl = await findCard("GoHighLevel");
+    await user.click(within(ghl).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    const owner = KINGDOM.profiles[0].full_name!;
+    expect(within(panel).getByText("Kingdom Custom Construction (HighLevel)")).toBeInTheDocument();
+    expect(await within(panel).findByText(owner)).toBeInTheDocument();
+    expect(within(panel).getByText(formatDate("2026-08-04T15:30:00.000Z"))).toBeInTheDocument();
+    expect(within(panel).getByText("Not read yet")).toBeInTheDocument();
+    expect(within(panel).getByText("Read only")).toBeInTheDocument();
+    expect(within(panel).getByText("Sales & Finance: closed sales")).toBeInTheDocument();
+    expect(within(panel).getByText("Sales for each person")).toBeInTheDocument();
+    const first = owner.split(" ")[0];
+    expect(within(panel).getByText(`Connected once for everyone at Kingdom Custom Construction. If ${first} leaves or loses access to this account, reconnect with an account the company keeps.`)).toBeInTheDocument();
+    // Connected, keys in, nothing turned off: Reconnect is there and Disconnect waits for a press.
+    expect(within(panel).getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("names a deleted connector of the account as 'someone no longer listed'", async () => {
+    const user = userEvent.setup();
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.map((r) => (r.provider === "gohighlevel" ? { ...r, connected_by: "profile-gone" } : r)));
+    onTestFinished(() => spy.mockRestore());
+    renderCatalog();
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(await within(panel).findByText("someone no longer listed")).toBeInTheDocument();
+    expect(within(panel).getByText("Connected once for everyone at Kingdom Custom Construction. If the person who connected it leaves or loses access to this account, reconnect with an account the company keeps.")).toBeInTheDocument();
+  });
+
+  it("shows the stored error first for a card that needs attention", async () => {
+    const user = userEvent.setup();
+    await ghlInError();
+    renderCatalog();
+    const ghl = await findCard("GoHighLevel");
+    // Reconnect still sits on the card, and Manage beside it reaches the panel.
+    expect(within(ghl).getByRole("button", { name: "Reconnect GoHighLevel" })).toBeInTheDocument();
+    await user.click(within(ghl).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    const error = within(panel).getByText("The provider refused the saved sign-in.");
+    expect(error).toHaveClass("text-danger");
+    // Before the account and everything else.
+    expect(error.compareDocumentPosition(within(panel).getByText("Account")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+  });
+
+  it("reaches Disconnect on a card in error whose keys are missing, with the blocked line in place of Reconnect", async () => {
+    const user = userEvent.setup();
+    setMockConnectorSetup({ quickbooks: true, gohighlevel: false, google_sheets: true });
+    await ghlInError();
+    renderCatalog();
+    const ghl = await findCard("GoHighLevel");
+    expect(within(ghl).queryByRole("button", { name: "Reconnect GoHighLevel" })).not.toBeInTheDocument();
+    await user.click(within(ghl).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(within(panel).queryByRole("button", { name: "Reconnect" })).not.toBeInTheDocument();
+    expect(within(panel).getByText("Rococo is setting this up.")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+  });
+
+  it("Disconnect asks again as 'Disconnect for everyone at {company name}' and only the second press disconnects", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(connectionsService, "disconnectConnection");
+    onTestFinished(() => spy.mockRestore());
+    renderCatalog(kingdomAdmin, "/settings/connections?connected=gohighlevel");
+    expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
+    await user.click(within(card("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await user.click(within(panel).getByRole("button", { name: "Disconnect" }));
+    expect(spy).not.toHaveBeenCalled();
+    await user.click(within(panel).getByRole("button", { name: "Disconnect for everyone at Kingdom Custom Construction" }));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(KINGDOM.company.id, "gohighlevel");
+    // The panel closes, the rows load again, and the return trip's banner goes with the connection.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(within(card("GoHighLevel")).getByText("Not connected")).toBeInTheDocument());
+    expect(within(card("GoHighLevel")).getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+    expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument();
+  });
+
+  it("Reconnect is absent and the blocked line shows when keys are missing on a connected card", async () => {
+    const user = userEvent.setup();
+    setMockConnectorSetup({ quickbooks: true, gohighlevel: false, google_sheets: true });
+    renderCatalog();
+    const ghl = await findCard("GoHighLevel");
+    expect(within(ghl).getByText("Connected")).toBeInTheDocument();
+    await user.click(within(ghl).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    expect(within(panel).queryByRole("button", { name: "Reconnect" })).not.toBeInTheDocument();
+    expect(within(panel).getByText("Rococo is setting this up.")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+  });
+
+  it("Reconnect in the panel goes through the connect panel", async () => {
+    const user = userEvent.setup();
+    renderCatalog();
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    await user.click(within(await screen.findByRole("dialog", { name: "GoHighLevel" })).getByRole("button", { name: "Reconnect" }));
+    expect(await screen.findByRole("dialog", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to GoHighLevel" })).toBeInTheDocument();
+  });
+});
+
+describe("the connect panel", () => {
+  it("Connect opens the connect panel; Continue to {Tool} calls startConnection with the company's return address", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(connectionsService, "startConnection").mockRejectedValue(new Error("Stopped before leaving the page."));
+    onTestFinished(() => spy.mockRestore());
+    renderCatalog();
+    await user.click(within(await findCard("QuickBooks Online")).getByRole("button", { name: "Connect QuickBooks Online" }));
+    expect(spy).not.toHaveBeenCalled();
+    const panel = await screen.findByRole("dialog", { name: "Connect QuickBooks Online" });
+    expect(within(panel).getByText("You'll go to QuickBooks Online to sign in and approve. Then you come straight back here.")).toBeInTheDocument();
+    expect(within(panel).getByText("Use an account the company keeps, like a shared office login. If the person who signs in leaves, the connection stops for everyone.")).toBeInTheDocument();
+    expect(within(panel).getByText("Sales & Finance: invoices and balances")).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Continue to QuickBooks Online" }));
+    expect(spy).toHaveBeenCalledWith(KINGDOM.company.id, "quickbooks", `${window.location.origin}/settings/connections/${KINGDOM.company.id}`);
+    // A failure says so in the panel, and Continue is there to try again.
+    expect(await within(panel).findByText("Stopped before leaving the page.")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Continue to QuickBooks Online" })).not.toBeDisabled();
+  });
+
+  it("Reconnect on a card in error opens the connect panel too", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(connectionsService, "startConnection");
+    onTestFinished(() => spy.mockRestore());
+    await ghlInError();
+    renderCatalog();
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Reconnect GoHighLevel" }));
+    expect(await screen.findByRole("dialog", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("Monday's links", () => {
+  it("Manage links on Monday lists only Monday links and adds new ones as Monday", async () => {
+    const user = userEvent.setup();
+    const create = vi.spyOn(linksService, "createExternalLink");
+    onTestFinished(async () => {
+      create.mockRestore();
+      for (const link of await linksService.listExternalLinks(KINGDOM.company.id)) {
+        if (link.label === "Sample estimating board") await linksService.deleteExternalLink(link.id);
+      }
+    });
+    renderCatalog();
+    const monday = await findCard("Monday.com");
+    expect(within(monday).getByText("3 boards linked")).toBeInTheDocument();
+    await user.click(within(monday).getByRole("button", { name: "Manage links for Monday.com" }));
+    const panel = await screen.findByRole("dialog", { name: "Monday.com links" });
+    expect(await within(panel).findByText("Sample sales board")).toBeInTheDocument();
+    expect(within(panel).getByText("Sample production board")).toBeInTheDocument();
+    expect(within(panel).getByText("Sample schedule view")).toBeInTheDocument();
+    // The company's other links stay on Resources.
+    expect(within(panel).queryByText("Sample owner report")).not.toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Tool")).not.toBeInTheDocument();
+
+    await user.type(within(panel).getByLabelText("Label"), "Sample estimating board");
+    await user.type(within(panel).getByLabelText("Link"), "https://example.com/monday/sample-estimating");
+    await user.click(within(panel).getByRole("button", { name: "Add link" }));
+    expect(await within(panel).findByText("Sample estimating board")).toBeInTheDocument();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ company_id: KINGDOM.company.id, provider: "monday", label: "Sample estimating board" }));
+
+    await user.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(within(card("Monday.com")).getByText("4 boards linked")).toBeInTheDocument());
+  });
+
+  it("Add a board link on a Monday card with no links opens the same panel", async () => {
+    const user = userEvent.setup();
+    const all = await linksService.listExternalLinks(KINGDOM.company.id);
+    const spy = vi.spyOn(linksService, "listExternalLinks").mockResolvedValue(all.filter((l) => l.provider !== "monday"));
+    onTestFinished(() => spy.mockRestore());
+    renderCatalog();
+    const monday = await findCard("Monday.com");
+    expect(within(monday).getByText("Not set up")).toBeInTheDocument();
+    await user.click(within(monday).getByRole("button", { name: "Add a board link for Monday.com" }));
+    const panel = await screen.findByRole("dialog", { name: "Monday.com links" });
+    expect(await within(panel).findByRole("form", { name: "Add a link" })).toBeInTheDocument();
+    expect(within(panel).queryByText("Sample owner report")).not.toBeInTheDocument();
+  });
+});
+
+describe("switching company", () => {
+  function Shell({ hub }: { hub: HubValue }) {
+    return (
+      <HubContext value={hub}>
+        <MemoryRouter initialEntries={["/settings/connections"]}>
+          <Routes>
+            <Route path="/settings/connections" element={<SettingsPage tab="connections" />} />
+          </Routes>
+        </MemoryRouter>
+      </HubContext>
+    );
+  }
+
+  it("closes the panel when the active company changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Shell hub={kingdomRococo} />);
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    expect(await screen.findByRole("dialog", { name: "GoHighLevel" })).toBeInTheDocument();
+    await user.type(screen.getByRole("searchbox", { name: "Search tools" }), "nothing like this");
+
+    // The sidebar switcher changes company without navigating.
+    rerender(<Shell hub={makeHub("rococo", RBA.company)} />);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("searchbox", { name: "Search tools" })).toHaveValue("");
+    expect(await findCard("QuickBooks Online")).toBeInTheDocument();
   });
 });

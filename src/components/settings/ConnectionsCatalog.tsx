@@ -1,9 +1,11 @@
 // Settings > Connections: every outside tool a company might use, in one catalog that is the same
 // for every company, grouped by what each tool is for. A card's state comes from the company's own
 // connection rows, its modules, its links, its tool requests and whether Rococo's app keys are in,
-// all worked out by cardView (lib/connectors.ts). Connect sends the admin to the provider's sign-in
-// and back; the outcome comes back on the address, read here once. Nothing here reads a token or
-// calls a provider: that is the connections Edge Function's job.
+// all worked out by cardView (lib/connectors.ts). Connect and Reconnect open the step before the
+// provider's sign-in (ConnectPanel), which sends the admin there and back; the outcome comes back on
+// the address, read here once. Manage opens the card's own panel (ConnectorPanel): the connection's
+// detail and its Disconnect, or Monday's links. Nothing here reads a token or calls a provider: that
+// is the connections Edge Function's job.
 import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
@@ -14,15 +16,17 @@ import SkeletonRows from "../ui/SkeletonRows.tsx";
 import { inputClass } from "../ui/forms.ts";
 import { eyebrowLabelClass, metaClass, sectionTitleClass } from "../ui/type.ts";
 import ConnectorCard, { type CardAction } from "./ConnectorCard.tsx";
+import ConnectorPanel from "./ConnectorPanel.tsx";
+import ConnectPanel from "./ConnectPanel.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
-import { listConnections, loadConnectorSetup, startConnection } from "../../services/connections.ts";
+import { listConnections, loadConnectorSetup } from "../../services/connections.ts";
 import { listConnectorRequests, requestConnector, withdrawConnectorRequest } from "../../services/connectorRequests.ts";
 import { listExternalLinks } from "../../services/externalLinks.ts";
 import { CARD_STATE_ORDER, CONNECTOR_GROUPS, CONNECTORS, cardView, summaryCounts, type CardView, type Connector, type ConnectorGroup } from "../../lib/connectors.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { hasModule } from "../../lib/modules.ts";
-import { CONNECTION_PROVIDER_LABELS, keysOf, type Company, type CompanyConnection, type ConnectionProvider, type ConnectorRequest } from "../../types/database.ts";
+import { CONNECTION_PROVIDER_LABELS, keysOf, type Company, type CompanyConnection, type ConnectionProvider, type ConnectorRequest, type ExternalLink, type LinkProvider } from "../../types/database.ts";
 
 // The fixed lines the connections Edge Function puts on connect_error, word for word, kept in step
 // with supabase/functions/connections/index.ts. Anything else on the address was written by
@@ -83,7 +87,8 @@ interface CatalogData {
   companyId: string;
   connections: CompanyConnection[];
   requests: ConnectorRequest[];
-  links: number;
+  /** How many of the company's links each link tool has. */
+  links: Partial<Record<LinkProvider, number>>;
   setup: Record<ConnectionProvider, boolean> | null;
 }
 
@@ -91,7 +96,18 @@ interface Card {
   connector: Connector;
   view: CardView;
   row: CompanyConnection | null;
+  keysIn: boolean | null;
+  linkCount: number;
   order: number;
+}
+
+// The panel a card has open: its detail (or links), or the step before the provider's sign-in.
+type OpenPanel = { key: string; kind: "detail" | "connect" };
+
+function countByProvider(links: ExternalLink[]): Partial<Record<LinkProvider, number>> {
+  const counts: Partial<Record<LinkProvider, number>> = {};
+  for (const link of links) counts[link.provider] = (counts[link.provider] ?? 0) + 1;
+  return counts;
 }
 
 // The summary strip: three figures, read from the cards themselves.
@@ -109,7 +125,9 @@ function Summary({ connected, attention, available }: { connected: number; atten
   );
 }
 
-export default function ConnectionsCatalog({ company, onOpen = () => undefined }: { company: Company; onOpen?: (connectorKey: string) => void }) {
+// Settings renders this keyed by the company, so a Rococo admin switching company starts it afresh:
+// no banner, filter, search or open panel carries over from the company before.
+export default function ConnectionsCatalog({ company }: { company: Company }) {
   const { isRococo } = useHub();
   const idPrefix = useId();
   const linksOn = hasModule(company, "external_links");
@@ -122,7 +140,7 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
       linksOn ? listExternalLinks(company.id) : Promise.resolve([]),
       loadConnectorSetup(company.id),
     ]);
-    return { companyId: company.id, connections, requests, links: links.filter((l) => l.provider === "monday").length, setup };
+    return { companyId: company.id, connections, requests, links: countByProvider(links), setup };
   }, [company.id, linksOn]);
 
   const [params, setParams] = useSearchParams();
@@ -130,6 +148,7 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [panel, setPanel] = useState<OpenPanel | null>(null);
 
   // The provider sends the browser back here with the outcome on the address. It is read once, on
   // arrival, and then taken off the address, so a reload does not report it again and a later
@@ -148,24 +167,15 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
     );
   }, [params, setParams]);
 
-  // Connect leaves busy set while the browser goes to the provider. Back from there can restore
-  // this page from the back-forward cache with that state intact, so a restored page lets go.
-  useEffect(() => {
-    const onShow = (event: PageTransitionEvent) => {
-      if (event.persisted) setBusy(null);
-    };
-    window.addEventListener("pageshow", onShow);
-    return () => window.removeEventListener("pageshow", onShow);
-  }, []);
-
   const data = state.data;
   const cards = useMemo<Card[] | null>(() => {
     if (!data) return null;
     return CONNECTORS.map((connector, order) => {
       const row = connector.provider ? data.connections.find((c) => c.provider === connector.provider) ?? null : null;
       const keysIn = connector.provider && data.setup !== null ? data.setup[connector.provider] : null;
-      const view = cardView(connector, { row, hasModule: (m) => hasModule(company, m), keysIn, linkCount: connector.linkProvider ? data.links : 0 });
-      return { connector, view, row, order };
+      const linkCount = connector.linkProvider ? data.links[connector.linkProvider] ?? 0 : 0;
+      const view = cardView(connector, { row, hasModule: (m) => hasModule(company, m), keysIn, linkCount });
+      return { connector, view, row, keysIn, linkCount, order };
     });
   }, [data, company]);
 
@@ -176,14 +186,6 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
   // that provider reads connected too. Until the rows load, and over a row that says otherwise, it
   // says nothing: the row itself is the truth.
   const shown = outcome && (outcome.tone === "error" || rowFor(outcome.provider)?.status === "connected") ? outcome : null;
-
-  async function connect(provider: ConnectionProvider) {
-    setOutcome(null);
-    // The trip to the provider is a full page load, and the company a Rococo admin stepped into
-    // lives only in this session's memory, so the way back names the company (App.tsx).
-    const url = await startConnection(company.id, provider, `${window.location.origin}/settings/connections/${company.id}`);
-    window.location.assign(url);
-  }
 
   // Asking twice keeps one request: the service hands back the stored row either way. A Rococo
   // admin can switch company while the answer is out, so it lands only on the company it is for.
@@ -201,25 +203,42 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
 
   async function act(connector: Connector, action: CardAction) {
     if (busy) return;
-    if (action === "manage" || action === "manage_links" || action === "add_link") {
-      onOpen(connector.key);
+    if (action === "connect" || action === "reconnect") {
+      setPanel({ key: connector.key, kind: "connect" });
+      return;
+    }
+    if (action !== "ask") {
+      setPanel({ key: connector.key, kind: "detail" });
       return;
     }
     setBusy(connector.key);
     setError("");
     try {
-      if (action === "ask") {
-        await toggleRequest(connector.key);
-        setBusy(null);
-      } else if (connector.provider) {
-        // Connect and Reconnect leave busy set while the browser goes to the provider.
-        await connect(connector.provider);
-      }
+      await toggleRequest(connector.key);
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
       setBusy(null);
     }
   }
+
+  // A Disconnect: the return trip's "is connected" no longer holds, and the rows load again.
+  function changed() {
+    setOutcome(null);
+    state.reload();
+  }
+
+  // Links change inside Monday's panel, so its card's count is read again when it closes.
+  function closePanel(card: Card) {
+    setPanel(null);
+    if (card.connector.how === "links") state.reload();
+  }
+
+  // A connection's detail is only for a row that is on or in error. Should the rows say otherwise
+  // after a reload (disconnected from another tab), the panel goes rather than offer a Disconnect
+  // of nothing.
+  const found = panel && cards ? cards.find((c) => c.connector.key === panel.key) ?? null : null;
+  const open = found && (found.connector.how === "links" || panel?.kind === "connect" || found.view.state === "connected" || found.view.state === "needs_attention") ? found : null;
 
   const needle = query.trim().toLowerCase();
   const visible = (card: Card) =>
@@ -275,7 +294,7 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
                 <p className={metaClass}>{group.note}</p>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {list.map(({ connector, view, row }) => (
+                {list.map(({ connector, view, row, linkCount }) => (
                   <ConnectorCard
                     key={connector.key}
                     connector={connector}
@@ -283,8 +302,7 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
                     row={row}
                     requested={requested.has(connector.key)}
                     rococoLine={isRococo ? rococoLineFor(connector, data!.setup) : null}
-                    linkCount={connector.linkProvider ? data!.links : 0}
-                    busy={busy === connector.key}
+                    linkCount={linkCount}
                     disabled={busy !== null}
                     onAction={(action) => void act(connector, action)}
                   />
@@ -293,6 +311,10 @@ export default function ConnectionsCatalog({ company, onOpen = () => undefined }
             </section>
           ))}
         </>
+      ) : null}
+      {open && panel?.kind === "connect" ? <ConnectPanel company={company} connector={open.connector} onClose={() => setPanel(null)} /> : null}
+      {open && panel?.kind === "detail" ? (
+        <ConnectorPanel company={company} connector={open.connector} row={open.row} view={open.view} keysIn={open.keysIn} onClose={() => closePanel(open)} onChanged={changed} />
       ) : null}
     </Section>
   );

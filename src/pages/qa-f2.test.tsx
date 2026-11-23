@@ -38,6 +38,7 @@ vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts")
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { deleteCompanyGoal, updateCompanyGoal, updatePillar } from "../services/gsr.ts";
@@ -229,6 +230,12 @@ describe("connection outcome", () => {
   it("still says so when the row does read connected", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/?connected=gohighlevel" });
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Manage GoHighLevel" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await userEvent.click(within(panel).getByRole("button", { name: "Disconnect" }));
+    await userEvent.click(within(panel).getByRole("button", { name: "Disconnect for everyone at Klasik Construction" }));
+    // Once it is not connected, the page stops saying it is.
+    await waitFor(() => expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument());
+    expect(await screen.findByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
   });
 });

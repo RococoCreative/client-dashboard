@@ -180,7 +180,7 @@ function ConnectionsTab({ company }: { company: Company }) {
   if (sourceId && !dataSources) return <Navigate to="/settings/connections" replace />;
   return (
     <div className="space-y-6">
-      <ConnectionsCatalog company={company} />
+      <ConnectionsCatalog key={company.id} company={company} />
       {dataSources ? <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} /> : null}
     </div>
   );

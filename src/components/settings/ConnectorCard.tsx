@@ -1,7 +1,9 @@
 // One tool on the Connections catalog: its monogram, name and line, its state for this company as
 // a pill, and the one action that makes sense next, or the line saying why there is none. The
-// state itself comes from cardView (lib/connectors.ts); this card only shows it. Rococo's setup
-// line sits underneath when the catalog passes one, which it does for a Rococo admin only.
+// state itself comes from cardView (lib/connectors.ts); this card only shows it. A card that needs
+// attention also offers Manage, so the detail panel and its Disconnect are always in reach, even
+// when Reconnect cannot run. Rococo's setup line sits underneath when the catalog passes one, which
+// it does for a Rococo admin only.
 import { useId } from "react";
 import Badge, { type BadgeTone } from "../ui/Badge.tsx";
 import Button from "../ui/Button.tsx";
@@ -51,16 +53,16 @@ function Detail({ view, row, linkCount }: { view: CardView; row: CompanyConnecti
 
 // The one button a card offers. Its accessible name carries the tool, so a reader moving through
 // the buttons alone still knows which card each one belongs to.
-function Action({ connector, view, requested, busy, disabled, onAction }: { connector: Connector; view: CardView; requested: boolean; busy: boolean; disabled: boolean; onAction: (action: CardAction) => void }) {
+function Action({ connector, view, requested, disabled, onAction }: { connector: Connector; view: CardView; requested: boolean; disabled: boolean; onAction: (action: CardAction) => void }) {
   const { action } = view;
   if (!action) return null;
   const { name } = connector;
   const press = () => onAction(action);
   switch (action) {
     case "connect":
-      return <Button size="sm" aria-label={`Connect ${name}`} disabled={disabled} onClick={press}>{busy ? "Opening..." : "Connect"}</Button>;
+      return <Button size="sm" aria-label={`Connect ${name}`} disabled={disabled} onClick={press}>Connect</Button>;
     case "reconnect":
-      return <Button size="sm" aria-label={`Reconnect ${name}`} disabled={disabled} onClick={press}>{busy ? "Opening..." : "Reconnect"}</Button>;
+      return <Button size="sm" aria-label={`Reconnect ${name}`} disabled={disabled} onClick={press}>Reconnect</Button>;
     case "manage":
       return <Button variant="secondary" size="sm" aria-label={`Manage ${name}`} disabled={disabled} onClick={press}>Manage</Button>;
     case "manage_links":
@@ -84,7 +86,6 @@ export default function ConnectorCard({
   rococoLine,
   onAction,
   linkCount = 0,
-  busy = false,
   disabled = false,
 }: {
   connector: Connector;
@@ -95,8 +96,6 @@ export default function ConnectorCard({
   rococoLine: string | null;
   onAction: (action: CardAction) => void;
   linkCount?: number;
-  /** True while this card's own action is running. */
-  busy?: boolean;
   /** True while any action on the catalog is running, this card's included. */
   disabled?: boolean;
 }) {
@@ -123,7 +122,12 @@ export default function ConnectorCard({
           <Badge tone={badge.tone}>{badge.label}</Badge>
           <span className={eyebrowLabelClass}>{HOW_LABELS[connector.how]}</span>
         </div>
-        <Action connector={connector} view={view} requested={requested} busy={busy} disabled={disabled} onAction={onAction} />
+        <div className="flex flex-wrap items-center gap-2">
+          {view.state === "needs_attention" ? (
+            <Button variant="secondary" size="sm" aria-label={`Manage ${connector.name}`} disabled={disabled} onClick={() => onAction("manage")}>Manage</Button>
+          ) : null}
+          <Action connector={connector} view={view} requested={requested} disabled={disabled} onAction={onAction} />
+        </div>
       </div>
       {rococoLine ? <p className="border-t border-dashed border-line pt-2 font-mono text-[11px] leading-relaxed text-info">{rococoLine}</p> : null}
     </article>

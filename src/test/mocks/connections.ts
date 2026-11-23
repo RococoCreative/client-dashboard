@@ -3,8 +3,15 @@
 import type { CompanyConnection, ConnectionProvider } from "../../types/database.ts";
 import { fromAll } from "../fixtures.ts";
 
-const connections = fromAll((b) => b.connections).map((x) => ({ ...x }));
+const seeded = () => fromAll((b) => b.connections).map((x) => ({ ...x }));
+const connections = seeded();
 const now = () => new Date().toISOString();
+
+// Puts every company's rows back as seeded, so a Disconnect in one test is not still in effect in
+// the next. Called from src/test/setup.ts.
+export function resetMockConnections(): void {
+  connections.splice(0, connections.length, ...seeded());
+}
 
 export async function listConnections(companyId: string): Promise<CompanyConnection[]> {
   return connections.filter((c) => c.company_id === companyId).sort((a, b) => a.provider.localeCompare(b.provider));

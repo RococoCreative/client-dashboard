@@ -5,6 +5,10 @@
 // is enforced by RLS on its audience, never by a screen. Each link reads as text first; its pencil
 // opens the fields in place, one link at a time, with Remove beside Done. Every change saves on its
 // own.
+//
+// Settings > Connections opens the same editor from one tool's card (Monday's) with onlyProvider:
+// it then lists only that tool's links, adds new ones as that tool, offers no tool picker, and sits
+// bare inside the card's panel, which carries the heading.
 import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import Badge from "../ui/Badge.tsx";
@@ -68,7 +72,10 @@ function LinkRow({
   onError,
   onRemove,
   onDone,
+  fixedProvider,
 }: {
+  /** True when the editor is limited to one tool, so a link's tool is not offered for change. */
+  fixedProvider: boolean;
   editing: boolean;
   onEdit: () => void;
   onDone: () => void;
@@ -148,7 +155,7 @@ function LinkRow({
           <BlurInput value={link.embed_url ?? ""} placeholder="https://" ariaLabel={`Embed link for ${link.label}`} onSave={saveEmbedUrl} className={cellInput} />
         </label>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`mt-3 grid grid-cols-2 gap-3 ${fixedProvider ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
         <label className="block">
           <Caption>Category</Caption>
           <select value={link.nav_group} aria-label={`Category for ${link.label}`} onChange={(e) => void save({ nav_group: e.target.value as LinkNavGroup })} className={cellSelect}>
@@ -161,12 +168,14 @@ function LinkRow({
             {keysOf(LINK_AUDIENCE_LABELS).map((audience) => <option key={audience} value={audience}>{LINK_AUDIENCE_LABELS[audience]}</option>)}
           </select>
         </label>
-        <label className="block">
-          <Caption>Tool</Caption>
-          <select value={link.provider} aria-label={`Tool for ${link.label}`} onChange={(e) => void save({ provider: e.target.value as LinkProvider })} className={cellSelect}>
-            {keysOf(LINK_PROVIDER_LABELS).map((provider) => <option key={provider} value={provider}>{LINK_PROVIDER_LABELS[provider]}</option>)}
-          </select>
-        </label>
+        {fixedProvider ? null : (
+          <label className="block">
+            <Caption>Tool</Caption>
+            <select value={link.provider} aria-label={`Tool for ${link.label}`} onChange={(e) => void save({ provider: e.target.value as LinkProvider })} className={cellSelect}>
+              {keysOf(LINK_PROVIDER_LABELS).map((provider) => <option key={provider} value={provider}>{LINK_PROVIDER_LABELS[provider]}</option>)}
+            </select>
+          </label>
+        )}
         <label className="block">
           <Caption>Order</Caption>
           <BlurInput type="number" value={String(link.sort_order)} required ariaLabel={`Order for ${link.label}`} onSave={saveOrder} className={`${cellInput} tnum`} />
@@ -193,20 +202,20 @@ function LinkRow({
   );
 }
 
-function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; destination_note: string | null; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }) => Promise<boolean> }) {
+function AddLinkForm({ onAdd, onlyProvider }: { onAdd: (draft: { label: string; url: string; destination_note: string | null; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }) => Promise<boolean>; onlyProvider?: LinkProvider }) {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [navGroup, setNavGroup] = useState<LinkNavGroup>("home");
   const [audience, setAudience] = useState<LinkAudience>("everyone");
-  const [provider, setProvider] = useState<LinkProvider>("other");
+  const [provider, setProvider] = useState<LinkProvider>(onlyProvider ?? "other");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
-    const added = await onAdd({ label, url, destination_note: note.trim() || null, nav_group: navGroup, audience, provider });
+    const added = await onAdd({ label, url, destination_note: note.trim() || null, nav_group: navGroup, audience, provider: onlyProvider ?? provider });
     setBusy(false);
     if (added) {
       setLabel("");
@@ -230,7 +239,7 @@ function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; d
           </Field>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
+      <div className={`mt-3 grid grid-cols-2 items-end gap-3 ${onlyProvider ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
         <Field label="Category" htmlFor="new-link-section">
           <select id="new-link-section" value={navGroup} onChange={(e) => setNavGroup(e.target.value as LinkNavGroup)} className={cellSelect}>
             {LINK_GROUPS.map((group) => <option key={group} value={group}>{LINK_GROUP_LABELS[group]}</option>)}
@@ -241,11 +250,13 @@ function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; d
             {keysOf(LINK_AUDIENCE_LABELS).map((a) => <option key={a} value={a}>{LINK_AUDIENCE_LABELS[a]}</option>)}
           </select>
         </Field>
-        <Field label="Tool" htmlFor="new-link-provider">
-          <select id="new-link-provider" value={provider} onChange={(e) => setProvider(e.target.value as LinkProvider)} className={cellSelect}>
-            {keysOf(LINK_PROVIDER_LABELS).map((p) => <option key={p} value={p}>{LINK_PROVIDER_LABELS[p]}</option>)}
-          </select>
-        </Field>
+        {onlyProvider ? null : (
+          <Field label="Tool" htmlFor="new-link-provider">
+            <select id="new-link-provider" value={provider} onChange={(e) => setProvider(e.target.value as LinkProvider)} className={cellSelect}>
+              {keysOf(LINK_PROVIDER_LABELS).map((p) => <option key={p} value={p}>{LINK_PROVIDER_LABELS[p]}</option>)}
+            </select>
+          </Field>
+        )}
         <Button type="submit" variant="secondary" disabled={busy}>
           <Plus size={14} aria-hidden /> Add link
         </Button>
@@ -254,7 +265,7 @@ function AddLinkForm({ onAdd }: { onAdd: (draft: { label: string; url: string; d
   );
 }
 
-export default function ExternalLinksPanel({ companyId }: { companyId: string }) {
+export default function ExternalLinksPanel({ companyId, onlyProvider }: { companyId: string; onlyProvider?: LinkProvider }) {
   const state = useAsync(() => listExternalLinks(companyId), [companyId]);
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState<ExternalLink | null>(null);
@@ -263,7 +274,9 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
   // One link open at a time.
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // Every link of the company, for the order a new one takes; the ones on show, for the list.
   const links = state.data ?? [];
+  const shown = onlyProvider ? links.filter((l) => l.provider === onlyProvider) : links;
 
   async function add(draft: { label: string; url: string; destination_note: string | null; nav_group: LinkNavGroup; audience: LinkAudience; provider: LinkProvider }): Promise<boolean> {
     const label = draft.label.trim();
@@ -301,21 +314,19 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
     }
   }
 
-  const groups = groupLinks(links);
+  const groups = groupLinks(shown);
 
-  return (
-    <Section
-      eyebrow="Admins add, everyone reads"
-      title="Links to outside tools"
-      description="Where the work lives: the programs the team works in, such as Monday boards. Links show here and on Home for whoever they are for; a category other than General also puts a link on that section's page. People still sign in to those tools themselves."
-    >
+  const body = (
+    <>
       {state.error && !state.data ? <Notice tone="error">{state.error}</Notice> : null}
       {!state.data && !state.error ? <SkeletonRows rows={3} /> : null}
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
       {state.data ? (
         <>
           {groups.length === 0 ? (
-            <p className={secondaryClass}>No links yet. Add the programs the team works in below, with a line on what each is for.</p>
+            <p className={secondaryClass}>
+              {onlyProvider ? `No ${LINK_PROVIDER_LABELS[onlyProvider]} links yet. Add the first one below, with a line on what it is for.` : "No links yet. Add the programs the team works in below, with a line on what each is for."}
+            </p>
           ) : (
             <div className="space-y-5">
               {groups.map((g) => (
@@ -326,6 +337,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
                       <LinkRow
                         key={link.id}
                         link={link}
+                        fixedProvider={onlyProvider !== undefined}
                         editing={openId === link.id}
                         onEdit={() => setOpenId(link.id)}
                         onSaved={(next) => state.setData((prev) => (prev ? prev.map((l) => (l.id === next.id ? next : l)) : prev))}
@@ -342,7 +354,7 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
               ))}
             </div>
           )}
-          <AddLinkForm onAdd={add} />
+          <AddLinkForm onAdd={add} onlyProvider={onlyProvider} />
         </>
       ) : null}
       {removing ? (
@@ -357,6 +369,17 @@ export default function ExternalLinksPanel({ companyId }: { companyId: string })
           onCancel={() => setRemoving(null)}
         />
       ) : null}
+    </>
+  );
+
+  if (onlyProvider) return <div>{body}</div>;
+  return (
+    <Section
+      eyebrow="Admins add, everyone reads"
+      title="Links to outside tools"
+      description="Where the work lives: the programs the team works in, such as Monday boards. Links show here and on Home for whoever they are for; a category other than General also puts a link on that section's page. People still sign in to those tools themselves."
+    >
+      {body}
     </Section>
   );
 }

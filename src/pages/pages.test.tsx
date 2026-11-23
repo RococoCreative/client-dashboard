@@ -1179,6 +1179,18 @@ describe("connections", () => {
     expect(screen.queryByRole("heading", { name: "Links to outside tools" })).not.toBeInTheDocument();
   });
 
+  it("disconnects a connection from its card's panel in settings", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<SettingsPage tab="connections" />, admin);
+    await user.click(within(await toolCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await user.click(within(panel).getByRole("button", { name: "Disconnect" }));
+    await user.click(within(panel).getByRole("button", { name: "Disconnect for everyone at Klasik Construction" }));
+    const ghl = await toolCard("GoHighLevel");
+    await waitFor(() => expect(within(ghl).getByText("Not connected")).toBeInTheDocument());
+    expect(within(ghl).getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
+  });
+
   it("offers Google Sheets only to a company with data sources", async () => {
     const { unmount } = renderWithHub(<ConnectionsCatalog company={KLASIK.company} />, admin);
     const off = await toolCard("Google Sheets");

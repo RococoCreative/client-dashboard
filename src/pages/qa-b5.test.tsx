@@ -144,6 +144,7 @@ describe("connection outcome on settings", () => {
     vi.mocked(startConnection).mockRejectedValueOnce(new Error("Stopped before leaving the page."));
     renderSettings("/settings/connections");
     await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
+    await user.click(await screen.findByRole("button", { name: "Continue to QuickBooks Online" }));
     expect(vi.mocked(startConnection)).toHaveBeenCalledWith(KLASIK.company.id, "quickbooks", `${window.location.origin}/settings/connections/${KLASIK.company.id}`);
   });
 
@@ -153,6 +154,7 @@ describe("connection outcome on settings", () => {
     vi.mocked(startConnection).mockImplementationOnce(() => new Promise<string>(() => {}));
     renderSettings("/settings/connections");
     await user.click(await screen.findByRole("button", { name: "Connect QuickBooks Online" }));
+    await user.click(await screen.findByRole("button", { name: "Continue to QuickBooks Online" }));
     expect(await screen.findByText("Opening...")).toBeInTheDocument();
     // Back from the provider restores this page as it was left.
     const restored = new Event("pageshow");
@@ -161,7 +163,7 @@ describe("connection outcome on settings", () => {
       window.dispatchEvent(restored);
     });
     await waitFor(() => expect(screen.queryByText("Opening...")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Connect QuickBooks Online" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue to QuickBooks Online" })).not.toBeDisabled();
   });
 
   it("shows a known outcome and clears it from the address", async () => {
@@ -177,6 +179,20 @@ describe("connection outcome on settings", () => {
   });
 
   it("drops the connected notice once the provider is disconnected", async () => {
+    const user = userEvent.setup();
+    renderSettings("/settings/connections?connected=gohighlevel");
+    expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
+    await user.click(screen.getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await user.click(within(panel).getByRole("button", { name: "Disconnect" }));
+    await user.click(within(panel).getByRole("button", { name: "Disconnect for everyone at Klasik Construction" }));
+    const ghl = screen.getByRole("article", { name: "GoHighLevel" });
+    await waitFor(() => expect(within(ghl).getByText("Not connected")).toBeInTheDocument());
+    expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument();
+  });
+
+  it("drops the connected notice once the provider is disconnected elsewhere", async () => {
     renderSettings("/settings/connections?connected=gohighlevel");
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
