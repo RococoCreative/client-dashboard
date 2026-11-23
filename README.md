@@ -206,7 +206,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   trigger function). Either one failing makes every delete of a signed-in person refuse and roll
   back. The hook needs no change in the dashboard: it is the same function. Apply it before merging
   the app, which offers Delete person.
-- **Written, not applied yet:** `0050_connector_requests`. It adds `connector_requests`, one row
+- **Applied (pasted in the SQL editor, checked live 2026-11-23):** `0050_connector_requests`. It adds `connector_requests`, one row
   per company per tool a company has asked for from the Connections catalog: members and Rococo
   read, the company's admins (or a Rococo admin acting for it) ask and withdraw, the database
   stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
