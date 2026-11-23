@@ -851,6 +851,18 @@ export const CONNECTION_PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   quickbooks: "QuickBooks Online",
   google_sheets: "Google Sheets",
 };
+// A tool a company has asked for from the Connections catalog (0050): one row per company per tool,
+// keyed by the catalog's connector key (src/lib/connectors.ts). Members and Rococo read; admins of
+// the company, or a Rococo admin acting for it, ask and withdraw. requested_by is stamped by the
+// database as whoever asked, and clears if that person is deleted. Rows are never edited.
+export interface ConnectorRequest {
+  id: string;
+  company_id: string;
+  connector_key: string;
+  requested_by: string | null;
+  requested_at: string;
+}
+
 export type ConnectionStatus = "not_connected" | "connected" | "error";
 export interface CompanyConnection {
   id: string;

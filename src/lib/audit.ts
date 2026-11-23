@@ -15,6 +15,7 @@ import {
   TARGET_MODULE_LABELS,
   type AuditEvent,
 } from "../types/database.ts";
+import { CONNECTORS } from "./connectors.ts";
 import { LINK_GROUP_LABELS } from "./links.ts";
 import { MODULE_LABELS } from "./modules.ts";
 
@@ -44,6 +45,7 @@ export const AUDIT_TABLE_LABELS: Record<string, string> = {
   external_links: "External link",
   company_capabilities: "Permission",
   milestone_templates: "Standard milestone",
+  connector_requests: "Tool request",
 };
 
 function fmt(value: unknown): string {
@@ -148,6 +150,9 @@ interface Column {
 // A data source's sync days, numbered as the database numbers them (0 = Sunday).
 const WEEKDAY_LABELS: Record<string, string> = { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" };
 
+// A requested tool by its catalog name. A key the catalog no longer lists reads as the key itself.
+const CONNECTOR_NAMES: Record<string, string> = Object.fromEntries(CONNECTORS.map((c) => [c.key, c.name]));
+
 const COLUMNS: Record<string, Record<string, Column>> = {
   companies: {
     modules: { label: "modules", kind: { labels: MODULE_LABELS } },
@@ -225,6 +230,9 @@ const COLUMNS: Record<string, Record<string, Column>> = {
     kind: { label: "kind", kind: { labels: MILESTONE_KIND_LABELS } },
     sort_order: { label: "position", kind: "text" },
     archived_at: { label: "removed", kind: "text" },
+  },
+  connector_requests: {
+    connector_key: { label: "tool", kind: { labels: CONNECTOR_NAMES } },
   },
 };
 

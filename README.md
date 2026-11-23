@@ -206,7 +206,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   trigger function). Either one failing makes every delete of a signed-in person refuse and roll
   back. The hook needs no change in the dashboard: it is the same function. Apply it before merging
   the app, which offers Delete person.
-- **Next free number:** `0050`.
+- **Written, not applied yet:** `0050_connector_requests`. It adds `connector_requests`, one row
+  per company per tool a company has asked for from the Connections catalog: members and Rococo
+  read, the company's admins (or a Rococo admin acting for it) ask and withdraw, the database
+  stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
+  request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
+  Nothing visible changes when it goes in. Apply it before merging the app that reads it.
+- **Next free number:** `0051`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.

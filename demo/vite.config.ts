@@ -19,7 +19,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^(.*)\/services\/(supabase|auth|profiles|companies|invitations|gsr|gsrOnDemand|sops|resources|storage|financials|marketing|employees|deliverables|jobRoles|connections|audit|projects|wins|tasks|sync|externalLinks|focusTopics|scorecards|divisions|directory|projectAssignments|reviewProjectNotes|capabilities|milestoneTemplates)\.ts$/,
+        find: /^(.*)\/services\/(supabase|auth|profiles|companies|invitations|gsr|gsrOnDemand|sops|resources|storage|financials|marketing|employees|deliverables|jobRoles|connections|audit|projects|wins|tasks|sync|externalLinks|focusTopics|scorecards|divisions|directory|projectAssignments|reviewProjectNotes|capabilities|milestoneTemplates|connectorRequests)\.ts$/,
         replacement: `${REPO}/src/test/mocks/$2.ts`,
       },
     ],
