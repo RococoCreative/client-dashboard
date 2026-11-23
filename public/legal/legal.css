@@ -1,0 +1,70 @@
+/* Why this exists: the public legal pages (license agreement, privacy policy, QuickBooks
+   disconnect) sit outside the React app so anyone, signed in or not, can read them, and outside
+   providers such as Intuit can link to them. They share this one quiet stylesheet. */
+
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #5f5e5a;
+  --rule: #e6e3dd;
+  --accent: #6b5b3e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141412;
+    --surface: #1c1c1a;
+    --text: #ecebe7;
+    --muted: #a8a69f;
+    --rule: #2e2d2a;
+    --accent: #c9b48a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 16px 80px;
+}
+
+.brand {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 19px; margin: 36px 0 8px; padding-top: 20px; border-top: 1px solid var(--rule); }
+p, li { color: var(--text); }
+ul { padding-left: 20px; }
+li { margin: 4px 0; }
+.meta { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+a { color: var(--accent); }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 20px;
+  margin: 24px 0;
+}
+
+footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 14px;
+}
