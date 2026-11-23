@@ -14,6 +14,7 @@ import Skeleton from "../ui/Skeleton.tsx";
 import { eyebrowLabelClass, metaClass, metaSizeClass, secondaryClass, sectionTitleClass } from "../ui/type.ts";
 import ConnectPanel from "./ConnectPanel.tsx";
 import ExternalLinksPanel from "../links/ExternalLinksPanel.tsx";
+import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection } from "../../services/connections.ts";
 import { listDirectory } from "../../services/directory.ts";
@@ -23,7 +24,7 @@ import { formatDate } from "../../lib/format.ts";
 import { hasModule } from "../../lib/modules.ts";
 import type { Company, CompanyConnection } from "../../types/database.ts";
 
-const NO_LONGER_LISTED = "someone no longer listed";
+const NOT_ON_PEOPLE = "someone not on the People list";
 
 // The meta line in the danger colour: the size and leading come from the type scale, the colour is named here.
 const DANGER_LINE = `${metaSizeClass} text-danger`;
@@ -38,10 +39,15 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-// Who connected the account, by name from the company directory. A person who is not in it any
-// more, or a connection with no one recorded, reads "someone no longer listed".
+// Who connected the account. The signed-in person is named from their own profile: a Rococo admin
+// who connected it for the company is not in the company directory, which leaves Rococo staff out.
+// Anyone else is named from the directory, and a person who is not in it, or a connection with no
+// one recorded, reads "someone not on the People list".
 function useConnectedBy(companyId: string, profileId: string | null): { name: string | null; loading: boolean } {
-  const directory = useAsync(() => (profileId ? listDirectory(companyId) : Promise.resolve([])), [companyId, profileId]);
+  const { profile } = useHub();
+  const ownName = profileId !== null && profileId === profile.id ? profile.full_name?.trim() || null : null;
+  const directory = useAsync(() => (profileId && !ownName ? listDirectory(companyId) : Promise.resolve([])), [companyId, profileId, ownName]);
+  if (ownName) return { name: ownName, loading: false };
   if (!profileId) return { name: null, loading: false };
   if (!directory.data) return { name: null, loading: !directory.error };
   const entry = directory.data.find((d) => d.id === profileId);
@@ -131,7 +137,7 @@ function ConnectionBody({
         <dl className="mt-3 divide-y divide-line border-y border-line">
           <Fact label="Account">{account}</Fact>
           <Fact label="Connected by">
-            {connectedBy.loading ? <Skeleton className="h-4 w-32" /> : connectedBy.name ?? NO_LONGER_LISTED}
+            {connectedBy.loading ? <Skeleton className="h-4 w-32" /> : connectedBy.name ?? NOT_ON_PEOPLE}
           </Fact>
           <Fact label="Since">{row.connected_at ? formatDate(row.connected_at) : "Not recorded"}</Fact>
           <Fact label="Last read">{row.last_synced_at ? formatDate(row.last_synced_at) : "Not read yet"}</Fact>

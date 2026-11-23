@@ -25,6 +25,7 @@ import { setMockConnectorSetup } from "../test/mocks/connections.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as requestsService from "../services/connectorRequests.ts";
 import * as linksService from "../services/externalLinks.ts";
+import * as directoryService from "../services/directory.ts";
 import ConnectionsCatalog from "../components/settings/ConnectionsCatalog.tsx";
 import SettingsPage from "./settings/SettingsPage.tsx";
 import { formatDate } from "../lib/format.ts";
@@ -277,7 +278,7 @@ describe("the detail panel", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("names a deleted connector of the account as 'someone no longer listed'", async () => {
+  it("names a connector of the account who is not in the directory as 'someone not on the People list'", async () => {
     const user = userEvent.setup();
     const rows = await connectionsService.listConnections(KINGDOM.company.id);
     const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.map((r) => (r.provider === "gohighlevel" ? { ...r, connected_by: "profile-gone" } : r)));
@@ -285,8 +286,27 @@ describe("the detail panel", () => {
     renderCatalog();
     await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
     const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
-    expect(await within(panel).findByText("someone no longer listed")).toBeInTheDocument();
+    expect(await within(panel).findByText("someone not on the People list")).toBeInTheDocument();
     expect(within(panel).getByText("Connected once for everyone at Kingdom Custom Construction. If the person who connected it leaves or loses access to this account, reconnect with an account the company keeps.")).toBeInTheDocument();
+  });
+
+  it("names the signed-in person who connected it from their own profile, though the directory leaves them out", async () => {
+    const user = userEvent.setup();
+    // A Rococo admin connected it for the company; the company directory leaves Rococo staff out.
+    const me = kingdomRococo.profile;
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.map((r) => (r.provider === "gohighlevel" ? { ...r, connected_by: me.id } : r)));
+    onTestFinished(() => spy.mockRestore());
+    const directory = await directoryService.listDirectory(KINGDOM.company.id);
+    const dirSpy = vi.spyOn(directoryService, "listDirectory").mockResolvedValue(directory.filter((d) => d.id !== me.id));
+    onTestFinished(() => dirSpy.mockRestore());
+    renderCatalog(kingdomRococo);
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    const name = me.full_name!;
+    expect(await within(panel).findByText(name)).toBeInTheDocument();
+    expect(within(panel).queryByText("someone not on the People list")).not.toBeInTheDocument();
+    expect(within(panel).getByText(`Connected once for everyone at Kingdom Custom Construction. If ${name.split(" ")[0]} leaves or loses access to this account, reconnect with an account the company keeps.`)).toBeInTheDocument();
   });
 
   it("shows the stored error first for a card that needs attention", async () => {
