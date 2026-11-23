@@ -69,9 +69,11 @@ describe("AUDIT_TABLE_LABELS", () => {
       "external_links",
       "company_capabilities",
       "milestone_templates",
+      "connector_requests",
     ]);
     expect(AUDIT_TABLE_LABELS.company_domains).toBe("Sign-in domain");
     expect(AUDIT_TABLE_LABELS.milestone_templates).toBe("Standard milestone");
+    expect(AUDIT_TABLE_LABELS.connector_requests).toBe("Tool request");
   });
 });
 
@@ -144,6 +146,21 @@ describe("describeAuditEventPlain", () => {
       "a data source's sync days and business days switch",
       on("sync_sources", "update", { sync_weekdays: { old: [1], new: [1, 2, 3, 4, 5] }, stale_business_days: { old: false, new: true } }, "src-1"),
       "Data source: sync days changed from Monday to Monday, Tuesday, Wednesday, Thursday, Friday; counts business days only changed from no to yes",
+    ],
+    [
+      "a tool request, naming the tool",
+      on("connector_requests", "insert", { connector_key: { old: null, new: "google_calendar" } }, "req-1"),
+      "Tool request added (tool Google Calendar)",
+    ],
+    [
+      "a withdrawn tool request",
+      on("connector_requests", "delete", { connector_key: { old: "jobtread", new: null } }, "req-1"),
+      "Tool request removed (tool JobTread)",
+    ],
+    [
+      "a tool request whose key shares a name with an Object property, as the bare key",
+      on("connector_requests", "insert", { connector_key: { old: null, new: "constructor" } }, "req-2"),
+      "Tool request added (tool constructor)",
     ],
   ];
 

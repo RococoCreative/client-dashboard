@@ -32,11 +32,13 @@ vi.mock("../services/jobRoles.ts", async () => {
 vi.mock("../services/connections.ts", () => import("../test/mocks/connections.ts"));
 vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));
 vi.mock("../services/projectAssignments.ts", () => import("../test/mocks/projectAssignments.ts"));
 vi.mock("../services/reviewProjectNotes.ts", () => import("../test/mocks/reviewProjectNotes.ts"));
+vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { deleteCompanyGoal, updateCompanyGoal, updatePillar } from "../services/gsr.ts";
@@ -228,6 +230,12 @@ describe("connection outcome", () => {
   it("still says so when the row does read connected", async () => {
     renderWithHub(<SettingsPage tab="connections" />, admin, { path: "/?connected=gohighlevel" });
     expect(await screen.findByText("GoHighLevel is connected.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Disconnect GoHighLevel" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Manage GoHighLevel" }));
+    const panel = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await userEvent.click(within(panel).getByRole("button", { name: "Disconnect" }));
+    await userEvent.click(within(panel).getByRole("button", { name: "Disconnect for everyone at Klasik Construction" }));
+    // Once it is not connected, the page stops saying it is.
+    await waitFor(() => expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument());
+    expect(await screen.findByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
   });
 });

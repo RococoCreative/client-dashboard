@@ -69,6 +69,16 @@ export async function requireAdmin(req: Request, companyId: string): Promise<str
   return profile!.id as string;
 }
 
+// The signed-in person, checked as an active member of the company (any role) or a Rococo admin,
+// on their own JWT, with the same is_active check as requireAdmin. Returns their profile id.
+export async function requireMember(req: Request, companyId: string): Promise<string> {
+  const { userId, asUser } = await signedInUser(req);
+  const { data: profile } = await asUser.from("profiles").select("id, company_id, is_rococo_admin, is_active").eq("user_id", userId).maybeSingle();
+  const allowed = Boolean(profile) && profile!.is_active === true && (profile!.is_rococo_admin || profile!.company_id === companyId);
+  if (!allowed) throw new HttpError(403, "Only someone at this company can see its connections.");
+  return profile!.id as string;
+}
+
 export const service = () => createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 export const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });

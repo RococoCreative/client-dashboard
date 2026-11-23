@@ -7,11 +7,14 @@
 //   POST /start        { company_id, provider, return_to }   -> { url } to send the browser to
 //   GET  /callback     ?code&state[&realmId]                 -> redirect back to return_to
 //   POST /disconnect   { company_id, provider }              -> { ok: true }
+//   POST /status       { company_id }                        -> { keys } which providers have their app keys
 //   POST /sync/run     { source_id }                         -> { status, message, rows_applied }
 //   POST /sync/tick    (x-sync-secret header)                -> { due, ran }
 //   POST /sync/describe { connection_id, spreadsheet_id, gid } -> { title, tabs, headers }
 //
-// start, disconnect and sync/describe need the signed-in admin's JWT; sync/run needs the JWT of
+// status needs the JWT of an active member of the company or a Rococo admin, and answers names of
+// providers with their keys set, never a value. start, disconnect and sync/describe need the
+// signed-in admin's JWT; sync/run needs the JWT of
 // someone allowed to sync the source, which row level security decides. The provider reaches
 // callback with no JWT at all, so this function verifies its own signed state and the gateway's
 // JWT check is off for it; the hourly cron reaches sync/tick with the shared secret instead. A
@@ -27,8 +30,9 @@
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { PROVIDER_KEYS, type ProviderKey } from "../_shared/providers.ts";
+import { PROVIDER_SECRETS, keysPresent } from "../_shared/providerSecrets.ts";
 import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl } from "../_shared/sync/googleSheets.ts";
-import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, sameBytes, service } from "./http.ts";
+import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, requireMember, sameBytes, service } from "./http.ts";
 import { handleSyncDescribe, handleSyncRun, handleSyncTick } from "./sync.ts";
 
 type Provider = ProviderKey;
@@ -69,7 +73,7 @@ const secondsFromNow = (seconds: number | undefined): string | null =>
 const GHL_SCOPES = "opportunities.readonly users.readonly locations.readonly";
 const gohighlevel: ProviderDef = {
   label: "GoHighLevel",
-  env: { id: "GHL_CLIENT_ID", secret: "GHL_CLIENT_SECRET" },
+  env: PROVIDER_SECRETS.gohighlevel,
   authorizeUrl: ({ clientId, redirectUri, state }) => {
     const q = new URLSearchParams({ response_type: "code", redirect_uri: redirectUri, client_id: clientId, scope: GHL_SCOPES, state });
     return `https://marketplace.gohighlevel.com/oauth/chooselocation?${q.toString()}`;
@@ -111,7 +115,7 @@ const qboApiBase = () => (Deno.env.get("QBO_ENVIRONMENT") === "production" ? "ht
 const basic = (clientId: string, clientSecret: string) => `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
 const quickbooks: ProviderDef = {
   label: "QuickBooks Online",
-  env: { id: "QBO_CLIENT_ID", secret: "QBO_CLIENT_SECRET" },
+  env: PROVIDER_SECRETS.quickbooks,
   authorizeUrl: ({ clientId, redirectUri, state }) => {
     const q = new URLSearchParams({ client_id: clientId, response_type: "code", scope: QBO_SCOPES, redirect_uri: redirectUri, state });
     return `https://appcenter.intuit.com/connect/oauth2?${q.toString()}`;
@@ -158,7 +162,7 @@ const quickbooks: ProviderDef = {
 // read, not verified (Google documents this as safe for tokens received directly).
 const google_sheets: ProviderDef = {
   label: "Google Sheets",
-  env: { id: "GOOGLE_CLIENT_ID", secret: "GOOGLE_CLIENT_SECRET" },
+  env: PROVIDER_SECRETS.google_sheets,
   authorizeUrl: ({ clientId, redirectUri, state }) => googleAuthorizeUrl({ clientId, redirectUri, state }),
   exchange: async ({ clientId, clientSecret, code, redirectUri }) => {
     const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -256,6 +260,13 @@ function checkReturnTo(value: unknown): string {
 
 const redirect = (to: string) => new Response(null, { status: 302, headers: { Location: to } });
 const backTo = (returnTo: string, params: Record<string, string>) => redirect(`${returnTo}?${new URLSearchParams(params).toString()}`);
+
+async function handleStatus(req: Request): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as { company_id?: unknown };
+  if (typeof body.company_id !== "string" || !body.company_id) throw new HttpError(400, "Say which company.");
+  await requireMember(req, body.company_id);
+  return json(200, { keys: keysPresent((name) => Deno.env.get(name)) });
+}
 
 async function handleStart(req: Request): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { company_id?: unknown; provider?: unknown; return_to?: unknown };
@@ -400,6 +411,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "POST" && path.endsWith("/sync/run")) return await handleSyncRun(req);
     if (req.method === "POST" && path.endsWith("/sync/tick")) return await handleSyncTick(req);
     if (req.method === "POST" && path.endsWith("/sync/describe")) return await handleSyncDescribe(req);
+    if (req.method === "POST" && path.endsWith("/status")) return await handleStatus(req);
     if (req.method === "POST" && path.endsWith("/start")) return await handleStart(req);
     if (req.method === "GET" && path.endsWith("/callback")) return await handleCallback(req);
     if (req.method === "POST" && path.endsWith("/disconnect")) return await handleDisconnect(req);

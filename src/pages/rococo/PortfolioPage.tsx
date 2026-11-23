@@ -3,6 +3,7 @@
 // things that need a Rococo hand. Rococo admins land here with no company active; opening a
 // company from a card switches the whole hub to that company's branding and nav. A company whose
 // GSRs are on demand (0047) also shows this week's GSRs: how many were done and their average.
+// Below the cards, a short list of the tools companies have asked for.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Plus } from "lucide-react";
@@ -10,6 +11,8 @@ import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
+import Section from "../../components/ui/Section.tsx";
+import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
@@ -25,7 +28,9 @@ import { listGsrsForLog } from "../../services/gsrOnDemand.ts";
 import { windowFigures, windowRange } from "../../lib/gsr/onDemand.ts";
 import { countedFor, countedGsrs } from "../../lib/gsr/gsrStanding.ts";
 import { companyToday } from "../../lib/wins.ts";
-import { listCompanyProfiles } from "../../services/profiles.ts";
+import { listAllProfiles, listCompanyProfiles } from "../../services/profiles.ts";
+import { listAllConnectorRequests } from "../../services/connectorRequests.ts";
+import { CONNECTORS } from "../../lib/connectors.ts";
 import { listSops } from "../../services/sops.ts";
 import { listSnapshots } from "../../services/financials.ts";
 import { listCampaigns } from "../../services/marketing.ts";
@@ -35,7 +40,7 @@ import { deriveSnapshot, periodLabel } from "../../lib/financials.ts";
 import { liveCampaignTotals } from "../../lib/marketing.ts";
 import { hasAccount } from "../../lib/people.ts";
 import { THEMES } from "../../lib/theme.ts";
-import { formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
+import { displayName, formatDate, formatMoney, formatNumber, formatPercent, pluralize } from "../../lib/format.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { isCompanyAdminRole } from "../../lib/people.ts";
 import type { Company, CompanyDomain, FinancialSnapshot, ReviewCycle } from "../../types/database.ts";
@@ -180,6 +185,51 @@ function marketingHint(summary: CompanySummary): string | undefined {
   if (summary.liveBudget > 0) parts.push(`${formatMoney(summary.liveSpend, true)} of ${formatMoney(summary.liveBudget, true)}`);
   if (summary.liveUnbudgeted > 0) parts.push(`${summary.liveUnbudgeted} with no budget set`);
   return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+// The "Tool requests" list: what each company has asked for from the Connections catalog, newest
+// first. It loads on its own, so a failed read costs this section and never the cards above.
+// Names come from every profile a Rococo admin can read, and a request made on a company's behalf
+// by Rococo staff is marked so. Someone deleted, or not found, reads as no longer listed.
+const TOOL_NAMES = new Map(CONNECTORS.map((c) => [c.key, c.name]));
+
+function ToolRequests({ companies }: { companies: Company[] }) {
+  const state = useAsync(async () => {
+    const [requests, people] = await Promise.all([listAllConnectorRequests(), listAllProfiles()]);
+    const byId = new Map(people.map((p) => [p.id, p]));
+    return [...requests]
+      .sort((a, b) => b.requested_at.localeCompare(a.requested_at))
+      .map((r) => ({ request: r, person: r.requested_by ? byId.get(r.requested_by) ?? null : null }));
+  }, []);
+  const companyName = new Map(companies.map((c) => [c.id, c.name]));
+  return (
+    <Section title="Tool requests" description="Tools companies have asked for from their Connections catalog." className="mt-6">
+      {state.error ? (
+        <p className="text-sm text-danger">{state.error}</p>
+      ) : !state.data ? (
+        <SkeletonRows rows={3} />
+      ) : state.data.length === 0 ? (
+        <p className="text-sm text-ink-2">No tool requests yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {state.data.map(({ request, person }) => (
+            <li key={request.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">{TOOL_NAMES.get(request.connector_key) ?? request.connector_key}</p>
+                <p className={metaClass}>{companyName.get(request.company_id) ?? "Unknown company"}</p>
+              </div>
+              <p className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-2">
+                {person ? displayName(person) : "someone no longer listed"}
+                {person?.is_rococo_admin ? <Badge tone="accent">Rococo</Badge> : null}
+                <span aria-hidden>·</span>
+                <span className="tnum">{formatDate(request.requested_at)}</span>
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
 }
 
 // The signals' columns from a small screen up, by how many signals a card carries. Written out so
@@ -328,6 +378,7 @@ export default function PortfolioPage() {
               <CompanyCard key={summary.company.id} summary={summary} onEnter={(path) => enter(summary.company.id, path)} />
             ))}
           </ul>
+          <ToolRequests companies={companies} />
         </>
       )}
 

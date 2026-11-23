@@ -28,6 +28,7 @@ vi.mock("../services/projects.ts", () => import("../test/mocks/projects.ts"));
 vi.mock("../services/wins.ts", () => import("../test/mocks/wins.ts"));
 vi.mock("../services/sync.ts", () => import("../test/mocks/sync.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
+vi.mock("../services/connectorRequests.ts", () => import("../test/mocks/connectorRequests.ts"));
 vi.mock("../services/focusTopics.ts", () => import("../test/mocks/focusTopics.ts"));
 vi.mock("../services/scorecards.ts", () => import("../test/mocks/scorecards.ts"));
 vi.mock("../services/divisions.ts", () => import("../test/mocks/divisions.ts"));

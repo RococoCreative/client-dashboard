@@ -1,22 +1,22 @@
 // Settings, for a company admin: one page, one tab per area, each tab its own route.
 //   Company: name, logo and time zone, plus the theme and sign-in domains, which Rococo manages
 //     (they decide who can sign in), so they read only here.
-//   Connections: the company's own connections to outside systems and, with the module, its data
-//     sources, which past three each have an address under /settings/connections/sources. Links to
-//     outside tools live in Resources > Links, which this tab points to.
+//   Connections: the catalog of outside tools, each card showing the company's own connection,
+//     links or request for it, and, with the module, its data sources, which past three each have
+//     an address under /settings/connections/sources.
 //   Activity: this company's own change log, for whoever the company lets read it.
 // Company and Activity show only to people the company's permissions allow. Below the tabs, a
 // signpost card lists where the rest of setup moved, so it shows whichever tab an admin lands on.
 // What shows is the company's data and modules (rule 12), never its name.
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import Button from "../../components/ui/Button.tsx";
 import Field from "../../components/ui/Field.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
-import ConnectionsPanel from "../../components/settings/ConnectionsPanel.tsx";
+import ConnectionsCatalog from "../../components/settings/ConnectionsCatalog.tsx";
 import DataSourcesPanel from "../../components/settings/DataSourcesPanel.tsx";
 import { inputClass } from "../../components/ui/forms.ts";
 import { bodyClass, eyebrowLabelClass, secondaryClass } from "../../components/ui/type.ts";
@@ -27,12 +27,9 @@ import { listCompanyDomains, updateCompany } from "../../services/companies.ts";
 import { THEMES } from "../../lib/theme.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { errorMessage } from "../../lib/errors.ts";
-import type { Company, ConnectionProvider } from "../../types/database.ts";
+import type { Company } from "../../types/database.ts";
 import ActivityList from "../../components/audit/ActivityList.tsx";
 import { settingsTabsFor, type SettingsTab } from "./settingsTabs.ts";
-
-// A company with data sources also connects its own Google account for them.
-const GOOGLE_ROW_PROVIDERS: ConnectionProvider[] = ["gohighlevel", "quickbooks", "google_sheets"];
 
 // The named zones the browser knows, offered as suggestions; the database has the final say.
 function timeZones(): string[] {
@@ -182,25 +179,9 @@ function ConnectionsTab({ company }: { company: Company }) {
   const { sourceId } = useParams();
   if (sourceId && !dataSources) return <Navigate to="/settings/connections" replace />;
   return (
-    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2">
-        <ConnectionsPanel companyId={company.id} providers={dataSources ? GOOGLE_ROW_PROVIDERS : undefined} />
-      </div>
-      {hasModule(company, "external_links") ? (
-        <Section eyebrow="Where the work lives" title="Links to outside tools">
-          <p className="text-sm text-ink-2">
-            The links people follow from the hub to the programs they work in, such as Monday boards, are kept in Resources, where everyone finds them. Admins add and order them there.
-          </p>
-          <Link to="/resources/links" className="mt-4 inline-block">
-            <Button variant="secondary" size="sm">Open Links</Button>
-          </Link>
-        </Section>
-      ) : null}
-      {dataSources ? (
-        <div className="lg:col-span-3">
-          <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} />
-        </div>
-      ) : null}
+    <div className="space-y-6">
+      <ConnectionsCatalog key={company.id} company={company} />
+      {dataSources ? <DataSourcesPanel companyId={company.id} companyTimeZone={company.time_zone} /> : null}
     </div>
   );
 }

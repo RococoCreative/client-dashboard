@@ -142,12 +142,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
-  set up yet." until all three are set. Live is version 4 (2026-11-18), the task email only: it
-  sends only for the task's creator, an owner or admin, or Rococo. The version in this repo also
-  sends the invitation email and is not deployed yet; until it is, Send invite on the People
-  page reports that the email did not go out and copies the link instead. It needs `0048` first.
-  Redeploy it with `supabase functions deploy notify` (JWT check on, no new secrets) after
-  applying `0048` and before merging the app, and record the version here.
+  set up yet." until all three are set. Live is version 5 (found deployed 2026-11-21, after `0048`): the task email, sent only for
+  the task's creator, an owner or admin, or Rococo, and the invitation email.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
   (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
@@ -175,7 +171,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   Setting Review runs at, monthly by default), with the guards and function bodies that read
   them. Every company is on the defaults, so nothing visible changed. No live screen reads either
   column; the app that ships with `0047` reads both.
-- **Written, not applied yet:** `0047_gsr_on_demand` (see GSRs on demand, and its release order
+- **Applied (found in the live database 2026-11-21; RBA is on demand, Kingdom and Klasik on periods):** `0047_gsr_on_demand` (see GSRs on demand, and its release order
   there). It adds `companies.gsr_mode`, GSRs with no cycle and their goals, the wall that keeps all
   of it out of a company on periods, the move of one company over, and takes back what `0046` put
   on every company. Every company stays on periods when it goes in, so nothing visible changes. It
@@ -185,13 +181,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `0046`. If any of them is ever pasted again after `0047`, paste `0047` straight after it.
   `0046` matters most: pasted again on its own it puts members opening cycles, the rhythm
   trigger and whole-month dates back on every company.
-- **Written, not applied yet:** `0048_invitation_emails`. It holds `invitations.email` to one
+- **Applied (found in the live database 2026-11-21):** `0048_invitation_emails`. It holds `invitations.email` to one
   plain address and adds `invitations.last_emailed_at`, the invitation email's 10 minute pace,
   which no signed-in writer can set or change. Every live invitation row already matches the
   address check. It does not depend on `0047`. The order: apply `0048`, then deploy `notify`, then
   merge the app (the app and the function both read `last_emailed_at`).
 - **Rococo Permissions page** (Rococo, Permissions): merged and deployed 2026-11-18.
-- **Written, not applied yet:** `0049_delete_people`. An owner or admin deletes a person who has
+- **Applied (found in the live database 2026-11-21):** `0049_delete_people`. An owner or admin deletes a person who has
   signed in (see The roster and accounts): a delete policy, the ranked guard rebuilt with the
   refusals for a signed-in person, the private block list `private.blocked_signups`, a trigger that
   blocks the address and deletes the person's `auth.users` row, the signup gate refusing a blocked
@@ -210,7 +206,13 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   trigger function). Either one failing makes every delete of a signed-in person refuse and roll
   back. The hook needs no change in the dashboard: it is the same function. Apply it before merging
   the app, which offers Delete person.
-- **Next free number:** `0050`.
+- **Applied (pasted in the SQL editor, checked live 2026-11-23):** `0050_connector_requests`. It adds `connector_requests`, one row
+  per company per tool a company has asked for from the Connections catalog: members and Rococo
+  read, the company's admins (or a Rococo admin acting for it) ask and withdraw, the database
+  stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
+  request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
+  Nothing visible changes when it goes in. Apply it before merging the app that reads it.
+- **Next free number:** `0051`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -480,6 +482,46 @@ and then removes its stored files under `{company_id}/` in `hub-files`, which no
 Imported values land read-only in `sync_records`, written only by the `connections` function. A
 failed sync keeps the last good values with their time, and a blank shows as "-", never 0.
 `docs/integrations.md` maps where each figure will come from.
+
+### The Connections catalog
+
+Settings > Connections is a catalog, the same for every company, grouped as Financials,
+Production, Marketing & Sales and Productivity. The list of tools lives in code
+(`src/lib/connectors.ts`); each company's own rows decide what each card shows. A card reads
+Connected, Needs attention, Not connected, Not available yet (Rococo has not added that tool's
+keys), Not on for this company (it needs a part of the hub the company does not have), Linked,
+Not set up, Coming next or Coming soon, and offers only the one action that will work. A company's
+own connection row always wins: a working connection stays visible even if its module was turned
+off later, and Disconnect always works.
+
+- **One connection per company per tool.** Any owner or admin connects it and it serves the whole
+  company. A connected card's panel names the account, who connected it, since when and what it
+  feeds. Someone who is not in the company's directory reads "someone not on the People list";
+  when the signed-in person made the connection themselves, their own name shows. The connect
+  panel advises signing in with a shared company login, so the connection does not break when one
+  person leaves.
+- **Monday** is a links tool. Its card opens the company's Monday board links in the panel, where
+  an admin adds, edits and removes them; they keep showing in their sidebar section and on Home.
+  The old "Links to outside tools" pointer on the Connections tab is gone.
+- **Asking for a tool.** On a Coming next or Coming soon card an admin presses Ask for this, which
+  records a row in `connector_requests` (0050) and turns the button to Requested; pressing it
+  again withdraws the ask. Members of the company and Rococo can read the requests. A Rococo admin
+  may ask or withdraw for a company, and the Rococo portfolio lists every company's requests under
+  "Tool requests".
+- **Rococo's setup line.** A Rococo admin stepped into a company sees a line under each card:
+  keys in, keys missing (naming the two secrets), nothing to set up, or not built yet. Company
+  admins never see secret names.
+- **Until `connections` is redeployed with `/status`,** every live tool reads as available, as it
+  did before the catalog, and a Rococo admin's line reads "Setup status unavailable."
+
+What Rococo does for a sign-in tool: register the hub once per tool with the provider (a
+Marketplace app, a developer app or an OAuth client, with the redirect URL under The connections
+function), then add the two secrets the card names to the Supabase function secrets. Until both
+are present the card reads Not available yet. JobTread is not built yet: its card reads Coming next,
+and Rococo's line reads "Rococo: not built yet." Once it is built, each company pastes its own
+access key, so Rococo will have nothing to set up for it. Links tools such as Monday need nothing
+from Rococo today.
+
 
 ## Impact scores
 
@@ -861,6 +903,10 @@ provider's callback arrives with no session. Its routes, all under
 - `POST /start` and `POST /disconnect`: an active Owner or Admin of the company, or a Rococo
   admin, checked on their own JWT.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
+- `POST /status`: which providers have their app keys (names only, never a value). An active member
+  of the company of any role, or a Rococo admin, checked on their own JWT. The secret names are in
+  `_shared/providerSecrets.ts`. The catalog needs it to know a card is available; without it the
+  app treats every live tool as available.
 - `POST /sync/run`: Sync now, on the JWT of someone allowed to sync the source
   (`private.can_sync_source`, decided by row level security), for a company with `data_sources`
   on.
@@ -893,8 +939,10 @@ needs these secrets (Dashboard, Edge Functions, Secrets):
   tick sends it, and Vault keeps the same value as `sync_cron_secret`.
 
 All three provider apps (HighLevel, Intuit and Google) must list the same single redirect URL:
-`https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until the keys are in
-place, Connect answers with a plain "not set up yet" line and nothing else changes. Deploy with
+`https://<project-ref>.supabase.co/functions/v1/connections/callback`. Until both of a tool's
+keys are in place, its card on Settings > Connections reads Not available yet and offers no
+Connect, once the function is deployed with `/status`. Before that redeploy the card treats the
+tool as available, and Connect answers with a plain "not set up yet" line. Deploy with
 `supabase functions deploy connections --no-verify-jwt`.
 
 ## The notify function
@@ -1157,6 +1205,20 @@ migrations are in; the app and function running today never read the new columns
    in Projects > Setup, and set sync days and weekdays-only staleness on each source.
 6. Record the app deploy and the `connections` redeploy in What is applied live (`0042` to `0045`
    are already recorded there).
+
+### Applying the Connections catalog
+
+The catalog reads `connector_requests`, so the order matters. The app copes with a `connections`
+function that lacks `/status`, but must not ship before `0050`.
+
+1. Apply `0050` and reload the schema (`notify pgrst, 'reload schema';`). Nothing visible changes.
+2. Redeploy the function: `supabase functions deploy connections --no-verify-jwt`. This also ships
+   the Phase 2 multi-day schedule code.
+3. Merge and deploy the app.
+4. For each sign-in tool a company should be able to connect, register the hub with the provider
+   and add its two secrets (see The connections function). The Rococo setup line shows what is
+   still missing.
+5. Record `0050` and the redeploy in What is applied live.
 
 ## Deploy
 
