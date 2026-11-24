@@ -14,6 +14,7 @@ import { resetMockConnections, resetMockConnectorSetup } from "./mocks/connectio
 import { resetMockConnectorRequests } from "./mocks/connectorRequests.ts";
 import { resetMockGsrs } from "./mocks/gsrOnDemand.ts";
 import { resetMockInvitationEmail } from "./mocks/invitations.ts";
+import { resetMockRococoAdmins } from "./mocks/rococoAdmins.ts";
 import { setActingPerson } from "./actingPerson.ts";
 
 beforeAll(() => {
@@ -21,7 +22,8 @@ beforeAll(() => {
 });
 
 // Capability overrides, standalone GSRs, a company put on demand, an invitation email told to fail,
-// tool requests, a disconnected connection and the acting person a test rendered or set do not leak into the next test.
+// tool requests, a disconnected connection, the Rococo admin list and the acting person a test rendered or set do not
+// leak into the next test.
 afterEach(() => {
   resetMockCapabilities();
   resetMockConnectorRequests();
@@ -29,6 +31,7 @@ afterEach(() => {
   resetMockConnectorSetup();
   resetMockGsrs();
   resetMockInvitationEmail();
+  resetMockRococoAdmins();
   setActingPerson(null);
 });
 

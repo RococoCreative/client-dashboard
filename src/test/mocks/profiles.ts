@@ -133,6 +133,22 @@ export async function listAllProfiles(): Promise<Profile[]> {
 
 export type ProfilePatch = RealProfilePatch;
 
+// Test helper, not a service function: the database writes a profile's Rococo flag only from the
+// Rococo admin list's sync (0051), so a test that needs a flagged person sets it here.
+export function setMockRococoFlag(id: string, value: boolean): void {
+  const index = profiles.findIndex((p) => p.id === id);
+  if (index === -1) throw new Error("Profile not found.");
+  profiles[index] = { ...profiles[index], is_rococo_admin: value };
+}
+
+// The Rococo admin list's sync, for mocks/rococoAdmins.ts: the profile at an added address is
+// flagged and turned on, at a removed one cleared and turned off (0051). No profile, no change.
+export function syncMockRococoAccess(email: string, on: boolean): void {
+  const index = profiles.findIndex((p) => p.email.toLowerCase() === email);
+  if (index === -1) return;
+  profiles[index] = { ...profiles[index], is_rococo_admin: on, is_active: on };
+}
+
 // What the client says when no policy lets the update reach the row: .single() finds nothing.
 const NO_ROW = "JSON object requested, multiple (or no) rows returned";
 

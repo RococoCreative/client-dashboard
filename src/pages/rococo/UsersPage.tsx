@@ -1,9 +1,11 @@
 // People tab of the Rococo portfolio: everyone on every company's roster, signed in or not,
 // with company assignment, role, Rococo access, and active flag. Filter by company or search
 // by name and email. A person who has never signed in is marked, never left out. A person's
-// company and role read as text until the row's pencil opens them, one row at a time; the Rococo
-// and Active switches stay live.
+// company and role read as text until the row's pencil opens them, one row at a time; the Active
+// switch stays live. Rococo access only reads here: the Rococo admin list on the Permissions tab is
+// the one place it changes (0051).
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Pencil, Search } from "lucide-react";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
@@ -15,7 +17,7 @@ import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import useEditRowFocus from "../../components/ui/useEditRowFocus.ts";
 import { checkboxClass, checkboxHitClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
-import { metaClass, secondarySizeClass } from "../../components/ui/type.ts";
+import { metaClass, secondaryClass, secondarySizeClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listAllProfiles, updateProfile } from "../../services/profiles.ts";
@@ -93,7 +95,7 @@ function UserRow({
         )}
       </td>
       <td className={tdClass}>
-        <label className={checkboxHitClass}><input type="checkbox" checked={person.is_rococo_admin} disabled={self} aria-label={`Rococo admin: ${person.email}`} onChange={(e) => patch({ is_rococo_admin: e.target.checked })} className={checkboxClass} /></label>
+        {person.is_rococo_admin ? <Badge>Rococo admin</Badge> : null}
       </td>
       <td className={tdClass}>
         <label className={checkboxHitClass}><input type="checkbox" checked={person.is_active} disabled={self} aria-label={`Active: ${person.email}`} onChange={(e) => patch({ is_active: e.target.checked })} className={checkboxClass} /></label>
@@ -153,8 +155,12 @@ export default function UsersPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Rococo Creative" title="People" description="Everyone in the hub, signed in or not. Move people between companies, set roles, grant Rococo access, or deactivate." />
+      <PageHeader eyebrow="Rococo Creative" title="People" description="Everyone in the hub, signed in or not. Move people between companies, set roles, or deactivate." />
       <Tabs items={PORTFOLIO_TABS} />
+      <p className={`mb-4 ${secondaryClass}`}>
+        Rococo admins are added and removed on the{" "}
+        <Link to="/rococo/permissions" className="text-link hover:underline">Permissions tab</Link>.
+      </p>
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] max-w-sm flex-1">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />

@@ -16,6 +16,10 @@
   ],
   "headers": [
     {
+      "source": "/((?!assets/|fonts/).*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },
