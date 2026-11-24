@@ -117,6 +117,41 @@ select tests.assert(
   'list_is_never_truncated: an entry was edited or the list was emptied'
 );
 
+-- case: account_address_must_match_profile
+-- A listed, flagged, active Rococo admin whose confirmed account address moves away from their
+-- profile's address is no longer one.
+update auth.users set email = 'sample.elsewhere@rocococreative.io', email_confirmed_at = now()
+ where id = tests.user_of(tests.id('rococo2'));
+select tests.act_as(tests.id('rococo2'));
+select tests.assert(not private.is_rococo_admin(), 'account_address_must_match_profile: an account at another address counts as a Rococo admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+update auth.users set email = tests.email_of(tests.id('rococo2'))
+ where id = tests.user_of(tests.id('rococo2'));
+select tests.act_as(tests.id('rococo2'));
+select tests.assert(private.is_rococo_admin(), 'account_address_must_match_profile: putting the address back did not restore the Rococo admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: deleting_who_added_keeps_the_entry
+-- added_by is on delete set null, which Postgres carries out as an update; that one edit goes through.
+select tests.create_person('rococo3', null, 'employee', true);
+select tests.act_as(tests.id('rococo3'));
+insert into public.rococo_admins (email) values ('sample.kept@rocococreative.io');
+reset role;
+select set_config('request.jwt.claims', '', true);
+delete from public.profiles where id = tests.id('rococo3');
+select tests.assert(
+  not exists (select 1 from public.profiles where id = tests.id('rococo3')),
+  'deleting_who_added_keeps_the_entry: the person who added an entry could not be deleted'
+);
+select tests.assert(
+  (select added_by is null from public.rococo_admins where email = 'sample.kept@rocococreative.io'),
+  'deleting_who_added_keeps_the_entry: the entry is gone or still names the deleted person'
+);
+delete from public.rococo_admins
+ where email = 'sample.kept@rocococreative.io' or email like 'rococo3.%@rocococreative.io';
+
 -- case: domain_alone_is_not_enough
 insert into auth.users (email, email_confirmed_at, raw_user_meta_data)
 values ('sample.unlisted@rocococreative.io', now(), '{}'::jsonb);

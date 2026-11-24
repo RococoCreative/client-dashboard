@@ -187,7 +187,9 @@ $$;
 revoke execute on function public.rococo_admins_keep_one() from public, anon, authenticated;
 
 -- An edit would move access to a new address with no sync and no audit, and a truncate would empty
--- the list with no check at all. Removing an entry and adding it again does both properly.
+-- the list with no check at all. Removing an entry and adding it again does both properly. The one
+-- update let through is added_by's on delete set null, when the person who added an entry is
+-- deleted: Postgres carries that out as an update, and refusing it would refuse the delete.
 create or replace function public.rococo_admins_no_edit()
 returns trigger
 language plpgsql
@@ -195,6 +197,13 @@ security definer
 set search_path = ''
 as $$
 begin
+  if new.added_by is null
+     and old.added_by is not null
+     and new.id = old.id
+     and new.email = old.email
+     and new.added_at = old.added_at then
+    return new;
+  end if;
   raise exception 'A Rococo admin entry is removed and added again, never edited.';
 end;
 $$;
