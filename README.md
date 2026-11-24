@@ -119,9 +119,11 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-  Also `0051_rococo_admins` and `0052_connection_secrets`: written, not applied (see Applying
-  security hardening). So `0001` to `0050` are not all live; `0032` is the gap. The next free
-  number is `0053`.
+  So `0001` to `0052` are not all live; `0032` is the gap. The next free number is `0053`.
+- **Applied 2026-11-24 (pasted in the SQL editor, checked live):** `0051_rococo_admins` and
+  `0052_connection_secrets` (see Applying security hardening). The one Rococo admin is on the
+  list and active; `connection_pending` is not readable by signed-in users; no provider
+  account id is left on a browser-readable row.
 - **Applied 2026-11-18:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
   may do what), with no override rows for any company yet. For a fresh database the order is:
   paste `0040`, then `0041`, confirm the API serves the new tables, and only then
@@ -138,15 +140,19 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
   after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
   again.
-- **The `connections` Edge Function** live is version 6 (deployed 2026-11-23 through the
-  Supabase connection, JWT check off, matching this repo): owners and admins manage connections,
-  Google Sheets and the sync routes, the Phase 2 multi-day schedule (`sync_weekdays`), and the
-  catalog's `POST /status` route. Google Sheets and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`,
+- **The `connections` Edge Function** live is version 9 (deployed 2026-11-24 through the
+  Supabase connection, JWT check off, checked byte for byte against this repo): owners and
+  admins manage connections, Google Sheets and the sync routes, the Phase 2 multi-day schedule
+  (`sync_weekdays`), the catalog's `POST /status` route, and the security hardening (sealed
+  tokens, connect then confirm, no-store). `TOKEN_ENCRYPTION_KEY` and `CONNECTIONS_STATE_SECRET`
+  are set. Google Sheets and the hourly sync answer "not set up yet" until `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
-  set up yet." until all three are set. Live is version 5 (found deployed 2026-11-21, after `0048`): the task email, sent only for
-  the task's creator, an owner or admin, or Rococo, and the invitation email.
+  set up yet." until all three are set. Live is version 8 (deployed 2026-11-24 with
+  `connections`, checked byte for byte): the task email, sent only for the task's creator, an
+  owner or admin, or Rococo (the same confirmed-email list rule as the database), and the
+  invitation email.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
   Klasik has `external_links` and `tasks`; RBA has `external_links`, `tasks` and `production`
   (read from the live database 2026-11-18). Kingdom's owners are Maddie Cothran and marvin waters. Running
@@ -1304,6 +1310,10 @@ id (`connection_pending` holds a sign-in until the admin confirms it). Order mat
    and `/finish`. `vercel.json` now sends `Cache-Control: no-store` on app pages.
 5. Record `0051`, `0052` and both deploys in What is applied live, and in the Hub Feature Register
    (outside the repo; the owner updates it).
+
+Done 2026-11-24: key added, `0051` and `0052` pasted and checked live, `connections` v9 and
+`notify` v8 deployed and byte-checked, and the app merged and deployed. The two checks below are
+still to do by hand.
 
 After the deploy, check by hand:
 
