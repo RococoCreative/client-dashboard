@@ -15,10 +15,12 @@ import {
   failureLocation,
   fallbackReturn,
   isPendingId,
+  localhostReturnAllowed,
   parsePendingAnswer,
   pendingExpiry,
   pendingVerdict,
   recheckReturn,
+  shouldRevokePending,
   withQuery,
   type ConnectErrorKey,
 } from "../../../supabase/functions/_shared/connectFlow.ts";
@@ -156,17 +158,31 @@ describe("return addresses", () => {
   const origins = ["https://app.example"];
   const fallback = "https://hub.example/settings/connections";
 
-  it("allowedReturn admits the app's own origins and localhost, as origin and path only", () => {
-    expect(allowedReturn("https://app.example/settings/connections/co1?x=1#y", origins)).toBe("https://app.example/settings/connections/co1");
-    expect(allowedReturn("http://localhost:5173/settings/connections", origins)).toBe("http://localhost:5173/settings/connections");
-    expect(allowedReturn("http://127.0.0.1:5173/x", origins)).toBe("http://127.0.0.1:5173/x");
+  it("allowedReturn admits the app's own origins, as origin and path only", () => {
+    expect(allowedReturn("https://app.example/settings/connections/co1?x=1#y", origins, false)).toBe("https://app.example/settings/connections/co1");
+  });
+
+  it("allowedReturn admits localhost only when localhost returns are switched on", () => {
+    expect(allowedReturn("http://localhost:5173/settings/connections", origins, true)).toBe("http://localhost:5173/settings/connections");
+    expect(allowedReturn("http://127.0.0.1:5173/x", origins, true)).toBe("http://127.0.0.1:5173/x");
+    expect(allowedReturn("http://localhost:5173/settings/connections", origins, false)).toBeNull();
+    expect(allowedReturn("http://127.0.0.1:5173/x", origins, false)).toBeNull();
+    expect(allowedReturn("http://localhost:5173/settings/connections", origins)).toBeNull();
+  });
+
+  it("localhostReturnAllowed is on only when ALLOW_LOCALHOST_RETURN is exactly true", () => {
+    const reader = (value: string | undefined) => (name: string) => (name === "ALLOW_LOCALHOST_RETURN" ? value : undefined);
+    expect(localhostReturnAllowed(reader("true"))).toBe(true);
+    for (const value of [undefined, "", "false", "TRUE", "True", " true", "true ", "1", "yes"]) {
+      expect(localhostReturnAllowed(reader(value)), String(value)).toBe(false);
+    }
   });
 
   it("allowedReturn refuses another origin, a non-web scheme, a non-URL and a non-string", () => {
     expect(allowedReturn("https://evil.example/settings", origins)).toBeNull();
     expect(allowedReturn("https://app.example.evil.example/x", origins)).toBeNull();
     expect(allowedReturn("javascript:alert(1)", origins)).toBeNull();
-    expect(allowedReturn("ftp://localhost/x", origins)).toBeNull();
+    expect(allowedReturn("ftp://localhost/x", origins, true)).toBeNull();
     expect(allowedReturn("not a url", origins)).toBeNull();
     expect(allowedReturn(7, origins)).toBeNull();
     expect(allowedReturn(undefined, origins)).toBeNull();
@@ -183,5 +199,37 @@ describe("return addresses", () => {
     expect(recheckReturn({ kind: "expired", claims }, ["https://other.example"], fallback)).toEqual({ kind: "expired", claims: { ...claims, r: fallback } });
     expect(recheckReturn({ kind: "valid", claims }, [], null)).toEqual({ kind: "invalid" });
     expect(failureLocation(recheckReturn({ kind: "valid", claims }, [], null), null, "refused")).toBeNull();
+  });
+
+  it("recheckReturn keeps a localhost address only while localhost returns are switched on", () => {
+    const local = { ...claims, r: "http://localhost:5173/settings/connections/co1" };
+    expect(recheckReturn({ kind: "valid", claims: local }, origins, fallback, true)).toEqual({ kind: "valid", claims: local });
+    expect(recheckReturn({ kind: "valid", claims: local }, origins, fallback, false)).toEqual({ kind: "valid", claims: { ...local, r: fallback } });
+    expect(recheckReturn({ kind: "valid", claims: local }, origins, fallback)).toEqual({ kind: "valid", claims: { ...local, r: fallback } });
+  });
+});
+
+describe("handing back a pending grant", () => {
+  it("revokes when the pending account is known and no live connection uses it", () => {
+    expect(shouldRevokePending("acct-1", [])).toBe(true);
+    expect(shouldRevokePending("acct-1", ["acct-2", "acct-3"])).toBe(true);
+  });
+
+  it("keeps the grant when a live connection, in any company, holds the same account", () => {
+    expect(shouldRevokePending("acct-1", ["acct-1"])).toBe(false);
+    expect(shouldRevokePending("acct-1", ["acct-2", "acct-1"])).toBe(false);
+  });
+
+  it("keeps the grant when the pending account is unknown", () => {
+    expect(shouldRevokePending(null, [])).toBe(false);
+    expect(shouldRevokePending(null, ["acct-1"])).toBe(false);
+    expect(shouldRevokePending("", [])).toBe(false);
+    expect(shouldRevokePending("   ", ["acct-2"])).toBe(false);
+  });
+
+  it("keeps the grant when any live connection's account is unknown, since it could be the same one", () => {
+    expect(shouldRevokePending("acct-1", [null])).toBe(false);
+    expect(shouldRevokePending("acct-1", ["acct-2", null])).toBe(false);
+    expect(shouldRevokePending("acct-1", ["  "])).toBe(false);
   });
 });

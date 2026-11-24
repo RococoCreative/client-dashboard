@@ -24,7 +24,10 @@
 // (deleting it) before it writes the connection, which deliberately reverses the design's "write,
 // then delete" order: the claim is what stops two finishes applying one sign-in, and any failure
 // after it hands the grant back to the provider. Expired pending rows are swept, and their grants
-// revoked, at /start and by the sync tick.
+// revoked, at /start and by the sync tick. Every such hand-back of a grant that never became a
+// connection, and of one a provider issued before the callback refused it, goes through
+// handBackPending (pending.ts), which keeps the grant when its outside account is unknown or is one
+// a live connection in any company also holds, since revoking it would cut that connection off.
 //
 // status needs the JWT of an active member of the company or a Rococo admin, and answers names of
 // providers with their keys set and of the connect flow's secrets, never a value. start, finish,
@@ -42,7 +45,8 @@
 // Environment (Supabase secrets): CONNECTIONS_STATE_SECRET, TOKEN_ENCRYPTION_KEY (32 random bytes,
 // base64), TOKEN_ENCRYPTION_KEY_PREVIOUS (optional, during a rotation), APP_URL (the app's address,
 // where a callback with no usable state is sent), APP_ORIGINS (comma separated origins the browser
-// may be sent back to; localhost is always allowed), GHL_CLIENT_ID, GHL_CLIENT_SECRET,
+// may be sent back to), ALLOW_LOCALHOST_RETURN (optional, development only: exactly "true" lets
+// localhost be a return address; unset in production), GHL_CLIENT_ID, GHL_CLIENT_SECRET,
 // QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production), GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, SYNC_CRON_SECRET (the secret the hourly tick sends). SUPABASE_URL,
 // SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
@@ -51,9 +55,11 @@ import {
   PENDING_GONE,
   PENDING_SOMEONE_ELSE,
   allowedReturn,
+  blankToNull,
   failureLocation,
   fallbackReturn,
   isPendingId,
+  localhostReturnAllowed,
   pendingVerdict,
   recheckReturn,
   withQuery,
@@ -63,12 +69,14 @@ import { NO_STORE } from "../_shared/headers.ts";
 import { flowSecretsReady, keysPresent } from "../_shared/providerSecrets.ts";
 import { TOKENS_NOT_SET_UP, TokenKeyError, loadTokenKeys, openTokens, sealTokens, tokenKeyProblem, type TokenKeys } from "../_shared/tokenCrypto.ts";
 import { CORS, HttpError, json, requireAdmin, requireMember, service, signedInProfileId } from "./http.ts";
-import { ConnectError, REDIRECT_URI, credentialsFor, providerFor, readCredentials, revokeGrant } from "./oauth.ts";
-import { claimPending, loadPending, parkPending, sweepExpiredPending } from "./pending.ts";
+import { ConnectError, REDIRECT_URI, credentialsFor, providerFor, readCredentials, revokeGrant, type Exchanged } from "./oauth.ts";
+import { claimPending, handBackPending, loadPending, parkPending, sweepExpiredPending } from "./pending.ts";
 import { handleSyncDescribe, handleSyncRun, handleSyncTick } from "./sync.ts";
 
 const STATE_SECRET = Deno.env.get("CONNECTIONS_STATE_SECRET") ?? "";
 const APP_ORIGINS = (Deno.env.get("APP_ORIGINS") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+// Off unless the secret is exactly "true", so production refuses a localhost return address.
+const ALLOW_LOCALHOST = localhostReturnAllowed((name) => Deno.env.get(name));
 const STATE_TTL_SECONDS = 10 * 60;
 const NOT_SAVED = "The connection could not be saved.";
 
@@ -79,10 +87,11 @@ const readEnv = (name: string) => Deno.env.get(name);
 const redirect = (location: string | null) =>
   new Response(null, { status: 302, headers: { ...NO_STORE, "Referrer-Policy": "no-referrer", ...(location ? { Location: location } : {}) } });
 
-// Where the browser may be sent back to: the app's own origins, and localhost for development.
+// Where the browser may be sent back to: the app's own origins, and localhost only in development
+// (ALLOW_LOCALHOST_RETURN).
 function checkReturnTo(value: unknown): string {
   if (typeof value !== "string") throw new HttpError(400, "Missing return address.");
-  const returnTo = allowedReturn(value, APP_ORIGINS);
+  const returnTo = allowedReturn(value, APP_ORIGINS, ALLOW_LOCALHOST);
   if (!returnTo) throw new HttpError(400, "The return address is not one of the app's own.");
   return returnTo;
 }
@@ -147,7 +156,7 @@ async function handleStart(req: Request): Promise<Response> {
 async function handleCallback(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const fallback = fallbackReturn(readEnv("APP_URL"), APP_ORIGINS);
-  const reading = recheckReturn(await readState(url.searchParams.get("state"), STATE_SECRET, Math.floor(Date.now() / 1000)), APP_ORIGINS, fallback);
+  const reading = recheckReturn(await readState(url.searchParams.get("state"), STATE_SECRET, Math.floor(Date.now() / 1000)), APP_ORIGINS, fallback, ALLOW_LOCALHOST);
   if (reading.kind !== "valid") return redirect(failureLocation(reading, fallback, "invalid"));
   const claims = reading.claims;
   try {
@@ -175,13 +184,30 @@ async function handleCallback(req: Request): Promise<Response> {
     const creds = readCredentials(def);
     if (tokenKeyProblem(readEnv) !== null || !creds) throw new ConnectError("not_set_up");
     const keys = await loadTokenKeys(readEnv);
-    const exchanged = await def.exchange({ ...creds, code, redirectUri: REDIRECT_URI, query: url.searchParams });
+    let exchanged: Exchanged;
+    try {
+      exchanged = await def.exchange({ ...creds, code, redirectUri: REDIRECT_URI, query: url.searchParams });
+    } catch (err) {
+      // Refused after the provider issued tokens (Google with no account, a GoHighLevel
+      // agency-wide install): hand that grant back, unless it could cut off a live connection.
+      // GoHighLevel has no revoke, so for it this is the log line alone.
+      if (err instanceof ConnectError && err.issued) {
+        console.error("sign-in refused after tokens were issued", def.key);
+        await handBackPending(admin, def, err.issued, keys);
+      }
+      throw err;
+    }
     let pendingId: string;
     try {
       pendingId = await parkPending(admin, { companyId: claims.c, provider: def.key, startedBy: claims.u, exchanged }, keys, new Date());
     } catch {
       // Nothing can finish a sign-in that was not parked, so hand the grant straight back.
-      await revokeGrant(def, { accessToken: exchanged.accessToken, refreshToken: exchanged.refreshToken });
+      await handBackPending(
+        admin,
+        def,
+        { accessToken: exchanged.accessToken, refreshToken: blankToNull(exchanged.refreshToken), accountId: blankToNull(exchanged.externalAccountId) },
+        keys,
+      );
       throw new ConnectError("failed");
     }
     return redirect(withQuery(claims.r, { pending: pendingId }));
@@ -233,7 +259,7 @@ async function handleFinish(req: Request): Promise<Response> {
     opened = await openTokens({ pendingId: claimed.id }, claimed, keys);
     // It may have expired between the read and the claim; an expired sign-in is never applied.
     if (pendingVerdict(claimed, profileId, new Date()) !== "ready") {
-      await revokeGrant(def, opened);
+      await handBackPending(admin, def, opened, keys);
       return json(410, { error: PENDING_GONE });
     }
     const connectedAt = new Date().toISOString();
@@ -280,12 +306,16 @@ async function handleFinish(req: Request): Promise<Response> {
         .eq("id", connectionId);
       if (undoError) console.error("undo after failed token save", undoError.code ?? "unknown");
     }
-    if (opened) await revokeGrant(def, opened);
+    // After the undo, so this company's own row no longer counts as live; another live connection
+    // to the same outside account still keeps the grant.
+    if (opened) await handBackPending(admin, def, opened, keys);
     throw new HttpError(500, NOT_SAVED);
   }
 }
 
-// The starter drops a pending connection: the row goes and the grant is handed back, best effort.
+// The starter drops a pending connection: the row goes and the grant is handed back, best effort,
+// unless a live connection holds the same outside account (or either account is unknown), when
+// revoked reads false and the app says the tool may still list the hub.
 async function handleDiscard(req: Request): Promise<Response> {
   const profileId = await signedInProfileId(req);
   const pendingId = await readPendingId(req);
@@ -300,7 +330,7 @@ async function handleDiscard(req: Request): Promise<Response> {
   let revoked = false;
   try {
     const keys = await loadTokenKeys(readEnv);
-    revoked = await revokeGrant(providerFor(claimed.provider), await openTokens({ pendingId: claimed.id }, claimed, keys));
+    revoked = await handBackPending(admin, providerFor(claimed.provider), await openTokens({ pendingId: claimed.id }, claimed, keys), keys);
   } catch (err) {
     console.error("discard revoke skipped", claimed.provider, err instanceof Error ? err.name : "unknown");
   }

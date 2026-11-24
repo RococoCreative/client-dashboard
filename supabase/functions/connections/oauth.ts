@@ -11,9 +11,20 @@ import { PROVIDER_SECRETS } from "../_shared/providerSecrets.ts";
 import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl, subjectFromIdToken } from "../_shared/sync/googleSheets.ts";
 import { HttpError, SUPABASE_URL } from "./http.ts";
 
+// A grant a provider issued: its tokens and the outside account they are for, when known.
+export interface IssuedGrant {
+  accessToken: string;
+  refreshToken: string | null;
+  accountId: string | null;
+}
+
 // A sign-in that did not finish, as one of the known keys. The callback maps it to its address.
+// issued holds the tokens when the provider issued them before the hub refused the sign-in (Google
+// with no account, a GoHighLevel agency-wide install), so the callback can hand that grant back.
+// It is never logged or sent anywhere but the provider's revoke.
 export class ConnectError extends Error {
   key: ConnectErrorKey;
+  issued: IssuedGrant | null = null;
   constructor(key: ConnectErrorKey) {
     super(key);
     this.name = "ConnectError";
@@ -101,7 +112,11 @@ const gohighlevel: ProviderDef = {
     });
     const token = await tokenAnswer<{ access_token: string; refresh_token?: string; expires_in?: number; scope?: string; locationId?: string }>(response, "gohighlevel");
     const locationId = blankToNull(token.locationId);
-    if (!locationId) throw new ConnectError("one_location");
+    if (!locationId) {
+      const refused = new ConnectError("one_location");
+      refused.issued = { accessToken: token.access_token, refreshToken: blankToNull(token.refresh_token), accountId: null };
+      throw refused;
+    }
     let name: string | null = null;
     try {
       const located = await fetch(`https://services.leadconnectorhq.com/locations/${encodeURIComponent(locationId)}`, {
@@ -193,7 +208,17 @@ const google_sheets: ProviderDef = {
     });
     const token = await tokenAnswer<{ access_token: string; refresh_token?: string; expires_in?: number; scope?: string; id_token?: string }>(response, "google_sheets");
     const email = typeof token.id_token === "string" ? emailFromIdToken(token.id_token) : null;
-    if (!email) throw new ConnectError("no_account");
+    if (!email) {
+      // Google issued a grant all the same. The account id goes with it, so the callback can hand it
+      // back without touching a live connection to the same Google account; with no id it is kept.
+      const refused = new ConnectError("no_account");
+      refused.issued = {
+        accessToken: token.access_token,
+        refreshToken: blankToNull(token.refresh_token),
+        accountId: typeof token.id_token === "string" ? subjectFromIdToken(token.id_token) : null,
+      };
+      throw refused;
+    }
     return {
       accessToken: token.access_token,
       refreshToken: blankToNull(token.refresh_token),

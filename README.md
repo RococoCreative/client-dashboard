@@ -289,9 +289,14 @@ columns on the company, and each defaults to what every company has today.
   removed from the hub. Ask an owner or admin to invite you again." A pending invitation opens the
   gate as it does for any personal address, and signing in through it lifts the block (0049). An
   invitation made before the delete does not count. A deleted Rococo admin cannot come back this
-  way (an invitation would place them in a company with its role), so Rococo lifts their block in
-  the SQL editor, `delete from private.blocked_signups where email = '...'`, and they sign in
-  again as Rococo staff.
+  way (an invitation would place them in a company with its role), and the block outranks the
+  Rococo admins list, so first make sure the address is on the list (Rococo > Permissions), then
+  clear that one row in the SQL editor: check it with the read-only
+  `select email, blocked_at from private.blocked_signups where email = lower(trim('name@rocococreative.io'));`
+  (one row expected), then delete only it with
+  `delete from private.blocked_signups where email = lower(trim('name@rocococreative.io'));`, using
+  their address in place of `name@rocococreative.io` in both. They then sign in again as a Rococo
+  admin.
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
   compensation and deliverables with them and leaves their months with the old company. Their
   ratings start over in the new company, since criteria are each company's own, and their
@@ -909,7 +914,13 @@ provider's callback arrives with no session. Its routes, all under
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
   It always answers a bare 302 back to the app with `?pending=<id>`. It does not connect
   anything: it exchanges the code, seals the result and parks it for ten minutes in
-  `connection_pending`. Expired grants are swept and revoked.
+  `connection_pending`. Expired grants are swept and revoked. A grant that never became a
+  connection (swept, discarded, failed at finish, or refused at the callback after the provider
+  issued tokens) is revoked only when no live connection, in any company, holds the same outside
+  account and both accounts are known. Google treats one client and one user as a single grant,
+  and an Intuit revoke disconnects the app from the QuickBooks company, so revoking it otherwise
+  would cut off the live connection. A kept grant only leaves the hub listed in that account, and
+  Discard then says the tool may still list it.
 - `POST /pending`, `POST /finish` and `POST /discard`: a signed-in person. The app reads a
   parked connection with `/pending`, shows which outside account is about to be attached, and the
   admin confirms with `/finish` or drops it with `/discard`. Finish and discard work only for the
@@ -950,7 +961,9 @@ needs these secrets (Dashboard, Edge Functions, Secrets):
   to be applied before this version of the function is deployed.
 - `APP_ORIGINS`: comma separated origins the browser may be returned to, such as the
   production domain (`https://companyhub.rocococreative.io`) and the Vercel preview domain.
-  Localhost is always allowed.
+- `ALLOW_LOCALHOST_RETURN`: optional, development only. Exactly `true` lets a localhost address
+  be a return address; anything else, or unset, refuses it. Never set it on the production
+  project, so production only ever returns to `APP_ORIGINS`.
 - `GHL_CLIENT_ID` and `GHL_CLIENT_SECRET`: from a HighLevel Marketplace app owned by Rococo
   with the scopes `opportunities.readonly users.readonly locations.readonly`.
 - `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` (`sandbox` or `production`): from
@@ -1068,7 +1081,11 @@ through sources it configures. The steps, in order:
 **Intuit**
 
 10. For real books, complete Intuit's production app assessment and set
-    `QBO_ENVIRONMENT=production`.
+    `QBO_ENVIRONMENT=production`. Before then, during the QuickBooks sandbox test, confirm how
+    Intuit's revoke behaves: whether revoking one sign-in's token disconnects the app from the
+    whole company, ending another live connection to the same company. The function already
+    assumes it does and never revokes a parked or discarded sign-in for a company a live
+    connection holds.
 
 **In the hub**
 

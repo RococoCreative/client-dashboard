@@ -1,6 +1,7 @@
 // The connect flow's rules, kept pure so they are tested outside the function and shared with the
 // app: the error keys a provider return may carry and the one line the app shows for each, who may
-// finish a pending connection and when it expires, the reader of the /pending answer, which return
+// finish a pending connection and when it expires, the reader of the /pending answer, when a
+// pending grant may be handed back without cutting off a live connection, which return
 // addresses the app owns, and where the callback sends the browser when a sign-in does not finish. The callback only ever puts a key in
 // the address; the app turns it into words, so nothing a caller sends is ever shown as text.
 import type { StateReading } from "./connectState.ts";
@@ -66,6 +67,19 @@ export function parsePendingAnswer(value: unknown): PendingAnswer | null {
   return { status: "ready", provider: v.provider as ProviderKey, account_name: v.account_name, company_name: v.company_name };
 }
 
+// Whether a pending grant (parked, discarded, swept, or refused at the callback) may be handed back
+// to its provider. A provider keys a grant on its own terms, not on the hub's row: Google treats one
+// client and one user as a single grant, and an Intuit revoke disconnects the app from the company.
+// So revoking a pending grant for an outside account that a live connection (connected or in error,
+// in any company) also holds would cut that connection off. The grant is kept whenever its account
+// is unknown, or any live connection's account is unknown or the same, since keeping a grant only
+// leaves the hub listed in that account while revoking the wrong one breaks a company's sync.
+export function shouldRevokePending(pendingAccountId: string | null, liveAccountIds: readonly (string | null)[]): boolean {
+  const known = (id: string | null): id is string => typeof id === "string" && id.trim() !== "";
+  if (!known(pendingAccountId)) return false;
+  return liveAccountIds.every((live) => known(live) && live !== pendingAccountId);
+}
+
 // The id the callback mints for a pending connection: a uuid, in either case.
 export function isPendingId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -87,9 +101,15 @@ function webOrigin(value: string | undefined): string | null {
   }
 }
 
-// A return address the browser may be sent to: one of the app's own origins, or localhost for
-// development, kept as origin and path only. Null for anything else.
-export function allowedReturn(value: unknown, appOrigins: readonly string[]): string | null {
+// Whether localhost may be a return address: only when the optional ALLOW_LOCALHOST_RETURN secret
+// is exactly "true", which is for development only. Unset, as in production, localhost is refused.
+export function localhostReturnAllowed(read: (name: string) => string | undefined): boolean {
+  return read("ALLOW_LOCALHOST_RETURN") === "true";
+}
+
+// A return address the browser may be sent to: one of the app's own origins, or localhost when
+// allowLocalhost is on (development only), kept as origin and path only. Null for anything else.
+export function allowedReturn(value: unknown, appOrigins: readonly string[], allowLocalhost = false): string | null {
   if (typeof value !== "string") return null;
   let url: URL;
   try {
@@ -98,7 +118,7 @@ export function allowedReturn(value: unknown, appOrigins: readonly string[]): st
     return null;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  const local = allowLocalhost && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
   if (!local && !appOrigins.includes(url.origin)) return null;
   return `${url.origin}${url.pathname}`;
 }
@@ -106,9 +126,10 @@ export function allowedReturn(value: unknown, appOrigins: readonly string[]): st
 // A verified state's address checked again against the app's origins as they are at the callback,
 // since a state stays readable after an origin leaves APP_ORIGINS. One that no longer passes goes to
 // the fallback instead; with no fallback the state reads as invalid, which sends the browser nowhere.
-export function recheckReturn(reading: StateReading, appOrigins: readonly string[], fallback: string | null): StateReading {
+// A localhost address passes only while allowLocalhost is on, as at the start.
+export function recheckReturn(reading: StateReading, appOrigins: readonly string[], fallback: string | null, allowLocalhost = false): StateReading {
   if (reading.kind === "invalid") return reading;
-  const r = allowedReturn(reading.claims.r, appOrigins) ?? fallback;
+  const r = allowedReturn(reading.claims.r, appOrigins, allowLocalhost) ?? fallback;
   if (!r) return { kind: "invalid" };
   return { kind: reading.kind, claims: { ...reading.claims, r } };
 }

@@ -5,12 +5,15 @@
 // forwarded to someone else. Only the browser that came back from the provider learns the id.
 // Tokens and the account id are sealed under { pendingId }. Claiming a row deletes it as it reads
 // it, so only one caller ever gets it. Expired rows are swept, and each swept grant is handed back
-// to the provider, best effort. Logs carry a short message and a code, never a value.
+// to the provider, best effort. Every hand-back of a grant that never became a connection (swept,
+// discarded, failed at finish or refused at the callback) goes through handBackPending, which keeps
+// the grant when revoking it could cut off a live connection to the same outside account. Logs
+// carry a short message and a code, never a value.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
-import { blankToNull, pendingExpiry } from "../_shared/connectFlow.ts";
+import { blankToNull, pendingExpiry, shouldRevokePending } from "../_shared/connectFlow.ts";
 import type { ProviderKey } from "../_shared/providers.ts";
-import { loadTokenKeys, openTokens, sealTokens, type TokenKeys } from "../_shared/tokenCrypto.ts";
-import { providerFor, revokeGrant, type Exchanged } from "./oauth.ts";
+import { decryptToken, loadTokenKeys, openTokens, sealTokens, tokenAad, type TokenKeys } from "../_shared/tokenCrypto.ts";
+import { providerFor, revokeGrant, type Exchanged, type IssuedGrant, type ProviderDef } from "./oauth.ts";
 
 export interface PendingRow {
   id: string;
@@ -83,9 +86,63 @@ export async function claimPending(admin: SupabaseClient, id: string): Promise<P
   return (data as PendingRow | null) ?? null;
 }
 
-// Deletes every row at or past its expiry, then hands each grant back to its provider, best effort.
-// Missing or unusable keys, or a provider without app keys, only skip the revoke. Answers how many
-// rows went. Throws only when the delete itself fails.
+// The outside account ids held by every live connection (connected or in error) to this provider,
+// in every company, since one outside account may be connected in more than one. An id that will
+// not open reads as unknown (null). Throws when either read fails.
+async function liveAccountIds(admin: SupabaseClient, provider: ProviderKey, keys: TokenKeys): Promise<Array<string | null>> {
+  const { data: connections, error } = await admin.from("company_connections").select("id").eq("provider", provider).in("status", ["connected", "error"]);
+  if (error) {
+    console.error("live connections read failed", error.code ?? "unknown");
+    throw new Error("Live connections could not be read.");
+  }
+  const ids = ((connections ?? []) as Array<{ id: string }>).map((c) => c.id);
+  if (ids.length === 0) return [];
+  const { data: held, error: heldError } = await admin.from("connection_tokens").select("connection_id, account_id").in("connection_id", ids);
+  if (heldError) {
+    console.error("live accounts read failed", heldError.code ?? "unknown");
+    throw new Error("Live accounts could not be read.");
+  }
+  const out: Array<string | null> = [];
+  for (const row of (held ?? []) as Array<{ connection_id: string; account_id: string | null }>) {
+    if (row.account_id === null) {
+      out.push(null);
+      continue;
+    }
+    try {
+      out.push(await decryptToken(row.account_id, tokenAad({ connectionId: row.connection_id }, "account_id"), keys));
+    } catch {
+      out.push(null);
+    }
+  }
+  return out;
+}
+
+// Hands a grant that never became a connection back to its provider, but only when that cannot cut
+// off a live connection: a provider keys a grant on its own terms (Google on client and user, Intuit
+// on the company), so revoking a pending grant for an account a live connection also holds would end
+// that connection too. The grant is kept, with an id-safe log line, when its account is unknown, when
+// any live connection to the provider holds the same or an unknown account, or when the live
+// connections cannot be read. True only when the provider confirmed the revoke. Never throws.
+export async function handBackPending(admin: SupabaseClient, def: ProviderDef & { key: ProviderKey }, grant: IssuedGrant, keys: TokenKeys): Promise<boolean> {
+  // A provider with no revoke (GoHighLevel) has nothing to hand back to.
+  if (!def.revoke) return false;
+  let live: Array<string | null>;
+  try {
+    live = await liveAccountIds(admin, def.key, keys);
+  } catch {
+    console.error("pending revoke skipped", def.key, "live connections unread");
+    return false;
+  }
+  if (!shouldRevokePending(grant.accountId, live)) {
+    console.error("pending revoke skipped", def.key, "account unknown or live elsewhere");
+    return false;
+  }
+  return revokeGrant(def, grant);
+}
+
+// Deletes every row at or past its expiry, then hands each grant back to its provider, best effort,
+// through handBackPending. Missing or unusable keys, or a provider without app keys, only skip the
+// revoke. Answers how many rows went. Throws only when the delete itself fails.
 export async function sweepExpiredPending(admin: SupabaseClient, now: Date): Promise<number> {
   const { data, error } = await admin.from("connection_pending").delete().lte("expires_at", now.toISOString()).select(PENDING_COLUMNS);
   if (error) {
@@ -104,7 +161,7 @@ export async function sweepExpiredPending(admin: SupabaseClient, now: Date): Pro
     try {
       const def = providerFor(row.provider);
       const opened = await openTokens({ pendingId: row.id }, row, keys);
-      await revokeGrant(def, opened);
+      await handBackPending(admin, def, opened, keys);
     } catch (err) {
       console.error("pending sweep revoke skipped", row.provider, err instanceof Error ? err.name : "unknown");
     }
