@@ -42,12 +42,33 @@ describe("tokenCrypto", () => {
     expect(fromBase64Url(body).length).toBe(12 + new TextEncoder().encode("sample").length + 16);
   });
 
+  it("opens a fixed v1 value: IV first, then ciphertext and tag, bound to the exact AAD bytes", async () => {
+    // Built once outside the helper with Node's Web Crypto: key A, IV 00..0b, AAD
+    // utf8("connection:c1:access_token"), plaintext "known-answer". Stored rows must keep opening.
+    const vector = "v1:AAECAwQFBgcICQoL0Mj6UU7TZxeNHYK2zstHhe3sGl0BDi0gcbVK4g";
+    const keys = await loadTokenKeys(read({ TOKEN_ENCRYPTION_KEY: A }));
+    expect(await decryptToken(vector, "connection:c1:access_token", keys)).toBe("known-answer");
+    expect(fromBase64Url(vector.slice(3)).slice(0, 12)).toEqual(Uint8Array.from({ length: 12 }, (_, i) => i));
+
+    // And what the helper seals opens with plain Web Crypto under that same layout and AAD.
+    const sealed = await encryptToken("known-answer", tokenAad({ connectionId: "c1" }, "access_token"), keys);
+    const bytes = fromBase64Url(sealed.slice(3));
+    const raw = await crypto.subtle.importKey("raw", new Uint8Array(32).fill(1), { name: "AES-GCM" }, false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: bytes.slice(0, 12), additionalData: new TextEncoder().encode("connection:c1:access_token"), tagLength: 128 },
+      raw,
+      bytes.slice(12),
+    );
+    expect(new TextDecoder().decode(plain)).toBe("known-answer");
+  });
+
   it("seals the same value differently each time", async () => {
     const keys = await loadTokenKeys(read({ TOKEN_ENCRYPTION_KEY: A }));
     const aad = tokenAad({ connectionId: "c1" }, "access_token");
     const first = await encryptToken("same", aad, keys);
     const second = await encryptToken("same", aad, keys);
     expect(first).not.toBe(second);
+    expect(fromBase64Url(first.slice(3)).slice(0, 12)).not.toEqual(fromBase64Url(second.slice(3)).slice(0, 12));
     expect(await decryptToken(first, aad, keys)).toBe("same");
     expect(await decryptToken(second, aad, keys)).toBe("same");
   });
@@ -124,6 +145,37 @@ describe("tokenCrypto", () => {
     expect(Object.keys(first)).toContain("account_id");
     const opened = await openTokens(owner, { access_token: first.access_token, refresh_token: first.refresh_token, account_id: first.account_id ?? null }, keys);
     expect(opened).toEqual({ accessToken: "a", refreshToken: "r", accountId: "realm-1" });
+  });
+
+  it("refuses to seal anything but a non-empty string, and to open anything but a string", async () => {
+    const keys = await loadTokenKeys(read({ TOKEN_ENCRYPTION_KEY: A }));
+    const owner = { connectionId: "c1" };
+    const aad = tokenAad(owner, "access_token");
+    await expect(encryptToken("", aad, keys)).rejects.toThrow(TokenSealError);
+    await expect(encryptToken(undefined as never, aad, keys)).rejects.toThrow(TokenSealError);
+    await expect(encryptToken(null as never, aad, keys)).rejects.toThrow(TokenSealError);
+    await expect(decryptToken(null as never, aad, keys)).rejects.toThrow(TokenSealError);
+    await expect(decryptToken(undefined as never, aad, keys)).rejects.toThrow(TokenSealError);
+    await expect(sealTokens(owner, { accessToken: undefined as never, refreshToken: null }, keys)).rejects.toThrow(TokenSealError);
+    await expect(sealTokens(owner, { accessToken: "a", refreshToken: undefined as never }, keys)).rejects.toThrow(TokenSealError);
+    await expect(sealTokens(owner, { accessToken: "a", refreshToken: "" }, keys)).rejects.toThrow(TokenSealError);
+    await expect(openTokens(owner, { access_token: null as never, refresh_token: null, account_id: null }, keys)).rejects.toThrow(TokenSealError);
+    const nulls = await sealTokens(owner, { accessToken: "a", refreshToken: null, accountId: null }, keys);
+    expect(nulls.refresh_token).toBeNull();
+    expect(nulls.account_id).toBeNull();
+  });
+
+  it("tokenAad refuses a missing or empty id, an owner with both keys or neither, and malformed text", () => {
+    expect(() => tokenAad({ connectionId: undefined as never }, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ connectionId: "" }, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ pendingId: "" }, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ connectionId: "c1", pendingId: "p1" } as never, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({} as never, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad(null as never, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ connectionId: "c\uD800" }, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ pendingId: "\uDC00p" }, "access_token")).toThrow(TokenSealError);
+    expect(() => tokenAad({ connectionId: "c1" }, "password" as never)).toThrow(TokenSealError);
+    expect(tokenAad({ connectionId: "c\u{1F600}" }, "access_token")).toBe("connection:c\u{1F600}:access_token");
   });
 
   it("openTokens refuses an access token sealed as the refresh token (field swap)", async () => {

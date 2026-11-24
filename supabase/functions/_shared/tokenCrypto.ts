@@ -69,14 +69,32 @@ export async function loadTokenKeys(read: (name: string) => string | undefined):
   };
 }
 
+const FIELDS: readonly string[] = ["access_token", "refresh_token", "account_id"];
+
+// True for text that survives UTF-8 unchanged. A lone surrogate does not: TextEncoder turns every
+// one into the same replacement bytes, so two different ids would share one AAD.
+const wellFormed = (text: string) => new TextDecoder().decode(new TextEncoder().encode(text)) === text;
+
+// The additional authenticated data that ties a value to its row and column. A caller bug (an id
+// left out of a select, an owner with both keys) would otherwise seal many rows under one AAD, so
+// anything but exactly one non-empty, well-formed id and a known field is refused.
 export function tokenAad(owner: TokenOwner, field: TokenField): string {
-  return "connectionId" in owner ? `connection:${owner.connectionId}:${field}` : `pending:${owner.pendingId}:${field}`;
+  const refuse = () => new TokenSealError("The sign-in could not be stored safely.");
+  if (typeof owner !== "object" || owner === null || !FIELDS.includes(field)) throw refuse();
+  const isConnection = "connectionId" in owner;
+  if (isConnection === "pendingId" in owner) throw refuse();
+  const id: unknown = isConnection ? owner.connectionId : (owner as { pendingId: unknown }).pendingId;
+  if (typeof id !== "string" || id === "" || !wellFormed(id)) throw refuse();
+  return `${isConnection ? "connection" : "pending"}:${id}:${field}`;
 }
 
 const utf8 = (text: string) => new TextEncoder().encode(text);
 const gcm = (iv: Uint8Array<ArrayBuffer>, aad: string): AesGcmParams => ({ name: "AES-GCM", iv, additionalData: utf8(aad), tagLength: TAG_BYTES * 8 });
 
+// Only a non-empty string is a token. Anything else (a field a provider left out, read through a
+// cast) is refused here rather than stored as a sealed empty value that looks valid.
 export async function encryptToken(plain: string, aad: string, keys: TokenKeys): Promise<string> {
+  if (typeof plain !== "string" || plain === "") throw new TokenSealError("The sign-in could not be stored safely.");
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const sealed = new Uint8Array(await crypto.subtle.encrypt(gcm(iv, aad), keys.current, utf8(plain)));
   const out = new Uint8Array(IV_BYTES + sealed.length);
@@ -88,7 +106,7 @@ export async function encryptToken(plain: string, aad: string, keys: TokenKeys):
 // Tries the current key, then the previous one; GCM's tag check refuses the wrong key, owner or
 // field. Every failure reads the same, so nothing about why reaches a caller or a log.
 export async function decryptToken(sealed: string, aad: string, keys: TokenKeys): Promise<string> {
-  if (!sealed.startsWith(TOKEN_FORMAT)) throw new TokenSealError();
+  if (typeof sealed !== "string" || !sealed.startsWith(TOKEN_FORMAT)) throw new TokenSealError();
   const bytes = fromBase64Url(sealed.slice(TOKEN_FORMAT.length));
   if (!bytes || bytes.length < IV_BYTES + TAG_BYTES) throw new TokenSealError();
   const params = gcm(bytes.slice(0, IV_BYTES), aad);
@@ -111,7 +129,8 @@ export interface SealedTokens {
 }
 
 // The row values to store. account_id is left out entirely when accountId is undefined, so a save
-// after a token refresh, which never learns the account, does not overwrite the stored one.
+// after a token refresh, which never learns the account, does not overwrite the stored one. Only
+// null means "no value"; an undefined access or refresh token is refused, never stored as null.
 export async function sealTokens(
   owner: TokenOwner,
   tokens: { accessToken: string; refreshToken: string | null; accountId?: string | null },
