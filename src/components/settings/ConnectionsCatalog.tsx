@@ -27,7 +27,7 @@ import { listConnections, loadConnectorSetup } from "../../services/connections.
 import { listConnectorRequests, requestConnector, withdrawConnectorRequest } from "../../services/connectorRequests.ts";
 import { listExternalLinks } from "../../services/externalLinks.ts";
 import { CARD_STATE_ORDER, CONNECTOR_GROUPS, CONNECTORS, cardView, summaryCounts, type CardView, type Connector, type ConnectorGroup, type ConnectorSetup } from "../../lib/connectors.ts";
-import { connectErrorText } from "../../../supabase/functions/_shared/connectFlow.ts";
+import { connectErrorText, isPendingId } from "../../../supabase/functions/_shared/connectFlow.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { CONNECTION_PROVIDER_LABELS, keysOf, type Company, type CompanyConnection, type ConnectionProvider, type ConnectorRequest, type ExternalLink, type LinkProvider } from "../../types/database.ts";
@@ -155,8 +155,13 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
   // entry), keeping the rest of it: a reload does not report an error again, a later Disconnect is
   // not contradicted by "is connected" above a card that says otherwise, and the pending id, which
   // lets its starter attach the sign-in, never stays in history or in a link copied from the bar.
+  // Only an id shaped like the one the callback mints is read; anything else, from a hand-made
+  // link, opens nothing and is never sent to the function, but leaves the address all the same.
   const [outcome, setOutcome] = useState(() => readOutcome(params));
-  const [pendingId, setPendingId] = useState(() => params.get("pending") || null);
+  const [pendingId, setPendingId] = useState(() => {
+    const value = params.get("pending");
+    return isPendingId(value) ? value : null;
+  });
   useEffect(() => {
     if (!params.has("connected") && !params.has("connect_error") && !params.has("pending")) return;
     setParams(

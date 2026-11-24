@@ -1,6 +1,9 @@
+// The line for a failure nobody can say more about.
+export const FALLBACK_MESSAGE = "Something went wrong. Try again.";
+
 // Turn whatever a service threw (a Supabase PostgrestError, an Error, a string) into one
 // friendly sentence for the UI. Services throw, callers message; this is the message.
-export function errorMessage(err: unknown, fallback = "Something went wrong. Try again."): string {
+export function errorMessage(err: unknown, fallback = FALLBACK_MESSAGE): string {
   if (!err) return fallback;
   if (typeof err === "string") return err;
   if (err instanceof Error && err.message) return friendly(err.message);

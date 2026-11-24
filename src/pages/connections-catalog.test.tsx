@@ -343,6 +343,21 @@ describe("the confirm panel", () => {
     expect(await within(panel).findByRole("button", { name: "Connect" })).toBeInTheDocument();
   });
 
+  // Only the id the callback mints is ever read: anything else on the address, from a hand-made
+  // link, opens nothing and is never sent to the function, and still comes off the address.
+  it("ignores a pending value that is not a well-formed id: no panel, no call, and it leaves the address", async () => {
+    const read = vi.spyOn(connectionsService, "readPendingConnection");
+    onTestFinished(() => read.mockRestore());
+    for (const value of ["not-an-id", `${PENDING_ID}x`, "' or 1=1 --"]) {
+      const { unmount } = renderCatalog(kingdomAdmin, `/settings/connections?pending=${encodeURIComponent(value)}&keep=1`);
+      await findCard("QuickBooks Online");
+      await waitFor(() => expect(screen.getByTestId("address").textContent).toBe("?keep=1"));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      unmount();
+    }
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("reads the no-name line when the tool gave no account name", async () => {
     setMockPending(PENDING_ID, ready("gohighlevel", null));
     renderCatalog(kingdomAdmin, pendingPath());

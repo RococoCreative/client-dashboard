@@ -4,12 +4,32 @@
 // posture, extended: no provider secret and no provider token ever reaches the app or Vercel.
 import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type ConnectionProvider } from "../types/database.ts";
 import { parseConnectorSetup, type ConnectorSetup } from "../lib/connectors.ts";
-import { parsePendingAnswer, type PendingAnswer } from "../../supabase/functions/_shared/connectFlow.ts";
-import { invokeFunction } from "./invoke.ts";
+import { PENDING_GONE, PENDING_SOMEONE_ELSE, parsePendingAnswer, type PendingAnswer } from "../../supabase/functions/_shared/connectFlow.ts";
+import { FALLBACK_MESSAGE } from "../lib/errors.ts";
+import { FunctionCallError, invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
-// What a caller sees when the function answered something this app cannot read.
+// What a caller sees when the function answered something this app cannot read, or nothing.
 const NO_ANSWER = "The connection service did not answer. Try again in a moment.";
+
+// On the confirm step a refusal's status says what happened: the sign-in is someone else's, or it
+// is expired or already used.
+const PENDING_REFUSALS: Partial<Record<number, string>> = { 403: PENDING_SOMEONE_ELSE, 410: PENDING_GONE };
+
+// Calls the function and, when it refuses, throws only a line this app holds: the one its status
+// maps to, the no-answer line when no answer came back, and the fallback for anything else. The
+// text a refusal carried is never passed on, since a gateway in front of the function can write
+// its own (spec 5: never raw provider or database text on screen).
+async function call<T>(path: string, body: Record<string, unknown>, refusals: Partial<Record<number, string>> = {}): Promise<T> {
+  try {
+    return await invokeFunction<T>(path, body);
+  } catch (err) {
+    // The original stays as the cause, for a developer's console; only the message is ever shown.
+    if (err instanceof FunctionCallError && err.status === null) throw new Error(NO_ANSWER, { cause: err });
+    const status = err instanceof FunctionCallError ? err.status : null;
+    throw new Error((status !== null ? refusals[status] : undefined) ?? FALLBACK_MESSAGE, { cause: err });
+  }
+}
 
 const COLUMNS = "id, company_id, provider, status, external_account_name, scopes, connected_by, connected_at, last_synced_at, last_error, settings, created_at, updated_at";
 
@@ -37,21 +57,21 @@ function revokedIn(answer: unknown): { revoked: boolean } {
 
 // The connection goes on the hub's side either way; revoked says whether the provider let go too.
 export async function disconnectConnection(companyId: string, provider: ConnectionProvider): Promise<{ revoked: boolean }> {
-  return revokedIn(await invokeFunction<unknown>("connections/disconnect", { company_id: companyId, provider }));
+  return revokedIn(await call<unknown>("connections/disconnect", { company_id: companyId, provider }));
 }
 
 // What a sign-in that came back is: ready to confirm (the tool, the account name when the tool gave
 // one, and the company), started by someone else, or gone. Only whoever started it learns more.
 export async function readPendingConnection(pendingId: string): Promise<PendingAnswer> {
-  const answer = parsePendingAnswer(await invokeFunction<unknown>("connections/pending", { pending_id: pendingId }));
+  const answer = parsePendingAnswer(await call<unknown>("connections/pending", { pending_id: pendingId }));
   if (!answer) throw new Error(NO_ANSWER);
   return answer;
 }
 
 // Attaches the sign-in to its company and returns the tool it connected. The function refuses
-// anyone but its starter, and an expired or already used one, with a plain line.
+// anyone but its starter (403), and an expired or already used one (410).
 export async function finishConnection(pendingId: string): Promise<ConnectionProvider> {
-  const answer = await invokeFunction<{ provider?: unknown } | null>("connections/finish", { pending_id: pendingId });
+  const answer = await call<{ provider?: unknown } | null>("connections/finish", { pending_id: pendingId }, PENDING_REFUSALS);
   const provider = keysOf(CONNECTION_PROVIDER_LABELS).find((key) => key === answer?.provider);
   if (!provider) throw new Error(NO_ANSWER);
   return provider;
@@ -59,7 +79,7 @@ export async function finishConnection(pendingId: string): Promise<ConnectionPro
 
 // Drops the sign-in without attaching it; revoked says whether the provider let go of it.
 export async function discardConnection(pendingId: string): Promise<{ revoked: boolean }> {
-  return revokedIn(await invokeFunction<unknown>("connections/discard", { pending_id: pendingId }));
+  return revokedIn(await call<unknown>("connections/discard", { pending_id: pendingId }, PENDING_REFUSALS));
 }
 
 // How long the setup check may take before the catalog stops waiting for it.
