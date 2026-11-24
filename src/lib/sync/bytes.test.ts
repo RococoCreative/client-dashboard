@@ -22,6 +22,14 @@ describe("bytes", () => {
     expect(fromBase64Url("not base64")).toBeNull();
   });
 
+  it("fromBase64Url refuses a final character that carries padding bits, so each value has one spelling", () => {
+    expect(fromBase64Url("AA")).toEqual(Uint8Array.from([0]));
+    expect(fromBase64Url("AB")).toBeNull();
+    expect(fromBase64Url("AAA")).toEqual(Uint8Array.from([0, 0]));
+    expect(fromBase64Url("AAB")).toBeNull();
+    expect(fromBase64Url("AAAA")).toEqual(Uint8Array.from([0, 0, 0]));
+  });
+
   it("fromBase64 reads standard base64 or base64url, padded or not, and trims the ends", () => {
     const bytes = Uint8Array.from([251, 255, 191, 0, 1]);
     const standard = btoa(String.fromCharCode(...bytes));

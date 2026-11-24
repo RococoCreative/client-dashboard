@@ -10,10 +10,13 @@ export function toBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// Strict base64url: the url alphabet only, no padding, and a length that can hold whole bytes.
+// Strict base64url: the url alphabet only, no padding, a length that can hold whole bytes, and a
+// final character whose unused bits are zero. That last rule gives every value one spelling, which
+// the signed connect state relies on: a signature or payload cannot be respelled and still read.
 export function fromBase64Url(text: string): Uint8Array<ArrayBuffer> | null {
   if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return null;
-  return decode(text.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = decode(text.replace(/-/g, "+").replace(/_/g, "/"));
+  return bytes && toBase64Url(bytes) === text ? bytes : null;
 }
 
 // For a secret pasted by hand: standard base64 or base64url, padded or not, with surrounding
