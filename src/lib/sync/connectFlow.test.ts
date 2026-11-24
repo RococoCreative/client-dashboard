@@ -1,5 +1,5 @@
 // Pins the connect flow's rules outside the function: the error keys and the only lines the app
-// shows for them, who may finish a pending connection, the confirm copy, the reader of the pending
+// shows for them, who may finish a pending connection, the reader of the pending
 // answer, and where the callback sends the browser when a sign-in does not finish.
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
@@ -9,7 +9,6 @@ import {
   PENDING_GONE,
   PENDING_SOMEONE_ELSE,
   PENDING_TTL_SECONDS,
-  confirmText,
   connectErrorText,
   failureLocation,
   fallbackReturn,
@@ -48,7 +47,7 @@ describe("connectErrorText", () => {
   });
 
   it("has no em dash in any line", () => {
-    const lines = [...Object.values(CONNECT_ERROR_TEXT), PENDING_GONE, PENDING_SOMEONE_ELSE, confirmText("QuickBooks", "Sample Books", "Sample Co"), confirmText("QuickBooks", null, "Sample Co")];
+    const lines = [...Object.values(CONNECT_ERROR_TEXT), PENDING_GONE, PENDING_SOMEONE_ELSE];
     for (const line of lines) expect(line).not.toContain("\u2014");
   });
 });
@@ -73,14 +72,6 @@ describe("pending connections", () => {
     expect(pendingVerdict({ started_by: "pr1", expires_at: later }, "pr1", at)).toBe("ready");
     expect(pendingVerdict({ started_by: "pr1", expires_at: new Date((now - 1) * 1000).toISOString() }, "pr2", at)).toBe("gone");
     expect(pendingVerdict({ started_by: "pr1", expires_at: "not a date" }, "pr1", at)).toBe("gone");
-  });
-
-  it("confirmText names the account when the tool gave one, and warns when it did not", () => {
-    expect(confirmText("QuickBooks", "Sample Books", "Sample Co")).toBe("Connect QuickBooks account Sample Books to Sample Co?");
-    expect(confirmText("QuickBooks", null, "Sample Co")).toBe(
-      "Connect QuickBooks to Sample Co? QuickBooks did not give this account's name. Only continue if you just approved access in QuickBooks.",
-    );
-    expect(confirmText("QuickBooks", "  ", "Sample Co")).toBe(confirmText("QuickBooks", null, "Sample Co"));
   });
 
   it("parsePendingAnswer accepts the three shapes", () => {

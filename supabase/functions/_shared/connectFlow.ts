@@ -1,6 +1,6 @@
 // The connect flow's rules, kept pure so they are tested outside the function and shared with the
 // app: the error keys a provider return may carry and the one line the app shows for each, who may
-// finish a pending connection, the confirm copy, the reader of the /pending answer, and where the
+// finish a pending connection, the reader of the /pending answer, and where the
 // callback sends the browser when a sign-in does not finish. The callback only ever puts a key in
 // the address; the app turns it into words, so nothing a caller sends is ever shown as text.
 import type { StateReading } from "./connectState.ts";
@@ -39,13 +39,6 @@ export function pendingVerdict(row: { started_by: string; expires_at: string } |
   if (!row) return "gone";
   if (!(Date.parse(row.expires_at) > now.getTime())) return "gone";
   return row.started_by === callerProfileId ? "ready" : "someone_else";
-}
-
-// The confirm panel's question. The account name is best effort; without it the panel says so.
-export function confirmText(tool: string, accountName: string | null, company: string): string {
-  const name = accountName?.trim();
-  if (name) return `Connect ${tool} account ${name} to ${company}?`;
-  return `Connect ${tool} to ${company}? ${tool} did not give this account's name. Only continue if you just approved access in ${tool}.`;
 }
 
 export type PendingAnswer = { status: "ready"; provider: ProviderKey; account_name: string | null; company_name: string } | { status: "someone_else" } | { status: "gone" };
