@@ -9,14 +9,18 @@
 -- writes it). The order matters: the audit trigger stops watching the column before it is cleared.
 --
 --   1. The company_connections audit trigger watches status and provider only.
---   2. external_account_id is cleared on every connection and must stay null. The column stays so
+--   2. A sync error that quotes its connection's account id (a network failure names the request
+--      URL, which carries the QuickBooks realm id) is replaced with one fixed line, on that
+--      connection's sources and runs only. It runs while the id is still there to match on, so a
+--      second paste finds nothing to replace.
+--   3. external_account_id is cleared on every connection and must stay null. The column stays so
 --      an older function build fails loudly rather than writing it; the account name stays for
 --      display.
---   3. Historic audit events for connections lose the account id.
---   4. Synced rows lose the QuickBooks realm id from source_ref.
---   5. connection_tokens gains account_id, and its tokens and account id must be sealed. Live holds
+--   4. Historic audit events for connections lose the account id.
+--   5. Synced rows lose the QuickBooks realm id from source_ref.
+--   6. connection_tokens gains account_id, and its tokens and account id must be sealed. Live holds
 --      no tokens today; a plaintext row would make this paste fail, which is intended.
---   6. public.connection_pending holds a provider sign-in between the OAuth callback and the admin
+--   7. public.connection_pending holds a provider sign-in between the OAuth callback and the admin
 --      confirming which account to connect. Row level security is on with no policies and only the
 --      service role is granted, so no signed-in person or anon ever reads it. A pending connection
 --      is keyed by a fresh random id the function mints at the callback, never by the state nonce:
@@ -34,7 +38,27 @@ create trigger company_connections_audit
   for each row execute function private.audit_change('status', 'provider');
 
 -- ---------------------------------------------------------------------------------------
--- 2. No account id on the connection row
+-- 2. No account id in a stored sync error
+-- ---------------------------------------------------------------------------------------
+-- The line replaces the whole error: the id may sit anywhere in it, and nothing else in a
+-- network failure's text helps an admin. A run keeps the { message } shape the runs list reads.
+
+update public.sync_sources s
+   set last_error = 'The last sync could not reach the outside tool.'
+  from public.company_connections c
+ where s.connection_id = c.id
+   and c.external_account_id <> ''
+   and strpos(s.last_error, c.external_account_id) > 0;
+
+update public.sync_runs r
+   set error_detail = jsonb_build_object('message', 'The last sync could not reach the outside tool.')
+  from public.company_connections c
+ where r.connection_id = c.id
+   and c.external_account_id <> ''
+   and strpos(r.error_detail::text, c.external_account_id) > 0;
+
+-- ---------------------------------------------------------------------------------------
+-- 3. No account id on the connection row
 -- ---------------------------------------------------------------------------------------
 
 update public.company_connections set external_account_id = null where external_account_id is not null;
@@ -44,7 +68,7 @@ alter table public.company_connections add constraint company_connections_no_acc
   check (external_account_id is null);
 
 -- ---------------------------------------------------------------------------------------
--- 3. No account id in the audit log
+-- 4. No account id in the audit log
 -- ---------------------------------------------------------------------------------------
 
 update public.audit_events
@@ -52,13 +76,13 @@ update public.audit_events
  where table_name = 'company_connections' and changed ? 'external_account_id';
 
 -- ---------------------------------------------------------------------------------------
--- 4. No realm id on synced rows
+-- 5. No realm id on synced rows
 -- ---------------------------------------------------------------------------------------
 
 update public.sync_records set source_ref = source_ref - 'realmId' where source_ref ? 'realmId';
 
 -- ---------------------------------------------------------------------------------------
--- 5. Sealed tokens and the sealed account id
+-- 6. Sealed tokens and the sealed account id
 -- ---------------------------------------------------------------------------------------
 
 alter table public.connection_tokens add column if not exists account_id text;
@@ -68,7 +92,7 @@ alter table public.connection_tokens add constraint connection_tokens_sealed
   check (access_token like 'v1:%' and (refresh_token is null or refresh_token like 'v1:%') and (account_id is null or account_id like 'v1:%'));
 
 -- ---------------------------------------------------------------------------------------
--- 6. Pending connections
+-- 7. Pending connections
 -- ---------------------------------------------------------------------------------------
 
 create table if not exists public.connection_pending (
