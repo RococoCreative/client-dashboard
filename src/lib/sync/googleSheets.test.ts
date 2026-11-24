@@ -52,7 +52,7 @@ function harness(tokens: ProviderTokens, answers: Array<{ status: number; body: 
     clientId: "sample-client",
     clientSecret: "sample-secret",
     tokens: {
-      load: async () => ({ ...tokens }),
+      load: async () => ({ ...tokens, accountId: null }),
       save: async (connectionId, saved) => {
         log.push({ kind: "save", connectionId, tokens: saved });
       },
@@ -67,7 +67,7 @@ function harness(tokens: ProviderTokens, answers: Array<{ status: number; body: 
 
 const fresh: ProviderTokens = { accessToken: "sample-access", refreshToken: "sample-refresh", accessExpiresAt: inMinutes(60), refreshExpiresAt: null };
 const sheetsConfig: SheetsSourceConfig = { spreadsheet_id: "sample-sheet", sheet_gid: 42, range: null, header_row: 1 };
-const connection = { id: "connection-1", external_account_id: "sample-reports@example.com" };
+const connection = { id: "connection-1" };
 
 function source(config: unknown = sheetsConfig): SyncSourceSpec {
   return {
@@ -260,6 +260,32 @@ describe("Google Sheets adapter", () => {
       expect((error as Error).message).not.toContain("sample-access");
       expect((error as Error).message).not.toContain("sample-refresh");
     }
+  });
+
+  it("a fetch that throws reads 'Google Sheets did not answer. Try again later.'", async () => {
+    const throwing = () =>
+      vi.fn(async () => {
+        throw new TypeError("error sending request for url (https://sheets.googleapis.com/v4/spreadsheets/sample-sheet)");
+      }) as unknown as typeof globalThis.fetch;
+    // A metadata fetch with a fresh token, then a refresh fetch with an expiring one.
+    for (const tokens of [fresh, { ...fresh, accessExpiresAt: inMinutes(2) }]) {
+      const h = harness(tokens, []);
+      h.deps.fetch = throwing();
+      const error = await createGoogleSheetsAdapter(h.deps).read(source(), connection).catch((err: Error) => err);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("Google Sheets did not answer. Try again later.");
+      expect(h.saves()).toHaveLength(0);
+    }
+  });
+
+  it("keeps the old refresh token when Google sends an empty one", async () => {
+    const h = harness({ ...fresh, accessExpiresAt: inMinutes(2) }, [
+      { status: 200, body: { access_token: "sample-access-2", refresh_token: "", expires_in: 3600 } },
+      { status: 200, body: META },
+      valuesAnswer(VALUES),
+    ]);
+    await createGoogleSheetsAdapter(h.deps).read(source(), connection);
+    expect(h.saves()[0].tokens.refreshToken).toBe("sample-refresh");
   });
 
   it("refuses a source that is not a Google Sheets tab, or a bad spreadsheet id", async () => {

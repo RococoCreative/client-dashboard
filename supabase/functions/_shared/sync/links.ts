@@ -34,8 +34,10 @@ export function recordLink(ref: Record<string, unknown>): { href: string; label:
     return { href: sheetsUrl(ref.spreadsheet_id, ref.sheet_gid, row), label: "Open in Google Sheets", note: null };
   }
   // QuickBooks invoices only: the invoice deep link is documented by the community rather than by
-  // Intuit, and it opens behind the company's own QuickBooks sign-in, so the row says so.
-  if (ref.entity === "Invoice" && typeof ref.Id === "string" && ref.Id.trim() && typeof ref.realmId === "string") {
+  // Intuit, and it opens behind the company's own QuickBooks sign-in, so the row says so. The link
+  // needs no company id, so none is stored on a record; an older ref that still carries one links
+  // the same.
+  if (ref.entity === "Invoice" && typeof ref.Id === "string" && ref.Id.trim()) {
     const host = ref.sandbox === true ? "https://app.sandbox.qbo.intuit.com" : "https://app.qbo.intuit.com";
     return { href: `${host}/app/invoice?txnId=${encodeURIComponent(ref.Id)}`, label: "Open in QuickBooks", note: "Opens QuickBooks, sign-in required" };
   }

@@ -1,8 +1,9 @@
 // Proves the one list of provider secret names agrees with the registry the catalog shows, that
-// the key status rule needs both values, and that the app's reader of that status never throws.
+// the key status rule needs both values, that the connect flow's own secrets read ready only when
+// usable and name the exact one at fault, and that the app's reader of that status never throws.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_KEYS } from "../../../supabase/functions/_shared/providers.ts";
-import { PROVIDER_SECRETS, keysPresent } from "../../../supabase/functions/_shared/providerSecrets.ts";
+import { FLOW_SECRETS, PROVIDER_SECRETS, flowSecretsReady, keysPresent, missingFlowSecrets } from "../../../supabase/functions/_shared/providerSecrets.ts";
 import { CONNECTORS } from "../connectors.ts";
 
 vi.mock("../../services/invoke.ts", () => ({ invokeFunction: vi.fn() }));
@@ -28,6 +29,67 @@ describe("PROVIDER_SECRETS", () => {
   it("reports a provider present only when both values are non-empty", () => {
     const env = { QBO_CLIENT_ID: "a", QBO_CLIENT_SECRET: "b", GHL_CLIENT_ID: "a", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "x" } as Record<string, string>;
     expect(keysPresent((n) => env[n])).toEqual({ quickbooks: true, gohighlevel: false, google_sheets: false });
+  });
+});
+
+const keyOf = (bytes: number) => btoa(String.fromCharCode(...new Uint8Array(bytes).fill(7)));
+const VALID_KEY = keyOf(32);
+
+describe("flowSecretsReady", () => {
+  const ready = (env: Record<string, string | undefined>) => flowSecretsReady((name) => env[name]);
+
+  it("names the connect flow's two secrets", () => {
+    expect(FLOW_SECRETS).toEqual(["CONNECTIONS_STATE_SECRET", "TOKEN_ENCRYPTION_KEY"]);
+  });
+
+  it("reads all true with a state secret and a valid key", () => {
+    expect(ready({ CONNECTIONS_STATE_SECRET: "sample-state", TOKEN_ENCRYPTION_KEY: VALID_KEY })).toEqual({ CONNECTIONS_STATE_SECRET: true, TOKEN_ENCRYPTION_KEY: true });
+    expect(ready({ CONNECTIONS_STATE_SECRET: "sample-state", TOKEN_ENCRYPTION_KEY: VALID_KEY, TOKEN_ENCRYPTION_KEY_PREVIOUS: keyOf(32) })).toEqual({
+      CONNECTIONS_STATE_SECRET: true,
+      TOKEN_ENCRYPTION_KEY: true,
+    });
+  });
+
+  it("reads an empty state secret as false", () => {
+    expect(ready({ CONNECTIONS_STATE_SECRET: "", TOKEN_ENCRYPTION_KEY: VALID_KEY }).CONNECTIONS_STATE_SECRET).toBe(false);
+    expect(ready({ TOKEN_ENCRYPTION_KEY: VALID_KEY }).CONNECTIONS_STATE_SECRET).toBe(false);
+  });
+
+  it("reads a short key, a missing key, or a malformed previous key as TOKEN_ENCRYPTION_KEY false", () => {
+    const state = { CONNECTIONS_STATE_SECRET: "sample-state" };
+    expect(ready({ ...state, TOKEN_ENCRYPTION_KEY: keyOf(16) }).TOKEN_ENCRYPTION_KEY).toBe(false);
+    expect(ready({ ...state }).TOKEN_ENCRYPTION_KEY).toBe(false);
+    expect(ready({ ...state, TOKEN_ENCRYPTION_KEY: VALID_KEY, TOKEN_ENCRYPTION_KEY_PREVIOUS: keyOf(16) }).TOKEN_ENCRYPTION_KEY).toBe(false);
+  });
+
+  it("reads a key with a trailing newline as true", () => {
+    expect(ready({ CONNECTIONS_STATE_SECRET: "sample-state", TOKEN_ENCRYPTION_KEY: `${VALID_KEY}\n` }).TOKEN_ENCRYPTION_KEY).toBe(true);
+  });
+
+  // The previous key is reported only when it is the one at fault, so the setup line can name it.
+  it("reports TOKEN_ENCRYPTION_KEY_PREVIOUS only when it is the secret at fault", () => {
+    const state = { CONNECTIONS_STATE_SECRET: "sample-state" };
+    expect(ready({ ...state, TOKEN_ENCRYPTION_KEY: VALID_KEY, TOKEN_ENCRYPTION_KEY_PREVIOUS: "not a key" })).toEqual({
+      CONNECTIONS_STATE_SECRET: true,
+      TOKEN_ENCRYPTION_KEY: false,
+      TOKEN_ENCRYPTION_KEY_PREVIOUS: false,
+    });
+    expect(ready({ ...state, TOKEN_ENCRYPTION_KEY: keyOf(16), TOKEN_ENCRYPTION_KEY_PREVIOUS: "not a key" })).not.toHaveProperty("TOKEN_ENCRYPTION_KEY_PREVIOUS");
+    expect(ready({ ...state, TOKEN_ENCRYPTION_KEY: VALID_KEY, TOKEN_ENCRYPTION_KEY_PREVIOUS: "" })).not.toHaveProperty("TOKEN_ENCRYPTION_KEY_PREVIOUS");
+  });
+});
+
+describe("missingFlowSecrets", () => {
+  const missing = (env: Record<string, string | undefined>) => missingFlowSecrets(flowSecretsReady((name) => env[name]));
+
+  it("names nothing when the flow is ready", () => {
+    expect(missing({ CONNECTIONS_STATE_SECRET: "sample-state", TOKEN_ENCRYPTION_KEY: VALID_KEY })).toEqual([]);
+  });
+
+  it("names each secret at fault, in order, and the previous key rather than the current one when that is the fault", () => {
+    expect(missing({})).toEqual(["CONNECTIONS_STATE_SECRET", "TOKEN_ENCRYPTION_KEY"]);
+    expect(missing({ CONNECTIONS_STATE_SECRET: "sample-state", TOKEN_ENCRYPTION_KEY: keyOf(16) })).toEqual(["TOKEN_ENCRYPTION_KEY"]);
+    expect(missing({ TOKEN_ENCRYPTION_KEY: VALID_KEY, TOKEN_ENCRYPTION_KEY_PREVIOUS: keyOf(16) })).toEqual(["CONNECTIONS_STATE_SECRET", "TOKEN_ENCRYPTION_KEY_PREVIOUS"]);
   });
 });
 

@@ -30,7 +30,7 @@
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { PROVIDER_KEYS, type ProviderKey } from "../_shared/providers.ts";
-import { PROVIDER_SECRETS, keysPresent } from "../_shared/providerSecrets.ts";
+import { PROVIDER_SECRETS, flowSecretsReady, keysPresent } from "../_shared/providerSecrets.ts";
 import { GOOGLE_SCOPES, emailFromIdToken, googleAuthorizeUrl } from "../_shared/sync/googleSheets.ts";
 import { CORS, HttpError, SUPABASE_URL, json, readJson, requireAdmin, requireMember, sameBytes, service } from "./http.ts";
 import { handleSyncDescribe, handleSyncRun, handleSyncTick } from "./sync.ts";
@@ -265,7 +265,9 @@ async function handleStatus(req: Request): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { company_id?: unknown };
   if (typeof body.company_id !== "string" || !body.company_id) throw new HttpError(400, "Say which company.");
   await requireMember(req, body.company_id);
-  return json(200, { keys: keysPresent((name) => Deno.env.get(name)) });
+  // Booleans only. A bad TOKEN_ENCRYPTION_KEY_PREVIOUS is reported under its own name.
+  const read = (name: string) => Deno.env.get(name);
+  return json(200, { keys: keysPresent(read), secrets: flowSecretsReady(read) });
 }
 
 async function handleStart(req: Request): Promise<Response> {

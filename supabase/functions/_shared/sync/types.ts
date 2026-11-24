@@ -26,7 +26,10 @@ export type MapResult =
   | { ok: true; rows: ParsedRow[]; rowsRead: number; rowsBlank: number }
   | { ok: false; errors: ValidationError[]; rowsRead: number; rowsBlank: number };
 export interface ProviderTokens { accessToken: string; refreshToken: string | null; accessExpiresAt: string | null; refreshExpiresAt: string | null }
-export interface TokenStore { load(connectionId: string): Promise<ProviderTokens>; save(connectionId: string, tokens: ProviderTokens): Promise<void> }
-export interface ConnectionRef { id: string; external_account_id: string | null }
+// What a load hands back: the opened tokens and the provider account id stored beside them (the
+// QuickBooks company), which lives only in connection_tokens. A save never takes the account id.
+export interface StoredTokens extends ProviderTokens { accountId: string | null }
+export interface TokenStore { load(connectionId: string): Promise<StoredTokens>; save(connectionId: string, tokens: ProviderTokens): Promise<void> }
+export interface ConnectionRef { id: string }
 export interface ProviderAdapter { provider: SyncProvider; read(source: SyncSourceSpec, connection: ConnectionRef): Promise<RawTable> }
 export type AdapterRegistry = Partial<Record<SyncProvider, ProviderAdapter>>;

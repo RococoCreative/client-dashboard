@@ -2,7 +2,7 @@
 // consent URL and the account its id token names, a tab's range and rows as a raw table, a token
 // kept fresh through the token store, and the adapter the runner reads through. fetch is injected,
 // so all of it is unit-tested without the network; only spreadsheets.get and values:batchGet are
-// ever called, and no token or response body ever reaches an error message.
+// ever called, and no token, request address or response body ever reaches an error message.
 import type { CellValue, ConnectionRef, ProviderAdapter, RawRow, RawTable, SheetsSourceConfig, TokenStore } from "./types.ts";
 
 export const GOOGLE_SCOPES = "openid email https://www.googleapis.com/auth/spreadsheets.readonly";
@@ -13,6 +13,7 @@ const REFRESH_MARGIN_MS = 5 * 60000;
 const SPREADSHEET_ID = /^[A-Za-z0-9_-]+$/;
 
 const TAB_NOT_FOUND = "That tab was not found in the spreadsheet. It may have been deleted.";
+const NO_ANSWER = "Google Sheets did not answer. Try again later.";
 
 // access_type=offline and prompt=consent make Google return a refresh token on every connect.
 export function googleAuthorizeUrl(args: { clientId: string; redirectUri: string; state: string }): string {
@@ -104,14 +105,24 @@ export function sheetTitleForGid(meta: unknown, gid: number): string | null {
 export interface GoogleDeps { clientId: string; clientSecret: string; tokens: TokenStore; fetch: typeof fetch; now: () => Date }
 export interface SheetDescription { title: string; tabs: Array<{ gid: number; title: string }>; headers: string[] }
 
+// A fetch that throws becomes a fixed line: its own message can quote the request address.
+async function call(deps: GoogleDeps, url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await deps.fetch(url, init);
+  } catch {
+    throw new Error(NO_ANSWER);
+  }
+}
+
 // A usable access token, refreshed and saved first when it is missing an expiry or within five
-// minutes of it.
+// minutes of it. Google usually leaves the refresh token out of a refresh, so the one on file is
+// saved again; the store refuses an empty one rather than storing it.
 async function accessToken(deps: GoogleDeps, connectionId: string): Promise<string> {
   const old = await deps.tokens.load(connectionId);
   const now = deps.now().getTime();
   if (old.accessExpiresAt !== null && Date.parse(old.accessExpiresAt) - now > REFRESH_MARGIN_MS) return old.accessToken;
   if (!old.refreshToken) throw new Error("Google did not leave a way to stay signed in. Disconnect Google Sheets in Settings and connect it again.");
-  const response = await deps.fetch(TOKEN_URL, {
+  const response = await call(deps, TOKEN_URL, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: deps.clientId, client_secret: deps.clientSecret, refresh_token: old.refreshToken, grant_type: "refresh_token" }),
@@ -128,7 +139,7 @@ async function accessToken(deps: GoogleDeps, connectionId: string): Promise<stri
   const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 0;
   await deps.tokens.save(connectionId, {
     accessToken: body.access_token,
-    refreshToken: typeof body.refresh_token === "string" ? body.refresh_token : old.refreshToken,
+    refreshToken: typeof body.refresh_token === "string" && body.refresh_token ? body.refresh_token : old.refreshToken,
     accessExpiresAt: new Date(now + expiresIn * 1000).toISOString(),
     refreshExpiresAt: old.refreshExpiresAt,
   });
@@ -136,16 +147,15 @@ async function accessToken(deps: GoogleDeps, connectionId: string): Promise<stri
 }
 
 async function sheetsGet(deps: GoogleDeps, token: string, url: string): Promise<unknown> {
-  const response = await deps.fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+  const response = await call(deps, url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
   if (response.status === 401 || response.status === 403) throw new Error("Google refused access to that spreadsheet. Check that the connected Google account can open it.");
   if (response.status === 404) throw new Error("That spreadsheet was not found. Check the link.");
   if (response.status === 429) throw new Error("Google asked us to slow down. Try again in a few minutes.");
-  const unavailable = "Google Sheets did not answer. Try again later.";
-  if (!response.ok) throw new Error(unavailable);
+  if (!response.ok) throw new Error(NO_ANSWER);
   try {
     return await response.json();
   } catch {
-    throw new Error(unavailable);
+    throw new Error(NO_ANSWER);
   }
 }
 

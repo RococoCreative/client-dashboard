@@ -5,18 +5,22 @@
 // shared secret that can only start a sync; describe is for a company admin choosing a Google
 // Sheets tab. Neither sync route runs a source whose company has the data sources module off.
 // The database side of the runner and the token store live here, over the service role;
-// everything else a sync does is in the pure modules under _shared/sync.
+// everything else a sync does is in the pure modules under _shared/sync. Tokens are stored sealed
+// and opened only here, with keys loaded once the caller is authorised; without usable keys a sync
+// answers 503 with the setup line rather than reading anything.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
 import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
 import { runSync, type RunOutcome, type SyncStore } from "../_shared/sync/runner.ts";
 import { carriesSyncModule, planTick, sweepStaleRuns } from "../_shared/sync/tick.ts";
-import type { AdapterRegistry, ProviderAdapter, ProviderTokens, SyncProvider, SyncSourceSpec, TokenStore } from "../_shared/sync/types.ts";
+import { createSealedTokenStore, type StoredTokenRow } from "../_shared/sync/tokenStore.ts";
+import type { AdapterRegistry, ProviderAdapter, SyncProvider, SyncSourceSpec, TokenStore } from "../_shared/sync/types.ts";
+import { TOKENS_NOT_SET_UP, TokenKeyError, loadTokenKeys, type TokenKeys } from "../_shared/tokenCrypto.ts";
 import { HttpError, json, requireAdmin, sameBytes, service, signedInUser } from "./http.ts";
 
 const SOURCE_COLUMNS =
   "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_weekdays, sync_time, sync_timezone, current_run_id, last_attempt_at, last_success_at";
-const CONNECTION_COLUMNS = "id, company_id, provider, status, external_account_id";
+const CONNECTION_COLUMNS = "id, company_id, provider, status";
 
 // Wall time the tick spends starting sources; the rest stay due and run on the next tick.
 const TICK_BUDGET_MS = 100_000;
@@ -26,47 +30,51 @@ const SPREADSHEET_ID = /^[A-Za-z0-9_-]+$/;
 const SYNC_LABELS: Record<SyncProvider, string> = { google_sheets: "Google Sheets", quickbooks: "QuickBooks Online" };
 
 type SourceRow = SyncSourceSpec & { name: string };
-interface ConnectionRow { id: string; company_id: string; provider: string; status: string; external_account_id: string | null }
+interface ConnectionRow { id: string; company_id: string; provider: string; status: string }
 
 // A body that is not JSON reads as empty, as the OAuth routes read theirs.
 async function readJsonBody<T>(req: Request): Promise<Partial<T>> {
   return ((await req.json().catch(() => ({}))) ?? {}) as Partial<T>;
 }
 
-export function createTokenStore(service: SupabaseClient): TokenStore {
-  return {
-    async load(connectionId) {
-      const { data, error } = await service
-        .from("connection_tokens")
-        .select("access_token, refresh_token, access_expires_at, refresh_expires_at")
-        .eq("connection_id", connectionId)
-        .maybeSingle();
-      if (error) console.error("token load failed", error.message);
-      if (error || !data) throw new Error("This connection has no sign-in on file. Connect it again in Settings.");
-      return {
-        accessToken: data.access_token as string,
-        refreshToken: (data.refresh_token as string | null) ?? null,
-        accessExpiresAt: (data.access_expires_at as string | null) ?? null,
-        refreshExpiresAt: (data.refresh_expires_at as string | null) ?? null,
-      };
+// The token store over connection_tokens. Reads and writes sealed values only; sealing and opening
+// are in _shared/sync/tokenStore.ts. Errors are logged by code and kind, never by value.
+export function createTokenStore(service: SupabaseClient, keys: TokenKeys): TokenStore {
+  return createSealedTokenStore(
+    {
+      async read(connectionId) {
+        const { data, error } = await service
+          .from("connection_tokens")
+          .select("access_token, refresh_token, account_id, access_expires_at, refresh_expires_at")
+          .eq("connection_id", connectionId)
+          .maybeSingle();
+        if (error) console.error("token load failed", error.code ?? "unknown");
+        return error || !data ? null : (data as StoredTokenRow);
+      },
+      async write(connectionId, values) {
+        const { error } = await service
+          .from("connection_tokens")
+          .update({ ...values, updated_at: new Date().toISOString() })
+          .eq("connection_id", connectionId);
+        if (error) {
+          console.error("token save failed", error.code ?? "unknown");
+          throw new Error("The new sign-in could not be saved.");
+        }
+      },
     },
-    async save(connectionId, tokens: ProviderTokens) {
-      const { error } = await service
-        .from("connection_tokens")
-        .update({
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-          access_expires_at: tokens.accessExpiresAt,
-          refresh_expires_at: tokens.refreshExpiresAt,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("connection_id", connectionId);
-      if (error) {
-        console.error("token save failed", error.message);
-        throw new Error("The new sign-in could not be saved.");
-      }
-    },
-  };
+    keys,
+  );
+}
+
+// The token keys, loaded once a caller is authorised. Keys that are missing or malformed answer
+// 503 with the setup line; which secret is at fault is for /status, not for a sync's caller.
+async function tokenKeys(): Promise<TokenKeys> {
+  try {
+    return await loadTokenKeys((name) => Deno.env.get(name));
+  } catch (err) {
+    if (err instanceof TokenKeyError) throw new HttpError(503, TOKENS_NOT_SET_UP);
+    throw err;
+  }
 }
 
 export function createSyncStore(service: SupabaseClient): SyncStore {
@@ -196,14 +204,21 @@ export function adaptersFor(tokens: TokenStore): AdapterRegistry {
   };
 }
 
-async function runOne(service: SupabaseClient, source: SourceRow, connection: ConnectionRow, trigger: "schedule" | "manual", requestedBy: string | null): Promise<RunOutcome> {
+async function runOne(
+  service: SupabaseClient,
+  keys: TokenKeys,
+  source: SourceRow,
+  connection: ConnectionRow,
+  trigger: "schedule" | "manual",
+  requestedBy: string | null,
+): Promise<RunOutcome> {
   const outcome = await runSync({
     source,
-    connection: { id: connection.id, external_account_id: connection.external_account_id },
+    connection: { id: connection.id },
     trigger,
     requestedBy,
     store: createSyncStore(service),
-    adapters: adaptersFor(createTokenStore(service)),
+    adapters: adaptersFor(createTokenStore(service, keys)),
     now: () => new Date(),
   });
   if (outcome.status === "succeeded") {
@@ -245,10 +260,11 @@ export async function handleSyncRun(req: Request): Promise<Response> {
   // A disabled source may still be synced by hand, so an admin can test it before enabling it.
   if (!connection || connection.status !== "connected") throw new HttpError(409, `Connect ${SYNC_LABELS[spec.provider] ?? "the source"} in Settings first.`);
 
+  const keys = await tokenKeys();
   const { data: profile } = await asUser.from("profiles").select("id").eq("user_id", userId).maybeSingle();
   const requestedBy = (profile?.id as string | undefined) ?? null;
 
-  const outcome = await runOne(admin, spec, connection as ConnectionRow, "manual", requestedBy);
+  const outcome = await runOne(admin, keys, spec, connection as ConnectionRow, "manual", requestedBy);
   return json(200, { status: outcome.status, message: outcome.message, rows_applied: outcome.rowsApplied });
 }
 
@@ -261,6 +277,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
   if (!secret) throw new HttpError(503, "Scheduled syncs are not set up yet.");
   const offered = req.headers.get("x-sync-secret") ?? "";
   if (!sameBytes(await sha256(offered), await sha256(secret))) throw new HttpError(401, "Not allowed.");
+  const keys = await tokenKeys();
 
   const started = Date.now();
   const now = new Date();
@@ -303,7 +320,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
     for (const source of sources) {
       if (Date.now() - started > TICK_BUDGET_MS) break outer;
       try {
-        const outcome = await runOne(admin, source, connection, "schedule", null);
+        const outcome = await runOne(admin, keys, source, connection, "schedule", null);
         ran.push({ source_id: source.id, status: outcome.status });
       } catch (err) {
         console.error("scheduled sync failed", source.id, err instanceof Error ? err.message : "unknown");
@@ -329,12 +346,13 @@ export async function handleSyncDescribe(req: Request): Promise<Response> {
   await requireAdmin(req, connection.company_id as string);
   if (connection.provider !== "google_sheets" || connection.status !== "connected") throw new HttpError(409, "Connect Google Sheets in Settings first.");
 
-  const keys = googleKeys();
-  if (!keys) throw new HttpError(503, "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.");
+  const google = googleKeys();
+  if (!google) throw new HttpError(503, "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.");
+  const keys = await tokenKeys();
   try {
     const description = await describeSheet(
-      { ...keys, tokens: createTokenStore(admin), fetch, now: () => new Date() },
-      { id: connection.id as string, external_account_id: (connection.external_account_id as string | null) ?? null },
+      { ...google, tokens: createTokenStore(admin, keys), fetch, now: () => new Date() },
+      { id: connection.id as string },
       body.spreadsheet_id,
       gid as number | null,
     );

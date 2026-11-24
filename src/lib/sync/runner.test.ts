@@ -48,7 +48,7 @@ function makeSource(patch: Partial<SyncSource> = {}): SyncSourceSpec {
   });
 }
 
-const connection = { id: "connection-1", external_account_id: null };
+const connection = { id: "connection-1" };
 
 const GOOD: RawTable = {
   headers: ["Job", "Contract amount"],
