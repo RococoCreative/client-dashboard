@@ -66,7 +66,7 @@ describe("parseCell", () => {
     expect(parseCell(1250.5, "currency")).toEqual({ ok: true, value: 1250.5 });
     expect(parseCell(0, "number")).toEqual({ ok: true, value: 0 });
     expect(parseCell(0.25, "percent")).toEqual({ ok: true, value: 0.25 });
-    expect(parseCell("1,250", "currency")).toEqual({ ok: false, message: 'Expected a number but found "1,250".' });
+    expect(parseCell("1,250", "currency")).toEqual({ ok: false, message: "expected a number" });
     expect(parseCell("$5", "currency").ok).toBe(false);
     expect(parseCell("25%", "percent").ok).toBe(false);
     expect(parseCell(true, "number").ok).toBe(false);
@@ -76,12 +76,12 @@ describe("parseCell", () => {
   it("reads a date from a serial or an ISO date and nothing else", () => {
     expect(parseCell(45658, "date")).toEqual({ ok: true, value: "2025-01-01" });
     expect(parseCell("2026-08-14", "date")).toEqual({ ok: true, value: "2026-08-14" });
-    expect(parseCell("08/14/2026", "date")).toEqual({ ok: false, message: 'Expected a date but found "08/14/2026".' });
+    expect(parseCell("08/14/2026", "date")).toEqual({ ok: false, message: "expected a date" });
     expect(parseCell(true, "date").ok).toBe(false);
   });
 
   it("fails a serial past the calendar's range instead of throwing", () => {
-    expect(parseCell(123456789012, "date")).toEqual({ ok: false, message: 'Expected a date but found "123456789012".' });
+    expect(parseCell(123456789012, "date")).toEqual({ ok: false, message: "expected a date" });
   });
 });
 
@@ -148,8 +148,33 @@ describe("mapRows", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors).toEqual([
-      { code: "wrong_type", row: 3, field: "amount", message: 'Row 3, Contract amount: Expected a number but found "abc".' },
+      { code: "wrong_type", row: 3, field: "amount", message: "Row 3, Contract amount: expected a number." },
     ]);
+  });
+
+  it("never quotes a cell's value in a validation line, so last_error shows where and not what", () => {
+    // Anyone who can sync a source reads its last_error, though not its records.
+    const secret = "Sample salary 98765";
+    const cells: Array<[string, string]> = [
+      ["Sample job 101", secret],
+      ["Sample job 102", "08/14/2026 " + secret],
+    ];
+    const fieldMap = [FM[0], { ...FM[1], type: "date" as const }];
+    const results = [mapRows(table(HEADERS, ...cells), FM, ["job"]), mapRows(table(HEADERS, ...cells), fieldMap, ["job"])];
+    for (const result of results) {
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.errors.length).toBeGreaterThan(0);
+      for (const error of result.errors) {
+        expect(error.message).not.toContain("98765");
+        expect(error.message).toMatch(/^Row \d+, Contract amount: expected a (number|date)\.$/);
+      }
+    }
+    for (const type of ["number", "currency", "percent", "date"] as const) {
+      const parsed = parseCell(secret, type);
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) expect(parsed.message).not.toContain("98765");
+    }
   });
 
   it("reports a blank required cell", () => {

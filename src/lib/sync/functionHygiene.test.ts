@@ -149,6 +149,11 @@ function safeArgument(arg: string): boolean {
   return safeValue(arg);
 }
 
+// Every use of console must be a direct method call the scan above can read: no console.error.call,
+// no console["log"], no alias such as const log = console.log.
+const strayConsole = (text: string) =>
+  [...codeOf(text).matchAll(/\bconsole\b(?!\s*\.\s*\w+\s*\()/g)].map((m) => lineAt(codeOf(text), m.index!));
+
 const unsafeLogs = (text: string) =>
   consoleCalls(text).flatMap(({ line, method, args }) => args.filter((arg) => !safeArgument(arg)).map((arg) => `${line} console.${method}: ${arg}`));
 
@@ -223,6 +228,7 @@ describe("function hygiene", () => {
     const calls = files.flatMap((file) => consoleCalls(file.text));
     expect(calls.length).toBeGreaterThan(10);
     expect(files.flatMap((file) => unsafeLogs(file.text).map((problem) => `${file.path}:${problem}`))).toEqual([]);
+    expect(files.flatMap((file) => strayConsole(file.text).map((line) => `${file.path}:${line}`))).toEqual([]);
   });
 
   it("the log scan itself sees what it must refuse and lets ids and codes through", () => {
@@ -255,6 +261,10 @@ describe("function hygiene", () => {
     ];
     for (const call of allowed) expect(unsafeLogs(call), call).toEqual([]);
     expect(consoleCalls('if (a) console.error("a (b)", id); else f(err.message);')[0].args).toEqual(['"a (b)"', "id"]);
+    for (const stray of ["console.error.call(null, err)", 'console["log"](body)', "const log = console.log;", "const { error } = console;"]) {
+      expect(strayConsole(stray), stray).not.toEqual([]);
+    }
+    expect(strayConsole('console.error("x", id);\n// console is fine in a comment')).toEqual([]);
   });
 
   it("every connect error the function sends is one the app can show", async () => {
