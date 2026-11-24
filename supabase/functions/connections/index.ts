@@ -46,7 +46,7 @@
 // QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production), GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, SYNC_CRON_SECRET (the secret the hourly tick sends). SUPABASE_URL,
 // SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import "npm:@supabase/functions-js@2.116.0/src/edge-runtime.d.ts";
 import {
   PENDING_GONE,
   PENDING_SOMEONE_ELSE,
@@ -343,7 +343,7 @@ async function handleDisconnect(req: Request): Promise<Response> {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, ...NO_STORE } });
   const path = new URL(req.url).pathname;
   try {
     if (req.method === "POST" && path.endsWith("/sync/run")) return await handleSyncRun(req);

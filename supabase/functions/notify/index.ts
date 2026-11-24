@@ -17,7 +17,7 @@
 //   POST /functions/v1/notify { task_id } -> { sent: boolean, reason?: string }. The caller is the
 //     signed-in person who saved the task, and must be able to see it under row level security.
 //     Only the person who created the task, an owner or admin of its company, or a Rococo admin
-//     can have its email sent; anyone else who can see the task gets { sent: false, reason }.
+//     (as the database defines one, _shared/rococoAdmin.ts) can have its email sent; anyone else who can see the task gets { sent: false, reason }.
 //   POST /functions/v1/notify { invitation_id } -> { sent: boolean, reason?: string }. The caller
 //     must be able to see the invitation under row level security (an admin over the person it is
 //     for), and only an owner or admin of its company, or a Rococo admin, can have it sent; anyone
@@ -27,8 +27,10 @@
 // Environment (Supabase secrets): RESEND_API_KEY, TASKS_FROM_EMAIL (the sending address), and
 // APP_URL (the app's own address, which every link in either email starts from; an https or http
 // URL). SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import "npm:@supabase/functions-js@2.116.0/src/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { NO_STORE } from "../_shared/headers.ts";
+import { isRococoAdmin } from "../_shared/rococoAdmin.ts";
 
 class HttpError extends Error {
   status: number;
@@ -59,7 +61,8 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+// Every answer says not to keep it: each one is about a person, a task or an invitation.
+const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, ...NO_STORE, "Content-Type": "application/json" } });
 
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } };
 const service = () => createClient(SUPABASE_URL, SERVICE_ROLE_KEY, noSession);
@@ -95,23 +98,33 @@ function appUrl(): string | null {
 }
 
 // 2. The caller, under their own JWT and the same row level security the app lives under. Both
-// emails start here.
+// emails start here. Whether they are a Rococo admin is asked only when it matters, and answered
+// exactly as the database defines one (private.is_rococo_admin, 0051), the same rule the
+// connections function holds: an active, flagged profile whose address is the account's own,
+// confirmed, and on the list, read as the caller. The profile's flag alone is never enough.
 async function signedInCaller(req: Request) {
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!jwt) throw new HttpError(401, "Sign in first.");
   const asUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${jwt}` } }, ...noSession });
   const { data: userData, error: userError } = await asUser.auth.getUser(jwt);
   if (userError || !userData.user) throw new HttpError(401, "Sign in first.");
-  const { data: caller } = await asUser.from("profiles").select("id, full_name, is_active, role, company_id, is_rococo_admin").eq("user_id", userData.user.id).maybeSingle();
+  const user = userData.user;
+  const { data: caller } = await asUser.from("profiles").select("id, full_name, is_active, role, company_id, is_rococo_admin, email").eq("user_id", user.id).maybeSingle();
   if (!caller || caller.is_active !== true) throw new HttpError(403, "Your profile is not active.");
-  return { asUser, caller };
+  const account = { email: user.email ?? null, emailConfirmed: Boolean(user.email_confirmed_at) };
+  const isRococo = () =>
+    isRococoAdmin(caller, account, async (email) => {
+      const { data, error } = await asUser.from("rococo_admins").select("id").eq("email", email).maybeSingle();
+      return !error && Boolean(data);
+    });
+  return { asUser, caller, isRococo };
 }
 
 async function handleTask(req: Request, body: { task_id?: unknown } | null): Promise<Response> {
   const taskId = typeof body?.task_id === "string" ? body.task_id : "";
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) throw new HttpError(400, "Send the task to notify about.");
 
-  const { asUser, caller } = await signedInCaller(req);
+  const { asUser, caller, isRococo } = await signedInCaller(req);
 
   // 3. The task, read as the caller: if they cannot see it, nothing is sent.
   const { data: task } = await asUser.from("tasks").select("id, company_id, title, due_date, assignee_id, completed_at, created_by").eq("id", taskId).maybeSingle();
@@ -121,7 +134,7 @@ async function handleTask(req: Request, body: { task_id?: unknown } | null): Pro
   // themselves, must not be able to send its email. The person who created it, an owner or admin
   // of its company, or a Rococo admin can.
   const companyAdmin = caller.company_id === task.company_id && (caller.role === "owner" || caller.role === "admin");
-  if (task.created_by !== caller.id && !companyAdmin && caller.is_rococo_admin !== true) {
+  if (task.created_by !== caller.id && !companyAdmin && !(await isRococo())) {
     return json(200, { sent: false, reason: "Only the person who assigned this task or an admin can send its email." });
   }
 
@@ -206,7 +219,7 @@ async function handleInvitation(req: Request, invitationIdValue: unknown): Promi
   const invitationId = typeof invitationIdValue === "string" ? invitationIdValue : "";
   if (!/^[0-9a-f-]{36}$/i.test(invitationId)) throw new HttpError(400, "Send the invitation to email.");
 
-  const { asUser, caller } = await signedInCaller(req);
+  const { asUser, caller, isRococo } = await signedInCaller(req);
 
   // The invitation, read as the caller: if they cannot see it, nothing is sent.
   const { data: invitation } = await asUser.from("invitations").select("id, company_id, email, profile_id, accepted_at, last_emailed_at").eq("id", invitationId).maybeSingle();
@@ -214,7 +227,7 @@ async function handleInvitation(req: Request, invitationIdValue: unknown): Promi
 
   // Inviting is an admin's: an owner or admin of the invitation's company, or a Rococo admin.
   const companyAdmin = caller.company_id === invitation.company_id && (caller.role === "owner" || caller.role === "admin");
-  if (!companyAdmin && caller.is_rococo_admin !== true) {
+  if (!companyAdmin && !(await isRococo())) {
     return json(200, { sent: false, reason: "Only an owner or admin of this company can send its invitations." });
   }
 
@@ -324,7 +337,7 @@ async function handleNotify(req: Request): Promise<Response> {
 
 Deno.serve(async (req: Request) => {
   // 1. The browser's preflight.
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, ...NO_STORE } });
   if (req.method !== "POST") return json(405, { error: "Use POST." });
   try {
     return await handleNotify(req);

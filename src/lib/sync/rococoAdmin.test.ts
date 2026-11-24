@@ -1,9 +1,10 @@
-// Pins the connections function's Rococo admin rule to the database's (private.is_rococo_admin,
-// 0051): an active, flagged profile whose own address is also its account's address, confirmed.
-// The list itself is read under row level security by the function, so only this half is here.
+// Pins the edge functions' Rococo admin rule to the database's (private.is_rococo_admin, 0051): an
+// active, flagged profile whose own address is also its account's address, confirmed, and on the
+// list. The list itself is read under row level security by each function, so a fake lookup
+// stands in for it here.
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { rococoAccountMatches } from "../../../supabase/functions/_shared/rococoAdmin.ts";
+import { isRococoAdmin, rococoAccountMatches } from "../../../supabase/functions/_shared/rococoAdmin.ts";
 
 const profile = { is_active: true, is_rococo_admin: true, email: "Sam@rocococreative.io" };
 const account = { email: "sam@rocococreative.io", emailConfirmed: true };
@@ -26,5 +27,39 @@ describe("rococoAccountMatches", () => {
     expect(rococoAccountMatches({ ...profile, is_rococo_admin: "true" }, account)).toBe(false);
     expect(rococoAccountMatches({ ...profile, email: null }, account)).toBe(false);
     expect(rococoAccountMatches({ ...profile, email: "" }, { ...account, email: "" })).toBe(false);
+  });
+});
+
+describe("isRococoAdmin", () => {
+  it("holds when the account half holds and the lowercased address is on the list", async () => {
+    const asked: string[] = [];
+    const onList = async (email: string) => {
+      asked.push(email);
+      return true;
+    };
+    expect(await isRococoAdmin(profile, account, onList)).toBe(true);
+    expect(asked).toEqual(["sam@rocococreative.io"]);
+  });
+
+  it("never asks the list when the account half fails, whatever the flag says", async () => {
+    const asked: string[] = [];
+    const onList = async (email: string) => {
+      asked.push(email);
+      return true;
+    };
+    expect(await isRococoAdmin(profile, { ...account, emailConfirmed: false }, onList)).toBe(false);
+    expect(await isRococoAdmin(profile, { ...account, email: "other@rocococreative.io" }, onList)).toBe(false);
+    expect(await isRococoAdmin({ ...profile, is_active: false }, account, onList)).toBe(false);
+    expect(await isRococoAdmin({ ...profile, is_rococo_admin: false }, account, onList)).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
+  it("fails when the address is off the list or the list cannot be read", async () => {
+    expect(await isRococoAdmin(profile, account, async () => false)).toBe(false);
+    expect(
+      await isRococoAdmin(profile, account, async () => {
+        throw new Error("The list could not be read.");
+      }),
+    ).toBe(false);
   });
 });

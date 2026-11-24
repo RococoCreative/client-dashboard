@@ -9,7 +9,7 @@
 // and opened only here, with keys loaded once the caller is authorised; without usable keys a sync
 // answers 503 with the setup line rather than reading anything. The tick also sweeps expired
 // pending connections (pending.ts).
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
 import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
 import { runSync, type RunOutcome, type SyncStore } from "../_shared/sync/runner.ts";
@@ -249,7 +249,7 @@ export async function handleSyncRun(req: Request): Promise<Response> {
   const { data: source, error: sourceError } = await admin.from("sync_sources").select(SOURCE_COLUMNS).eq("id", sourceId).maybeSingle();
   // A failed read (for example a column this database does not have yet) is not a missing source.
   if (sourceError) {
-    console.error("source read failed", sourceId, sourceError.message);
+    console.error("source read failed", sourceId, sourceError.code ?? "unknown");
     throw new HttpError(500, "The source could not be read. Try again.");
   }
   if (!source) throw new HttpError(403, "That source was not found, or you cannot sync it.");
@@ -319,9 +319,9 @@ export async function handleSyncTick(req: Request): Promise<Response> {
     connections,
     modules,
     now,
-    onSkip: (id, message) => console.error("scheduled sync skipped", id, message),
+    onSkip: (id, reason) => console.error("scheduled sync skipped", id, reason),
   });
-  const abandoned = await sweepStaleRuns(createSyncStore(admin), sweep, now, (id, message) => console.error("stale sweep failed", id, message));
+  const abandoned = await sweepStaleRuns(createSyncStore(admin), sweep, now, (id, reason) => console.error("stale sweep failed", id, reason));
 
   // One connection at a time and, within it, one source at a time, so sources sharing a
   // connection never meet on the lock and a refresh token never rotates twice at once.
@@ -334,7 +334,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
         const outcome = await runOne(admin, keys, source, connection, "schedule", null);
         ran.push({ source_id: source.id, status: outcome.status });
       } catch (err) {
-        console.error("scheduled sync failed", source.id, err instanceof Error ? err.message : "unknown");
+        console.error("scheduled sync failed", source.id, err instanceof Error ? err.name : "unknown");
         ran.push({ source_id: source.id, status: "failed" });
       }
     }

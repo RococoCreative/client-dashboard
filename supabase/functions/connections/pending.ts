@@ -6,7 +6,7 @@
 // Tokens and the account id are sealed under { pendingId }. Claiming a row deletes it as it reads
 // it, so only one caller ever gets it. Expired rows are swept, and each swept grant is handed back
 // to the provider, best effort. Logs carry a short message and a code, never a value.
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
 import { blankToNull, pendingExpiry } from "../_shared/connectFlow.ts";
 import type { ProviderKey } from "../_shared/providers.ts";
 import { loadTokenKeys, openTokens, sealTokens, type TokenKeys } from "../_shared/tokenCrypto.ts";

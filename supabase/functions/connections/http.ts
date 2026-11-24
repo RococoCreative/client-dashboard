@@ -2,8 +2,9 @@
 // keys, CORS, who is calling, and the service client. Nothing here reads a token; index.ts and
 // sync.ts do that, and sync.ts imports this file rather than index.ts, which starts the server when
 // it loads. The constant-time compare lives in _shared/bytes.ts.
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { rococoAccountMatches, type RococoProfile } from "../_shared/rococoAdmin.ts";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
+import { NO_STORE } from "../_shared/headers.ts";
+import { isRococoAdmin as matchesRococoRule, type RococoProfile } from "../_shared/rococoAdmin.ts";
 
 export class HttpError extends Error {
   status: number;
@@ -58,10 +59,11 @@ export async function signedInProfileId(req: Request): Promise<string> {
 // flagged profile whose address is the account's own, confirmed, and is on the list. The flag
 // alone is never enough. The list is read as the caller, and its row level security lets a row
 // through only when the database's own check passes, so any doubt reads as no.
-async function isRococoAdmin(signedIn: SignedIn, profile: RococoProfile): Promise<boolean> {
-  if (!rococoAccountMatches(profile, signedIn)) return false;
-  const { data, error } = await signedIn.asUser.from("rococo_admins").select("id").eq("email", (profile.email as string).toLowerCase()).maybeSingle();
-  return !error && Boolean(data);
+function isRococoAdmin(signedIn: SignedIn, profile: RococoProfile): Promise<boolean> {
+  return matchesRococoRule(profile, signedIn, async (email) => {
+    const { data, error } = await signedIn.asUser.from("rococo_admins").select("id").eq("email", email).maybeSingle();
+    return !error && Boolean(data);
+  });
 }
 
 // The signed-in person, checked as an active admin (owner or admin) of the company, or a Rococo
@@ -92,4 +94,4 @@ export async function requireMember(req: Request, companyId: string): Promise<st
 
 export const service = () => createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-export const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+export const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, ...NO_STORE, "Content-Type": "application/json" } });
