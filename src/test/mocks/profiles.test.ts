@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../fixtures.ts";
 import { setActingPerson } from "../actingPerson.ts";
-import { PERSON_NOT_DELETED, deletePerson, listCompanyProfiles, updateProfile } from "./profiles.ts";
+import { PERSON_NOT_DELETED, deletePerson, listCompanyProfiles, setMockRococoFlag } from "./profiles.ts";
 import { listEmployeeKpis } from "./employees.ts";
 import { listGoals } from "./gsr.ts";
 
@@ -16,9 +16,10 @@ describe("profiles mock: deletePerson", () => {
     setActingPerson(avery);
     await expect(deletePerson(KINGDOM.company.id, avery.id)).rejects.toThrow("You cannot delete yourself.");
     await expect(deletePerson(KINGDOM.company.id, byName(KINGDOM.profiles, "Marcus Lee").id)).rejects.toThrow("You cannot delete someone ranked above you.");
-    const placed = await updateProfile(byName(KINGDOM.profiles, "Theo Brandt").id, { is_rococo_admin: true });
+    const placed = byName(KINGDOM.profiles, "Theo Brandt");
+    setMockRococoFlag(placed.id, true);
     await expect(deletePerson(KINGDOM.company.id, placed.id)).rejects.toThrow("A Rococo admin is removed by Rococo.");
-    await updateProfile(placed.id, { is_rococo_admin: false });
+    setMockRococoFlag(placed.id, false);
   });
 
   it("refuses the company's only owner, even to Rococo", async () => {

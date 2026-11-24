@@ -58,6 +58,7 @@ export async function listAllProfiles(): Promise<Profile[]> {
 // view_all_divisions and view_division_ids are an owner's or Rococo's (guard_profile_fields, 0038).
 // division_id is a read-only mirror of division_ids now, so it is not patchable here. gsr_cadence,
 // a person's GSR rhythm, is an admin's to set, or a manager's for the people they lead (0046).
+// is_rococo_admin is not here: only the Rococo admin list's own sync writes it (0051).
 export type ProfilePatch = Partial<
   Pick<
     Profile,
@@ -66,7 +67,6 @@ export type ProfilePatch = Partial<
     | "role"
     | "is_active"
     | "company_id"
-    | "is_rococo_admin"
     | "hire_date"
     | "phone"
     | "department"

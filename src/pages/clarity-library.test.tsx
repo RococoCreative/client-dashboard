@@ -1,11 +1,11 @@
 // Task 18 of the hub clarity plan: the read-first and quiet-row steps added to a project's
 // milestones, Resources > Links, the Files & media cards, and the Rococo Companies and People tabs.
-// Everyday controls (a milestone's status, the module and Financials switches, Rococo and Active)
-// stay live, and every action keeps the name it had. Rendered against the mocked data layer, as
-// pages.test.tsx is.
+// Everyday controls (a milestone's status, the module and Financials switches, Active) stay live,
+// and every action keeps the name it had. Rococo access reads as a badge, changed on Permissions.
+// Rendered against the mocked data layer, as pages.test.tsx is.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("../services/supabase.ts", () => import("../test/mocks/supabase.ts"));
 vi.mock("../services/auth.ts", () => import("../test/mocks/auth.ts"));
@@ -39,6 +39,7 @@ vi.mock("../services/milestoneTemplates.ts", () => import("../test/mocks/milesto
 
 import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
 import { renderWithHub } from "../test/renderWithHub.tsx";
+import { setMockRococoFlag } from "../test/mocks/profiles.ts";
 import ProjectPage from "./production/ProjectPage.tsx";
 import ResourcesPage from "./resources/ResourcesPage.tsx";
 import CompaniesPage from "./rococo/CompaniesPage.tsx";
@@ -136,15 +137,26 @@ describe("Rococo Companies reads first", () => {
 });
 
 describe("Rococo People reads first", () => {
-  it("shows company and role as text until the row's pencil opens them; Rococo and Active stay live", async () => {
+  it("shows company and role as text until the row's pencil opens them; Active stays live and Rococo reads only", async () => {
     const user = userEvent.setup();
     const marcus = KINGDOM.profiles[0];
+    const theo = KINGDOM.profiles.find((p) => p.full_name === "Theo Brandt")!;
+    setMockRococoFlag(theo.id, true);
+    onTestFinished(() => setMockRococoFlag(theo.id, false));
     renderWithHub(<UsersPage />, rococo, { path: "/rococo/people", pattern: "/rococo/people" });
     await screen.findByText("Austin Rococo (you)");
     expect(screen.queryByRole("combobox", { name: /^Role for / })).toBeNull();
     expect(screen.queryByRole("combobox", { name: /^Company for / })).toBeNull();
     expect(screen.getByRole("checkbox", { name: `Active: ${marcus.email}` })).toBeEnabled();
-    expect(screen.getByRole("checkbox", { name: `Rococo admin: ${marcus.email}` })).toBeEnabled();
+    expect(screen.queryByRole("checkbox", { name: /^Rococo admin:/ })).toBeNull();
+    const theoRow = screen.getByText(theo.email, { exact: false }).closest("tr")!;
+    expect(within(theoRow).getByText("Rococo admin")).toBeInTheDocument();
+    const marcusRow = screen.getByText(marcus.email, { exact: false }).closest("tr")!;
+    expect(within(marcusRow).queryByText("Rococo admin")).toBeNull();
+    expect(screen.getByText(/Rococo admins are added and removed on the/)).toHaveTextContent(
+      "Rococo admins are added and removed on the Permissions tab.",
+    );
+    expect(screen.getByRole("link", { name: "Permissions tab" })).toHaveAttribute("href", "/rococo/permissions");
 
     const pencil = screen.getByRole("button", { name: `Edit ${marcus.email}` });
     expect(pencil).toHaveAttribute("title", `Edit ${marcus.email}`);

@@ -34,19 +34,24 @@ describe("recordLink", () => {
   });
 
   it("links a QuickBooks invoice back to QuickBooks, with a note that it needs a sign-in", () => {
-    expect(recordLink({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true })).toEqual({
+    expect(recordLink({ entity: "Invoice", Id: "101", sandbox: true })).toEqual({
       href: "https://app.sandbox.qbo.intuit.com/app/invoice?txnId=101",
       label: "Open in QuickBooks",
       note: "Opens QuickBooks, sign-in required",
     });
-    expect(recordLink({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: false })?.href).toBe("https://app.qbo.intuit.com/app/invoice?txnId=101");
+    expect(recordLink({ entity: "Invoice", Id: "101", sandbox: false })?.href).toBe("https://app.qbo.intuit.com/app/invoice?txnId=101");
+  });
+
+  // Records synced before the realm id came off source_ref still carry it; the link ignores it.
+  it("gives a legacy ref that still carries a realm id the same link", () => {
+    expect(recordLink({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true })?.href).toBe("https://app.sandbox.qbo.intuit.com/app/invoice?txnId=101");
   });
 
   it("has no link for a payment, an invoice without an id, or anything else", () => {
-    expect(recordLink({ entity: "Payment", Id: "7", realmId: "sample-realm", sandbox: true })).toBeNull();
-    expect(recordLink({ entity: "Invoice", realmId: "sample-realm" })).toBeNull();
-    expect(recordLink({ entity: "Invoice", Id: " ", realmId: "sample-realm" })).toBeNull();
-    expect(recordLink({ entity: "Invoice", Id: "1" })).toBeNull();
+    expect(recordLink({ entity: "Payment", Id: "7", sandbox: true })).toBeNull();
+    expect(recordLink({ entity: "Invoice" })).toBeNull();
+    expect(recordLink({ entity: "Invoice", Id: " " })).toBeNull();
+    expect(recordLink({ entity: "Invoice", Id: 101 })).toBeNull();
     expect(recordLink({})).toBeNull();
   });
 });

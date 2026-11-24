@@ -88,9 +88,9 @@ async function openPillar(user: ReturnType<typeof userEvent.setup>, name: string
 }
 
 // A call that stays in flight until the test settles it, so a test can act while it runs.
-function pending() {
-  let settle: { resolve: () => void; reject: (err: Error) => void } = { resolve: () => undefined, reject: () => undefined };
-  const promise = new Promise<void>((resolve, reject) => {
+function pending<T = void>() {
+  let settle: { resolve: (value: T) => void; reject: (err: Error) => void } = { resolve: () => undefined, reject: () => undefined };
+  const promise = new Promise<T>((resolve, reject) => {
     settle = { resolve, reject };
   });
   return { promise, ...settle };
@@ -491,7 +491,7 @@ describe("deleting a company", () => {
     renderCompanies();
     await user.click(await screen.findByRole("button", { name: "Delete Klasik Construction" }));
     const dialog = screen.getByRole("dialog");
-    const call = pending();
+    const call = pending<{ revoked: boolean }>();
     vi.mocked(disconnectConnection).mockImplementationOnce(() => call.promise);
     await user.type(within(dialog).getByLabelText("Type the identifier to confirm"), "klasik");
     await user.click(within(dialog).getByRole("button", { name: "Delete company" }));

@@ -69,15 +69,20 @@ begin
   v_email := lower(regexp_replace(p_name, '[^A-Za-z0-9]+', '.', 'g'))
              || '.' || substr(md5(random()::text), 1, 6) || '@' || v_domain;
 
-  insert into auth.users (email, raw_user_meta_data)
-  values (v_email, jsonb_build_object('full_name', p_name))
+  -- A Rococo admin is an address on the list (0051), put there before the account exists so the
+  -- sign-up reads it exactly as a real one does.
+  if p_rococo then
+    insert into public.rococo_admins (email) values (v_email) on conflict (email) do nothing;
+  end if;
+
+  insert into auth.users (email, email_confirmed_at, raw_user_meta_data)
+  values (v_email, now(), jsonb_build_object('full_name', p_name))
   returning id into v_user;
 
   update public.profiles
-     set company_id      = p_company,
-         role            = p_role,
-         is_rococo_admin = p_rococo,
-         full_name       = p_name
+     set company_id = p_company,
+         role       = p_role,
+         full_name  = p_name
    where user_id = v_user
   returning id into v_profile;
 

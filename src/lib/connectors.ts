@@ -1,7 +1,9 @@
-// The registry of outside tools the Connections catalog lists, and the one pure rule that turns a
-// company's connection row, modules and Rococo's keys into what a card shows. Pages read this and
-// never work a card's state out themselves.
-import type { CompanyConnection, ConnectionProvider, LinkProvider } from "../types/database.ts";
+// The registry of outside tools the Connections catalog lists, the one pure rule that turns a
+// company's connection row, modules and Rococo's keys into what a card shows, the reader of what
+// Rococo's setup check answers, and the lines the confirm step and a Disconnect say. Pages read
+// this and never work a card's state, or those lines, out themselves.
+import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type ConnectionProvider, type LinkProvider } from "../types/database.ts";
+import { FLOW_SECRETS, missingFlowSecrets, type FlowSecretName, type FlowSecretsStatus } from "../../supabase/functions/_shared/providerSecrets.ts";
 import { MODULE_LABELS, type ModuleKey } from "./modules.ts";
 
 export type ConnectorGroup = "financials" | "production" | "marketing_sales" | "productivity";
@@ -159,4 +161,53 @@ export function summaryCounts(views: CardView[]): { connected: number; attention
     else if (v.state === "not_connected") available++;
   }
   return { connected, attention, available };
+}
+
+// What Rococo's setup check says: which providers have their app keys, and which of the connect
+// flow's own secrets must be set (empty when the flow is ready). Any missing secret stops every
+// sign-in tool, whatever its keys.
+export interface ConnectorSetup {
+  keys: Record<ConnectionProvider, boolean>;
+  missingSecrets: FlowSecretName[];
+}
+
+const PREVIOUS_KEY = "TOKEN_ENCRYPTION_KEY_PREVIOUS";
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// The /status answer, or null when it cannot be told. Every provider needs its own key boolean and
+// every flow secret its own: one left out would read as missing and hide a Connect that works, so a
+// partial answer is "cannot tell". The previous key is reported only when it is the fault, and the
+// secrets to set come from the same rule the function uses (missingFlowSecrets).
+export function parseConnectorSetup(answer: unknown): ConnectorSetup | null {
+  if (!isRecord(answer) || !isRecord(answer.keys) || !isRecord(answer.secrets)) return null;
+  const { keys, secrets } = answer;
+  const parsed = {} as Record<ConnectionProvider, boolean>;
+  for (const provider of keysOf(CONNECTION_PROVIDER_LABELS)) {
+    const value = keys[provider];
+    if (typeof value !== "boolean") return null;
+    parsed[provider] = value;
+  }
+  const status = {} as FlowSecretsStatus;
+  for (const name of FLOW_SECRETS) {
+    const value = secrets[name];
+    if (typeof value !== "boolean") return null;
+    status[name] = value;
+  }
+  const previous = secrets[PREVIOUS_KEY];
+  if (previous !== undefined && typeof previous !== "boolean") return null;
+  if (previous === false) status[PREVIOUS_KEY] = false;
+  return { keys: parsed, missingSecrets: missingFlowSecrets(status) };
+}
+
+// What the confirm step asks before a sign-in is attached. The account name is best effort; without
+// it the line says so and asks for a sign-in the admin has only just made.
+export function confirmConnectLine(tool: string, accountName: string | null, companyName: string): string {
+  if (accountName !== null) return `Connect ${tool} account ${accountName} to ${companyName}?`;
+  return `Connect ${tool} to ${companyName}? ${tool} did not give this account's name. Only continue if you just approved access in ${tool}.`;
+}
+
+// Said when the tool did not confirm it let go of the hub's access (GoHighLevel offers no revoke).
+export function stillListedLine(tool: string): string {
+  return `${tool} may still list Company Hub; remove it there too.`;
 }

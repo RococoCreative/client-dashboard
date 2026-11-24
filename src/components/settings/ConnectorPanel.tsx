@@ -2,7 +2,8 @@
 // detail of the company's one connection: the stored error first when there is one, then the
 // account, who connected it, since when, when the hub last read it, that it is read only, and what
 // it feeds, with the reminder that a leaver's account breaks it for everyone. Disconnect is always
-// here for a connection that is on or in error, and asks once more before it goes. Reconnect shows
+// here for a connection that is on or in error, and asks once more before it goes; when the tool
+// did not confirm it let go, the catalog is told to say the tool may still list the hub. Reconnect shows
 // only when it can run; otherwise the line saying why takes its place, from the same rule the
 // cards use (cardView). For a links tool (Monday), it is the links editor from Resources, limited
 // to that tool.
@@ -18,7 +19,7 @@ import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { disconnectConnection } from "../../services/connections.ts";
 import { listDirectory } from "../../services/directory.ts";
-import { cardView, type CardView, type Connector } from "../../lib/connectors.ts";
+import { cardView, stillListedLine, type CardView, type Connector } from "../../lib/connectors.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName, formatDate } from "../../lib/format.ts";
 import { hasModule } from "../../lib/modules.ts";
@@ -91,7 +92,7 @@ function ConnectionBody({
   view: CardView;
   keysIn: boolean | null;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (note: string | null) => void;
   onReconnect: () => void;
 }) {
   const titleId = useId();
@@ -115,8 +116,8 @@ function ConnectionBody({
     setBusy(true);
     setError("");
     try {
-      await disconnectConnection(company.id, connector.provider);
-      onChanged();
+      const { revoked } = await disconnectConnection(company.id, connector.provider);
+      onChanged(revoked ? null : `Disconnected here. ${stillListedLine(connector.name)}`);
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -129,7 +130,7 @@ function ConnectionBody({
     if (!busy) onClose();
   };
   const firstName = connectedBy.name?.split(/\s+/)[0] ?? null;
-  const account = row.external_account_name ?? row.external_account_id ?? "Not recorded";
+  const account = row.external_account_name ?? "Not recorded";
   const feeds = connector.feeds ?? [];
 
   return (
@@ -192,8 +193,8 @@ export default function ConnectorPanel({
   /** Whether Rococo's keys for this tool are in; null when that could not be told. */
   keysIn?: boolean | null;
   onClose: () => void;
-  /** After a change the catalog should reload for: a Disconnect. */
-  onChanged: () => void;
+  /** After a change the catalog should reload for: a Disconnect, with a line to show when there is one. */
+  onChanged: (note: string | null) => void;
 }) {
   // Reconnect hands over to the step before the provider's sign-in; Cancel there comes back here.
   const [signingIn, setSigningIn] = useState(false);

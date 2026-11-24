@@ -2,7 +2,9 @@
 // consent URL and the account its id token names, a tab's range and rows as a raw table, a token
 // kept fresh through the token store, and the adapter the runner reads through. fetch is injected,
 // so all of it is unit-tested without the network; only spreadsheets.get and values:batchGet are
-// ever called, and no token or response body ever reaches an error message.
+// ever called, and no token, request address, response body or name from the sheet ever reaches an
+// error message: every error is a SyncError with a fixed line (errors.ts).
+import { SyncError } from "./errors.ts";
 import type { CellValue, ConnectionRef, ProviderAdapter, RawRow, RawTable, SheetsSourceConfig, TokenStore } from "./types.ts";
 
 export const GOOGLE_SCOPES = "openid email https://www.googleapis.com/auth/spreadsheets.readonly";
@@ -13,6 +15,8 @@ const REFRESH_MARGIN_MS = 5 * 60000;
 const SPREADSHEET_ID = /^[A-Za-z0-9_-]+$/;
 
 const TAB_NOT_FOUND = "That tab was not found in the spreadsheet. It may have been deleted.";
+const NO_ANSWER = "Google Sheets did not answer. Try again later.";
+const EXPIRED = "Google sign-in has expired or was removed. Connect Google Sheets again in Settings.";
 
 // access_type=offline and prompt=consent make Google return a refresh token on every connect.
 export function googleAuthorizeUrl(args: { clientId: string; redirectUri: string; state: string }): string {
@@ -29,21 +33,33 @@ export function googleAuthorizeUrl(args: { clientId: string; redirectUri: string
   return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
 }
 
-// The verified email in an id token received straight from Google's token endpoint over TLS, so
-// its payload is read, not verified, as Google documents is safe for tokens received directly.
-export function emailFromIdToken(idToken: string): string | null {
+// An id token's payload, read straight from Google's token endpoint over TLS, so it is read, not
+// verified, as Google documents is safe for tokens received directly. Null when it does not parse.
+function idTokenPayload(idToken: string): Record<string, unknown> | null {
   const parts = idToken.split(".");
   if (parts.length !== 3) return null;
   try {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
     const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { email?: unknown; email_verified?: unknown };
-    if (typeof payload.email !== "string" || !payload.email || payload.email_verified === false) return null;
-    return payload.email;
+    const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : null;
   } catch {
     return null;
   }
+}
+
+// The verified email in an id token: the account's name as an admin sees it.
+export function emailFromIdToken(idToken: string): string | null {
+  const payload = idTokenPayload(idToken);
+  if (!payload || typeof payload.email !== "string" || !payload.email || payload.email_verified === false) return null;
+  return payload.email;
+}
+
+// The account's stable id (sub) in an id token: what the hub seals as the Google account id.
+export function subjectFromIdToken(idToken: string): string | null {
+  const payload = idTokenPayload(idToken);
+  return payload && typeof payload.sub === "string" && payload.sub ? payload.sub : null;
 }
 
 // The tab is always chosen by gid, so any tab named inside a stored range is ignored.
@@ -68,11 +84,11 @@ function startRowOf(range: string | null): number {
 // values are the sheet's rows from the range's first row down; Sheets omits trailing empty rows
 // and cells, and a short row reads blank when it is mapped. header_row is the sheet's own row
 // number, as the person sees it in Google Sheets.
-export function valuesToRawTable(values: CellValue[][], config: SheetsSourceConfig, sheetTitle: string): RawTable {
+export function valuesToRawTable(values: CellValue[][], config: SheetsSourceConfig): RawTable {
   const startRow = startRowOf(config.range);
   const index = config.header_row - startRow;
-  if (index < 0) throw new Error("The header row is above the range. Check the header row and range for this source.");
-  if (index >= values.length) throw new Error(`The tab "${sheetTitle}" has no row ${config.header_row} to read headers from.`);
+  if (index < 0) throw new SyncError("The header row is above the range. Check the header row and range for this source.");
+  if (index >= values.length) throw new SyncError("The tab ends before the header row. Check the header row and range for this source.");
   const rows: RawRow[] = [];
   for (let i = index + 1; i < values.length; i++) {
     rows.push({ cells: values[i], ref: { spreadsheet_id: config.spreadsheet_id, sheet_gid: config.sheet_gid, row: startRow + i } });
@@ -104,31 +120,40 @@ export function sheetTitleForGid(meta: unknown, gid: number): string | null {
 export interface GoogleDeps { clientId: string; clientSecret: string; tokens: TokenStore; fetch: typeof fetch; now: () => Date }
 export interface SheetDescription { title: string; tabs: Array<{ gid: number; title: string }>; headers: string[] }
 
+// A fetch that throws becomes a fixed line: its own message can quote the request address.
+async function call(deps: GoogleDeps, url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await deps.fetch(url, init);
+  } catch {
+    throw new SyncError(NO_ANSWER);
+  }
+}
+
 // A usable access token, refreshed and saved first when it is missing an expiry or within five
-// minutes of it.
+// minutes of it. Google usually leaves the refresh token out of a refresh, so the one on file is
+// saved again; the store refuses an empty one rather than storing it.
 async function accessToken(deps: GoogleDeps, connectionId: string): Promise<string> {
   const old = await deps.tokens.load(connectionId);
   const now = deps.now().getTime();
   if (old.accessExpiresAt !== null && Date.parse(old.accessExpiresAt) - now > REFRESH_MARGIN_MS) return old.accessToken;
-  if (!old.refreshToken) throw new Error("Google did not leave a way to stay signed in. Disconnect Google Sheets in Settings and connect it again.");
-  const response = await deps.fetch(TOKEN_URL, {
+  if (!old.refreshToken) throw new SyncError("Google did not leave a way to stay signed in. Disconnect Google Sheets in Settings and connect it again.");
+  const response = await call(deps, TOKEN_URL, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: deps.clientId, client_secret: deps.clientSecret, refresh_token: old.refreshToken, grant_type: "refresh_token" }),
   });
-  const expired = "Google sign-in has expired or was removed. Connect Google Sheets again in Settings.";
-  if (!response.ok) throw new Error(expired);
+  if (!response.ok) throw new SyncError(EXPIRED);
   let body: { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown };
   try {
     body = (await response.json()) as typeof body;
   } catch {
-    throw new Error(expired);
+    throw new SyncError(EXPIRED);
   }
-  if (typeof body.access_token !== "string" || !body.access_token) throw new Error(expired);
+  if (typeof body.access_token !== "string" || !body.access_token) throw new SyncError(EXPIRED);
   const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 0;
   await deps.tokens.save(connectionId, {
     accessToken: body.access_token,
-    refreshToken: typeof body.refresh_token === "string" ? body.refresh_token : old.refreshToken,
+    refreshToken: typeof body.refresh_token === "string" && body.refresh_token ? body.refresh_token : old.refreshToken,
     accessExpiresAt: new Date(now + expiresIn * 1000).toISOString(),
     refreshExpiresAt: old.refreshExpiresAt,
   });
@@ -136,21 +161,20 @@ async function accessToken(deps: GoogleDeps, connectionId: string): Promise<stri
 }
 
 async function sheetsGet(deps: GoogleDeps, token: string, url: string): Promise<unknown> {
-  const response = await deps.fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
-  if (response.status === 401 || response.status === 403) throw new Error("Google refused access to that spreadsheet. Check that the connected Google account can open it.");
-  if (response.status === 404) throw new Error("That spreadsheet was not found. Check the link.");
-  if (response.status === 429) throw new Error("Google asked us to slow down. Try again in a few minutes.");
-  const unavailable = "Google Sheets did not answer. Try again later.";
-  if (!response.ok) throw new Error(unavailable);
+  const response = await call(deps, url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+  if (response.status === 401 || response.status === 403) throw new SyncError("Google refused access to that spreadsheet. Check that the connected Google account can open it.");
+  if (response.status === 404) throw new SyncError("That spreadsheet was not found. Check the link.");
+  if (response.status === 429) throw new SyncError("Google asked us to slow down. Try again in a few minutes.");
+  if (!response.ok) throw new SyncError(NO_ANSWER);
   try {
     return await response.json();
   } catch {
-    throw new Error(unavailable);
+    throw new SyncError(NO_ANSWER);
   }
 }
 
 function checkSpreadsheetId(spreadsheetId: string): void {
-  if (!SPREADSHEET_ID.test(spreadsheetId)) throw new Error("That spreadsheet id is not valid. Paste the Google Sheets link again.");
+  if (!SPREADSHEET_ID.test(spreadsheetId)) throw new SyncError("That spreadsheet id is not valid. Paste the Google Sheets link again.");
 }
 
 function metadata(deps: GoogleDeps, token: string, spreadsheetId: string): Promise<unknown> {
@@ -177,7 +201,7 @@ export async function describeSheet(deps: GoogleDeps, connection: ConnectionRef,
   const meta = await metadata(deps, token, spreadsheetId);
   const tabs = [...(tabsOf(meta) ?? [])].sort((a, b) => a.index - b.index);
   const tab = gid === null ? tabs[0] : tabs.find((t) => t.gid === gid);
-  if (!tab) throw new Error(TAB_NOT_FOUND);
+  if (!tab) throw new SyncError(TAB_NOT_FOUND);
   const rows = await values(deps, token, spreadsheetId, sheetRange(tab.title, "1:1"));
   const headers = (rows[0] ?? []).map((cell) => (cell === null || cell === undefined ? "" : String(cell).trim()));
   while (headers.length > 0 && headers[headers.length - 1] === "") headers.pop();
@@ -195,14 +219,14 @@ export function createGoogleSheetsAdapter(deps: GoogleDeps): ProviderAdapter {
     provider: "google_sheets",
     async read(source, connection) {
       const config = source.config;
-      if (!isSheetsConfig(config)) throw new Error("This source is not set up for Google Sheets.");
+      if (!isSheetsConfig(config)) throw new SyncError("This source is not set up for Google Sheets.");
       checkSpreadsheetId(config.spreadsheet_id);
       const token = await accessToken(deps, connection.id);
       const meta = await metadata(deps, token, config.spreadsheet_id);
       const title = sheetTitleForGid(meta, config.sheet_gid);
-      if (title === null) throw new Error(TAB_NOT_FOUND);
+      if (title === null) throw new SyncError(TAB_NOT_FOUND);
       const rows = await values(deps, token, config.spreadsheet_id, sheetRange(title, config.range));
-      return valuesToRawTable(rows, config, title);
+      return valuesToRawTable(rows, config);
     },
   };
 }

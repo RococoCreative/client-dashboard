@@ -293,8 +293,10 @@ describe("library files", () => {
     ctl.storage.length = 0;
     ctl.failures.set("deleteSop", refused("permission denied for table sops"));
     await user.click(within(dialog()).getByRole("button", { name: "Delete SOP" }));
-    // The refusal shows where the person is looking, and the attachment's file is untouched.
-    expect(await within(dialog()).findByText("permission denied for table sops")).toBeInTheDocument();
+    // The refusal shows where the person is looking, as the friendly line rather than the database's
+    // own words, and the attachment's file is untouched.
+    expect(await within(dialog()).findByText("Something went wrong. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText("permission denied for table sops")).toBeNull();
     expect(ctl.storage.filter((call) => call.startsWith("removeFile:"))).toEqual([]);
     expect(screen.getByText("Safety-walk-checklist.pdf")).toBeInTheDocument();
   });

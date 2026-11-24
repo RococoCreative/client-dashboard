@@ -1,6 +1,8 @@
 // The Rococo Permissions page against the mocked capabilities store: the grid reads what the
 // database returned, a change is written, re-read and then shown from that re-read, the changed
 // level is what loadCapabilities then returns for the company, and only a Rococo admin gets in.
+// Under the grid, the Rococo admin list against its mock: who is on it, adding an address, removing
+// one after asking once, never your own, and a refusal read out as its line.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,10 +44,15 @@ vi.mock("../services/capabilities.ts", async () => {
   };
 });
 
+vi.mock("../services/rococoAdmins.ts", async () => {
+  const mock = await import("../test/mocks/rococoAdmins.ts");
+  return { ...mock, removeRococoAdmin: vi.fn(mock.removeRococoAdmin) };
+});
+
 import App from "../App.tsx";
 import PermissionsPage from "./rococo/PermissionsPage.tsx";
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { COMPANIES, makeHub } from "../test/fixtures.ts";
+import { COMPANIES, KINGDOM, makeHub } from "../test/fixtures.ts";
 import { setMockCapabilities } from "../test/mocks/capabilities.ts";
 import {
   clearCompanyCapability,
@@ -53,6 +60,7 @@ import {
   loadCapabilities,
   setCompanyCapability,
 } from "../services/capabilities.ts";
+import { listRococoAdmins, removeRococoAdmin } from "../services/rococoAdmins.ts";
 
 const kingdom = "co-kingdom";
 const rococo = makeHub("rococo", null);
@@ -62,8 +70,11 @@ const reread = vi.mocked(listAllCompanyCapabilities);
 const realSet = set.getMockImplementation()!;
 const realClear = clear.getMockImplementation()!;
 const realReread = reread.getMockImplementation()!;
+const remove = vi.mocked(removeRococoAdmin);
+const realRemove = remove.getMockImplementation()!;
 
 beforeEach(() => {
+  remove.mockReset().mockImplementation(realRemove);
   set.mockReset().mockImplementation(realSet);
   clear.mockReset().mockImplementation(realClear);
   reread.mockReset().mockImplementation(realReread);
@@ -222,6 +233,91 @@ describe("the Permissions page", () => {
     open();
     expect(await screen.findByText("No permissions are defined yet.")).toBeInTheDocument();
     spy.mockRestore();
+  });
+});
+
+describe("the Rococo admins section", () => {
+  async function adminList() {
+    return screen.findByRole("list", { name: "Rococo admins" });
+  }
+
+  it("lists the Rococo admins by name, or by email when there is no profile", async () => {
+    open();
+    const list = await adminList();
+    expect(await within(list).findByText("Austin Rococo (you)")).toBeInTheDocument();
+    expect(within(list).getByText("austin@rocococreative.io")).toBeInTheDocument();
+    expect(within(list).getByText("sample.staff@rocococreative.io")).toBeInTheDocument();
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Rococo admins" })).toBeInTheDocument();
+    expect(
+      screen.getByText("The people who can open every company. Each one signs in with a confirmed rocococreative.io address."),
+    ).toBeInTheDocument();
+  });
+
+  it("Add refuses 'someone@example.com' with 'Use a rocococreative.io address.' and adds 'Sam@RococoCreative.io' as 'sam@rocococreative.io'", async () => {
+    const user = userEvent.setup();
+    open();
+    await adminList();
+    const field = screen.getByLabelText("Email address");
+    await user.type(field, "someone@example.com");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(await screen.findByText("Use a rocococreative.io address.")).toBeInTheDocument();
+    expect((await listRococoAdmins()).map((a) => a.email)).not.toContain("someone@example.com");
+
+    await user.clear(field);
+    await user.type(field, "  Sam@RococoCreative.io ");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(await within(await adminList()).findByText("sam@rocococreative.io")).toBeInTheDocument();
+    expect(screen.queryByText("Use a rocococreative.io address.")).toBeNull();
+    expect(field).toHaveValue("");
+    expect((await listRococoAdmins()).map((a) => a.email)).toContain("sam@rocococreative.io");
+  });
+
+  it("Remove asks 'Remove sample.staff@rocococreative.io as a Rococo admin? Their hub account is turned off. You can add them back later.' and only Remove removes it; Keep leaves it", async () => {
+    const user = userEvent.setup();
+    const question = "Remove sample.staff@rocococreative.io as a Rococo admin? Their hub account is turned off. You can add them back later.";
+    open();
+    const list = await adminList();
+    await user.click(within(list).getByRole("button", { name: "Remove sample.staff@rocococreative.io" }));
+    expect(screen.getByText(question)).toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Keep" }));
+    expect(screen.queryByText(question)).toBeNull();
+    expect(remove).not.toHaveBeenCalled();
+    expect(within(list).getByText("sample.staff@rocococreative.io")).toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: "Remove sample.staff@rocococreative.io" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(remove).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(within(list).queryByText("sample.staff@rocococreative.io")).toBeNull());
+    expect((await listRococoAdmins()).map((a) => a.email)).toEqual(["austin@rocococreative.io"]);
+  });
+
+  it("your own row offers no Remove", async () => {
+    open();
+    const list = await adminList();
+    await within(list).findByText("Austin Rococo (you)");
+    expect(within(list).queryByRole("button", { name: /Austin/ })).toBeNull();
+    expect(within(list).getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("a refusal shows its line", async () => {
+    remove.mockRejectedValue({ message: "The last Rococo admin cannot be removed.", code: "23514" });
+    const user = userEvent.setup();
+    open();
+    const list = await adminList();
+    await user.click(within(list).getByRole("button", { name: "Remove sample.staff@rocococreative.io" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("The last Rococo admin cannot be removed.")).toBeInTheDocument();
+    expect(within(list).getByText("sample.staff@rocococreative.io")).toBeInTheDocument();
+  });
+
+  it("is not there for anyone but a Rococo admin", async () => {
+    renderWithHub(<PermissionsPage />, makeHub("owner", KINGDOM.company), { path: "/rococo/permissions", pattern: "/rococo/permissions" });
+    await cell("See pay", "Kingdom Custom Construction");
+    expect(screen.queryByRole("heading", { name: "Rococo admins" })).toBeNull();
+    expect(screen.queryByLabelText("Email address")).toBeNull();
   });
 });
 

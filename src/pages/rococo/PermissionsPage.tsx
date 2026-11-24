@@ -2,8 +2,9 @@
 // capability, set from the app instead of in SQL. Every cell is written, then the whole grid is read
 // back from the database and drawn from that read, so the page never shows a level the database did
 // not return. The database applies a stored level at once (0040, 0041); a person with the hub open
-// picks it up when they next return to the tab.
+// picks it up when they next return to the tab. Under the grid, the Rococo admin list.
 import { useEffect, useRef, useState } from "react";
+import RococoAdminsSection from "../../components/rococo/RococoAdminsSection.tsx";
 import Button from "../../components/ui/Button.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -250,6 +251,7 @@ export default function PermissionsPage() {
           </table>
         </div>
       )}
+      <RococoAdminsSection />
     </>
   );
 }

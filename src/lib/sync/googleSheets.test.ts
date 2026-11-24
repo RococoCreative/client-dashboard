@@ -11,6 +11,7 @@ import {
   googleAuthorizeUrl,
   sheetRange,
   sheetTitleForGid,
+  subjectFromIdToken,
   valuesToRawTable,
   type GoogleDeps,
 } from "../../../supabase/functions/_shared/sync/googleSheets.ts";
@@ -52,7 +53,7 @@ function harness(tokens: ProviderTokens, answers: Array<{ status: number; body: 
     clientId: "sample-client",
     clientSecret: "sample-secret",
     tokens: {
-      load: async () => ({ ...tokens }),
+      load: async () => ({ ...tokens, accountId: null }),
       save: async (connectionId, saved) => {
         log.push({ kind: "save", connectionId, tokens: saved });
       },
@@ -67,7 +68,7 @@ function harness(tokens: ProviderTokens, answers: Array<{ status: number; body: 
 
 const fresh: ProviderTokens = { accessToken: "sample-access", refreshToken: "sample-refresh", accessExpiresAt: inMinutes(60), refreshExpiresAt: null };
 const sheetsConfig: SheetsSourceConfig = { spreadsheet_id: "sample-sheet", sheet_gid: 42, range: null, header_row: 1 };
-const connection = { id: "connection-1", external_account_id: "sample-reports@example.com" };
+const connection = { id: "connection-1" };
 
 function source(config: unknown = sheetsConfig): SyncSourceSpec {
   return {
@@ -119,6 +120,15 @@ describe("Google sign-in", () => {
     expect(emailFromIdToken("not-a-token")).toBeNull();
     expect(emailFromIdToken("a.%%%.c")).toBeNull();
   });
+
+  it("reads the account's stable id (sub) from the id token, for sealing as the account id", () => {
+    expect(subjectFromIdToken(`header.${b64url({ sub: "1234567890", email: "sample-reports@example.com" })}.sig`)).toBe("1234567890");
+    expect(subjectFromIdToken(`header.${b64url({ email: "sample-reports@example.com" })}.sig`)).toBeNull();
+    expect(subjectFromIdToken(`header.${b64url({ sub: "" })}.sig`)).toBeNull();
+    expect(subjectFromIdToken(`header.${b64url({ sub: 7 })}.sig`)).toBeNull();
+    expect(subjectFromIdToken("not-a-token")).toBeNull();
+    expect(subjectFromIdToken("a.%%%.c")).toBeNull();
+  });
 });
 
 describe("sheetRange", () => {
@@ -133,7 +143,7 @@ describe("sheetRange", () => {
 
 describe("valuesToRawTable", () => {
   it("takes headers from the header row and numbers each row as the sheet does", () => {
-    const table = valuesToRawTable(VALUES, sheetsConfig, "Sample sales");
+    const table = valuesToRawTable(VALUES, sheetsConfig);
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows).toEqual([
       { cells: ["Sample job 101", 250000], ref: { spreadsheet_id: "sample-sheet", sheet_gid: 42, row: 2 } },
@@ -143,22 +153,23 @@ describe("valuesToRawTable", () => {
   });
 
   it("reads a header row below a title row", () => {
-    const table = valuesToRawTable([["Sample title"], ["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, header_row: 2 }, "Sample sales");
+    const table = valuesToRawTable([["Sample title"], ["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, header_row: 2 });
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows[0].ref.row).toBe(3);
   });
 
   it("counts rows from the start of the range", () => {
-    const table = valuesToRawTable([["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, range: "B5:D", header_row: 5 }, "Sample sales");
+    const table = valuesToRawTable([["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, range: "B5:D", header_row: 5 });
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows[0].ref.row).toBe(6);
   });
 
   it("refuses a header row above the range or past the end of the tab", () => {
-    expect(() => valuesToRawTable(VALUES, { ...sheetsConfig, range: "A5:D", header_row: 3 }, "Sample sales")).toThrow(
+    expect(() => valuesToRawTable(VALUES, { ...sheetsConfig, range: "A5:D", header_row: 3 })).toThrow(
       "The header row is above the range. Check the header row and range for this source.",
     );
-    expect(() => valuesToRawTable([], sheetsConfig, "Sample sales")).toThrow('The tab "Sample sales" has no row 1 to read headers from.');
+    // The line never quotes the tab's title: a name from the sheet is not the hub's own text.
+    expect(() => valuesToRawTable([], sheetsConfig)).toThrow("The tab ends before the header row. Check the header row and range for this source.");
   });
 });
 
@@ -260,6 +271,32 @@ describe("Google Sheets adapter", () => {
       expect((error as Error).message).not.toContain("sample-access");
       expect((error as Error).message).not.toContain("sample-refresh");
     }
+  });
+
+  it("a fetch that throws reads 'Google Sheets did not answer. Try again later.'", async () => {
+    const throwing = () =>
+      vi.fn(async () => {
+        throw new TypeError("error sending request for url (https://sheets.googleapis.com/v4/spreadsheets/sample-sheet)");
+      }) as unknown as typeof globalThis.fetch;
+    // A metadata fetch with a fresh token, then a refresh fetch with an expiring one.
+    for (const tokens of [fresh, { ...fresh, accessExpiresAt: inMinutes(2) }]) {
+      const h = harness(tokens, []);
+      h.deps.fetch = throwing();
+      const error = await createGoogleSheetsAdapter(h.deps).read(source(), connection).catch((err: Error) => err);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("Google Sheets did not answer. Try again later.");
+      expect(h.saves()).toHaveLength(0);
+    }
+  });
+
+  it("keeps the old refresh token when Google sends an empty one", async () => {
+    const h = harness({ ...fresh, accessExpiresAt: inMinutes(2) }, [
+      { status: 200, body: { access_token: "sample-access-2", refresh_token: "", expires_in: 3600 } },
+      { status: 200, body: META },
+      valuesAnswer(VALUES),
+    ]);
+    await createGoogleSheetsAdapter(h.deps).read(source(), connection);
+    expect(h.saves()[0].tokens.refreshToken).toBe("sample-refresh");
   });
 
   it("refuses a source that is not a Google Sheets tab, or a bad spreadsheet id", async () => {

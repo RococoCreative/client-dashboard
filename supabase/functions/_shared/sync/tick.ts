@@ -30,7 +30,8 @@ export function planTick<S extends SyncSourceSpec>(input: {
   connections: Map<string, TickConnection>;
   modules: Map<string, readonly string[]>;
   now: Date;
-  onSkip?: (sourceId: string, message: string) => void;
+  // Told which source was skipped and the error's name, never its message, which may quote a value.
+  onSkip?: (sourceId: string, reason: string) => void;
 }): TickPlan<S> {
   const { sources, connections, modules, now } = input;
   // Each source is judged on its own, so one that cannot be read never stops the others.
@@ -38,7 +39,7 @@ export function planTick<S extends SyncSourceSpec>(input: {
     try {
       return carriesSyncModule(modules.get(s.company_id)) && connections.get(s.connection_id)?.status === "connected" && isDue(s, now);
     } catch (err) {
-      input.onSkip?.(s.id, err instanceof Error ? err.message : "unknown");
+      input.onSkip?.(s.id, err instanceof Error ? err.name : "unknown");
       return false;
     }
   });
@@ -49,12 +50,13 @@ export function planTick<S extends SyncSourceSpec>(input: {
 
 // Abandons runs older than the stale window on each connection, so a run the platform cut off is
 // closed on the next tick rather than only when another run starts on the same connection. A
-// connection whose sweep fails is reported and the rest carry on. Returns how many it abandoned.
+// connection whose sweep fails is reported, by the error's name only, and the rest carry on.
+// Returns how many it abandoned.
 export async function sweepStaleRuns(
   store: Pick<SyncStore, "abandonStaleRuns">,
   connectionIds: string[],
   now: Date,
-  onFail?: (connectionId: string, message: string) => void,
+  onFail?: (connectionId: string, reason: string) => void,
 ): Promise<number> {
   const cutoff = staleRunCutoff(now);
   let abandoned = 0;
@@ -62,7 +64,7 @@ export async function sweepStaleRuns(
     try {
       abandoned += await store.abandonStaleRuns(connectionId, cutoff);
     } catch (err) {
-      onFail?.(connectionId, err instanceof Error ? err.message : "unknown");
+      onFail?.(connectionId, err instanceof Error ? err.name : "unknown");
     }
   }
   return abandoned;

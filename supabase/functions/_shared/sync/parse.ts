@@ -28,6 +28,8 @@ export function isBlankCell(cell: CellValue | undefined): boolean {
   return cell === undefined || cell === null || (typeof cell === "string" && cell.trim() === "");
 }
 
+// A failed cell says what was expected and never quotes the cell: a validation line lands in the
+// source's last_error, which anyone who may sync the source can read, though not its records.
 export type CellParse = { ok: true; value: ParsedValue } | { ok: false; message: string };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,14 +44,14 @@ export function parseCell(cell: CellValue | undefined, type: FieldType): CellPar
     case "percent":
       // A percent stays a fraction: 0.25 is 25%.
       if (typeof cell === "number" && Number.isFinite(cell)) return { ok: true, value: cell };
-      return { ok: false, message: `Expected a number but found "${String(cell)}".` };
+      return { ok: false, message: "expected a number" };
     case "date":
       // A serial past the calendar's range (an id typed into a date column) is no date at all.
       if (typeof cell === "number" && Number.isFinite(cell) && !Number.isNaN(new Date((cell - SHEETS_SERIAL_EPOCH) * 86400000).getTime())) {
         return { ok: true, value: serialToIsoDate(cell) };
       }
       if (typeof cell === "string" && ISO_DATE.test(cell.trim())) return { ok: true, value: cell.trim() };
-      return { ok: false, message: `Expected a date but found "${String(cell)}".` };
+      return { ok: false, message: "expected a date" };
   }
 }
 
@@ -114,7 +116,7 @@ export function mapRows(table: RawTable, fieldMap: FieldMapEntry[], recordKey: s
       if (!parsed.ok) {
         data[entry.key] = null;
         reported.add(entry.key);
-        report({ code: "wrong_type", message: `Row ${rowNumber}, ${entry.label}: ${parsed.message}`, row: rowNumber, field: entry.key });
+        report({ code: "wrong_type", message: `Row ${rowNumber}, ${entry.label}: ${parsed.message}.`, row: rowNumber, field: entry.key });
         return;
       }
       data[entry.key] = parsed.value;

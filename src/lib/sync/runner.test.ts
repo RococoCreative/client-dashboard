@@ -2,6 +2,7 @@
 // never moves the source off its last good data, that a held lock touches nothing, and that the
 // row counts reach the run.
 import { describe, expect, it } from "vitest";
+import { SyncError } from "../../../supabase/functions/_shared/sync/errors.ts";
 import { runSync, type SyncStore } from "../../../supabase/functions/_shared/sync/runner.ts";
 import type { AdapterRegistry, ParsedRow, RawTable, SyncSourceSpec } from "../../../supabase/functions/_shared/sync/types.ts";
 import type { SyncSource } from "../../types/database.ts";
@@ -48,7 +49,7 @@ function makeSource(patch: Partial<SyncSource> = {}): SyncSourceSpec {
   });
 }
 
-const connection = { id: "connection-1", external_account_id: null };
+const connection = { id: "connection-1" };
 
 const GOOD: RawTable = {
   headers: ["Job", "Contract amount"],
@@ -80,7 +81,7 @@ function fakeStore(options: { locked?: boolean; insertThrows?: boolean; pruneThr
     },
     async insertRecords(...args) {
       calls.push({ name: "insertRecords", args });
-      if (options.insertThrows) throw new Error("Sample insert failure");
+      if (options.insertThrows) throw new SyncError("Sample insert failure");
       records.push(...args[2]);
     },
     async markSource(...args) {
@@ -202,17 +203,28 @@ describe("runSync", () => {
     expect(fake.called("finishRun")[0].args[1]).toMatchObject({ status: "failed", errorDetail: { message: "Provider not supported yet" } });
   });
 
-  it("fails with the adapter's own message and leaves the pointer alone", async () => {
+  it("fails with the adapter's own fixed line and leaves the pointer alone", async () => {
     const fake = fakeStore();
     const outcome = await runSync({
       source: makeSource(), connection, trigger: "manual", requestedBy: null,
-      store: fake.store, adapters: adapterFor(new Error("Sample provider refused")), now,
+      store: fake.store, adapters: adapterFor(new SyncError("Sample provider refused")), now,
     });
     expect(outcome).toMatchObject({ status: "failed", message: "Sample provider refused" });
     for (const call of fake.called("markSource")) {
       expect(call.args[1]).not.toHaveProperty("current_run_id");
       expect(call.args[1]).not.toHaveProperty("last_success_at");
     }
+  });
+
+  it("never lets any other error's text reach the outcome, the run or the source", async () => {
+    const raw = 'relation "sample_table" does not exist';
+    const fake = fakeStore();
+    const outcome = await runSync({
+      source: makeSource(), connection, trigger: "manual", requestedBy: null,
+      store: fake.store, adapters: adapterFor(new Error(raw)), now,
+    });
+    expect(outcome).toMatchObject({ status: "failed", message: "The source could not be read." });
+    expect(JSON.stringify(fake.calls)).not.toContain(raw);
   });
 
   it("keeps only the new run on a first success", async () => {

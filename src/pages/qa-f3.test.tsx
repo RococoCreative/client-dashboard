@@ -53,7 +53,7 @@ vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { createCycle, createPillar, deleteCycle, deletePillar, ensureReview, updateReview } from "../services/gsr.ts";
 import { createEmployeeFinancial, deleteEmployeeFinancial } from "../services/employees.ts";
-import { updateProfile } from "../services/profiles.ts";
+import { setMockRococoFlag } from "../test/mocks/profiles.ts";
 import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import DashboardPage from "./DashboardPage.tsx";
 import MyReviewsPage from "./gsr/MyReviewsPage.tsx";
@@ -112,7 +112,7 @@ describe("the quarter's GSR line", () => {
 describe("a Rococo admin's person page", () => {
   it("offers a company admin no role control, the same as the People list", async () => {
     const riley = KLASIK.profiles[2];
-    await updateProfile(riley.id, { is_rococo_admin: true });
+    setMockRococoFlag(riley.id, true);
     try {
       // On Setup, where the hub role is changed for everyone else: it reads Rococo Creative, with
       // no Role select and no account actions.
@@ -124,7 +124,7 @@ describe("a Rococo admin's person page", () => {
       expect(screen.queryByRole("button", { name: /Deactivate|Reactivate|Remove/ })).not.toBeInTheDocument();
       rococoRow.unmount();
     } finally {
-      await updateProfile(riley.id, { is_rococo_admin: false });
+      setMockRococoFlag(riley.id, false);
     }
     // Everyone else keeps it, on Setup.
     renderWithHub(<PersonPage />, admin, personAt(riley.id, "setup"));

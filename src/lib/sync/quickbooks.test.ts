@@ -14,11 +14,13 @@ import {
 } from "../../../supabase/functions/_shared/sync/quickbooks.ts";
 import { mapRows } from "../../../supabase/functions/_shared/sync/parse.ts";
 import { runSync, type SyncStore } from "../../../supabase/functions/_shared/sync/runner.ts";
-import type { FieldMapEntry, ParsedRow, ProviderTokens, SyncSourceSpec } from "../../../supabase/functions/_shared/sync/types.ts";
+import { SyncError } from "../../../supabase/functions/_shared/sync/errors.ts";
+import { CONNECTION_CHANGED } from "../../../supabase/functions/_shared/sync/tokenStore.ts";
+import type { FieldMapEntry, ParsedRow, ProviderTokens, StoredTokens, SyncSourceSpec } from "../../../supabase/functions/_shared/sync/types.ts";
 
 const now = () => new Date("2026-11-09T14:00:00Z");
 const inMinutes = (minutes: number) => new Date(now().getTime() + minutes * 60000).toISOString();
-const connection = { id: "sample-conn", external_account_id: "sample-realm" };
+const connection = { id: "sample-conn" };
 
 const entry = (header: string, key: string, type: FieldMapEntry["type"], required = false): FieldMapEntry => ({
   header,
@@ -68,16 +70,21 @@ function fakeFetch(log: Call[], answers: Array<{ status: number; body: unknown }
   });
 }
 
-function harness(tokens: ProviderTokens, answers: Array<{ status: number; body: unknown }>, options: { saveThrows?: boolean } = {}) {
+function harness(
+  tokens: ProviderTokens,
+  answers: Array<{ status: number; body: unknown }>,
+  options: { saveThrows?: boolean | Error; accountId?: string | null } = {},
+) {
   const log: Call[] = [];
   const fetch = fakeFetch(log, answers);
   const deps: QuickBooksDeps = {
     clientId: "sample-client",
     clientSecret: "sample-secret",
     tokens: {
-      load: async () => ({ ...tokens }),
+      load: async (): Promise<StoredTokens> => ({ ...tokens, accountId: options.accountId === undefined ? "sample-realm" : options.accountId }),
       save: async (connectionId, saved) => {
         log.push({ kind: "save", connectionId, tokens: saved });
+        if (options.saveThrows instanceof Error) throw options.saveThrows;
         if (options.saveThrows) throw new Error("Sample save failure");
       },
     },
@@ -150,17 +157,17 @@ describe("getPath", () => {
 
 describe("projectEntities", () => {
   it("keeps only the field map's columns, with a ref back to the entity", () => {
-    const table = projectEntities(INVOICES, FM, "sample-realm", "Invoice", true);
+    const table = projectEntities(INVOICES, FM, "Invoice", true);
     expect(table.headers).toEqual(["DocNumber", "CustomerRef.name", "TxnDate", "DueDate", "TotalAmt", "Balance"]);
     expect(table.rows[0].cells).toEqual(["1001", "Sample customer", "2026-08-14", null, 1250.5, 0]);
     for (const row of table.rows) expect(row.cells).toHaveLength(6);
-    expect(table.rows[0].ref).toEqual({ entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true });
-    expect(table.rows[1].ref).toEqual({ entity: "Invoice", Id: "102", realmId: "sample-realm", sandbox: true });
+    expect(table.rows[0].ref).toEqual({ entity: "Invoice", Id: "101", sandbox: true });
+    expect(table.rows[1].ref).toEqual({ entity: "Invoice", Id: "102", sandbox: true });
     expect(JSON.stringify(table)).not.toContain("Sample note");
   });
 
   it("parses through the shared column map with blanks left blank", () => {
-    const result = mapRows(projectEntities(INVOICES, FM, "sample-realm", "Invoice", true), FM, ["doc_number"]);
+    const result = mapRows(projectEntities(INVOICES, FM, "Invoice", true), FM, ["doc_number"]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const first = result.rows[0].data;
@@ -288,6 +295,12 @@ describe("createQuickBooksAdapter", () => {
     expect(h.fetches().filter((c) => c.method === "GET")).toHaveLength(0);
   });
 
+  it("reads nothing and says so plainly when the connection changed under the sync", async () => {
+    const h = harness(expiring, [{ status: 200, body: REFRESHED }, page("Invoice", INVOICES)], { saveThrows: new SyncError(CONNECTION_CHANGED) });
+    await expect(createQuickBooksAdapter(h.deps).read(source(), connection)).rejects.toThrow(CONNECTION_CHANGED);
+    expect(h.fetches().filter((c) => c.method === "GET")).toHaveLength(0);
+  });
+
   it("saves nothing and reads nothing when QuickBooks refuses the refresh", async () => {
     const h = harness(expiring, [{ status: 400, body: { error: "invalid_grant" } }]);
     await expect(createQuickBooksAdapter(h.deps).read(source(), connection)).rejects.toThrow("QuickBooks sign-in has expired. Connect QuickBooks again in Settings.");
@@ -307,21 +320,41 @@ describe("createQuickBooksAdapter", () => {
     }
   });
 
-  it("asks to reconnect when the connection names no company", async () => {
-    const h = harness(fresh, []);
-    await expect(createQuickBooksAdapter(h.deps).read(source(), { id: "sample-conn", external_account_id: null })).rejects.toThrow(
-      "QuickBooks did not say which company is connected. Connect QuickBooks again in Settings.",
-    );
-    await expect(createQuickBooksAdapter(h.deps).read(source(), { id: "sample-conn", external_account_id: "  " })).rejects.toThrow(
-      "QuickBooks did not say which company is connected. Connect QuickBooks again in Settings.",
-    );
-    expect(h.fetch).not.toHaveBeenCalled();
+  it("reads the company from the stored sign-in", async () => {
+    const { fetches } = await freshRead();
+    expect(new URL(fetches()[0].url).pathname).toBe("/v3/company/sample-realm/query");
+  });
+
+  it("fails with 'QuickBooks did not say which company is connected. Connect QuickBooks again in Settings.' when the stored sign-in has no account id", async () => {
+    for (const accountId of [null, "  "]) {
+      const h = harness(fresh, [], { accountId });
+      await expect(createQuickBooksAdapter(h.deps).read(source(), connection)).rejects.toThrow(
+        "QuickBooks did not say which company is connected. Connect QuickBooks again in Settings.",
+      );
+      expect(h.fetch).not.toHaveBeenCalled();
+      expect(h.saves()).toHaveLength(0);
+    }
+  });
+
+  it("a fetch that throws reads 'QuickBooks did not answer. Try again later.' and never the address", async () => {
+    const thrown = () => new TypeError("error sending request for url (https://sandbox-quickbooks.api.intuit.com/v3/company/sample-realm/query)");
+    for (const tokens of [fresh, expiring]) {
+      const h = harness(tokens, []);
+      h.deps.fetch = vi.fn(async () => {
+        throw thrown();
+      }) as unknown as typeof globalThis.fetch;
+      const err = await createQuickBooksAdapter(h.deps).read(source(), connection).catch((e: unknown) => e as Error);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe("QuickBooks did not answer. Try again later.");
+      expect((err as Error).message).not.toContain("sample-realm");
+      expect(h.saves()).toHaveLength(0);
+    }
   });
 
   it("reads payments, and refuses a source that is not a QuickBooks entity", async () => {
     const { fetches, table } = await paymentRead();
     expect(queryOf(fetches()[0])).toBe("select * from Payment orderby Id startposition 1 maxresults 1000");
-    expect(table.rows[0].ref).toEqual({ entity: "Payment", Id: "7", realmId: "sample-realm", sandbox: true });
+    expect(table.rows[0].ref).toEqual({ entity: "Payment", Id: "7", sandbox: true });
 
     const h = harness(fresh, []);
     const adapter = createQuickBooksAdapter(h.deps);
@@ -375,8 +408,8 @@ describe("QuickBooks through the shared runner", () => {
     expect(outcome.status).toBe("succeeded");
     expect(outcome.rowsApplied).toBe(INVOICES.length);
     expect(inserted.map((row) => row.source_ref)).toEqual([
-      { entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true },
-      { entity: "Invoice", Id: "102", realmId: "sample-realm", sandbox: true },
+      { entity: "Invoice", Id: "101", sandbox: true },
+      { entity: "Invoice", Id: "102", sandbox: true },
     ]);
     const keys = FM.map((f) => f.key).sort();
     for (const row of inserted) expect(Object.keys(row.data).sort()).toEqual(keys);

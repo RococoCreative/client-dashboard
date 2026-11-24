@@ -35,10 +35,11 @@ alter default privileges for role postgres in schema public
 create schema auth;
 grant usage on schema auth to anon, authenticated, service_role, supabase_auth_admin;
 
--- The migrations read id, email and raw_user_meta_data only.
+-- The migrations read id, email, email_confirmed_at and raw_user_meta_data only.
 create table auth.users (
   id                 uuid primary key default gen_random_uuid(),
   email              text,
+  email_confirmed_at timestamptz,
   raw_user_meta_data jsonb default '{}'::jsonb,
   raw_app_meta_data  jsonb default '{}'::jsonb,
   created_at         timestamptz default now(),

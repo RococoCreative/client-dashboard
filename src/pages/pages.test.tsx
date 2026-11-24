@@ -1814,7 +1814,7 @@ describe("data sources", () => {
       run_id: "sample-run",
       record_key: '["1001"]',
       data: { doc_number: "1001" },
-      source_ref: { entity: "Invoice", Id: "101", realmId: "sample-realm", sandbox: true },
+      source_ref: { entity: "Invoice", Id: "101", sandbox: true },
       created_at: "2026-11-09T14:00:00.000Z",
     };
     render(<MappedTable source={{ ...invoices, current_run_id: "sample-run" }} records={[record]} />);

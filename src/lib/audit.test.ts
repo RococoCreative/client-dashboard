@@ -139,8 +139,8 @@ describe("describeAuditEventPlain", () => {
     ],
     [
       "a setting that is not shown",
-      on("company_connections", "update", { status: { old: "connected", new: "error" }, external_account_id: { old: "a", new: "b" } }, "row-9"),
-      "Connection: status changed from Connected to Needs attention; account changed",
+      on("sync_sources", "update", { name: { old: "Sales", new: "Sales sheet" }, config: { old: { tab: "A" }, new: { tab: "B" } } }, "src-9"),
+      "Data source: name changed from Sales to Sales sheet; settings changed",
     ],
     [
       "a data source's sync days and business days switch",

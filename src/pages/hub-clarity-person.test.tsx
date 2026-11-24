@@ -44,6 +44,7 @@ import { setMockCapabilities } from "../test/mocks/capabilities.ts";
 import * as employeesService from "../services/employees.ts";
 import * as invitationsService from "../services/invitations.ts";
 import * as profilesService from "../services/profiles.ts";
+import { setMockRococoFlag } from "../test/mocks/profiles.ts";
 import * as tasksService from "../services/tasks.ts";
 import PersonPage from "./people/PersonPage.tsx";
 import { personTabsFor } from "./people/personTabs.ts";
@@ -211,8 +212,8 @@ describe("a Rococo admin's row", () => {
   it("keeps every tab but Tasks, with no role scorecard and no account actions", async () => {
     // Noor is placed on RBA's roster as a Rococo admin; RBA has the tasks module.
     const user = userEvent.setup();
-    await profilesService.updateProfile(noor.id, { is_rococo_admin: true });
-    onTestFinished(() => profilesService.updateProfile(noor.id, { is_rococo_admin: false }).then(() => undefined));
+    setMockRococoFlag(noor.id, true);
+    onTestFinished(() => setMockRococoFlag(noor.id, false));
     renderPerson(rbaAdmin, `/people/${noor.id}`);
     expect(await screen.findByRole("heading", { name: "Noor Haddad" })).toBeInTheDocument();
     expect(await tabNames()).toEqual(["Overview", "GSR and goals", "Scorecard", "Reviews", "Setup"]);

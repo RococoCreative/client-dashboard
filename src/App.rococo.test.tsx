@@ -215,7 +215,7 @@ describe("routes land the same with modules on", () => {
       const message = "The sign-in was cancelled or refused. Nothing changed.";
       // It has arrived once the outcome is off the address, not merely once the path matches.
       const landed = await landing(
-        `/settings/connections/${bundle.company.id}?connect_error=${encodeURIComponent(message)}`,
+        `/settings/connections/${bundle.company.id}?connect_error=cancelled`,
         "admin",
         slug,
         "/settings/connections",

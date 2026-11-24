@@ -95,9 +95,10 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 6. **Keys.** Project Settings, API: copy the Project URL and the anon (publishable) key
    into `.env` locally and into Vercel's environment variables. Never put the service_role
    key or database password in `.env`, in Vercel, or in any `VITE_` variable.
-7. **Sign in.** Any `@rocococreative.io` address is a Rococo admin on first sign-in and
-   lands on the portfolio: every company with its signals, and the tabs where companies,
-   themes, domains, and users are managed. Opening a company switches the hub to that
+7. **Sign in.** An `@rocococreative.io` address is a Rococo admin only once it is on the Rococo
+   admins list (Rococo > Permissions), and only with a confirmed email; `0051` seeds the first
+   entry from the existing Rococo admin. A Rococo admin lands on the portfolio: every company with
+   its signals, and the tabs where companies, themes, domains, and users are managed. Opening a company switches the hub to that
    company's branding and nav, for that session only.
 
 ### What is applied live
@@ -118,6 +119,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
+  Also `0051_rococo_admins` and `0052_connection_secrets`: written, not applied (see Applying
+  security hardening). So `0001` to `0050` are not all live; `0032` is the gap. The next free
+  number is `0053`.
 - **Applied 2026-11-18:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
   may do what), with no override rows for any company yet. For a fresh database the order is:
   paste `0040`, then `0041`, confirm the API serves the new tables, and only then
@@ -211,7 +215,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
   request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
   Nothing visible changes when it goes in. Apply it before merging the app that reads it.
-- **Next free number:** `0051`.
+- **Next free number:** `0053`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -285,9 +289,14 @@ columns on the company, and each defaults to what every company has today.
   removed from the hub. Ask an owner or admin to invite you again." A pending invitation opens the
   gate as it does for any personal address, and signing in through it lifts the block (0049). An
   invitation made before the delete does not count. A deleted Rococo admin cannot come back this
-  way (an invitation would place them in a company with its role), so Rococo lifts their block in
-  the SQL editor, `delete from private.blocked_signups where email = '...'`, and they sign in
-  again as Rococo staff.
+  way (an invitation would place them in a company with its role), and the block outranks the
+  Rococo admins list, so first make sure the address is on the list (Rococo > Permissions), then
+  clear that one row in the SQL editor: check it with the read-only
+  `select email, blocked_at from private.blocked_signups where email = lower(trim('name@rocococreative.io'));`
+  (one row expected), then delete only it with
+  `delete from private.blocked_signups where email = lower(trim('name@rocococreative.io'));`, using
+  their address in place of `name@rocococreative.io` in both. They then sign in again as a Rococo
+  admin.
 - **Moving** a person to another company (Rococo, Users) takes their yearly goals, KPIs,
   compensation and deliverables with them and leaves their months with the old company. Their
   ratings start over in the new company, since criteria are each company's own, and their
@@ -900,9 +909,25 @@ provider's callback arrives with no session. Its routes, all under
 `/functions/v1/connections`, and who may call each:
 
 - `POST /start` and `POST /disconnect`: an active Owner or Admin of the company, or a Rococo
-  admin, checked on their own JWT.
+  admin, checked on their own JWT. Disconnect reports whether the tool confirmed it revoked
+  access. GoHighLevel has no revoke, so its answer says access was not revoked there.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
-- `POST /status`: which providers have their app keys (names only, never a value). An active member
+  It always answers a bare 302 back to the app with `?pending=<id>`. It does not connect
+  anything: it exchanges the code, seals the result and parks it for ten minutes in
+  `connection_pending`. Expired grants are swept and revoked. A grant that never became a
+  connection (swept, discarded, failed at finish, or refused at the callback after the provider
+  issued tokens) is revoked only when no live connection, in any company, holds the same outside
+  account and both accounts are known. Google treats one client and one user as a single grant,
+  and an Intuit revoke disconnects the app from the QuickBooks company, so revoking it otherwise
+  would cut off the live connection. A kept grant only leaves the hub listed in that account, and
+  Discard then says the tool may still list it.
+- `POST /pending`, `POST /finish` and `POST /discard`: a signed-in person. The app reads a
+  parked connection with `/pending`, shows which outside account is about to be attached, and the
+  admin confirms with `/finish` or drops it with `/discard`. Finish and discard work only for the
+  person who started the connection, who must still be an active Owner or Admin of the company, or
+  the Rococo admin who started it. Anyone else who opens the link is told so and changes nothing.
+- `POST /status`: which providers have their app keys, and whether `CONNECTIONS_STATE_SECRET`
+  and `TOKEN_ENCRYPTION_KEY` are set (names only, never a value). An active member
   of the company of any role, or a Rococo admin, checked on their own JWT. The secret names are in
   `_shared/providerSecrets.ts`. The catalog needs it to know a card is available; without it the
   app treats every live tool as available.
@@ -920,13 +945,25 @@ provider's callback arrives with no session. Its routes, all under
 The sync routes live in this function so it stays the only reader of `connection_tokens`. It
 needs these secrets (Dashboard, Edge Functions, Secrets):
 
+- `TOKEN_ENCRYPTION_KEY`: 32 random bytes, base64, from `openssl rand -base64 32`. Tokens and the
+  provider account id are sealed with AES-256-GCM under it before they are stored. Never share it,
+  keep a copy anywhere, or put it in Vercel; it lives only here.
+- `TOKEN_ENCRYPTION_KEY_PREVIOUS`: optional, only during a rotation. Move the old value here and
+  put a new one in `TOKEN_ENCRYPTION_KEY`. Each saved value moves to the new key on its next
+  token refresh. Leave the previous key in place until every connection has saved again under the
+  new key. GoHighLevel connections never refresh, so reconnect them after a rotation, before the
+  previous key is removed.
+- `APP_URL`: already a project secret for `notify`. The callback uses it as its fallback return
+  address.
 - `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
   the company and admin who started it. Each state is good for one callback: `start` records its
   nonce in `connection_states` and `callback` deletes it as it redeems it, so migration 0029 has
   to be applied before this version of the function is deployed.
 - `APP_ORIGINS`: comma separated origins the browser may be returned to, such as the
   production domain (`https://companyhub.rocococreative.io`) and the Vercel preview domain.
-  Localhost is always allowed.
+- `ALLOW_LOCALHOST_RETURN`: optional, development only. Exactly `true` lets a localhost address
+  be a return address; anything else, or unset, refuses it. Never set it on the production
+  project, so production only ever returns to `APP_ORIGINS`.
 - `GHL_CLIENT_ID` and `GHL_CLIENT_SECRET`: from a HighLevel Marketplace app owned by Rococo
   with the scopes `opportunities.readonly users.readonly locations.readonly`.
 - `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET` and `QBO_ENVIRONMENT` (`sandbox` or `production`): from
@@ -943,6 +980,12 @@ keys are in place, its card on Settings > Connections reads Not available yet an
 Connect, once the function is deployed with `/status`. Before that redeploy the card treats the
 tool as available, and Connect answers with a plain "not set up yet" line. Deploy with
 `supabase functions deploy connections --no-verify-jwt`.
+
+Every response from the function is `Cache-Control: no-store`. Its imports are pinned to exact
+versions (supabase-js 2.116.0), and its log lines carry ids and codes only, never a token, code,
+realm id or account id. `external_account_id` on `company_connections` is cleared and blocked;
+the account id lives only sealed in `connection_tokens` and is scrubbed from audit events, sync
+records and sync errors (`0052`).
 
 ## The notify function
 
@@ -987,6 +1030,10 @@ Secrets):
 - `APP_URL`: the production address, `https://companyhub.rocococreative.io`. The task link and
   the invitation link start from it and from nothing else, so an email can only ever link to the
   app.
+
+`notify` imports its shared helpers from `_shared`, so it is deployed together with `connections`.
+Its responses are `Cache-Control: no-store` and its imports are pinned like the connections
+function's.
 
 Until all three are set, the task email answers "Task emails are not set up yet." and claims
 nothing. A task that is already complete is never announced, and a send that Resend does not
@@ -1034,7 +1081,11 @@ through sources it configures. The steps, in order:
 **Intuit**
 
 10. For real books, complete Intuit's production app assessment and set
-    `QBO_ENVIRONMENT=production`.
+    `QBO_ENVIRONMENT=production`. Before then, during the QuickBooks sandbox test, confirm how
+    Intuit's revoke behaves: whether revoking one sign-in's token disconnects the app from the
+    whole company, ending another live connection to the same company. The function already
+    assumes it does and never revokes a parked or discarded sign-in for a company a live
+    connection holds.
 
 **In the hub**
 
@@ -1220,6 +1271,49 @@ function that lacks `/status`, but must not ship before `0050`.
 
 Done 2026-11-23: `0050` pasted and checked live, `connections` redeployed as version 6, and the
 app merged and deployed. Step 4 waits on Rococo registering each provider.
+
+### Applying security hardening
+
+`0051` makes Rococo admin an explicit list. A Rococo admin is now an active, flagged profile whose
+email is on `rococo_admins`, equals the account email, and is confirmed. Removing someone
+deactivates their profile and adding them back reactivates it; the last entry cannot be removed.
+The list is managed from the Rococo Permissions page. `0052` seals tokens and the provider account
+id (`connection_pending` holds a sign-in until the admin confirms it). Order matters:
+
+1. Add `TOKEN_ENCRYPTION_KEY` in Supabase: Dashboard, Edge Functions, Secrets, add a secret named
+   `TOKEN_ENCRYPTION_KEY`. Generate the value in a terminal with `openssl rand -base64 32` and
+   paste it straight in. Never share it or keep a copy.
+2. Before pasting `0051`, run this read-only check. It lists every active Rococo admin whose
+   profile email differs from their account email, or whose email is not confirmed. Zero rows
+   means it is safe to paste:
+   `select p.email as profile_email, u.email as account_email, u.email_confirmed_at from public.profiles p join auth.users u on u.id = p.user_id where p.is_rococo_admin and p.is_active and (lower(p.email) <> lower(u.email) or u.email_confirmed_at is null);`
+   On 2026-11-24 two equivalent read-only checks ran on the live project: a mismatch count
+   returned 0, and a confirmed-email count returned 1 of 1 active Rococo admins confirmed. The
+   combined query above was not itself run.
+   Then paste `0051`, then `0052`, then `notify pgrst, 'reload schema';`. Check
+   `select r.email, u.email_confirmed_at from public.rococo_admins r join auth.users u on lower(u.email) = r.email;`
+   lists the Rococo admin with a confirmation time; without one, Rococo access stops at this step.
+   Nothing visible changes.
+3. Straight away, deploy both functions together: `supabase functions deploy connections
+   --no-verify-jwt` and `supabase functions deploy notify`. A failed import pin fails the deploy
+   here, before anything is live. If the deploy rejects the npm edge-runtime types import, the
+   fallback is `jsr:@supabase/functions-js@<exact>/edge-runtime.d.ts`. Between steps 2 and 3 the
+   old function cannot save a new connection (`0052` refuses plaintext tokens and account ids);
+   that is safe today because no company is connected.
+4. Merge and deploy the app. It must not ship before steps 2 and 3, because it calls `/pending`
+   and `/finish`. `vercel.json` now sends `Cache-Control: no-store` on app pages.
+5. Record `0051`, `0052` and both deploys in What is applied live, and in the Hub Feature Register
+   (outside the repo; the owner updates it).
+
+After the deploy, check by hand:
+
+- A response from `/settings/connections` carries `Cache-Control: no-store`.
+- In the Supabase logs, the callback's request URL does not expose `code`, `state` or `realmId`.
+  If it does, note the risk.
+
+Go forwards only. Re-pasting `0013`, `0049` or `0025` undoes parts of `0051` and `0052`, so paste
+`0051` and `0052` again straight after. Re-pasting `0025` in particular restores
+`external_account_id` on the audit trigger.
 
 ## Deploy
 

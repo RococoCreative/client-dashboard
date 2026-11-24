@@ -2,8 +2,13 @@
 // query, and it is a GET; every entity is projected through the source's field map before it
 // leaves this file, so only mapped fields can ever reach sync_records. QuickBooks rotates refresh
 // tokens, so a new one is saved before any data call, and the runner holds the connection's lock
-// while this runs, so two syncs never spend the same refresh token. fetch is injected, so all of
-// it is unit-tested without the network, and no token or response body reaches an error message.
+// while this runs, so two syncs never spend the same refresh token. The company (realm) id comes
+// from the stored sign-in and is used only in the request URL: it never reaches a record, and a
+// fetch that throws (whose message quotes the URL) becomes a fixed line. fetch is injected, so all
+// of it is unit-tested without the network, and no token, company id or response body reaches an
+// error message.
+import { SyncError } from "./errors.ts";
+import { CONNECTION_CHANGED } from "./tokenStore.ts";
 import type { CellValue, FieldMapEntry, ProviderAdapter, ProviderTokens, RawTable, TokenStore } from "./types.ts";
 
 export const QBO_PAGE_SIZE = 1000;
@@ -19,6 +24,17 @@ const REFRESH_MARGIN_MS = 5 * 60000;
 const RECONNECT = "Connect QuickBooks again in Settings.";
 const EXPIRED = `QuickBooks sign-in has expired. ${RECONNECT}`;
 const NO_ANSWER = "QuickBooks did not answer. Try again later.";
+const NO_COMPANY = `QuickBooks did not say which company is connected. ${RECONNECT}`;
+
+// A fetch that throws never reaches the caller as itself: its message can quote the request URL,
+// and the URL holds the company id.
+async function call(deps: { fetch: typeof fetch }, url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await deps.fetch(url, init);
+  } catch {
+    throw new SyncError(NO_ANSWER);
+  }
+}
 
 export function qboApiBase(environment: QboEnvironment): string {
   return environment === "production" ? "https://quickbooks.api.intuit.com" : "https://sandbox-quickbooks.api.intuit.com";
@@ -46,13 +62,14 @@ export function getPath(obj: unknown, path: string): CellValue {
   return typeof current === "string" || typeof current === "number" || typeof current === "boolean" ? current : null;
 }
 
-// Each entity cut down to the field map's own headers, in its order. Nothing else is kept.
-export function projectEntities(entities: Record<string, unknown>[], fieldMap: FieldMapEntry[], realmId: string, entity: QboEntity, sandbox: boolean): RawTable {
+// Each entity cut down to the field map's own headers, in its order. Nothing else is kept, and the
+// ref back to it carries no company id.
+export function projectEntities(entities: Record<string, unknown>[], fieldMap: FieldMapEntry[], entity: QboEntity, sandbox: boolean): RawTable {
   return {
     headers: fieldMap.map((f) => f.header),
     rows: entities.map((e) => ({
       cells: fieldMap.map((f) => getPath(e, f.header)),
-      ref: { entity, Id: String(e.Id ?? ""), realmId, sandbox },
+      ref: { entity, Id: String(e.Id ?? ""), sandbox },
     })),
   };
 }
@@ -64,26 +81,26 @@ export function createQboClient(deps: QboClientDeps): { query(sql: string, start
   return {
     async query(sql, start, max) {
       if (!Number.isInteger(start) || start < 1 || !Number.isInteger(max) || max < 1 || max > QBO_PAGE_SIZE) {
-        throw new Error("The QuickBooks page is out of range.");
+        throw new SyncError("The QuickBooks page is out of range.");
       }
       const q = encodeURIComponent(`${sql} startposition ${start} maxresults ${max}`);
       const url = `${qboApiBase(deps.environment)}/v3/company/${encodeURIComponent(deps.realmId)}/query?query=${q}&minorversion=${QBO_MINOR_VERSION}`;
-      const response = await deps.fetch(url, { method: "GET", headers: { Authorization: `Bearer ${deps.accessToken}`, Accept: "application/json" } });
-      if (response.status === 401) throw new Error(`QuickBooks refused the sign-in. ${RECONNECT}`);
-      if (response.status === 403) throw new Error("QuickBooks refused access to these records.");
-      if (response.status === 429) throw new Error("QuickBooks asked us to slow down. Try again in a few minutes.");
-      if (!response.ok) throw new Error(NO_ANSWER);
+      const response = await call(deps, url, { method: "GET", headers: { Authorization: `Bearer ${deps.accessToken}`, Accept: "application/json" } });
+      if (response.status === 401) throw new SyncError(`QuickBooks refused the sign-in. ${RECONNECT}`);
+      if (response.status === 403) throw new SyncError("QuickBooks refused access to these records.");
+      if (response.status === 429) throw new SyncError("QuickBooks asked us to slow down. Try again in a few minutes.");
+      if (!response.ok) throw new SyncError(NO_ANSWER);
       let body: unknown;
       try {
         body = await response.json();
       } catch {
-        throw new Error(NO_ANSWER);
+        throw new SyncError(NO_ANSWER);
       }
-      if (!isRecord(body)) throw new Error(NO_ANSWER);
-      if ("Fault" in body) throw new Error("QuickBooks could not run the query.");
+      if (!isRecord(body)) throw new SyncError(NO_ANSWER);
+      if ("Fault" in body) throw new SyncError("QuickBooks could not run the query.");
       // An answer with no QueryResponse at all is not an empty page: reading it as one would
       // replace the company's last good data with nothing.
-      if (!isRecord(body.QueryResponse)) throw new Error(NO_ANSWER);
+      if (!isRecord(body.QueryResponse)) throw new SyncError(NO_ANSWER);
       const rows = Object.values(body.QueryResponse).find(Array.isArray);
       return (rows ?? []) as Record<string, unknown>[];
     },
@@ -97,15 +114,18 @@ function entityOf(config: unknown): QboEntity | null {
   return config.entity === "Invoice" || config.entity === "Payment" ? config.entity : null;
 }
 
-// A usable access token. One within five minutes of expiry, or with none on file, is refreshed and
-// the new pair saved before anything reads: QuickBooks retires the old refresh token as soon as it
-// issues a new one, so a pair that is not saved is a sign-in lost.
-async function accessToken(deps: QuickBooksDeps, connectionId: string): Promise<string> {
+// A usable access token and the company it reads. The company comes from the stored sign-in and is
+// checked before anything is called. A token within five minutes of expiry, or with none on file,
+// is refreshed and the new pair saved before anything reads: QuickBooks retires the old refresh
+// token as soon as it issues a new one, so a pair that is not saved is a sign-in lost.
+async function accessToken(deps: QuickBooksDeps, connectionId: string): Promise<{ token: string; realmId: string }> {
   const old = await deps.tokens.load(connectionId);
+  const realmId = old.accountId;
+  if (typeof realmId !== "string" || !realmId.trim()) throw new SyncError(NO_COMPANY);
   const now = deps.now().getTime();
-  if (old.accessExpiresAt !== null && Date.parse(old.accessExpiresAt) - now > REFRESH_MARGIN_MS) return old.accessToken;
-  if (!old.refreshToken || (old.refreshExpiresAt !== null && !(Date.parse(old.refreshExpiresAt) > now))) throw new Error(EXPIRED);
-  const response = await deps.fetch(TOKEN_URL, {
+  if (old.accessExpiresAt !== null && Date.parse(old.accessExpiresAt) - now > REFRESH_MARGIN_MS) return { token: old.accessToken, realmId };
+  if (!old.refreshToken || (old.refreshExpiresAt !== null && !(Date.parse(old.refreshExpiresAt) > now))) throw new SyncError(EXPIRED);
+  const response = await call(deps, TOKEN_URL, {
     method: "POST",
     headers: {
       Authorization: `Basic ${btoa(`${deps.clientId}:${deps.clientSecret}`)}`,
@@ -114,14 +134,14 @@ async function accessToken(deps: QuickBooksDeps, connectionId: string): Promise<
     },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: old.refreshToken }).toString(),
   });
-  if (!response.ok) throw new Error(EXPIRED);
+  if (!response.ok) throw new SyncError(EXPIRED);
   let body: { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; x_refresh_token_expires_in?: unknown };
   try {
     body = (await response.json()) as typeof body;
   } catch {
-    throw new Error(EXPIRED);
+    throw new SyncError(EXPIRED);
   }
-  if (!isRecord(body) || typeof body.access_token !== "string" || !body.access_token) throw new Error(EXPIRED);
+  if (!isRecord(body) || typeof body.access_token !== "string" || !body.access_token) throw new SyncError(EXPIRED);
   const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 0;
   const refreshIn = typeof body.x_refresh_token_expires_in === "number" && body.x_refresh_token_expires_in > 0 ? body.x_refresh_token_expires_in : null;
   const next: ProviderTokens = {
@@ -132,10 +152,12 @@ async function accessToken(deps: QuickBooksDeps, connectionId: string): Promise<
   };
   try {
     await deps.tokens.save(connectionId, next);
-  } catch {
-    throw new Error(`The new QuickBooks sign-in could not be saved. ${RECONNECT}`);
+  } catch (err) {
+    // A reconnect or disconnect in between is not a lost sign-in: the connection holds its newer one.
+    if (err instanceof SyncError && err.message === CONNECTION_CHANGED) throw err;
+    throw new SyncError(`The new QuickBooks sign-in could not be saved. ${RECONNECT}`);
   }
-  return next.accessToken;
+  return { token: next.accessToken, realmId };
 }
 
 export function createQuickBooksAdapter(deps: QuickBooksDeps): ProviderAdapter {
@@ -143,10 +165,8 @@ export function createQuickBooksAdapter(deps: QuickBooksDeps): ProviderAdapter {
     provider: "quickbooks",
     async read(source, connection) {
       const entity = entityOf(source.config);
-      if (!entity) throw new Error("This source is not set up for QuickBooks.");
-      const realmId = connection.external_account_id;
-      if (typeof realmId !== "string" || !realmId.trim()) throw new Error(`QuickBooks did not say which company is connected. ${RECONNECT}`);
-      const token = await accessToken(deps, connection.id);
+      if (!entity) throw new SyncError("This source is not set up for QuickBooks.");
+      const { token, realmId } = await accessToken(deps, connection.id);
       const client = createQboClient({ fetch: deps.fetch, environment: deps.environment, realmId, accessToken: token });
       // The entity is one of two literals, never text from a person.
       const sql = `select * from ${entity} orderby Id`;
@@ -154,9 +174,9 @@ export function createQuickBooksAdapter(deps: QuickBooksDeps): ProviderAdapter {
       for (let page = 0; page < QBO_MAX_PAGES; page++) {
         const rows = await client.query(sql, 1 + page * QBO_PAGE_SIZE, QBO_PAGE_SIZE);
         all.push(...rows);
-        if (rows.length < QBO_PAGE_SIZE) return projectEntities(all, source.field_map, realmId, entity, deps.environment === "sandbox");
+        if (rows.length < QBO_PAGE_SIZE) return projectEntities(all, source.field_map, entity, deps.environment === "sandbox");
       }
-      throw new Error("QuickBooks returned more records than one sync reads (50,000).");
+      throw new SyncError("QuickBooks returned more records than one sync reads (50,000).");
     },
   };
 }

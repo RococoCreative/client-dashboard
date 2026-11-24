@@ -2,7 +2,9 @@
 // order of writes and the keep-the-last-good-data rule are proven here with fakes and the Edge
 // Function only supplies the database and the providers. A failure never moves the source's
 // pointer or its last success: the records the company last saw stay current until a sync
-// succeeds.
+// succeeds. A failure's line is a SyncError's own or a fixed fallback (errors.ts), never another
+// error's text, since it is shown on the source and written to last_error.
+import { syncMessage } from "./errors.ts";
 import { mapRows } from "./parse.ts";
 import type { AdapterRegistry, ConnectionRef, ParsedRow, SyncSourceSpec, ValidationError } from "./types.ts";
 
@@ -43,10 +45,6 @@ type Attempt =
   | { ok: true; rows: ParsedRow[]; rowsRead: number; rowsBlank: number }
   | { ok: false; message: string; errors: ValidationError[]; rowsRead: number; rowsBlank: number };
 
-function messageOf(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
-
 export async function runSync(args: {
   source: SyncSourceSpec; connection: ConnectionRef; trigger: "schedule" | "manual"; requestedBy: string | null;
   store: SyncStore; adapters: AdapterRegistry; now?: () => Date;
@@ -73,7 +71,7 @@ export async function runSync(args: {
       try {
         table = await adapter.read(source, connection);
       } catch (err) {
-        return { ok: false, message: messageOf(err, "The source could not be read."), errors: [], rowsRead, rowsBlank };
+        return { ok: false, message: syncMessage(err, "The source could not be read."), errors: [], rowsRead, rowsBlank };
       }
       rowsRead = table.rows.length;
       const mapped = mapRows(table, source.field_map, source.record_key);
@@ -87,7 +85,7 @@ export async function runSync(args: {
       await store.markSource(source.id, { current_run_id: runId, last_success_at: now().toISOString(), last_status: "succeeded", last_error: null });
       return mapped;
     } catch (err) {
-      return { ok: false, message: messageOf(err, "The sync could not finish."), errors: [], rowsRead, rowsBlank };
+      return { ok: false, message: syncMessage(err, "The sync could not finish."), errors: [], rowsRead, rowsBlank };
     }
   };
 
