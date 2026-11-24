@@ -506,6 +506,7 @@ select tests.assert(
   (select accepted_at is not null from public.invitations where email = 'sample.newowner@example.com'),
   'signup_still_creates_profiles: the invitation was not accepted'
 );
+insert into public.rococo_admins (email) values ('sample.staff@rocococreative.io');
 insert into auth.users (id, email, raw_user_meta_data)
 values (gen_random_uuid(), 'sample.staff@rocococreative.io', '{}'::jsonb);
 select tests.assert(

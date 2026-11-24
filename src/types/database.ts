@@ -128,6 +128,12 @@ export interface Profile {
   updated_at: string;
 }
 
+// An address on the Rococo admin list (0051). The list is the source of truth for Rococo access;
+// profiles.is_rococo_admin only mirrors it, written by the database when an entry is added or removed.
+export interface RococoAdmin { id: string; email: string; added_by: string | null; added_at: string }
+// A list entry with the person at that address, when there is one.
+export interface RococoAdminEntry extends RococoAdmin { name: string | null; profile_id: string | null }
+
 // A person's name card, readable by everyone in their company (0038). Names on screens that are
 // not about the person (who assigned a task, who owns a milestone, who wrote a note) come from
 // here; everything else about a person is read through profiles, which RLS narrows to the
