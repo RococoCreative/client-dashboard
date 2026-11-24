@@ -99,6 +99,17 @@ describe("planTick", () => {
     expect(skipped).toEqual(["bad"]);
   });
 
+  it("tells onSkip the error's name only, never its message", () => {
+    const reasons: Array<[string, string]> = [];
+    const bad = Object.defineProperty(spec({ id: "bad" }), "sync_timezone", {
+      get() {
+        throw new RangeError("Invalid time zone: sample-secret-value");
+      },
+    });
+    planTick({ sources: [bad], connections, modules, now, onSkip: (id, reason) => reasons.push([id, reason]) });
+    expect(reasons).toEqual([["bad", "RangeError"]]);
+  });
+
   it("starts a source on any day of its set, judged in its own zone, and reads a null set as its single day", () => {
     // Tuesday 10 November 2026, 14:00 UTC is 08:00 on Tuesday in Chicago.
     const tuesday = new Date("2026-11-10T14:00:00Z");
@@ -148,5 +159,20 @@ describe("sweepStaleRuns", () => {
     expect(await sweepStaleRuns(store, ["conn-1", "conn-2"], now, (id) => failed.push(id))).toBe(1);
     expect(seen).toEqual(["conn-1", "conn-2"]);
     expect(failed).toEqual(["conn-1"]);
+  });
+
+  it("tells onFail the error's name only, never its message", async () => {
+    const reasons: Array<[string, string]> = [];
+    const store = {
+      async abandonStaleRuns(connectionId: string): Promise<number> {
+        if (connectionId === "conn-1") throw new TypeError('relation "sample_secret" does not exist');
+        throw "not an error";
+      },
+    };
+    await sweepStaleRuns(store, ["conn-1", "conn-2"], now, (id, reason) => reasons.push([id, reason]));
+    expect(reasons).toEqual([
+      ["conn-1", "TypeError"],
+      ["conn-2", "unknown"],
+    ]);
   });
 });

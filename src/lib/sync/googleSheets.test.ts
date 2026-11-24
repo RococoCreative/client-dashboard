@@ -143,7 +143,7 @@ describe("sheetRange", () => {
 
 describe("valuesToRawTable", () => {
   it("takes headers from the header row and numbers each row as the sheet does", () => {
-    const table = valuesToRawTable(VALUES, sheetsConfig, "Sample sales");
+    const table = valuesToRawTable(VALUES, sheetsConfig);
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows).toEqual([
       { cells: ["Sample job 101", 250000], ref: { spreadsheet_id: "sample-sheet", sheet_gid: 42, row: 2 } },
@@ -153,22 +153,23 @@ describe("valuesToRawTable", () => {
   });
 
   it("reads a header row below a title row", () => {
-    const table = valuesToRawTable([["Sample title"], ["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, header_row: 2 }, "Sample sales");
+    const table = valuesToRawTable([["Sample title"], ["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, header_row: 2 });
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows[0].ref.row).toBe(3);
   });
 
   it("counts rows from the start of the range", () => {
-    const table = valuesToRawTable([["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, range: "B5:D", header_row: 5 }, "Sample sales");
+    const table = valuesToRawTable([["Job", "Amount"], ["Sample job 101", 1]], { ...sheetsConfig, range: "B5:D", header_row: 5 });
     expect(table.headers).toEqual(["Job", "Amount"]);
     expect(table.rows[0].ref.row).toBe(6);
   });
 
   it("refuses a header row above the range or past the end of the tab", () => {
-    expect(() => valuesToRawTable(VALUES, { ...sheetsConfig, range: "A5:D", header_row: 3 }, "Sample sales")).toThrow(
+    expect(() => valuesToRawTable(VALUES, { ...sheetsConfig, range: "A5:D", header_row: 3 })).toThrow(
       "The header row is above the range. Check the header row and range for this source.",
     );
-    expect(() => valuesToRawTable([], sheetsConfig, "Sample sales")).toThrow('The tab "Sample sales" has no row 1 to read headers from.');
+    // The line never quotes the tab's title: a name from the sheet is not the hub's own text.
+    expect(() => valuesToRawTable([], sheetsConfig)).toThrow("The tab ends before the header row. Check the header row and range for this source.");
   });
 });
 

@@ -8,8 +8,10 @@
 // everything else a sync does is in the pure modules under _shared/sync. Tokens are stored sealed
 // and opened only here, with keys loaded once the caller is authorised; without usable keys a sync
 // answers 503 with the setup line rather than reading anything. The tick also sweeps expired
-// pending connections (pending.ts).
+// pending connections (pending.ts). The only error text a sync shows, in its answer or on the
+// source, is a SyncError's fixed line (_shared/sync/errors.ts); anything else reads as a plain line.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
+import { SHEET_NOT_READ, SyncError, syncMessage } from "../_shared/sync/errors.ts";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
 import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
 import { runSync, type RunOutcome, type SyncStore } from "../_shared/sync/runner.ts";
@@ -61,7 +63,7 @@ export function createTokenStore(service: SupabaseClient, keys: TokenKeys): Toke
           .eq("connection_id", connectionId);
         if (error) {
           console.error("token save failed", error.code ?? "unknown");
-          throw new Error("The new sign-in could not be saved.");
+          throw new SyncError("The new sign-in could not be saved.");
         }
       },
     },
@@ -90,7 +92,7 @@ export function createSyncStore(service: SupabaseClient): SyncStore {
         .eq("status", "running")
         .lt("started_at", olderThan.toISOString())
         .select("source_id");
-      if (error) throw new Error("Stale runs could not be cleared.");
+      if (error) throw new SyncError("Stale runs could not be cleared.");
       const runs = (data ?? []) as Array<{ source_id: string }>;
       const sourceIds = [...new Set(runs.map((run) => run.source_id))];
       if (sourceIds.length > 0) {
@@ -99,7 +101,7 @@ export function createSyncStore(service: SupabaseClient): SyncStore {
           .update({ last_status: "failed", last_error: "The sync stopped before finishing." })
           .in("id", sourceIds)
           .eq("last_status", "running");
-        if (sourceError) throw new Error("Stale runs could not be cleared.");
+        if (sourceError) throw new SyncError("Stale runs could not be cleared.");
       }
       return runs.length;
     },
@@ -119,12 +121,12 @@ export function createSyncStore(service: SupabaseClient): SyncStore {
         .select("id")
         .single();
       if (error?.code === "23505") return { locked: true };
-      if (error || !data) throw new Error("The sync could not start.");
+      if (error || !data) throw new SyncError("The sync could not start.");
       const { error: sourceError } = await service
         .from("sync_sources")
         .update({ last_status: "running", last_attempt_at: now.toISOString() })
         .eq("id", source.id);
-      if (sourceError) throw new Error("The sync could not start.");
+      if (sourceError) throw new SyncError("The sync could not start.");
       return { runId: data.id as string };
     },
 
@@ -139,13 +141,13 @@ export function createSyncStore(service: SupabaseClient): SyncStore {
           source_ref: row.source_ref,
         }));
         const { error } = await service.from("sync_records").insert(chunk);
-        if (error) throw new Error("The rows could not be saved.");
+        if (error) throw new SyncError("The rows could not be saved.");
       }
     },
 
     async markSource(sourceId, patch) {
       const { error } = await service.from("sync_sources").update(patch).eq("id", sourceId);
-      if (error) throw new Error("The source could not be updated.");
+      if (error) throw new SyncError("The source could not be updated.");
     },
 
     async finishRun(runId, result) {
@@ -160,12 +162,12 @@ export function createSyncStore(service: SupabaseClient): SyncStore {
           finished_at: result.finishedAt.toISOString(),
         })
         .eq("id", runId);
-      if (error) throw new Error("The run could not be closed.");
+      if (error) throw new SyncError("The run could not be closed.");
     },
 
     async pruneRecords(sourceId, keepRunIds) {
       const { error } = await service.from("sync_records").delete().eq("source_id", sourceId).not("run_id", "in", `(${keepRunIds.join(",")})`);
-      if (error) throw new Error("Old rows could not be cleared.");
+      if (error) throw new SyncError("Old rows could not be cleared.");
     },
   };
 }
@@ -176,10 +178,16 @@ function googleKeys(): { clientId: string; clientSecret: string } | null {
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
-function unconfigured(provider: SyncProvider, label: string): ProviderAdapter {
+// The line a source shows when its provider's app keys are missing.
+const NOT_SET_UP: Record<SyncProvider, string> = {
+  google_sheets: "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.",
+  quickbooks: "QuickBooks Online is not set up yet. Ask Rococo Creative to add the app keys.",
+};
+
+function unconfigured(provider: SyncProvider): ProviderAdapter {
   return {
     provider,
-    read: () => Promise.reject(new Error(`${label} is not set up yet. Ask Rococo Creative to add the app keys.`)),
+    read: () => Promise.reject(new SyncError(NOT_SET_UP[provider])),
   };
 }
 
@@ -194,7 +202,7 @@ export function adaptersFor(tokens: TokenStore): AdapterRegistry {
   const google = googleKeys();
   const qbo = quickBooksKeys();
   return {
-    google_sheets: google ? createGoogleSheetsAdapter({ ...google, tokens, fetch, now: () => new Date() }) : unconfigured("google_sheets", "Google Sheets"),
+    google_sheets: google ? createGoogleSheetsAdapter({ ...google, tokens, fetch, now: () => new Date() }) : unconfigured("google_sheets"),
     quickbooks: qbo
       ? createQuickBooksAdapter({
           ...qbo,
@@ -203,7 +211,7 @@ export function adaptersFor(tokens: TokenStore): AdapterRegistry {
           environment: Deno.env.get("QBO_ENVIRONMENT") === "production" ? "production" : "sandbox",
           now: () => new Date(),
         })
-      : unconfigured("quickbooks", "QuickBooks Online"),
+      : unconfigured("quickbooks"),
   };
 }
 
@@ -284,7 +292,8 @@ export async function handleSyncTick(req: Request): Promise<Response> {
   // is handed back when the keys and the provider's app keys allow. Best effort, so a failed sweep
   // never stops the syncs.
   try {
-    console.log("pending swept", await sweepExpiredPending(service(), new Date()));
+    const sweptCount = await sweepExpiredPending(service(), new Date());
+    console.log("pending swept", sweptCount);
   } catch (err) {
     console.error("pending sweep failed", err instanceof Error ? err.name : "unknown");
   }
@@ -321,7 +330,7 @@ export async function handleSyncTick(req: Request): Promise<Response> {
     now,
     onSkip: (id, reason) => console.error("scheduled sync skipped", id, reason),
   });
-  const abandoned = await sweepStaleRuns(createSyncStore(admin), sweep, now, (id, reason) => console.error("stale sweep failed", id, reason));
+  const abandonedCount = await sweepStaleRuns(createSyncStore(admin), sweep, now, (id, reason) => console.error("stale sweep failed", id, reason));
 
   // One connection at a time and, within it, one source at a time, so sources sharing a
   // connection never meet on the lock and a refresh token never rotates twice at once.
@@ -339,7 +348,9 @@ export async function handleSyncTick(req: Request): Promise<Response> {
       }
     }
   }
-  console.log("sync tick", JSON.stringify({ due: due.length, abandoned, ran }));
+  // Ids, counts and statuses only.
+  const ranStatus = ran.map((r) => `${r.source_id} ${r.status}`).join(", ");
+  console.log("sync tick", "due", due.length, "abandoned", abandonedCount, "ran", ranStatus);
   return json(200, { due: due.length, ran });
 }
 
@@ -369,7 +380,7 @@ export async function handleSyncDescribe(req: Request): Promise<Response> {
     );
     return json(200, description);
   } catch (err) {
-    if (err instanceof Error) throw new HttpError(502, err.message);
-    throw err;
+    // Only a sync's own fixed line is shown; anything else reads as the plain line (errors.ts).
+    throw new HttpError(502, syncMessage(err, SHEET_NOT_READ));
   }
 }

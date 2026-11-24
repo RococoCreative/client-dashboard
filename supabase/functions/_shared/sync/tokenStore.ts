@@ -5,6 +5,7 @@
 // service-role select and update on connection_tokens) lives in connections/sync.ts; this half has
 // no client of its own, so it is unit-tested without one. Errors carry fixed text, never a value.
 import { openTokens, sealTokens, type SealedTokens, type TokenKeys } from "../tokenCrypto.ts";
+import { SyncError } from "./errors.ts";
 import type { ProviderTokens, StoredTokens, TokenStore } from "./types.ts";
 
 export const NO_SIGN_IN = "This connection has no sign-in on file. Connect it again in Settings.";
@@ -31,14 +32,14 @@ export function createSealedTokenStore(rows: TokenRows, keys: TokenKeys): TokenS
   return {
     async load(connectionId): Promise<StoredTokens> {
       const row = await rows.read(connectionId);
-      if (!row) throw new Error(NO_SIGN_IN);
+      if (!row) throw new SyncError(NO_SIGN_IN);
       // Opening fails only with a TokenSealError (wrong key, owner or field, or not sealed at all),
       // and every one of those is a sign-in this connection cannot use.
       let opened: Awaited<ReturnType<typeof openTokens>>;
       try {
         opened = await openTokens({ connectionId }, row, keys);
       } catch {
-        throw new Error(NO_SIGN_IN);
+        throw new SyncError(NO_SIGN_IN);
       }
       accounts.set(connectionId, opened.accountId);
       return { ...opened, accessExpiresAt: row.access_expires_at ?? null, refreshExpiresAt: row.refresh_expires_at ?? null };
