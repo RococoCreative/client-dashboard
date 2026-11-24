@@ -70,6 +70,53 @@ reset role;
 select set_config('request.jwt.claims', '', true);
 update public.profiles set is_active = true where id = tests.id('rococo');
 
+-- case: helper_needs_the_flag
+-- Only the list's sync clears the flag on a listed address, so this stands in for the column and the
+-- list ever disagreeing: the flag must hold as well.
+select set_config('hub.rococo_sync', '1', true);
+update public.profiles set is_rococo_admin = false where id = tests.id('rococo');
+select set_config('hub.rococo_sync', '', true);
+select tests.act_as(tests.id('rococo'));
+select tests.assert(not private.is_rococo_admin(), 'helper_needs_the_flag: a listed profile without the flag counts as a Rococo admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select set_config('hub.rococo_sync', '1', true);
+update public.profiles set is_rococo_admin = true where id = tests.id('rococo');
+select set_config('hub.rococo_sync', '', true);
+select tests.act_as(tests.id('rococo'));
+select tests.assert(private.is_rococo_admin(), 'helper_needs_the_flag: restoring the flag did not restore the Rococo admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+-- case: changed_account_address_is_not_enough
+-- An account's address is the one a signed-in person can change; their profile's address is not.
+-- Moving the account onto a listed address nobody has claimed yet gives nothing.
+insert into public.rococo_admins (email) values ('sample.unclaimed@rocococreative.io');
+update auth.users set email = 'sample.unclaimed@rocococreative.io', email_confirmed_at = now()
+ where id = tests.user_of(tests.id('kingdom_employee'));
+select tests.act_as(tests.id('kingdom_employee'));
+select tests.assert(not private.is_rococo_admin(), 'changed_account_address_is_not_enough: a changed account address made a Rococo admin');
+reset role;
+select set_config('request.jwt.claims', '', true);
+update auth.users set email = tests.email_of(tests.id('kingdom_employee'))
+ where id = tests.user_of(tests.id('kingdom_employee'));
+delete from public.rococo_admins where email = 'sample.unclaimed@rocococreative.io';
+
+-- case: entries_are_never_edited
+select tests.assert_raises(
+  format($q$update public.rococo_admins set email = 'sample.typo@rocococreative.io' where email = %L$q$,
+    tests.email_of(tests.id('rococo2'))),
+  'A Rococo admin entry is removed and added again, never edited.'
+);
+
+-- case: list_is_never_truncated
+select tests.assert_raises('truncate public.rococo_admins', 'The last Rococo admin cannot be removed.');
+select tests.assert(
+  (select count(*) from public.rococo_admins
+    where email in (tests.email_of(tests.id('rococo')), tests.email_of(tests.id('rococo2')))) = 2,
+  'list_is_never_truncated: an entry was edited or the list was emptied'
+);
+
 -- case: domain_alone_is_not_enough
 insert into auth.users (email, email_confirmed_at, raw_user_meta_data)
 values ('sample.unlisted@rocococreative.io', now(), '{}'::jsonb);

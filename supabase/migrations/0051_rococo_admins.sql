@@ -15,14 +15,15 @@
 --      clears the flag and turns the profile off (the owner's decision), so a removed person keeps
 --      no access anywhere. Adding it back turns the profile on again.
 --   5. The last entry stays. Removals are serialized, and a removal that would leave the list
---      empty is refused.
+--      empty is refused. An entry is never edited and the list is never truncated, since either
+--      would pass by the sync, this check and the audit; that holds for the SQL editor too.
 --   6. Every add and removal is audited.
 --   7. profiles.is_rococo_admin stays the column the app reads, but only the sync writes it, for
 --      everyone, the SQL editor included. A new profile reads it from the list, which is how
 --      sign-up now follows the list rather than the domain; handle_new_user is left as 0049 wrote it.
 --   8. Any flagged profile not on the list (an inactive one the seed skipped) is cleared.
---   9. private.is_rococo_admin() is true only for an active profile whose account's address is on
---      the list and confirmed.
+--   9. private.is_rococo_admin() is true only for an active, flagged profile whose own address is on
+--      the list and is also its account's address, confirmed.
 --  10. The sign-up gate admits a Rococo address only when it is on the list. Company domains,
 --      invitations and the block list are as 0049 left them.
 
@@ -185,6 +186,33 @@ end;
 $$;
 revoke execute on function public.rococo_admins_keep_one() from public, anon, authenticated;
 
+-- An edit would move access to a new address with no sync and no audit, and a truncate would empty
+-- the list with no check at all. Removing an entry and adding it again does both properly.
+create or replace function public.rococo_admins_no_edit()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  raise exception 'A Rococo admin entry is removed and added again, never edited.';
+end;
+$$;
+revoke execute on function public.rococo_admins_no_edit() from public, anon, authenticated;
+
+create or replace function public.rococo_admins_no_truncate()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  raise exception 'The last Rococo admin cannot be removed.'
+    using errcode = 'check_violation';
+end;
+$$;
+revoke execute on function public.rococo_admins_no_truncate() from public, anon, authenticated;
+
 drop trigger if exists rococo_admins_hold on public.rococo_admins;
 create trigger rococo_admins_hold
   before delete on public.rococo_admins
@@ -195,6 +223,16 @@ create trigger rococo_admins_keep_one
   after delete on public.rococo_admins
   referencing old table as gone
   for each statement execute function public.rococo_admins_keep_one();
+
+drop trigger if exists rococo_admins_no_edit on public.rococo_admins;
+create trigger rococo_admins_no_edit
+  before update on public.rococo_admins
+  for each row execute function public.rococo_admins_no_edit();
+
+drop trigger if exists rococo_admins_no_truncate on public.rococo_admins;
+create trigger rococo_admins_no_truncate
+  before truncate on public.rococo_admins
+  for each statement execute function public.rococo_admins_no_truncate();
 
 -- ---------------------------------------------------------------------------------------
 -- 6. Audit
@@ -253,8 +291,10 @@ select set_config('hub.rococo_sync', '', true);
 -- ---------------------------------------------------------------------------------------
 -- 9. The helper
 -- ---------------------------------------------------------------------------------------
--- The account's own address is what must be on the list, and confirmed: the profile's address is
--- a copy, and an unconfirmed account has not proved it owns the address.
+-- Every part must agree. The profile's address, which nobody can change, is the one on the list;
+-- the flag only the list's sync writes is set; and the account's address, which its owner can
+-- change, is that same address and confirmed. An account moved onto a listed address that nobody
+-- has claimed gains nothing.
 
 create or replace function private.is_rococo_admin()
 returns boolean
@@ -267,9 +307,11 @@ as $$
     select 1
       from public.profiles p
       join auth.users u on u.id = p.user_id
-      join public.rococo_admins r on r.email = lower(u.email)
+      join public.rococo_admins r on r.email = lower(p.email)
      where p.user_id = (select auth.uid())
        and p.is_active
+       and p.is_rococo_admin
+       and lower(u.email) = lower(p.email)
        and u.email_confirmed_at is not null
   )
 $$;
