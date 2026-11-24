@@ -363,11 +363,11 @@ describe("the detail panel", () => {
     expect(within(panel).getByText("Connected once for everyone at Kingdom Custom Construction. If the person who connected it leaves or loses access to this account, reconnect with an account the company keeps.")).toBeInTheDocument();
   });
 
-  it("reads 'Not recorded' for the account when the row has neither an account name nor an id", async () => {
+  it("reads 'Not recorded' for the account when the row has no account name", async () => {
     const user = userEvent.setup();
     const rows = await connectionsService.listConnections(KINGDOM.company.id);
     const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(
-      rows.map((r) => (r.provider === "gohighlevel" ? { ...r, external_account_name: null, external_account_id: null } : r)),
+      rows.map((r) => (r.provider === "gohighlevel" ? { ...r, external_account_name: null } : r)),
     );
     onTestFinished(() => spy.mockRestore());
     renderCatalog();

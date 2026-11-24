@@ -129,7 +129,7 @@ function ConnectionBody({
     if (!busy) onClose();
   };
   const firstName = connectedBy.name?.split(/\s+/)[0] ?? null;
-  const account = row.external_account_name ?? row.external_account_id ?? "Not recorded";
+  const account = row.external_account_name ?? "Not recorded";
   const feeds = connector.feeds ?? [];
 
   return (

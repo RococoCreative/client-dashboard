@@ -875,7 +875,8 @@ export interface CompanyConnection {
   company_id: string;
   provider: ConnectionProvider;
   status: ConnectionStatus;
-  external_account_id: string | null;
+  // No account id here: the row's account id column is always null since 0052, and the provider's
+  // account id lives sealed in connection_tokens, which only the connections function reads.
   external_account_name: string | null;
   scopes: string | null;
   connected_by: string | null;

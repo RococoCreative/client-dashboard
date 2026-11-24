@@ -91,7 +91,6 @@ function connection(overrides: Partial<CompanyConnection> = {}): CompanyConnecti
     company_id: "co",
     provider: "gohighlevel",
     status: "connected",
-    external_account_id: null,
     external_account_name: null,
     scopes: null,
     connected_by: null,

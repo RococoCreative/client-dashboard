@@ -6,7 +6,7 @@ import { CONNECTION_PROVIDER_LABELS, keysOf, type CompanyConnection, type Connec
 import { invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
-const COLUMNS = "id, company_id, provider, status, external_account_id, external_account_name, scopes, connected_by, connected_at, last_synced_at, last_error, settings, created_at, updated_at";
+const COLUMNS = "id, company_id, provider, status, external_account_name, scopes, connected_by, connected_at, last_synced_at, last_error, settings, created_at, updated_at";
 
 export async function listConnections(companyId: string): Promise<CompanyConnection[]> {
   const { data, error } = await db().from("company_connections").select(COLUMNS).eq("company_id", companyId).order("provider");

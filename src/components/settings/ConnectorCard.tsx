@@ -37,7 +37,7 @@ function Detail({ view, row, linkCount }: { view: CardView; row: CompanyConnecti
   const lines: Array<{ text: string; className: string }> = [];
   if ((view.state === "connected" || view.state === "needs_attention") && row) {
     // The card has no label beside it, so a row with no account recorded says what is missing.
-    const account = row.external_account_name ?? row.external_account_id ?? "Account not recorded";
+    const account = row.external_account_name ?? "Account not recorded";
     lines.push({ text: `${account}${row.connected_at ? ` · since ${formatDate(row.connected_at)}` : ""}`, className: metaClass });
   }
   if (view.state === "needs_attention" && row?.last_error) lines.push({ text: row.last_error, className: DANGER_META });

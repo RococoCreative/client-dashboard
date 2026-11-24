@@ -610,13 +610,13 @@ function build(company: Company): CompanyBundle {
 
   // The company's own connections: HighLevel connected by the owner, QuickBooks not yet.
   const connections: CompanyConnection[] = [
-    { id: p("conn-ghl"), company_id: company.id, provider: "gohighlevel", status: "connected", external_account_id: p("ghl-location"), external_account_name: `${company.name} (HighLevel)`, scopes: "opportunities.readonly users.readonly locations.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+    { id: p("conn-ghl"), company_id: company.id, provider: "gohighlevel", status: "connected", external_account_name: `${company.name} (HighLevel)`, scopes: "opportunities.readonly users.readonly locations.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
   ];
   // A company with data sources also reads a spreadsheet account and, not yet, QuickBooks.
   if (spec.sync) {
     connections.push(
-      { id: p("conn-sheets"), company_id: company.id, provider: "google_sheets", status: "connected", external_account_id: p("sheets-account"), external_account_name: "sample-reports@example.com", scopes: "spreadsheets.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
-      { id: p("conn-qbo"), company_id: company.id, provider: "quickbooks", status: "not_connected", external_account_id: null, external_account_name: null, scopes: null, connected_by: null, connected_at: null, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("conn-sheets"), company_id: company.id, provider: "google_sheets", status: "connected", external_account_name: "sample-reports@example.com", scopes: "spreadsheets.readonly", connected_by: profiles[0].id, connected_at: EARLIER, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
+      { id: p("conn-qbo"), company_id: company.id, provider: "quickbooks", status: "not_connected", external_account_name: null, scopes: null, connected_by: null, connected_at: null, last_synced_at: null, last_error: null, settings: {}, created_at: EARLIER, updated_at: EARLIER },
     );
   }
 

@@ -127,7 +127,7 @@ export function auditNames(input: {
   return names;
 }
 
-// How a watched value reads. "detail" values (settings blobs, outside account ids) are not shown,
+// How a watched value reads. "detail" values (settings blobs, internal ids) are not shown,
 // only that they changed.
 type Kind =
   | "text"
@@ -186,7 +186,6 @@ const COLUMNS: Record<string, Record<string, Column>> = {
   company_connections: {
     status: { label: "status", kind: { labels: { not_connected: "Not connected", connected: "Connected", error: "Needs attention" } } },
     provider: { label: "system", kind: { labels: CONNECTION_PROVIDER_LABELS } },
-    external_account_id: { label: "account", kind: "detail" },
   },
   gsr_pillars: {
     weight: { label: "weight", kind: "text" },
