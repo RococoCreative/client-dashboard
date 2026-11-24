@@ -10,7 +10,8 @@ own branding, people, and review process, walled off from each other at the data
 level. Admins (owners and managers) get the whole hub for their company: Goal Setting and
 Review (GSR), People, the SOP library, the resource library, financial snapshots, the
 marketing tracker. Employees get their own GSR data plus the two libraries. Rococo admins
-(austin@rocococreative.io and other @rocococreative.io accounts) sign in to the portfolio,
+(the people on the Rococo admin list, managed from Rococo Permissions, with a confirmed email;
+0051) sign in to the portfolio,
 Rococo-branded, with no company active, and step into a company for the session; nothing
 about the chosen company is persisted. Vite + React 19 + TypeScript, Tailwind v4, Supabase (auth, db,
 storage), deployed on Vercel.
@@ -62,15 +63,18 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    can only return through a new invitation (0049).
 6. **Sign-in is magic link, gated server-side.** The login screen may create users
    (`shouldCreateUser: true`) only because the "Before User Created" hook in
-   `0002_signup_gate.sql` admits company domains, pending invitations, and Rococo staff and
-   rejects everyone else. The app-side domain lookup is UX, not security. No service-role
+   `0002_signup_gate.sql` admits company domains, pending invitations, and addresses on the
+   Rococo admin list (0051) and rejects everyone else. Rococo admin is never granted by email
+   domain alone. The app-side domain lookup is UX, not security. No service-role
    key anywhere in the app or in Vercel; an invitation is a row, and its email goes out through
    the `notify` function, with the link kept as a fallback the admin can copy.
    The same posture covers outside systems: a company connects its own GoHighLevel or
    QuickBooks account through the app's own OAuth flow in the `connections` Edge Function
    (`supabase/functions/connections`), never through anything of Rococo's. Provider tokens
-   live in `connection_tokens`, which only that function reads; the browser sees status rows
-   and never calls a provider. The `notify` Edge Function (`supabase/functions/notify`) sends the
+   and account ids live in `connection_tokens`, which only that function reads, sealed with
+   `TOKEN_ENCRYPTION_KEY` (AES-256-GCM, `_shared/tokenCrypto.ts`); the browser sees status rows
+   and never calls a provider. A connection finishes only when the admin who started it
+   confirms it in the hub (0052, `connection_pending`). The `notify` Edge Function (`supabase/functions/notify`) sends the
    task assignment email and the invitation email through Resend and is the only place the Resend
    key lives; its secrets are `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and every link it
    sends starts from `APP_URL` alone, never from anything the caller sends.
