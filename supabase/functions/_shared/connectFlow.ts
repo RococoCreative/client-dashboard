@@ -1,7 +1,7 @@
 // The connect flow's rules, kept pure so they are tested outside the function and shared with the
 // app: the error keys a provider return may carry and the one line the app shows for each, who may
-// finish a pending connection, the reader of the /pending answer, and where the
-// callback sends the browser when a sign-in does not finish. The callback only ever puts a key in
+// finish a pending connection and when it expires, the reader of the /pending answer, which return
+// addresses the app owns, and where the callback sends the browser when a sign-in does not finish. The callback only ever puts a key in
 // the address; the app turns it into words, so nothing a caller sends is ever shown as text.
 import type { StateReading } from "./connectState.ts";
 import { PROVIDER_KEYS, type ProviderKey } from "./providers.ts";
@@ -27,6 +27,17 @@ export function connectErrorText(value: string | null): string | null {
 
 // How long a pending connection waits for its starter to confirm it.
 export const PENDING_TTL_SECONDS = 600;
+
+// When a pending connection parked now stops being usable, as the timestamp the table stores.
+export function pendingExpiry(now: Date): string {
+  return new Date(now.getTime() + PENDING_TTL_SECONDS * 1000).toISOString();
+}
+
+// A provider value that may be missing or blank (an account id, a refresh token, an account name),
+// as text or null. A blank value is never sealed: sealing refuses it, and it means "none" anyway.
+export function blankToNull(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
 
 export const PENDING_SOMEONE_ELSE = "This connection was started by someone else, so it can't be finished here. Ask them to finish it, or start again.";
 export const PENDING_GONE = "This connection request has expired. Start the connection again.";
@@ -74,6 +85,32 @@ function webOrigin(value: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+// A return address the browser may be sent to: one of the app's own origins, or localhost for
+// development, kept as origin and path only. Null for anything else.
+export function allowedReturn(value: unknown, appOrigins: readonly string[]): string | null {
+  if (typeof value !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (!local && !appOrigins.includes(url.origin)) return null;
+  return `${url.origin}${url.pathname}`;
+}
+
+// A verified state's address checked again against the app's origins as they are at the callback,
+// since a state stays readable after an origin leaves APP_ORIGINS. One that no longer passes goes to
+// the fallback instead; with no fallback the state reads as invalid, which sends the browser nowhere.
+export function recheckReturn(reading: StateReading, appOrigins: readonly string[], fallback: string | null): StateReading {
+  if (reading.kind === "invalid") return reading;
+  const r = allowedReturn(reading.claims.r, appOrigins) ?? fallback;
+  if (!r) return { kind: "invalid" };
+  return { kind: reading.kind, claims: { ...reading.claims, r } };
 }
 
 // Where a callback with no verified state sends the browser: the app's Connections page on

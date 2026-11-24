@@ -9,12 +9,16 @@ import {
   PENDING_GONE,
   PENDING_SOMEONE_ELSE,
   PENDING_TTL_SECONDS,
+  allowedReturn,
+  blankToNull,
   connectErrorText,
   failureLocation,
   fallbackReturn,
   isPendingId,
   parsePendingAnswer,
+  pendingExpiry,
   pendingVerdict,
+  recheckReturn,
   withQuery,
   type ConnectErrorKey,
 } from "../../../supabase/functions/_shared/connectFlow.ts";
@@ -101,6 +105,18 @@ describe("pending connections", () => {
     expect(parsePendingAnswer("ready")).toBeNull();
   });
 
+  it("pendingExpiry is ten minutes after now, as the timestamp the table stores", () => {
+    expect(pendingExpiry(at)).toBe(later);
+  });
+
+  it("blankToNull keeps text and turns a missing or blank value into null", () => {
+    expect(blankToNull("realm-1")).toBe("realm-1");
+    expect(blankToNull("")).toBeNull();
+    expect(blankToNull("   ")).toBeNull();
+    expect(blankToNull(null)).toBeNull();
+    expect(blankToNull(undefined)).toBeNull();
+  });
+
   it("isPendingId accepts a uuid and nothing else", () => {
     const id = crypto.randomUUID();
     expect(isPendingId(id)).toBe(true);
@@ -133,5 +149,39 @@ describe("where the callback sends the browser", () => {
     expect(failureLocation(expired, fallback, "refused")).toBe(`${claims.r}?connect_error=expired`);
     expect(failureLocation(invalid, fallback, "refused")).toBe(`${fallback}?connect_error=invalid`);
     expect(failureLocation(invalid, null, "refused")).toBeNull();
+  });
+});
+
+describe("return addresses", () => {
+  const origins = ["https://app.example"];
+  const fallback = "https://hub.example/settings/connections";
+
+  it("allowedReturn admits the app's own origins and localhost, as origin and path only", () => {
+    expect(allowedReturn("https://app.example/settings/connections/co1?x=1#y", origins)).toBe("https://app.example/settings/connections/co1");
+    expect(allowedReturn("http://localhost:5173/settings/connections", origins)).toBe("http://localhost:5173/settings/connections");
+    expect(allowedReturn("http://127.0.0.1:5173/x", origins)).toBe("http://127.0.0.1:5173/x");
+  });
+
+  it("allowedReturn refuses another origin, a non-web scheme, a non-URL and a non-string", () => {
+    expect(allowedReturn("https://evil.example/settings", origins)).toBeNull();
+    expect(allowedReturn("https://app.example.evil.example/x", origins)).toBeNull();
+    expect(allowedReturn("javascript:alert(1)", origins)).toBeNull();
+    expect(allowedReturn("ftp://localhost/x", origins)).toBeNull();
+    expect(allowedReturn("not a url", origins)).toBeNull();
+    expect(allowedReturn(7, origins)).toBeNull();
+    expect(allowedReturn(undefined, origins)).toBeNull();
+  });
+
+  it("recheckReturn keeps a state whose address the app still owns", () => {
+    expect(recheckReturn({ kind: "valid", claims }, origins, fallback)).toEqual({ kind: "valid", claims });
+    expect(recheckReturn({ kind: "expired", claims }, origins, fallback)).toEqual({ kind: "expired", claims });
+    expect(recheckReturn({ kind: "invalid" }, origins, fallback)).toEqual({ kind: "invalid" });
+  });
+
+  it("recheckReturn sends a state whose origin has left APP_ORIGINS to the fallback, or reads it as invalid without one", () => {
+    expect(recheckReturn({ kind: "valid", claims }, [], fallback)).toEqual({ kind: "valid", claims: { ...claims, r: fallback } });
+    expect(recheckReturn({ kind: "expired", claims }, ["https://other.example"], fallback)).toEqual({ kind: "expired", claims: { ...claims, r: fallback } });
+    expect(recheckReturn({ kind: "valid", claims }, [], null)).toEqual({ kind: "invalid" });
+    expect(failureLocation(recheckReturn({ kind: "valid", claims }, [], null), null, "refused")).toBeNull();
   });
 });

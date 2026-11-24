@@ -30,21 +30,33 @@ export function googleAuthorizeUrl(args: { clientId: string; redirectUri: string
   return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
 }
 
-// The verified email in an id token received straight from Google's token endpoint over TLS, so
-// its payload is read, not verified, as Google documents is safe for tokens received directly.
-export function emailFromIdToken(idToken: string): string | null {
+// An id token's payload, read straight from Google's token endpoint over TLS, so it is read, not
+// verified, as Google documents is safe for tokens received directly. Null when it does not parse.
+function idTokenPayload(idToken: string): Record<string, unknown> | null {
   const parts = idToken.split(".");
   if (parts.length !== 3) return null;
   try {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
     const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { email?: unknown; email_verified?: unknown };
-    if (typeof payload.email !== "string" || !payload.email || payload.email_verified === false) return null;
-    return payload.email;
+    const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : null;
   } catch {
     return null;
   }
+}
+
+// The verified email in an id token: the account's name as an admin sees it.
+export function emailFromIdToken(idToken: string): string | null {
+  const payload = idTokenPayload(idToken);
+  if (!payload || typeof payload.email !== "string" || !payload.email || payload.email_verified === false) return null;
+  return payload.email;
+}
+
+// The account's stable id (sub) in an id token: what the hub seals as the Google account id.
+export function subjectFromIdToken(idToken: string): string | null {
+  const payload = idTokenPayload(idToken);
+  return payload && typeof payload.sub === "string" && payload.sub ? payload.sub : null;
 }
 
 // The tab is always chosen by gid, so any tab named inside a stored range is ignored.

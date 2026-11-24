@@ -7,7 +7,8 @@
 // The database side of the runner and the token store live here, over the service role;
 // everything else a sync does is in the pure modules under _shared/sync. Tokens are stored sealed
 // and opened only here, with keys loaded once the caller is authorised; without usable keys a sync
-// answers 503 with the setup line rather than reading anything.
+// answers 503 with the setup line rather than reading anything. The tick also sweeps expired
+// pending connections (pending.ts).
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createGoogleSheetsAdapter, describeSheet } from "../_shared/sync/googleSheets.ts";
 import { createQuickBooksAdapter } from "../_shared/sync/quickbooks.ts";
@@ -16,7 +17,9 @@ import { carriesSyncModule, planTick, sweepStaleRuns } from "../_shared/sync/tic
 import { createSealedTokenStore, type StoredTokenRow } from "../_shared/sync/tokenStore.ts";
 import type { AdapterRegistry, ProviderAdapter, SyncProvider, SyncSourceSpec, TokenStore } from "../_shared/sync/types.ts";
 import { TOKENS_NOT_SET_UP, TokenKeyError, loadTokenKeys, type TokenKeys } from "../_shared/tokenCrypto.ts";
-import { HttpError, json, requireAdmin, sameBytes, service, signedInUser } from "./http.ts";
+import { sameBytes } from "../_shared/bytes.ts";
+import { HttpError, json, requireAdmin, service, signedInUser } from "./http.ts";
+import { sweepExpiredPending } from "./pending.ts";
 
 const SOURCE_COLUMNS =
   "id, company_id, connection_id, provider, name, config, field_map, record_key, enabled, sync_weekday, sync_weekdays, sync_time, sync_timezone, current_run_id, last_attempt_at, last_success_at";
@@ -277,6 +280,14 @@ export async function handleSyncTick(req: Request): Promise<Response> {
   if (!secret) throw new HttpError(503, "Scheduled syncs are not set up yet.");
   const offered = req.headers.get("x-sync-secret") ?? "";
   if (!sameBytes(await sha256(offered), await sha256(secret))) throw new HttpError(401, "Not allowed.");
+  // Pending connections nobody confirmed go first, keys or not: the rows always go, and each grant
+  // is handed back when the keys and the provider's app keys allow. Best effort, so a failed sweep
+  // never stops the syncs.
+  try {
+    console.log("pending swept", await sweepExpiredPending(service(), new Date()));
+  } catch (err) {
+    console.error("pending sweep failed", err instanceof Error ? err.name : "unknown");
+  }
   const keys = await tokenKeys();
 
   const started = Date.now();

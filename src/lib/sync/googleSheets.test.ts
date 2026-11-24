@@ -11,6 +11,7 @@ import {
   googleAuthorizeUrl,
   sheetRange,
   sheetTitleForGid,
+  subjectFromIdToken,
   valuesToRawTable,
   type GoogleDeps,
 } from "../../../supabase/functions/_shared/sync/googleSheets.ts";
@@ -118,6 +119,15 @@ describe("Google sign-in", () => {
     expect(emailFromIdToken(`header.${b64url({ sub: "1" })}.sig`)).toBeNull();
     expect(emailFromIdToken("not-a-token")).toBeNull();
     expect(emailFromIdToken("a.%%%.c")).toBeNull();
+  });
+
+  it("reads the account's stable id (sub) from the id token, for sealing as the account id", () => {
+    expect(subjectFromIdToken(`header.${b64url({ sub: "1234567890", email: "sample-reports@example.com" })}.sig`)).toBe("1234567890");
+    expect(subjectFromIdToken(`header.${b64url({ email: "sample-reports@example.com" })}.sig`)).toBeNull();
+    expect(subjectFromIdToken(`header.${b64url({ sub: "" })}.sig`)).toBeNull();
+    expect(subjectFromIdToken(`header.${b64url({ sub: 7 })}.sig`)).toBeNull();
+    expect(subjectFromIdToken("not-a-token")).toBeNull();
+    expect(subjectFromIdToken("a.%%%.c")).toBeNull();
   });
 });
 

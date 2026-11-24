@@ -56,7 +56,8 @@ export async function readState(state: string | null, secret: string, nowSeconds
     if (!sameBytes(await hmac(payload, secret), signature)) return invalid;
     const claims = claimsFrom(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payloadBytes)));
     if (!claims) return invalid;
-    return claims.e < nowSeconds ? { kind: "expired", claims } : { kind: "valid", claims };
+    // Written so that a clock that is not a number reads as expired, never as valid.
+    return claims.e >= nowSeconds ? { kind: "valid", claims } : { kind: "expired", claims };
   } catch {
     return invalid;
   }

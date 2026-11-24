@@ -72,6 +72,12 @@ describe("connect state", () => {
     }
   });
 
+  it("reads a state at its expiry second as valid, and one read with a clock that is not a number as expired", async () => {
+    const state = await signState({ ...claims, e: now }, secret);
+    expect((await readState(state, secret, now)).kind).toBe("valid");
+    expect((await readState(await signState(claims, secret), secret, Number.NaN)).kind).toBe("expired");
+  });
+
   it("checks the signature before the expiry", async () => {
     const state = await signState({ ...claims, e: now - 1 }, "another-secret");
     expect(await readState(state, secret, now)).toEqual({ kind: "invalid" });
