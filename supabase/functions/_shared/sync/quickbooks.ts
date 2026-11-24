@@ -8,6 +8,7 @@
 // of it is unit-tested without the network, and no token, company id or response body reaches an
 // error message.
 import { SyncError } from "./errors.ts";
+import { CONNECTION_CHANGED } from "./tokenStore.ts";
 import type { CellValue, FieldMapEntry, ProviderAdapter, ProviderTokens, RawTable, TokenStore } from "./types.ts";
 
 export const QBO_PAGE_SIZE = 1000;
@@ -151,7 +152,9 @@ async function accessToken(deps: QuickBooksDeps, connectionId: string): Promise<
   };
   try {
     await deps.tokens.save(connectionId, next);
-  } catch {
+  } catch (err) {
+    // A reconnect or disconnect in between is not a lost sign-in: the connection holds its newer one.
+    if (err instanceof SyncError && err.message === CONNECTION_CHANGED) throw err;
     throw new SyncError(`The new QuickBooks sign-in could not be saved. ${RECONNECT}`);
   }
   return { token: next.accessToken, realmId };

@@ -43,28 +43,35 @@ async function readJsonBody<T>(req: Request): Promise<Partial<T>> {
 }
 
 // The token store over connection_tokens. Reads and writes sealed values only; sealing and opening
-// are in _shared/sync/tokenStore.ts. Errors are logged by code and kind, never by value.
+// are in _shared/sync/tokenStore.ts. A write is conditional on the updated_at the read saw, so a
+// reconnect (which /finish stamps with a new updated_at) or a disconnect in between is never
+// overwritten by a refresh of the old grant. Errors are logged by code and kind, never by value.
 export function createTokenStore(service: SupabaseClient, keys: TokenKeys): TokenStore {
   return createSealedTokenStore(
     {
       async read(connectionId) {
         const { data, error } = await service
           .from("connection_tokens")
-          .select("access_token, refresh_token, account_id, access_expires_at, refresh_expires_at")
+          .select("access_token, refresh_token, account_id, access_expires_at, refresh_expires_at, updated_at")
           .eq("connection_id", connectionId)
           .maybeSingle();
         if (error) console.error("token load failed", error.code ?? "unknown");
         return error || !data ? null : (data as StoredTokenRow);
       },
-      async write(connectionId, values) {
-        const { error } = await service
+      async write(connectionId, values, loadedAt) {
+        const { data, error } = await service
           .from("connection_tokens")
           .update({ ...values, updated_at: new Date().toISOString() })
-          .eq("connection_id", connectionId);
+          .eq("connection_id", connectionId)
+          .eq("updated_at", loadedAt)
+          .select("connection_id");
         if (error) {
           console.error("token save failed", error.code ?? "unknown");
           throw new SyncError("The new sign-in could not be saved.");
         }
+        const written = (data ?? []).length > 0;
+        if (!written) console.error("token save skipped, connection changed", connectionId);
+        return written;
       },
     },
     keys,

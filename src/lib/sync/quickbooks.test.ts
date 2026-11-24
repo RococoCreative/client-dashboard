@@ -14,6 +14,8 @@ import {
 } from "../../../supabase/functions/_shared/sync/quickbooks.ts";
 import { mapRows } from "../../../supabase/functions/_shared/sync/parse.ts";
 import { runSync, type SyncStore } from "../../../supabase/functions/_shared/sync/runner.ts";
+import { SyncError } from "../../../supabase/functions/_shared/sync/errors.ts";
+import { CONNECTION_CHANGED } from "../../../supabase/functions/_shared/sync/tokenStore.ts";
 import type { FieldMapEntry, ParsedRow, ProviderTokens, StoredTokens, SyncSourceSpec } from "../../../supabase/functions/_shared/sync/types.ts";
 
 const now = () => new Date("2026-11-09T14:00:00Z");
@@ -71,7 +73,7 @@ function fakeFetch(log: Call[], answers: Array<{ status: number; body: unknown }
 function harness(
   tokens: ProviderTokens,
   answers: Array<{ status: number; body: unknown }>,
-  options: { saveThrows?: boolean; accountId?: string | null } = {},
+  options: { saveThrows?: boolean | Error; accountId?: string | null } = {},
 ) {
   const log: Call[] = [];
   const fetch = fakeFetch(log, answers);
@@ -82,6 +84,7 @@ function harness(
       load: async (): Promise<StoredTokens> => ({ ...tokens, accountId: options.accountId === undefined ? "sample-realm" : options.accountId }),
       save: async (connectionId, saved) => {
         log.push({ kind: "save", connectionId, tokens: saved });
+        if (options.saveThrows instanceof Error) throw options.saveThrows;
         if (options.saveThrows) throw new Error("Sample save failure");
       },
     },
@@ -289,6 +292,12 @@ describe("createQuickBooksAdapter", () => {
     await expect(createQuickBooksAdapter(h.deps).read(source(), connection)).rejects.toThrow(
       "The new QuickBooks sign-in could not be saved. Connect QuickBooks again in Settings.",
     );
+    expect(h.fetches().filter((c) => c.method === "GET")).toHaveLength(0);
+  });
+
+  it("reads nothing and says so plainly when the connection changed under the sync", async () => {
+    const h = harness(expiring, [{ status: 200, body: REFRESHED }, page("Invoice", INVOICES)], { saveThrows: new SyncError(CONNECTION_CHANGED) });
+    await expect(createQuickBooksAdapter(h.deps).read(source(), connection)).rejects.toThrow(CONNECTION_CHANGED);
     expect(h.fetches().filter((c) => c.method === "GET")).toHaveLength(0);
   });
 
