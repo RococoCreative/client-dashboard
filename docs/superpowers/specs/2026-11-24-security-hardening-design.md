@@ -115,7 +115,11 @@ The owner chose 1.
 2. `/callback` verifies the state and redeems the nonce as today, exchanges the code, and stores the
    encrypted result in a new pending table (service role only): nonce, company, provider, starting
    profile, account name, encrypted tokens and account id, expiry ten minutes out. It then redirects
-   to the app's Connections page with only `?pending=<nonce>`. No code, realmId or token in that URL.
+   to the app's Connections page with only `?pending=<id>`, where the id is freshly random and
+   minted at the callback, never the state's nonce: the starting admin can read the nonce inside
+   their own state, so a nonce key would let them finish a connection whose link they forwarded to
+   someone else. Only the browser that completed the provider sign-in ever holds the id. No code,
+   realmId or token in that URL.
 3. The Connections page sees `pending`, calls `POST /pending` (signed in) to read the tool and account
    name, and shows a confirm panel: "Connect {Tool} account {account name} to {company}?" with
    Connect and Cancel. The account name is best effort (the provider lookup may fail). Without it the
