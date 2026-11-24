@@ -95,9 +95,10 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 6. **Keys.** Project Settings, API: copy the Project URL and the anon (publishable) key
    into `.env` locally and into Vercel's environment variables. Never put the service_role
    key or database password in `.env`, in Vercel, or in any `VITE_` variable.
-7. **Sign in.** Any `@rocococreative.io` address is a Rococo admin on first sign-in and
-   lands on the portfolio: every company with its signals, and the tabs where companies,
-   themes, domains, and users are managed. Opening a company switches the hub to that
+7. **Sign in.** An `@rocococreative.io` address is a Rococo admin only once it is on the Rococo
+   admins list (Rococo > Permissions), and only with a confirmed email; `0051` seeds the first
+   entry from the existing Rococo admin. A Rococo admin lands on the portfolio: every company with
+   its signals, and the tabs where companies, themes, domains, and users are managed. Opening a company switches the hub to that
    company's branding and nav, for that session only.
 
 ### What is applied live
@@ -118,6 +119,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
+  Also `0051_rococo_admins` and `0052_connection_secrets`: written, not applied (see Applying
+  security hardening). So `0001` to `0050` are not all live; `0032` is the gap. The next free
+  number is `0053`.
 - **Applied 2026-11-18:** `0040_capabilities` and `0041_capability_policies` (see Roles, Who
   may do what), with no override rows for any company yet. For a fresh database the order is:
   paste `0040`, then `0041`, confirm the API serves the new tables, and only then
@@ -900,9 +904,19 @@ provider's callback arrives with no session. Its routes, all under
 `/functions/v1/connections`, and who may call each:
 
 - `POST /start` and `POST /disconnect`: an active Owner or Admin of the company, or a Rococo
-  admin, checked on their own JWT.
+  admin, checked on their own JWT. Disconnect reports whether the tool confirmed it revoked
+  access. GoHighLevel has no revoke, so its answer says access was not revoked there.
 - `GET /callback`: the provider, with no JWT; the function checks its own signed state instead.
-- `POST /status`: which providers have their app keys (names only, never a value). An active member
+  It always answers a bare 302 back to the app with `?pending=<id>`. It does not connect
+  anything: it exchanges the code, seals the result and parks it for ten minutes in
+  `connection_pending`. Expired grants are swept and revoked.
+- `POST /pending`, `POST /finish` and `POST /discard`: a signed-in person. The app reads a
+  parked connection with `/pending`, shows which outside account is about to be attached, and the
+  admin confirms with `/finish` or drops it with `/discard`. Finish and discard work only for the
+  person who started the connection, who must still be an active Owner or Admin of the company, or
+  the Rococo admin who started it. Anyone else who opens the link is told so and changes nothing.
+- `POST /status`: which providers have their app keys, and whether `CONNECTIONS_STATE_SECRET`
+  and `TOKEN_ENCRYPTION_KEY` are set (names only, never a value). An active member
   of the company of any role, or a Rococo admin, checked on their own JWT. The secret names are in
   `_shared/providerSecrets.ts`. The catalog needs it to know a card is available; without it the
   app treats every live tool as available.
@@ -920,6 +934,16 @@ provider's callback arrives with no session. Its routes, all under
 The sync routes live in this function so it stays the only reader of `connection_tokens`. It
 needs these secrets (Dashboard, Edge Functions, Secrets):
 
+- `TOKEN_ENCRYPTION_KEY`: 32 random bytes, base64, from `openssl rand -base64 32`. Tokens and the
+  provider account id are sealed with AES-256-GCM under it before they are stored. Never share it,
+  keep a copy anywhere, or put it in Vercel; it lives only here.
+- `TOKEN_ENCRYPTION_KEY_PREVIOUS`: optional, only during a rotation. Move the old value here and
+  put a new one in `TOKEN_ENCRYPTION_KEY`. Each saved value moves to the new key on its next
+  token refresh. Leave the previous key in place until every connection has saved again under the
+  new key. GoHighLevel connections never refresh, so reconnect them after a rotation, before the
+  previous key is removed.
+- `APP_URL`: already a project secret for `notify`. The callback uses it as its fallback return
+  address.
 - `CONNECTIONS_STATE_SECRET`: any long random string; signs the state that ties a callback to
   the company and admin who started it. Each state is good for one callback: `start` records its
   nonce in `connection_states` and `callback` deletes it as it redeems it, so migration 0029 has
@@ -943,6 +967,12 @@ keys are in place, its card on Settings > Connections reads Not available yet an
 Connect, once the function is deployed with `/status`. Before that redeploy the card treats the
 tool as available, and Connect answers with a plain "not set up yet" line. Deploy with
 `supabase functions deploy connections --no-verify-jwt`.
+
+Every response from the function is `Cache-Control: no-store`. Its imports are pinned to exact
+versions (supabase-js 2.116.0), and its log lines carry ids and codes only, never a token, code,
+realm id or account id. `external_account_id` on `company_connections` is cleared and blocked;
+the account id lives only sealed in `connection_tokens` and is scrubbed from audit events, sync
+records and sync errors (`0052`).
 
 ## The notify function
 
@@ -987,6 +1017,10 @@ Secrets):
 - `APP_URL`: the production address, `https://companyhub.rocococreative.io`. The task link and
   the invitation link start from it and from nothing else, so an email can only ever link to the
   app.
+
+`notify` imports its shared helpers from `_shared`, so it is deployed together with `connections`.
+Its responses are `Cache-Control: no-store` and its imports are pinned like the connections
+function's.
 
 Until all three are set, the task email answers "Task emails are not set up yet." and claims
 nothing. A task that is already complete is never announced, and a send that Resend does not
@@ -1220,6 +1254,45 @@ function that lacks `/status`, but must not ship before `0050`.
 
 Done 2026-11-23: `0050` pasted and checked live, `connections` redeployed as version 6, and the
 app merged and deployed. Step 4 waits on Rococo registering each provider.
+
+### Applying security hardening
+
+`0051` makes Rococo admin an explicit list. A Rococo admin is now an active, flagged profile whose
+email is on `rococo_admins`, equals the account email, and is confirmed. Removing someone
+deactivates their profile and adding them back reactivates it; the last entry cannot be removed.
+The list is managed from the Rococo Permissions page. `0052` seals tokens and the provider account
+id (`connection_pending` holds a sign-in until the admin confirms it). Order matters:
+
+1. Add `TOKEN_ENCRYPTION_KEY` in Supabase: Dashboard, Edge Functions, Secrets, add a secret named
+   `TOKEN_ENCRYPTION_KEY`. Generate the value in a terminal with `openssl rand -base64 32` and
+   paste it straight in. Never share it or keep a copy.
+2. Before pasting `0051`, check that no Rococo admin has a profile email different from their
+   account email (it returned 0 on 2026-11-24):
+   `select p.email, u.email from public.profiles p join auth.users u on u.id = p.user_id where p.is_rococo_admin and lower(p.email) <> lower(u.email);`
+   Then paste `0051`, then `0052`, then `notify pgrst, 'reload schema';`. Check
+   `select r.email, u.email_confirmed_at from public.rococo_admins r join auth.users u on lower(u.email) = r.email;`
+   lists the Rococo admin with a confirmation time; without one, Rococo access stops at this step.
+   Nothing visible changes.
+3. Straight away, deploy both functions together: `supabase functions deploy connections
+   --no-verify-jwt` and `supabase functions deploy notify`. A failed import pin fails the deploy
+   here, before anything is live. If the deploy rejects the npm edge-runtime types import, the
+   fallback is `jsr:@supabase/functions-js@<exact>/edge-runtime.d.ts`. Between steps 2 and 3 the
+   old function cannot save a new connection (`0052` refuses plaintext tokens and account ids);
+   that is safe today because no company is connected.
+4. Merge and deploy the app. It must not ship before steps 2 and 3, because it calls `/pending`
+   and `/finish`. `vercel.json` now sends `Cache-Control: no-store` on app pages.
+5. Record `0051`, `0052` and both deploys in What is applied live, and in the Hub Feature Register
+   (outside the repo; the owner updates it).
+
+After the deploy, check by hand:
+
+- A response from `/settings/connections` carries `Cache-Control: no-store`.
+- In the Supabase logs, the callback's request URL does not expose `code`, `state` or `realmId`.
+  If it does, note the risk.
+
+Go forwards only. Re-pasting `0013`, `0049` or `0025` undoes parts of `0051` and `0052`, so paste
+`0051` and `0052` again straight after. Re-pasting `0025` in particular restores
+`external_account_id` on the audit trigger.
 
 ## Deploy
 
