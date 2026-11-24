@@ -215,7 +215,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
   request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
   Nothing visible changes when it goes in. Apply it before merging the app that reads it.
-- **Next free number:** `0051`.
+- **Next free number:** `0053`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -1266,9 +1266,13 @@ id (`connection_pending` holds a sign-in until the admin confirms it). Order mat
 1. Add `TOKEN_ENCRYPTION_KEY` in Supabase: Dashboard, Edge Functions, Secrets, add a secret named
    `TOKEN_ENCRYPTION_KEY`. Generate the value in a terminal with `openssl rand -base64 32` and
    paste it straight in. Never share it or keep a copy.
-2. Before pasting `0051`, check that no Rococo admin has a profile email different from their
-   account email (it returned 0 on 2026-11-24):
-   `select p.email, u.email from public.profiles p join auth.users u on u.id = p.user_id where p.is_rococo_admin and lower(p.email) <> lower(u.email);`
+2. Before pasting `0051`, run this read-only check. It lists every active Rococo admin whose
+   profile email differs from their account email, or whose email is not confirmed. Zero rows
+   means it is safe to paste:
+   `select p.email as profile_email, u.email as account_email, u.email_confirmed_at from public.profiles p join auth.users u on u.id = p.user_id where p.is_rococo_admin and p.is_active and (lower(p.email) <> lower(u.email) or u.email_confirmed_at is null);`
+   On 2026-11-24 two equivalent read-only checks ran on the live project: a mismatch count
+   returned 0, and a confirmed-email count returned 1 of 1 active Rococo admins confirmed. The
+   combined query above was not itself run.
    Then paste `0051`, then `0052`, then `notify pgrst, 'reload schema';`. Check
    `select r.email, u.email_confirmed_at from public.rococo_admins r join auth.users u on lower(u.email) = r.email;`
    lists the Rococo admin with a confirmation time; without one, Rococo access stops at this step.
