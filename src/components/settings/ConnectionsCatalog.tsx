@@ -2,10 +2,12 @@
 // for every company, grouped by what each tool is for. A card's state comes from the company's own
 // connection rows, its modules, its links, its tool requests and whether Rococo's app keys are in,
 // all worked out by cardView (lib/connectors.ts). Connect and Reconnect open the step before the
-// provider's sign-in (ConnectPanel), which sends the admin there and back; the outcome comes back on
-// the address, read here once. Manage opens the card's own panel (ConnectorPanel): the connection's
-// detail and its Disconnect, or Monday's links. Nothing here reads a token or calls a provider: that
-// is the connections Edge Function's job.
+// provider's sign-in (ConnectPanel), which sends the admin there and back. The way back carries
+// only a pending id, or an error key: the id opens the confirm step (PendingConnectPanel), where
+// the admin who started it attaches the sign-in or drops it, and a key becomes its fixed line. Both
+// are read here once and taken off the address. Manage opens the card's own panel
+// (ConnectorPanel): the connection's detail and its Disconnect, or Monday's links. Nothing here
+// reads a token or calls a provider: that is the connections Edge Function's job.
 import { useEffect, useId, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
@@ -18,62 +20,57 @@ import { eyebrowLabelClass, metaClass, sectionTitleClass } from "../ui/type.ts";
 import ConnectorCard, { type CardAction } from "./ConnectorCard.tsx";
 import ConnectorPanel from "./ConnectorPanel.tsx";
 import ConnectPanel from "./ConnectPanel.tsx";
+import PendingConnectPanel, { type PendingOutcome } from "./PendingConnectPanel.tsx";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listConnections, loadConnectorSetup } from "../../services/connections.ts";
 import { listConnectorRequests, requestConnector, withdrawConnectorRequest } from "../../services/connectorRequests.ts";
 import { listExternalLinks } from "../../services/externalLinks.ts";
-import { CARD_STATE_ORDER, CONNECTOR_GROUPS, CONNECTORS, cardView, summaryCounts, type CardView, type Connector, type ConnectorGroup } from "../../lib/connectors.ts";
+import { CARD_STATE_ORDER, CONNECTOR_GROUPS, CONNECTORS, cardView, summaryCounts, type CardView, type Connector, type ConnectorGroup, type ConnectorSetup } from "../../lib/connectors.ts";
+import { connectErrorText } from "../../../supabase/functions/_shared/connectFlow.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { CONNECTION_PROVIDER_LABELS, keysOf, type Company, type CompanyConnection, type ConnectionProvider, type ConnectorRequest, type ExternalLink, type LinkProvider } from "../../types/database.ts";
 
-// The fixed lines the connections Edge Function puts on connect_error, word for word, kept in step
-// with supabase/functions/connections/index.ts. Anything else on the address was written by
-// someone other than that function, a hand-made link for instance, so it is never shown in the
-// app's own voice.
-const KNOWN_CONNECT_ERRORS = new Set([
-  "The sign-in was cancelled or refused. Nothing changed.",
-  "This sign-in link was already used or has expired. Start the connection again.",
-  "GoHighLevel is not set up yet. Ask Rococo Creative to add the app keys.",
-  "QuickBooks Online is not set up yet. Ask Rococo Creative to add the app keys.",
-  "Google Sheets is not set up yet. Ask Rococo Creative to add the app keys.",
-  "The GoHighLevel sign-in was refused by the provider.",
-  "The GoHighLevel sign-in returned something unexpected.",
-  "The QuickBooks sign-in was refused by the provider.",
-  "The QuickBooks sign-in returned something unexpected.",
-  "The Google sign-in was refused by the provider.",
-  "The Google sign-in returned something unexpected.",
-  "Choose one sub-account when installing; an agency-wide install is not supported.",
-  "QuickBooks did not say which company was connected.",
-  "Google did not say which account was connected. Try again from Settings.",
-  "The connection could not be saved.",
-  "The connection could not be finished. Try again from Settings.",
-]);
-
 // A success names the provider it is about, so it can be checked against that provider's row.
-type Outcome = { tone: "success"; text: string; provider: ConnectionProvider } | { tone: "error"; text: string };
+type Outcome = { tone: "success"; text: string; provider: ConnectionProvider } | { tone: "error" | "info" | "warning"; text: string };
 
-// What the provider round trip reported, read off the address it came back to.
+// What the provider round trip reported, read off the address it came back to. An error is a key
+// the function chose, shown as its fixed line; anything else there, an old full sentence or a
+// hand-made link, reads as the generic line and is never shown in the app's own voice.
 function readOutcome(params: URLSearchParams): Outcome | null {
   const connected = params.get("connected");
   if (connected !== null) {
     const provider = keysOf(CONNECTION_PROVIDER_LABELS).find((key) => key === connected);
     return provider ? { tone: "success", text: `${CONNECTION_PROVIDER_LABELS[provider]} is connected.`, provider } : null;
   }
-  const returned = params.get("connect_error");
-  if (returned === null) return null;
-  return { tone: "error", text: KNOWN_CONNECT_ERRORS.has(returned) ? returned : "The connection did not finish. Try again." };
+  const text = connectErrorText(params.get("connect_error"));
+  return text === null ? null : { tone: "error", text };
+}
+
+// What the confirm step reports, as a banner: a success only with the provider it is about.
+function fromPending(outcome: NonNullable<PendingOutcome>): Outcome {
+  if (outcome.tone === "success" && outcome.provider) return { tone: "success", text: outcome.text, provider: outcome.provider };
+  return { tone: outcome.tone === "success" ? "info" : outcome.tone, text: outcome.text };
+}
+
+// Whether a card's tool can be connected as far as Rococo's setup goes: any missing connect flow
+// secret stops every sign-in tool; otherwise its own app keys say. Null means cannot tell.
+function keysInFor(connector: Connector, setup: ConnectorSetup | null): boolean | null {
+  if (!connector.provider || setup === null) return null;
+  return setup.missingSecrets.length > 0 ? false : setup.keys[connector.provider];
 }
 
 // Rococo's side of a tool's setup, for a Rococo admin only. Secret names are not secret, but they
-// are Rococo's business, so a company admin never sees this line.
-function rococoLineFor(connector: Connector, setup: Record<ConnectionProvider, boolean> | null): string {
+// are Rococo's business, so a company admin never sees this line. The connect flow's own secrets
+// come first: without them no sign-in tool works, whatever its keys.
+function rococoLineFor(connector: Connector, setup: ConnectorSetup | null): string {
   if (connector.availability === "next" || connector.availability === "soon") return "Rococo: not built yet.";
   if (connector.how === "access_key" || connector.how === "links") return "Rococo: nothing to set up.";
   if (!connector.provider || !connector.secretNames) return "Rococo: nothing to set up.";
   if (setup === null) return "Setup status unavailable.";
-  if (setup[connector.provider]) return "Rococo: app keys added.";
+  if (setup.missingSecrets.length > 0) return `Rococo: connections are not set up. Set ${setup.missingSecrets.join(" and ")}.`;
+  if (setup.keys[connector.provider]) return "Rococo: app keys added.";
   const [id, secret] = connector.secretNames;
   return `Rococo: app keys missing. Add ${id} and ${secret}.`;
 }
@@ -153,17 +150,21 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<OpenPanel | null>(null);
 
-  // The provider sends the browser back here with the outcome on the address. It is read once, on
-  // arrival, and then taken off the address, so a reload does not report it again and a later
-  // Disconnect is not contradicted by "is connected" above a card that says otherwise.
+  // The provider sends the browser back here with a pending id or an error key on the address. Each
+  // is read once, on arrival, and then taken off the address in place (a replace, not a new history
+  // entry), keeping the rest of it: a reload does not report an error again, a later Disconnect is
+  // not contradicted by "is connected" above a card that says otherwise, and the pending id, which
+  // lets its starter attach the sign-in, never stays in history or in a link copied from the bar.
   const [outcome, setOutcome] = useState(() => readOutcome(params));
+  const [pendingId, setPendingId] = useState(() => params.get("pending") || null);
   useEffect(() => {
-    if (!params.has("connected") && !params.has("connect_error")) return;
+    if (!params.has("connected") && !params.has("connect_error") && !params.has("pending")) return;
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete("connected");
         next.delete("connect_error");
+        next.delete("pending");
         return next;
       },
       { replace: true },
@@ -175,7 +176,7 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
     if (!data) return null;
     return CONNECTORS.map((connector, order) => {
       const row = connector.provider ? data.connections.find((c) => c.provider === connector.provider) ?? null : null;
-      const keysIn = connector.provider && setup !== null ? setup[connector.provider] : null;
+      const keysIn = keysInFor(connector, setup);
       const linkCount = connector.linkProvider ? data.links[connector.linkProvider] ?? 0 : 0;
       const view = cardView(connector, { row, hasModule: (m) => hasModule(company, m), keysIn, linkCount });
       return { connector, view, row, keysIn, linkCount, order };
@@ -188,7 +189,7 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
   // Anyone can put ?connected= on a link, so "is connected" is said only once the loaded row for
   // that provider reads connected too. Until the rows load, and over a row that says otherwise, it
   // says nothing: the row itself is the truth.
-  const shown = outcome && (outcome.tone === "error" || rowFor(outcome.provider)?.status === "connected") ? outcome : null;
+  const shown = outcome && (outcome.tone !== "success" || rowFor(outcome.provider)?.status === "connected") ? outcome : null;
 
   // Asking twice keeps one request: the service hands back the stored row either way. A Rococo
   // admin can switch company while the answer is out, so it lands only on the company it is for.
@@ -225,9 +226,18 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
     }
   }
 
-  // A Disconnect: the return trip's "is connected" no longer holds, and the rows load again.
-  function changed() {
-    setOutcome(null);
+  // A Disconnect: the return trip's "is connected" no longer holds, and the rows load again. When
+  // the tool did not confirm it let go, the panel's line takes the banner's place.
+  function changed(note: string | null) {
+    setOutcome(note ? { tone: "warning", text: note } : null);
+    state.reload();
+  }
+
+  // The confirm step is done: its outcome takes the banner, and the rows load again. A success is
+  // still said only once the row agrees.
+  function pendingDone(result: PendingOutcome) {
+    setPendingId(null);
+    setOutcome(result ? fromPending(result) : null);
     state.reload();
   }
 
@@ -315,6 +325,7 @@ export default function ConnectionsCatalog({ company }: { company: Company }) {
           ))}
         </>
       ) : null}
+      {pendingId ? <PendingConnectPanel company={company} pendingId={pendingId} onDone={pendingDone} /> : null}
       {open && panel?.kind === "connect" ? <ConnectPanel company={company} connector={open.connector} onClose={() => setPanel(null)} /> : null}
       {open && panel?.kind === "detail" ? (
         <ConnectorPanel company={company} connector={open.connector} row={open.row} view={open.view} keysIn={open.keysIn} onClose={() => closePanel(open)} onChanged={changed} />

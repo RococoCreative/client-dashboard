@@ -44,6 +44,7 @@ import { renderWithHub } from "../test/renderWithHub.tsx";
 import { HubContext } from "../context/HubContext.tsx";
 import { listGoalPrivate, listGoals } from "../services/gsr.ts";
 import { disconnectConnection, startConnection } from "../services/connections.ts";
+import { setMockPending } from "../test/mocks/connections.ts";
 import { KLASIK, RBA, makeHub } from "../test/fixtures.ts";
 import App from "../App.tsx";
 import MyGoalsPage from "./gsr/MyGoalsPage.tsx";
@@ -167,14 +168,14 @@ describe("connection outcome on settings", () => {
   });
 
   it("shows a known outcome and clears it from the address", async () => {
-    renderSettings(`/settings/connections?connect_error=${encodeURIComponent("QuickBooks did not say which company was connected.")}`);
-    expect(await screen.findByText("QuickBooks did not say which company was connected.")).toBeInTheDocument();
+    renderSettings("/settings/connections?connect_error=no_account");
+    expect(await screen.findByText("The tool did not say which account was connected. Try again from Settings.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/settings/connections"));
   });
 
   it("never shows words from the address that the connection service did not write", async () => {
     renderSettings(`/settings/connections?connect_error=${encodeURIComponent("Your session expired. Call IT at 555-0100.")}`);
-    expect(await screen.findByText("The connection did not finish. Try again.")).toBeInTheDocument();
+    expect(await screen.findByText("The connection did not finish. Start again from Settings.")).toBeInTheDocument();
     expect(screen.queryByText(/555-0100/)).not.toBeInTheDocument();
   });
 
@@ -233,11 +234,30 @@ describe("connection return trip", () => {
   });
 
   it("lands a company admin on their own settings with the outcome", async () => {
-    window.history.pushState({}, "", `/settings/connections/${KLASIK.company.id}?persona=admin&company=klasik&connect_error=${encodeURIComponent("The sign-in was cancelled or refused. Nothing changed.")}`);
+    window.history.pushState({}, "", `/settings/connections/${KLASIK.company.id}?persona=admin&company=klasik&connect_error=cancelled`);
     render(<App />);
     expect(await screen.findByText("The sign-in was cancelled or refused. Nothing changed.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     await waitFor(() => expect(window.location.pathname).toBe("/settings/connections"));
+  });
+
+  // The callback sends back only a pending id. The browser's own address loses it as soon as the
+  // page has read it (a replace, so not in history either), while the confirm step stays open.
+  it("puts a Rococo admin back in the company with the confirm step, and takes the pending id off the browser's address", async () => {
+    const user = userEvent.setup();
+    const id = "5f0c7a52-0000-4000-8000-0000000000b5";
+    setMockPending(id, { status: "ready", provider: "quickbooks", account_name: "Sample Books LLC", company_name: RBA.company.name });
+    const entries = window.history.length;
+    window.history.pushState({}, "", `/settings/connections/${RBA.company.id}?persona=rococo&pending=${id}`);
+    render(<App />);
+    const panel = await screen.findByRole("dialog", { name: "Confirm the connection" });
+    expect(await within(panel).findByText(`Connect QuickBooks Online account Sample Books LLC to ${RBA.company.name}?`)).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/connections"));
+    await waitFor(() => expect(window.location.search).not.toContain("pending"));
+    expect(window.location.search).toContain("persona=rococo");
+    expect(window.history.length).toBe(entries + 1);
+    await user.click(within(panel).getByRole("button", { name: "Connect" }));
+    expect(await screen.findByText("QuickBooks Online is connected.")).toBeInTheDocument();
   });
 
   it("does not take a company admin into another company's return path", async () => {

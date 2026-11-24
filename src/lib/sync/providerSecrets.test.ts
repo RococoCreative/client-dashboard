@@ -117,8 +117,9 @@ describe("loadConnectorSetup", () => {
   it("returns null unless every provider has a boolean", async () => {
     const { invokeFunction } = await import("../../services/invoke.ts");
     const { loadConnectorSetup } = await import("../../services/connections.ts");
+    const secrets = { CONNECTIONS_STATE_SECRET: true, TOKEN_ENCRYPTION_KEY: true };
     for (const keys of [{}, { quickbooks: true, gohighlevel: true }, [true, true, true]]) {
-      vi.mocked(invokeFunction).mockResolvedValue({ keys });
+      vi.mocked(invokeFunction).mockResolvedValue({ keys, secrets });
       expect(await loadConnectorSetup("c1")).toBeNull();
     }
   });
@@ -142,11 +143,21 @@ describe("loadConnectorSetup", () => {
     expect(settled).toBeNull();
   });
 
-  it("returns the keys when the answer is well formed", async () => {
+  // An older function answers keys alone; without the flow secrets the setup cannot be told.
+  it("returns null when the answer has keys but no secrets", async () => {
+    const { invokeFunction } = await import("../../services/invoke.ts");
+    const { loadConnectorSetup } = await import("../../services/connections.ts");
+    vi.mocked(invokeFunction).mockResolvedValue({ keys: { quickbooks: true, gohighlevel: true, google_sheets: true } });
+    expect(await loadConnectorSetup("c1")).toBeNull();
+  });
+
+  it("returns the keys and the secrets to set when the answer is well formed", async () => {
     const { invokeFunction } = await import("../../services/invoke.ts");
     const { loadConnectorSetup } = await import("../../services/connections.ts");
     const keys = { quickbooks: true, gohighlevel: false, google_sheets: true };
-    vi.mocked(invokeFunction).mockResolvedValue({ keys });
-    expect(await loadConnectorSetup("c1")).toEqual(keys);
+    vi.mocked(invokeFunction).mockResolvedValue({ keys, secrets: { CONNECTIONS_STATE_SECRET: true, TOKEN_ENCRYPTION_KEY: true } });
+    expect(await loadConnectorSetup("c1")).toEqual({ keys, missingSecrets: [] });
+    vi.mocked(invokeFunction).mockResolvedValue({ keys, secrets: { CONNECTIONS_STATE_SECRET: true, TOKEN_ENCRYPTION_KEY: false, TOKEN_ENCRYPTION_KEY_PREVIOUS: false } });
+    expect(await loadConnectorSetup("c1")).toEqual({ keys, missingSecrets: ["TOKEN_ENCRYPTION_KEY_PREVIOUS"] });
   });
 });

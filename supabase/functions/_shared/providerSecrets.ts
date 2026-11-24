@@ -32,6 +32,9 @@ const PREVIOUS_KEY = "TOKEN_ENCRYPTION_KEY_PREVIOUS";
 // reported too, so the setup line can name the secret to fix rather than the good one.
 export type FlowSecretsStatus = Record<FlowSecret, boolean> & { [PREVIOUS_KEY]?: false };
 
+// A secret the setup line can name: one of the flow's two, or the previous key when it is the fault.
+export type FlowSecretName = FlowSecret | typeof PREVIOUS_KEY;
+
 export function flowSecretsReady(read: (name: string) => string | undefined): FlowSecretsStatus {
   const problem = tokenKeyProblem(read);
   const out: FlowSecretsStatus = {
@@ -44,8 +47,8 @@ export function flowSecretsReady(read: (name: string) => string | undefined): Fl
 
 // The secrets to set, in order, each named exactly: the previous key in place of the current one
 // when the previous key is the fault.
-export function missingFlowSecrets(status: FlowSecretsStatus): string[] {
-  const out: string[] = [];
+export function missingFlowSecrets(status: FlowSecretsStatus): FlowSecretName[] {
+  const out: FlowSecretName[] = [];
   if (!status.CONNECTIONS_STATE_SECRET) out.push("CONNECTIONS_STATE_SECRET");
   if (status[PREVIOUS_KEY] === false) out.push(PREVIOUS_KEY);
   else if (!status.TOKEN_ENCRYPTION_KEY) out.push("TOKEN_ENCRYPTION_KEY");

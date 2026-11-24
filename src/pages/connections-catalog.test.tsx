@@ -2,7 +2,8 @@
 // what they are for, each card reading its state from the company's own rows, modules, links,
 // requests and whether Rococo's keys are in. These pin what the page shows and the actions it
 // offers, the tool requests, Rococo's setup line, the return trip from a provider's sign-in, and the
-// two panels: the detail panel a connected tool opens, and the one before the provider's sign-in.
+// panels: the detail panel a connected tool opens, the one before the provider's sign-in, and the
+// confirm panel a sign-in comes back to before anything is connected.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
@@ -21,7 +22,8 @@ vi.mock("../services/audit.ts", () => import("../test/mocks/audit.ts"));
 import { renderWithHub } from "../test/renderWithHub.tsx";
 import { HubContext, type HubValue } from "../context/HubContext.tsx";
 import { KINGDOM, KLASIK, RBA, makeHub } from "../test/fixtures.ts";
-import { holdMockConnectorSetup, setMockConnectorSetup } from "../test/mocks/connections.ts";
+import { holdMockConnectorSetup, setMockConnectorSetup, setMockMissingSecrets, setMockPending } from "../test/mocks/connections.ts";
+import { PENDING_GONE, PENDING_SOMEONE_ELSE } from "../../supabase/functions/_shared/connectFlow.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as requestsService from "../services/connectorRequests.ts";
 import * as linksService from "../services/externalLinks.ts";
@@ -258,16 +260,180 @@ describe("the connections catalog", () => {
     expect(screen.queryByText("QuickBooks Online is connected.")).not.toBeInTheDocument();
   });
 
-  it("shows the fixed error line for a known ?connect_error= and the generic line for an unknown one", async () => {
-    const known = "The sign-in was cancelled or refused. Nothing changed.";
-    const { unmount } = renderCatalog(kingdomAdmin, `/settings/connections?connect_error=${encodeURIComponent(known)}`);
-    expect(await screen.findByText(known)).toBeInTheDocument();
+  it("shows the line for a known ?connect_error= key and the generic line for an old full sentence or an unknown key", async () => {
+    const { unmount } = renderCatalog(kingdomAdmin, "/settings/connections?connect_error=cancelled");
+    expect(await screen.findByText("The sign-in was cancelled or refused. Nothing changed.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(""));
     unmount();
 
-    renderCatalog(kingdomAdmin, `/settings/connections?connect_error=${encodeURIComponent("Send your password to someone.")}`);
-    expect(await screen.findByText("The connection did not finish. Try again.")).toBeInTheDocument();
-    expect(screen.queryByText("Send your password to someone.")).not.toBeInTheDocument();
+    const generic = "The connection did not finish. Start again from Settings.";
+    for (const value of ["The sign-in was cancelled or refused. Nothing changed.", "Send your password to someone.", "x"]) {
+      const { unmount: done } = renderCatalog(kingdomAdmin, `/settings/connections?connect_error=${encodeURIComponent(value)}`);
+      expect(await screen.findByText(generic)).toBeInTheDocument();
+      expect(screen.queryByText(value)).not.toBeInTheDocument();
+      done();
+    }
+  });
+
+  it("with TOKEN_ENCRYPTION_KEY missing, every live sign-in card reads Not available yet and a Rococo admin reads 'Rococo: connections are not set up. Set TOKEN_ENCRYPTION_KEY.'", async () => {
+    // Nothing connected yet, so no row keeps a card on Connected.
+    const rows = await connectionsService.listConnections(KINGDOM.company.id);
+    const spy = vi.spyOn(connectionsService, "listConnections").mockResolvedValue(rows.map((r) => ({ ...r, status: "not_connected" as const })));
+    onTestFinished(() => spy.mockRestore());
+    setMockMissingSecrets(["TOKEN_ENCRYPTION_KEY"]);
+    const { unmount } = renderCatalog(kingdomRococo);
+    await findCard("QuickBooks Online");
+    for (const name of ["QuickBooks Online", "GoHighLevel", "Google Sheets"]) {
+      expect(await within(card(name)).findByText("Not available yet")).toBeInTheDocument();
+      expect(within(card(name)).getByText("Rococo: connections are not set up. Set TOKEN_ENCRYPTION_KEY.")).toBeInTheDocument();
+      expect(within(card(name)).queryByRole("button")).not.toBeInTheDocument();
+    }
+    expect(within(card("Monday.com")).getByText("Rococo: nothing to set up.")).toBeInTheDocument();
+    unmount();
+
+    renderCatalog(kingdomAdmin);
+    expect(await within(await findCard("QuickBooks Online")).findByText("Not available yet")).toBeInTheDocument();
+    expect(screen.queryByText(/TOKEN_ENCRYPTION_KEY/)).not.toBeInTheDocument();
+  });
+
+  // A bad previous key also reads TOKEN_ENCRYPTION_KEY false; the line names the one to fix.
+  it("names TOKEN_ENCRYPTION_KEY_PREVIOUS when the previous key is the one at fault, and both secrets when both are missing", async () => {
+    setMockMissingSecrets(["TOKEN_ENCRYPTION_KEY_PREVIOUS"]);
+    const { unmount } = renderCatalog(kingdomRococo);
+    expect(await within(await findCard("QuickBooks Online")).findByText("Rococo: connections are not set up. Set TOKEN_ENCRYPTION_KEY_PREVIOUS.")).toBeInTheDocument();
+    expect(within(card("QuickBooks Online")).getByText("Not available yet")).toBeInTheDocument();
+    unmount();
+
+    setMockMissingSecrets(["CONNECTIONS_STATE_SECRET", "TOKEN_ENCRYPTION_KEY"]);
+    renderCatalog(kingdomRococo);
+    expect(await within(await findCard("QuickBooks Online")).findByText("Rococo: connections are not set up. Set CONNECTIONS_STATE_SECRET and TOKEN_ENCRYPTION_KEY.")).toBeInTheDocument();
+  });
+});
+
+const PENDING_ID = "5f0c7a52-0000-4000-8000-000000000001";
+const pendingPath = (id = PENDING_ID, rest = "") => `/settings/connections?pending=${id}${rest}`;
+const ready = (provider: "quickbooks" | "gohighlevel" | "google_sheets", account_name: string | null, company_name = KINGDOM.company.name) =>
+  ({ status: "ready", provider, account_name, company_name }) as const;
+const confirmPanel = () => screen.findByRole("dialog", { name: "Confirm the connection" });
+
+describe("the confirm panel", () => {
+  it("shows 'Connect QuickBooks Online account Sample Books LLC to Kingdom Custom Construction?' and Connect attaches it, says 'QuickBooks Online is connected.' and clears the address", async () => {
+    const user = userEvent.setup();
+    setMockPending(PENDING_ID, ready("quickbooks", "Sample Books LLC"));
+    renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(await within(panel).findByText("Connect QuickBooks Online account Sample Books LLC to Kingdom Custom Construction?")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(""));
+    expect(within(card("QuickBooks Online")).getByText("Not connected")).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Connect" }));
+    expect(await screen.findByText("QuickBooks Online is connected.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(within(card("QuickBooks Online")).getByText("Connected")).toBeInTheDocument());
+    expect(screen.getByTestId("address").textContent).toBe("");
+  });
+
+  // The id is the one thing that lets its starter finish the connection, so it never stays in the
+  // browser's history or in a link someone copies from the address bar.
+  it("takes ?pending off the address as soon as it is read, keeping the rest, while the panel stays open", async () => {
+    setMockPending(PENDING_ID, ready("quickbooks", "Sample Books LLC"));
+    renderCatalog(kingdomAdmin, pendingPath(PENDING_ID, "&keep=1"));
+    const panel = await confirmPanel();
+    await waitFor(() => expect(screen.getByTestId("address").textContent).toBe("?keep=1"));
+    expect(await within(panel).findByRole("button", { name: "Connect" })).toBeInTheDocument();
+  });
+
+  it("reads the no-name line when the tool gave no account name", async () => {
+    setMockPending(PENDING_ID, ready("gohighlevel", null));
+    renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(
+      await within(panel).findByText("Connect GoHighLevel to Kingdom Custom Construction? GoHighLevel did not give this account's name. Only continue if you just approved access in GoHighLevel."),
+    ).toBeInTheDocument();
+  });
+
+  it("the confirm line names the pending connection's company", async () => {
+    setMockPending(PENDING_ID, ready("quickbooks", "Sample Books LLC", "Klasik Sample"));
+    renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(await within(panel).findByText("Connect QuickBooks Online account Sample Books LLC to Klasik Sample?")).toBeInTheDocument();
+  });
+
+  it("renders an odd account name as text", async () => {
+    const odd = '<b>Smith & "Sons"</b>';
+    setMockPending(PENDING_ID, ready("quickbooks", odd));
+    renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(await within(panel).findByText(`Connect QuickBooks Online account ${odd} to Kingdom Custom Construction?`)).toBeInTheDocument();
+    expect(panel.querySelector("b")).toBeNull();
+  });
+
+  it("Cancel says 'Nothing was connected.'; for GoHighLevel it adds 'GoHighLevel may still list Company Hub; remove it there too.'", async () => {
+    const user = userEvent.setup();
+    const discard = vi.spyOn(connectionsService, "discardConnection");
+    onTestFinished(() => discard.mockRestore());
+    setMockPending(PENDING_ID, ready("quickbooks", "Sample Books LLC"));
+    const { unmount } = renderCatalog(kingdomAdmin, pendingPath());
+    await user.click(await within(await confirmPanel()).findByRole("button", { name: "Cancel" }));
+    expect(discard).toHaveBeenCalledWith(PENDING_ID);
+    expect(await screen.findByText("Nothing was connected.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText(/may still list/)).not.toBeInTheDocument();
+    expect(within(card("QuickBooks Online")).getByText("Not connected")).toBeInTheDocument();
+    unmount();
+
+    const other = "5f0c7a52-0000-4000-8000-000000000002";
+    setMockPending(other, ready("gohighlevel", "Sample Location"));
+    renderCatalog(kingdomAdmin, pendingPath(other));
+    await user.click(await within(await confirmPanel()).findByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Nothing was connected. GoHighLevel may still list Company Hub; remove it there too.")).toBeInTheDocument();
+  });
+
+  it("someone else's pending reads the someone-else line with only Close", async () => {
+    const user = userEvent.setup();
+    setMockPending(PENDING_ID, { status: "someone_else" });
+    renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(await within(panel).findByText(PENDING_SOMEONE_ELSE)).toBeInTheDocument();
+    expect(within(panel).getAllByRole("button").map((b) => b.textContent)).toEqual(["Close"]);
+    await user.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("address").textContent).toBe("");
+  });
+
+  it("an expired or unknown pending reads 'This connection request has expired. Start the connection again.'", async () => {
+    setMockPending(PENDING_ID, { status: "gone" });
+    const { unmount } = renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    expect(await within(panel).findByText("This connection request has expired. Start the connection again.")).toBeInTheDocument();
+    expect(within(panel).getAllByRole("button").map((b) => b.textContent)).toEqual(["Close"]);
+    unmount();
+
+    renderCatalog(kingdomAdmin, pendingPath("5f0c7a52-0000-4000-8000-0000000000ff"));
+    expect(await within(await confirmPanel()).findByText(PENDING_GONE)).toBeInTheDocument();
+  });
+
+  it("a pending link already finished reads the expired line, on opening or on a second Connect", async () => {
+    const user = userEvent.setup();
+    // A second Connect: the function answers that it is gone, and nothing is attached.
+    setMockPending(PENDING_ID, ready("quickbooks", "Sample Books LLC"));
+    const finish = vi.spyOn(connectionsService, "finishConnection").mockRejectedValueOnce(new Error(PENDING_GONE));
+    onTestFinished(() => finish.mockRestore());
+    const { unmount } = renderCatalog(kingdomAdmin, pendingPath());
+    const panel = await confirmPanel();
+    await user.click(await within(panel).findByRole("button", { name: "Connect" }));
+    expect(await within(panel).findByText(PENDING_GONE)).toBeInTheDocument();
+    expect(within(panel).getAllByRole("button").map((b) => b.textContent)).toEqual(["Close"]);
+    expect(within(card("QuickBooks Online")).getByText("Not connected")).toBeInTheDocument();
+    expect(screen.queryByText("QuickBooks Online is connected.")).not.toBeInTheDocument();
+    unmount();
+
+    // Opening a link whose connection was already finished.
+    const done = "5f0c7a52-0000-4000-8000-000000000003";
+    setMockPending(done, ready("quickbooks", "Sample Books LLC"), KINGDOM.company.id);
+    await connectionsService.finishConnection(done);
+    renderCatalog(kingdomAdmin, pendingPath(done));
+    expect(await within(await confirmPanel()).findByText(PENDING_GONE)).toBeInTheDocument();
   });
 });
 
@@ -427,6 +593,30 @@ describe("the detail panel", () => {
     await waitFor(() => expect(within(card("GoHighLevel")).getByText("Not connected")).toBeInTheDocument());
     expect(within(card("GoHighLevel")).getByRole("button", { name: "Connect GoHighLevel" })).toBeInTheDocument();
     expect(screen.queryByText("GoHighLevel is connected.")).not.toBeInTheDocument();
+  });
+
+  it("Disconnect of GoHighLevel says 'Disconnected here. GoHighLevel may still list Company Hub; remove it there too.'; a QuickBooks Disconnect says nothing more", async () => {
+    const user = userEvent.setup();
+    // QuickBooks connected through the confirm step, so both tools are on.
+    const id = "5f0c7a52-0000-4000-8000-000000000004";
+    setMockPending(id, ready("quickbooks", "Sample Books LLC"), KINGDOM.company.id);
+    await connectionsService.finishConnection(id);
+    renderCatalog();
+
+    await user.click(within(await findCard("GoHighLevel")).getByRole("button", { name: "Manage GoHighLevel" }));
+    const ghl = await screen.findByRole("dialog", { name: "GoHighLevel" });
+    await user.click(within(ghl).getByRole("button", { name: "Disconnect" }));
+    await user.click(within(ghl).getByRole("button", { name: "Disconnect for everyone at Kingdom Custom Construction" }));
+    expect(await screen.findByText("Disconnected here. GoHighLevel may still list Company Hub; remove it there too.")).toBeInTheDocument();
+    await waitFor(() => expect(within(card("GoHighLevel")).getByText("Not connected")).toBeInTheDocument());
+
+    await user.click(within(card("QuickBooks Online")).getByRole("button", { name: "Manage QuickBooks Online" }));
+    const qbo = await screen.findByRole("dialog", { name: "QuickBooks Online" });
+    await user.click(within(qbo).getByRole("button", { name: "Disconnect" }));
+    await user.click(within(qbo).getByRole("button", { name: "Disconnect for everyone at Kingdom Custom Construction" }));
+    await waitFor(() => expect(within(card("QuickBooks Online")).getByText("Not connected")).toBeInTheDocument());
+    expect(screen.queryByText(/may still list/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Disconnected here/)).not.toBeInTheDocument();
   });
 
   it("Reconnect is absent and the blocked line shows when keys are missing on a connected card", async () => {

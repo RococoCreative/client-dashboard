@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PROVIDER_KEYS } from "../../supabase/functions/_shared/providers.ts";
 import type { CompanyConnection } from "../types/database.ts";
 import {
-  CARD_STATE_ORDER, CONNECTORS, CONNECTOR_GROUPS, cardView, summaryCounts,
+  CARD_STATE_ORDER, CONNECTORS, CONNECTOR_GROUPS, cardView, confirmConnectLine, parseConnectorSetup, stillListedLine, summaryCounts,
   type CardInputs, type Connector,
 } from "./connectors.ts";
 
@@ -103,5 +103,46 @@ describe("summaryCounts and order", () => {
   it("orders states as the spec does", () => {
     expect(CARD_STATE_ORDER.needs_attention).toBe(0);
     expect(CARD_STATE_ORDER.coming_soon).toBe(8);
+  });
+});
+
+describe("parseConnectorSetup", () => {
+  const keys = { quickbooks: true, gohighlevel: false, google_sheets: true };
+  const secrets = { CONNECTIONS_STATE_SECRET: true, TOKEN_ENCRYPTION_KEY: true };
+
+  it("accepts a full answer and lists nothing missing when every flow secret is in", () =>
+    expect(parseConnectorSetup({ keys, secrets })).toEqual({ keys, missingSecrets: [] }));
+  it("lists TOKEN_ENCRYPTION_KEY when that one is false", () =>
+    expect(parseConnectorSetup({ keys, secrets: { ...secrets, TOKEN_ENCRYPTION_KEY: false } })?.missingSecrets).toEqual(["TOKEN_ENCRYPTION_KEY"]));
+  it("lists every missing secret in FLOW_SECRETS order", () =>
+    expect(parseConnectorSetup({ keys, secrets: { TOKEN_ENCRYPTION_KEY: false, CONNECTIONS_STATE_SECRET: false } })?.missingSecrets)
+      .toEqual(["CONNECTIONS_STATE_SECRET", "TOKEN_ENCRYPTION_KEY"]));
+  // A bad previous key reads TOKEN_ENCRYPTION_KEY false too; the line must name the one at fault.
+  it("names TOKEN_ENCRYPTION_KEY_PREVIOUS in place of the current key when the previous key is the fault", () =>
+    expect(parseConnectorSetup({ keys, secrets: { ...secrets, TOKEN_ENCRYPTION_KEY: false, TOKEN_ENCRYPTION_KEY_PREVIOUS: false } })?.missingSecrets)
+      .toEqual(["TOKEN_ENCRYPTION_KEY_PREVIOUS"]));
+  it("returns null with secrets absent, with a provider missing, or with a non-boolean", () => {
+    expect(parseConnectorSetup({ keys })).toBeNull();
+    expect(parseConnectorSetup({ keys: { quickbooks: true, gohighlevel: true }, secrets })).toBeNull();
+    expect(parseConnectorSetup({ keys: { ...keys, quickbooks: "yes" }, secrets })).toBeNull();
+    expect(parseConnectorSetup({ keys, secrets: { ...secrets, TOKEN_ENCRYPTION_KEY: 1 } })).toBeNull();
+    expect(parseConnectorSetup({ keys, secrets: { CONNECTIONS_STATE_SECRET: true } })).toBeNull();
+    expect(parseConnectorSetup({ keys, secrets: { ...secrets, TOKEN_ENCRYPTION_KEY_PREVIOUS: "no" } })).toBeNull();
+    expect(parseConnectorSetup({ keys, secrets: [true, true] })).toBeNull();
+    expect(parseConnectorSetup(null)).toBeNull();
+  });
+});
+
+describe("the confirm and still-listed lines", () => {
+  it("names the tool, the account and the company when the tool gave the account's name", () =>
+    expect(confirmConnectLine("QuickBooks Online", "Sample Books LLC", "Kingdom Custom Construction"))
+      .toBe("Connect QuickBooks Online account Sample Books LLC to Kingdom Custom Construction?"));
+  it("says the tool gave no name and asks for a recent approval when it did not", () =>
+    expect(confirmConnectLine("GoHighLevel", null, "Kingdom Custom Construction"))
+      .toBe("Connect GoHighLevel to Kingdom Custom Construction? GoHighLevel did not give this account's name. Only continue if you just approved access in GoHighLevel."));
+  it("says the tool may still list Company Hub", () =>
+    expect(stillListedLine("GoHighLevel")).toBe("GoHighLevel may still list Company Hub; remove it there too."));
+  it("has no em dashes", () => {
+    for (const line of [confirmConnectLine("T", "A", "C"), confirmConnectLine("T", null, "C"), stillListedLine("T")]) expect(line).not.toContain("\u2014");
   });
 });
