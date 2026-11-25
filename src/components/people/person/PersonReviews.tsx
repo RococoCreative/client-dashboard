@@ -192,7 +192,8 @@ export default function PersonReviews({
                       <th className={thClass}>Period</th>
                       <th className={thClass}>Status</th>
                       <th className={`${thClass} text-right`}>Score</th>
-                      <th className={thClass}></th>
+                      {/* Open stays pinned at the right edge, so a narrow column never pushes it out of view. */}
+                      <th className={`${thClass} sticky right-0 border-l border-line bg-surface`}><span className="sr-only">Open</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -202,7 +203,7 @@ export default function PersonReviews({
                         <td className={`${tdClass} text-ink-2`}>{cycle ? formatPeriod(cycle.period_start, cycle.period_end) : "-"}</td>
                         <td className={tdClass}><Badge tone={REVIEW_STATUS_TONE[review.status]}>{REVIEW_STATUS_LABELS[review.status]}</Badge></td>
                         <td className={`${tdClass} tnum text-right font-medium ${bandClass(result?.overall ?? null)}`}>{result?.overall ?? "-"}</td>
-                        <td className={`${tdClass} text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className={`text-link text-[13px] hover:underline ${tapTargetClass}`}>Open</Link></td>
+                        <td className={`${tdClass} sticky right-0 border-l border-line bg-surface text-right`}><Link to={cycle ? reviewPath(review.id, cycle.cadence) : `/gsr/reviews/${review.id}`} className={`text-link text-[13px] hover:underline ${tapTargetClass}`}>Open</Link></td>
                       </tr>
                     ))}
                   </tbody>

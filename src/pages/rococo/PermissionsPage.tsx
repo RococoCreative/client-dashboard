@@ -56,7 +56,7 @@ function LevelCell({
         data-differs={stored ? "true" : undefined}
         aria-label={`${CAPABILITY_LABELS[capability]} for ${company.name}`}
         onChange={(e) => onChange(e.target.value)}
-        className={`${selectClass} mt-0 min-w-[10rem] ${stored ? "border-accent text-accent" : ""}`}
+        className={`${selectClass} mt-0 min-w-[8rem] ${stored ? "border-accent text-accent" : ""}`}
       >
         <option value={DEFAULT}>Default</option>
         {levels.map((level) => (

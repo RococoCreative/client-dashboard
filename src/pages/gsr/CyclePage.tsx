@@ -24,7 +24,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import Stat from "../../components/ui/Stat.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { edgeCellsClass, inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
+import { cellTextClass, edgeCellsClass, inputClass, tableClass, tdClass, textareaClass, thClass } from "../../components/ui/forms.ts";
 import { REVIEW_STATUS_TONE } from "../../components/status.ts";
 import { bandClass } from "../../components/ui/bandClass.ts";
 import { tapTargetClass } from "../../components/ui/tap.ts";
@@ -472,7 +472,8 @@ export default function CyclePage() {
                     </>
                   ) : null}
                   {columns.gsrScore ? <th role="columnheader" className={`${thClass} text-right`}>GSR score</th> : null}
-                  <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>
+                  {/* The actions stay pinned at the right edge, so a row that has to scroll never hides them. */}
+                  <th role="columnheader" className={`${thClass} md:sticky md:right-0 md:border-l md:border-line md:bg-surface`}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody role="rowgroup" className="max-md:block">
@@ -481,9 +482,11 @@ export default function CyclePage() {
                     <td role="cell" className={`${tdClass} max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0 max-md:!pr-28`}>
                       <div className="flex items-center gap-3">
                         <Avatar person={person} size={28} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm text-ink">{displayName(person)}</p>
-                          <p className="truncate text-[12px] text-ink-3">
+                        {/* A floor as a table, so names wrap between words; a cap on a wide screen, so the longest
+                            title cannot take the room the row's actions need. */}
+                        <div className="min-w-0 md:min-w-[6.5rem] lg:max-w-[22rem]">
+                          <p className={`text-sm text-ink ${cellTextClass}`}>{displayName(person)}</p>
+                          <p className={`text-[12px] text-ink-3 ${cellTextClass}`}>
                             {person.title ?? person.email}
                             {hasAccount(person) ? "" : " · not signed in yet"}
                           </p>
@@ -519,8 +522,8 @@ export default function CyclePage() {
                         )}
                       </td>
                     ) : null}
-                    <td role="cell" className={`${tdClass} text-right max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0`}>
-                      <div className="flex items-center justify-end gap-3 whitespace-nowrap max-md:justify-start">
+                    <td role="cell" className={`${tdClass} text-right md:sticky md:right-0 md:border-l md:border-line md:bg-surface max-md:col-span-full max-md:block max-md:border-b-0 max-md:!p-0`}>
+                      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 max-md:justify-start [&>*]:whitespace-nowrap">
                         {review ? (
                           <Link to={reviewPath(review.id, cycle.cadence)} className={`text-[13px] text-link hover:underline ${tapTargetClass}`}>Open</Link>
                         ) : open ? (
