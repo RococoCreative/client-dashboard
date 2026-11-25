@@ -626,6 +626,17 @@ export interface CompanyGoal {
 
 // Library -----------------------------------------------------------------------------------
 
+// An SOP version's editor document (0053): a tree of nodes in the editor's schema
+// (src/lib/sops/schema.ts), stored as JSON. Structurally the editor's own JSONContent.
+export interface SopDocJson {
+  type?: string;
+  attrs?: Record<string, unknown>;
+  content?: SopDocJson[];
+  marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
+  text?: string;
+  [key: string]: unknown;
+}
+
 export type SopCategory = "safety" | "process" | "client" | "admin" | "field";
 export type SopStatus = "draft" | "published" | "archived";
 
