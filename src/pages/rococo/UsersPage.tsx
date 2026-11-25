@@ -16,7 +16,7 @@ import Section from "../../components/ui/Section.tsx";
 import Tabs from "../../components/ui/Tabs.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import useEditRowFocus from "../../components/ui/useEditRowFocus.ts";
-import { checkboxClass, checkboxHitClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { cellTextClass, checkboxClass, checkboxHitClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { metaClass, secondaryClass, secondarySizeClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -69,7 +69,7 @@ function UserRow({
           {displayName(person)}{self ? " (you)" : ""}
           {hasAccount(person) ? null : <Badge tone="warning">Not signed in yet</Badge>}
         </p>
-        <p className={metaClass}>{person.email}{person.title ? ` · ${person.title}` : ""}</p>
+        <p className={`${metaClass} ${cellTextClass}`}>{person.email}{person.title ? ` · ${person.title}` : ""}</p>
       </td>
       <td className={tdClass}>
         {editing ? (

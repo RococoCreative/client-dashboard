@@ -15,7 +15,7 @@ import PageHeader from "../../components/ui/PageHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { itemTitleClass, metaClass } from "../../components/ui/type.ts";
-import { labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { cellTextClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { tapStretchClass } from "../../components/ui/tap.ts";
 import DivisionCompare from "../../components/people/DivisionCompare.tsx";
 import DivisionSwitch from "../../components/people/DivisionSwitch.tsx";
@@ -103,10 +103,10 @@ function RoleBlock({
                     role="rowheader"
                     className="relative border-b border-line bg-surface px-3 py-1.5 text-left align-middle font-normal md:sticky md:left-0 md:z-10 max-md:flex max-md:flex-col max-md:justify-center max-md:border-b-0 max-md:px-0 max-md:py-0 tap:min-h-11"
                   >
-                    <Link to={`/people/${person.id}`} className={`block truncate text-sm text-ink hover:text-link ${tapStretchClass}`}>
+                    <Link to={`/people/${person.id}`} className={`block text-sm text-ink hover:text-link ${cellTextClass} ${tapStretchClass}`}>
                       {name}
                     </Link>
-                    {division || person.title ? <p className={`truncate ${metaClass}`}>{[division, person.title].filter(Boolean).join(" · ")}</p> : null}
+                    {division || person.title ? <p className={`${metaClass} ${cellTextClass}`}>{[division, person.title].filter(Boolean).join(" · ")}</p> : null}
                   </th>
                   {metrics.map((m) => {
                     const result = monthResult(m, own.filter((e) => e.metric_id === m.id && monthOf(e.period_month) === month));

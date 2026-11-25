@@ -38,6 +38,11 @@ export const helpClass = "mt-1.5 text-[12.5px] leading-relaxed text-ink-3";
 
 // Table classes: hairline rows, quiet uppercase headers, dense but readable.
 export const tableClass = "w-full border-collapse text-sm";
+// Text in a table cell that may run long (a name, a title, an email): it wraps, breaking a long
+// address anywhere, rather than truncating. A cell has no width of its own, so truncate inside one
+// never cuts: the longest line sets the column and pushes the row's controls out of the card.
+// table-fit.test.tsx holds the rule.
+export const cellTextClass = "[overflow-wrap:anywhere]";
 export const thClass =
   "border-b border-line px-3 py-2 text-left text-[11px] font-medium uppercase tracking-label text-ink-3";
 export const tdClass = "border-b border-line px-3 py-2.5 align-middle text-ink";

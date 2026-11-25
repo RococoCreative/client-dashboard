@@ -1,7 +1,7 @@
 // The values a source's last good sync brought in, as its own column map lays them out, each row
 // linked back to where it came from. Read-only by design: a figure is changed at its source, and
 // nothing here adds, averages or compares one.
-import { tableClass, tdClass, thClass } from "../ui/forms.ts";
+import { cellTextClass, tableClass, tdClass, thClass } from "../ui/forms.ts";
 import { tapTargetClass } from "../ui/tap.ts";
 import { formatMappedValue } from "../../lib/sync/format.ts";
 import { recordLink } from "../../../supabase/functions/_shared/sync/links.ts";
@@ -32,7 +32,7 @@ export default function MappedTable({ source, records }: { source: SyncSource; r
             <thead>
               <tr>
                 {source.field_map.map((entry) => (
-                  <th key={entry.key} className={`${thClass} whitespace-nowrap ${NUMERIC.has(entry.type) ? "text-right" : ""}`}>
+                  <th key={entry.key} className={`${thClass} ${NUMERIC.has(entry.type) ? "text-right" : ""}`}>
                     {entry.unit ? `${entry.label} (${entry.unit})` : entry.label}
                   </th>
                 ))}
@@ -45,7 +45,7 @@ export default function MappedTable({ source, records }: { source: SyncSource; r
                 return (
                   <tr key={record.id}>
                     {source.field_map.map((entry) => (
-                      <td key={entry.key} className={`${tdClass} whitespace-nowrap ${NUMERIC.has(entry.type) ? "tnum text-right" : ""}`}>
+                      <td key={entry.key} className={`${tdClass} ${NUMERIC.has(entry.type) ? "tnum whitespace-nowrap text-right" : cellTextClass}`}>
                         {formatMappedValue(record.data[entry.key] ?? null, entry.type)}
                       </td>
                     ))}

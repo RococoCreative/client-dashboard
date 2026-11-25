@@ -42,7 +42,7 @@ import Notice from "../../components/ui/Notice.tsx";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
-import { checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
+import { cellTextClass, checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
 import { tapTargetClass } from "../../components/ui/tap.ts";
 import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
@@ -524,7 +524,8 @@ export default function PeoplePage() {
                     <th role="columnheader" className={thClass}>Reports to</th>
                     <th role="columnheader" className={thClass}>Role</th>
                     <th role="columnheader" className={thClass}>Status</th>
-                    {teamView ? null : <th role="columnheader" className={thClass}><span className="sr-only">Actions</span></th>}
+                    {/* The actions stay pinned at the right edge, so a row that has to scroll never hides them. */}
+                    {teamView ? null : <th role="columnheader" className={`${thClass} lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface`}><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
                 <tbody role="rowgroup" className="max-lg:block">
@@ -545,9 +546,10 @@ export default function PeoplePage() {
                         <td role="cell" className={`${tdClass} py-2 ${STACKED_RESET} max-lg:order-1 max-lg:min-w-0 max-lg:flex-1`}>
                           <Link to={`/people/${person.id}`} className="flex items-center gap-2.5 tap:min-h-11">
                             <Avatar person={person} size={26} />
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm text-ink">{displayName(person)}{self ? " (you)" : ""}</span>
-                              <span className="block truncate text-[12px] text-ink-3">{person.title ?? (teamView ? "No title" : person.email)}</span>
+                            {/* A floor as a table, so a tight row wraps names between words rather than inside them. */}
+                            <span className="min-w-0 lg:min-w-[6.5rem]">
+                              <span className={`block text-sm text-ink ${cellTextClass}`}>{displayName(person)}{self ? " (you)" : ""}</span>
+                              <span className={`block text-[12px] text-ink-3 ${cellTextClass}`}>{person.title ?? (teamView ? "No title" : person.email)}</span>
                             </span>
                           </Link>
                         </td>
@@ -588,8 +590,8 @@ export default function PeoplePage() {
                           )}
                         </td>
                         {teamView ? null : (
-                          <td role="cell" className={`${tdClass} py-2 text-right ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
-                            <span className="flex items-center justify-end gap-1.5 max-lg:flex-wrap max-lg:justify-start max-lg:not-empty:mb-1">
+                          <td role="cell" className={`${tdClass} py-2 text-right lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
+                            <span className="flex flex-wrap items-center justify-end gap-1.5 max-lg:justify-start max-lg:not-empty:mb-1">
                               {!account && invitation ? (
                                 <>
                                   {person.is_active ? (

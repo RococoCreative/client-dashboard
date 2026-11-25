@@ -18,7 +18,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
-import { edgeCellsClass, inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
+import { cellTextClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
 import { metaClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
@@ -380,7 +380,8 @@ export default function FinancialsPage() {
                     <th className={`${thClass} text-right`}>Net profit</th>
                     <th className={`${thClass} text-right`}>Net margin</th>
                     <th className={`${thClass} text-right`}>Cash</th>
-                    <th className={thClass}><span className="sr-only">Edit</span></th>
+                    {/* Edit stays pinned at the right edge, so a period row that has to scroll never hides it. */}
+                    <th className={`${thClass} sticky right-0 border-l border-line bg-surface`}><span className="sr-only">Edit</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -390,7 +391,7 @@ export default function FinancialsPage() {
                       <tr key={row.id} className={`${edgeCellsClass} hover:bg-surface-2/60`}>
                         <td className={tdClass}>
                           <span className="font-medium">{periodLabel(row.period_type, row.period_start)}</span>
-                          {row.notes ? <span className={`block max-w-xs truncate ${metaClass}`} title={row.notes}>{row.notes}</span> : null}
+                          {row.notes ? <span className={`block max-w-xs line-clamp-2 ${metaClass} ${cellTextClass}`} title={row.notes}>{row.notes}</span> : null}
                         </td>
                         <td className={`${tdClass} tnum text-right`}>{formatMoney(row.revenue)}</td>
                         <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(row.cogs)}</td>
@@ -399,8 +400,8 @@ export default function FinancialsPage() {
                         <td className={`${tdClass} tnum text-right font-medium ${d.net >= 0 ? "text-success" : "text-danger"}`}>{formatMoney(d.net)}</td>
                         <td className={`${tdClass} tnum text-right`}>{formatPercent(d.netMargin, 1)}</td>
                         <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(row.cash_on_hand)}</td>
-                        <td className={`${tdClass} text-right`}>
-                          <span className="inline-flex items-center gap-1">
+                        <td className={`${tdClass} sticky right-0 border-l border-line bg-surface text-right`}>
+                          <span className="inline-flex flex-wrap items-center justify-end gap-1">
                             {row.source !== "manual" ? <Badge>{row.source === "csv" ? "CSV" : "QuickBooks"}</Badge> : null}
                             <IconButton label="Edit period" onClick={() => setDialog({ snapshot: row })}><Pencil size={15} aria-hidden /></IconButton>
                           </span>
