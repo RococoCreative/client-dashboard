@@ -1301,9 +1301,10 @@ id (`connection_pending` holds a sign-in until the admin confirms it). Order mat
    lists the Rococo admin with a confirmation time; without one, Rococo access stops at this step.
    Nothing visible changes.
 3. Straight away, deploy both functions together: `supabase functions deploy connections
-   --no-verify-jwt` and `supabase functions deploy notify`. A failed import pin fails the deploy
-   here, before anything is live. If the deploy rejects the npm edge-runtime types import, the
-   fallback is `jsr:@supabase/functions-js@<exact>/edge-runtime.d.ts`. Between steps 2 and 3 the
+   --no-verify-jwt` and `supabase functions deploy notify`. Neither function imports the
+   edge-runtime type definitions: on 2026-11-24 a pinned `npm:` `.d.ts` import deployed cleanly but
+   crashed every request at runtime (the runtime loaded the types file as JavaScript), so after any
+   deploy, call `/status` once and check the function logs for a boot error. Between steps 2 and 3 the
    old function cannot save a new connection (`0052` refuses plaintext tokens and account ids);
    that is safe today because no company is connected.
 4. Merge and deploy the app. It must not ship before steps 2 and 3, because it calls `/pending`

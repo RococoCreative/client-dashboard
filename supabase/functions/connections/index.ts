@@ -50,7 +50,6 @@
 // QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT (sandbox or production), GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, SYNC_CRON_SECRET (the secret the hourly tick sends). SUPABASE_URL,
 // SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
-import "npm:@supabase/functions-js@2.116.0/src/edge-runtime.d.ts";
 import {
   PENDING_GONE,
   PENDING_SOMEONE_ELSE,
