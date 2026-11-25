@@ -6,8 +6,9 @@
 // (initial.goal_id) into the save and says which goal, and a form with its person fixed says who it
 // is for. A task already on a goal keeps its person, because the database refuses to move it to
 // someone else until it is unlinked. Steps are typed one per line when the task is added; after
-// that they are edited on the task's page. It saves and hands back the task as the database read
-// it; the assignment email is the caller's.
+// that they are edited on the task's page. A task can ask its person to complete one of the
+// company's published SOPs (0053); their sign-off finishes it. It saves and hands back the task as
+// the database read it; the assignment email is the caller's.
 import { useState, type FormEvent } from "react";
 import Button from "../ui/Button.tsx";
 import Field from "../ui/Field.tsx";
@@ -19,6 +20,8 @@ import { displayName } from "../../lib/format.ts";
 import { hasAccount } from "../../lib/people.ts";
 import { PRIORITY_LABELS, RECURRENCE_LABELS } from "../../lib/tasks.ts";
 import { createTask, updateTask, type TaskPatch } from "../../services/tasks.ts";
+import { listSops } from "../../services/sops.ts";
+import { useAsync } from "../../hooks/useAsync.ts";
 import type { MarketingCampaign, Profile, TaskPriority, TaskRecurrence, TaskWithSteps } from "../../types/database.ts";
 
 const PRIORITIES = Object.keys(PRIORITY_LABELS) as TaskPriority[];
@@ -64,6 +67,15 @@ export default function TaskForm({
   const [priority, setPriority] = useState<TaskPriority>(initial?.priority ?? "medium");
   const [recurrence, setRecurrence] = useState<TaskRecurrence | "">(initial?.recurrence ?? "");
   const [campaignId, setCampaignId] = useState(initial?.campaign_id ?? "");
+  const [sopId, setSopId] = useState(initial?.sop_id ?? "");
+  // The company's published SOPs, best effort: without them the form simply offers none.
+  const sops = useAsync(async () => {
+    try {
+      return (await listSops(companyId)).filter((s) => s.status === "published").sort((a, b) => a.title.localeCompare(b.title));
+    } catch {
+      return [];
+    }
+  }, [companyId]);
   const [stepsText, setStepsText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -74,6 +86,9 @@ export default function TaskForm({
   // A linked task stays with the goal's person; the picker shows them and says why it is fixed.
   const assigneeFixed = editing && goalId !== null;
   const showCampaign = canSetCampaign && campaigns.length > 0;
+  // Moving an SOP link is the assigner's (the database holds it), so an edit offers it to admins.
+  const sopChoices = sops.data ?? [];
+  const showSop = (!editing || canSetCampaign) && (sopChoices.length > 0 || Boolean(initial?.sop_id));
   // The whole active roster, plus the current assignee if they have since been deactivated, so
   // the picker never reads as someone else.
   const choices = people.filter((p) => p.is_active || p.id === initial?.assignee_id);
@@ -101,6 +116,7 @@ export default function TaskForm({
         const patch: TaskPatch = { ...fields };
         if (showPicker && !assigneeFixed) patch.assignee_id = assignee;
         if (canSetCampaign) patch.campaign_id = campaignId || null;
+        if (showSop && (sopId || null) !== (initial?.sop_id ?? null)) patch.sop_id = sopId || null;
         onSaved(await updateTask(initial!.id!, patch));
       } else {
         onSaved(
@@ -110,6 +126,7 @@ export default function TaskForm({
             assignee_id: assignee,
             ...(canSetCampaign ? { campaign_id: campaignId || null } : {}),
             ...(goalId ? { goal_id: goalId } : {}),
+            ...(sopId ? { sop_id: sopId } : {}),
             steps: stepsText.split("\n"),
           }),
         );
@@ -169,6 +186,17 @@ export default function TaskForm({
                 <option value="">No campaign</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+          {showSop ? (
+            <Field label="SOP to complete" htmlFor="task-sop" hint={sopId ? "The task finishes when its person signs this SOP off." : undefined}>
+              <select id="task-sop" value={sopId} onChange={(e) => setSopId(e.target.value)} className={selectClass}>
+                <option value="">No SOP</option>
+                {initial?.sop_id && !sopChoices.some((s) => s.id === initial.sop_id) ? <option value={initial.sop_id}>The SOP it is on now</option> : null}
+                {sopChoices.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
                 ))}
               </select>
             </Field>

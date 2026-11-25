@@ -17,6 +17,8 @@ import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import SopDocument from "../../components/sops/SopDocument.tsx";
 import VersionHistory from "../../components/sops/VersionHistory.tsx";
+import SignoffCard from "../../components/sops/SignoffCard.tsx";
+import SopAssignments from "../../components/sops/SopAssignments.tsx";
 import { SOP_STATUS_TONE } from "../../components/status.ts";
 import { metaClass, secondaryClass } from "../../components/ui/type.ts";
 import { useHub } from "../../context/HubContext.tsx";
@@ -25,6 +27,10 @@ import { assertInCompany } from "../../lib/tenancy.ts";
 import { openSignedUrl } from "../../lib/newTab.ts";
 import { addSopAttachment, deleteSop, getSop, listSopAttachments, listSopVersions, removeSopAttachment, restoreSopVersion, updateSop } from "../../services/sops.ts";
 import { listSopCategories } from "../../services/sopCategories.ts";
+import { listMySopSignoffs, listSopSignoffs } from "../../services/sopSignoffs.ts";
+import { listTasks, listTasksForSop } from "../../services/tasks.ts";
+import { listCompanyProfiles } from "../../services/profiles.ts";
+import { hasModule } from "../../lib/modules.ts";
 import { buildObjectPath, formatBytes, getSignedUrl, removeFile, uploadFile } from "../../services/storage.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
@@ -41,7 +47,7 @@ function refused(err: unknown): boolean {
 
 export default function SopPage() {
   const { sopId = "" } = useParams();
-  const { company, isAdmin } = useHub();
+  const { company, isAdmin, profile } = useHub();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const companyId = company!.id;
@@ -63,6 +69,20 @@ export default function SopPage() {
     assertInCompany(sop, companyId, "SOP");
     return { sop, versions, attachments, categories };
   }, [sopId, companyId]);
+
+  // Who has signed it off and who it is assigned to: the reader's own, and for admins everyone's.
+  // Loaded beside the document, so the SOP never waits on it.
+  const member = profile.company_id === companyId;
+  const withTasks = hasModule(company!, "tasks");
+  const standing = useAsync(async () => {
+    const [mine, everyone, tasks, people] = await Promise.all([
+      member ? listMySopSignoffs(companyId, profile.id) : Promise.resolve([]),
+      isAdmin ? listSopSignoffs(sopId) : Promise.resolve([]),
+      withTasks ? (isAdmin ? listTasksForSop(companyId, sopId) : listTasks(companyId, { assigneeId: profile.id })) : Promise.resolve([]),
+      isAdmin ? listCompanyProfiles(companyId) : Promise.resolve([]),
+    ]);
+    return { mine: mine.filter((x) => x.sop_id === sopId), everyone, tasks: tasks.filter((t) => t.sop_id === sopId), people };
+  }, [sopId, companyId, profile.id, member, isAdmin, withTasks]);
 
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
@@ -242,6 +262,38 @@ export default function SopPage() {
           </Section>
         </div>
         <div className="space-y-6">
+          {member && sop.status === "published" && standing.data ? (
+            <SignoffCard
+              sop={sop}
+              profileId={profile.id}
+              signoffs={standing.data.mine}
+              openTasks={standing.data.tasks.filter((t) => t.assignee_id === profile.id && t.completed_at === null)}
+              onSigned={(signoff) =>
+                standing.setData((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        mine: [signoff, ...prev.mine],
+                        everyone: isAdmin ? [signoff, ...prev.everyone] : prev.everyone,
+                        tasks: prev.tasks.map((t) => (t.assignee_id === profile.id && t.completed_at === null && t.created_at <= signoff.signed_at ? { ...t, completed_at: signoff.signed_at } : t)),
+                      }
+                    : prev,
+                )
+              }
+            />
+          ) : null}
+          {isAdmin && standing.data ? (
+            <SopAssignments
+              sop={sop}
+              canAssign={withTasks}
+              people={standing.data.people}
+              signoffs={standing.data.everyone}
+              tasks={standing.data.tasks}
+              viewerId={profile.id}
+              onAssigned={(made) => standing.setData((prev) => (prev ? { ...prev, tasks: [...made, ...prev.tasks] } : prev))}
+            />
+          ) : null}
+          {standing.error ? <Notice tone="error">{standing.error}</Notice> : null}
           <Section
             eyebrow="Files"
             title={pluralize(attachments.length, "attachment")}

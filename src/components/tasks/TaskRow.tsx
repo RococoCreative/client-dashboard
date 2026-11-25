@@ -1,6 +1,7 @@
 // One task in a list, linking to its own page. It reads the way a person scans a to-do list: the
 // title, then who it is for (when the list spans people), when it is due, whether it repeats, how
-// far along its steps are, its priority, and a mark when it is overdue or done. A list that knows
+// far along its steps are, its priority, a mark when it is on an SOP (0053), and a mark when it is
+// overdue or done. A list that knows
 // more about a task (the GSR month it serves, on a person page) passes it as a note, and a list
 // that wants the task page to lead back to it passes where back is as link state. On a phone every
 // row reads the same way: the title at full width, then the meta with the badges on its line.
@@ -80,6 +81,7 @@ export default function TaskRow({
           {percent !== null ? <span className="text-[12px] tabular-nums text-ink-2" title="Steps done">{percent}%</span> : null}
           <Badge tone={PRIORITY_TONE[task.priority]}>{PRIORITY_LABELS[task.priority]}</Badge>
           {overdue ? <Badge tone="danger">Overdue</Badge> : null}
+          {task.sop_id ? <Badge tone="info">SOP</Badge> : null}
           {done ? <Badge tone="success">Done</Badge> : null}
         </div>
       </Link>

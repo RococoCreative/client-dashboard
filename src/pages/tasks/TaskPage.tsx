@@ -50,6 +50,7 @@ import { listCycles, listEmployeeReviews, listGoals } from "../../services/gsr.t
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { completeTask, deleteTask, getTask, reopenTask } from "../../services/tasks.ts";
+import { getSop } from "../../services/sops.ts";
 import type { MarketingCampaign, TaskWithSteps } from "../../types/database.ts";
 
 // Where the back link goes: the screen the task was opened from, when it said, else Tasks.
@@ -114,6 +115,18 @@ export default function TaskPage() {
     }
   }, [companyId, goalId, goalPerson]);
 
+  // The SOP a task asks the assignee to complete (0053), read as the viewer may read it. Best
+  // effort: an SOP since unpublished reads as hidden to an employee, and the line says so.
+  const sopId = state.data?.task.sop_id ?? null;
+  const linkedSop = useAsync(async () => {
+    if (!sopId) return null;
+    try {
+      return await getSop(sopId);
+    } catch {
+      return null;
+    }
+  }, [sopId]);
+
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
@@ -177,7 +190,11 @@ export default function TaskPage() {
 
   const actions = (
     <>
-      {canAct && !done ? (
+      {/* A task on an SOP finishes when its person signs the SOP off; only an admin closes it by hand. */}
+      {canAct && !done && task.sop_id && !isAdmin ? (
+        <Link to={`/sops/${task.sop_id}`} className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[12.5px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover tap:min-h-11">Sign off the SOP</Link>
+      ) : null}
+      {canAct && !done && (!task.sop_id || isAdmin) ? (
         <Button size="sm" disabled={busy} onClick={() => void act(() => completeTask(task.id))}>Mark complete</Button>
       ) : null}
       {canAct && done && !locked ? (
@@ -228,6 +245,16 @@ export default function TaskPage() {
             <Detail label="Repeat">{task.recurrence ? RECURRENCE_LABELS[task.recurrence] : "Does not repeat"}</Detail>
             {isAdmin ? <Detail label="Campaign">{campaign ? campaign.name : "None"}</Detail> : null}
             {done ? <Detail label="Completed">{formatDate(task.completed_at)}</Detail> : null}
+            {task.sop_id ? (
+              <Detail label="SOP">
+                {linkedSop.data ? (
+                  <Link to={`/sops/${task.sop_id}`} className="text-link hover:underline">{linkedSop.data.title}</Link>
+                ) : (
+                  <span className="text-ink-2">{linkedSop.data === null && !linkedSop.error ? "Not open to you right now" : "Loading"}</span>
+                )}
+                <span className="text-ink-3">Finishes when it is signed off.</span>
+              </Detail>
+            ) : null}
             {task.goal_id ? (
               <Detail label="GSR goal">
                 {linked.data ? (

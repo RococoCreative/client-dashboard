@@ -18,9 +18,14 @@ vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/directory.ts", () => import("../test/mocks/directory.ts"));
 vi.mock("../services/externalLinks.ts", () => import("../test/mocks/externalLinks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
+vi.mock("../services/marketing.ts", () => import("../test/mocks/marketing.ts"));
+vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import { KLASIK, makeHub } from "../test/fixtures.ts";
+import { KINGDOM, KLASIK, makeHub } from "../test/fixtures.ts";
+import * as tasksService from "../services/tasks.ts";
+import TaskPage from "./tasks/TaskPage.tsx";
+import TaskForm from "../components/tasks/TaskForm.tsx";
 import * as sopsService from "../services/sops.ts";
 import * as categoriesService from "../services/sopCategories.ts";
 import SopEditPage from "./sops/SopEditPage.tsx";
@@ -202,5 +207,63 @@ describe("importing SOPs", () => {
     expect(await screen.findByRole("button", { name: "Create 2 drafts" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Include fence.txt" }));
     expect(screen.getByRole("button", { name: "Create 1 draft" })).toBeInTheDocument();
+  });
+});
+
+describe("signing off and assigning an SOP", () => {
+  const kingdomAdmin = makeHub("admin", KINGDOM.company);
+  const kingdomEmployee = makeHub("employee", KINGDOM.company);
+  const sop = KINGDOM.sops.find((s) => s.status === "published")!;
+
+  it("lets a member sign off, and says which version they signed", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<SopPage />, kingdomEmployee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    const confirm = await screen.findByRole("checkbox", { name: "I have read this SOP and completed it" });
+    const sign = screen.getByRole("button", { name: "Sign off" });
+    expect(sign).toBeDisabled();
+    await user.click(confirm);
+    await user.click(sign);
+    expect(await screen.findByText(new RegExp(`You signed off version ${sop.current_version}`))).toBeInTheDocument();
+  });
+
+  it("assigns the SOP to people as tasks", async () => {
+    const user = userEvent.setup();
+    const create = vi.spyOn(tasksService, "createTask");
+    create.mockClear();
+    const person = KINGDOM.profiles.find((p) => p.role === "employee" && p.id !== kingdomEmployee.profile.id && p.is_active)!;
+    renderWithHub(<SopPage />, kingdomAdmin, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    await user.click(await screen.findByRole("button", { name: "Assign" }));
+    const dialog = await screen.findByRole("dialog", { name: "Assign this SOP" });
+    await user.click(within(dialog).getByRole("checkbox", { name: new RegExp(person.full_name!) }));
+    await user.click(within(dialog).getByRole("button", { name: "Assign to 1 person" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ sop_id: sop.id, assignee_id: person.id, title: `Complete SOP: ${sop.title}` })));
+    expect(await screen.findByText(person.full_name!, { selector: "li *" })).toBeInTheDocument();
+  });
+
+  it("finishes an employee's SOP task by sign-off, not by marking it complete", async () => {
+    const task = await tasksService.createTask({ company_id: KINGDOM.company.id, title: "Read it", assignee_id: kingdomEmployee.profile.id, sop_id: sop.id });
+    renderWithHub(<TaskPage />, kingdomEmployee, { path: `/tasks/${task.id}`, pattern: "/tasks/:taskId" });
+    expect(await screen.findByRole("link", { name: "Sign off the SOP" })).toHaveAttribute("href", `/sops/${sop.id}`);
+    expect(screen.queryByRole("button", { name: "Mark complete" })).not.toBeInTheDocument();
+  });
+});
+
+describe("a task on an SOP from the task form", () => {
+  it("offers the company's published SOPs and saves the one picked", async () => {
+    const user = userEvent.setup();
+    const create = vi.spyOn(tasksService, "createTask");
+    create.mockClear();
+    const published = KINGDOM.sops.find((s) => s.status === "published")!;
+    const draft = KINGDOM.sops.find((s) => s.status === "draft");
+    renderWithHub(
+      <TaskForm companyId={KINGDOM.company.id} people={KINGDOM.profiles} campaigns={[]} canSetCampaign={false} onSaved={() => undefined} onClose={() => undefined} />,
+      makeHub("admin", KINGDOM.company),
+    );
+    await user.type(screen.getByLabelText("Title"), "Read the safety walk");
+    const picker = await screen.findByLabelText("SOP to complete");
+    if (draft) expect(within(picker).queryByRole("option", { name: draft.title })).not.toBeInTheDocument();
+    await user.selectOptions(picker, published.title);
+    await user.click(screen.getByRole("button", { name: "Add task" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ sop_id: published.id })));
   });
 });
