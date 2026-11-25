@@ -18,7 +18,7 @@ import PageHeader from "../components/ui/PageHeader.tsx";
 import Section from "../components/ui/Section.tsx";
 import Stat from "../components/ui/Stat.tsx";
 import SkeletonRows from "../components/ui/SkeletonRows.tsx";
-import { cellTextClass, edgeCellsClass, inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
+import { edgeCellsClass, inputClass, selectClass, tableClass, tdClass, textareaClass, thClass } from "../components/ui/forms.ts";
 import { metaClass } from "../components/ui/type.ts";
 import { useHub } from "../context/HubContext.tsx";
 import { useAsync } from "../hooks/useAsync.ts";
@@ -391,7 +391,7 @@ export default function FinancialsPage() {
                       <tr key={row.id} className={`${edgeCellsClass} hover:bg-surface-2/60`}>
                         <td className={tdClass}>
                           <span className="font-medium">{periodLabel(row.period_type, row.period_start)}</span>
-                          {row.notes ? <span className={`block max-w-xs line-clamp-2 ${metaClass} ${cellTextClass}`} title={row.notes}>{row.notes}</span> : null}
+                          {row.notes ? <span className={`max-w-xs line-clamp-2 break-words ${metaClass}`} title={row.notes}>{row.notes}</span> : null}
                         </td>
                         <td className={`${tdClass} tnum text-right`}>{formatMoney(row.revenue)}</td>
                         <td className={`${tdClass} tnum text-right text-ink-2`}>{formatMoney(row.cogs)}</td>
