@@ -151,6 +151,8 @@ export default function TaskPage() {
   const lockAssigneeTo = isAdmin || leadsSomeone ? undefined : profileId;
   const formPeople = isAdmin ? people : people.filter((p) => p.id === profileId || led.some((l) => l.id === p.id));
   const assigneeName = task.assignee_id ? nameFromDirectory(names, task.assignee_id, "Not on the roster") : null;
+  // Whether the task's SOP can be opened and signed now: published, or any state for an admin.
+  const sopOpen = Boolean(linkedSop.data && (isAdmin || linkedSop.data.status === "published"));
   const goalOwner = task.assignee_id === profileId ? "your" : assigneeName ? `${assigneeName}'s` : "a";
 
   const setTask = (next: TaskWithSteps) => state.setData((prev) => (prev ? { ...prev, task: next } : prev));
@@ -191,8 +193,8 @@ export default function TaskPage() {
   const actions = (
     <>
       {/* A task on an SOP finishes when its person signs the SOP off; only an admin closes it by hand. */}
-      {canAct && !done && task.sop_id && !isAdmin ? (
-        <Link to={`/sops/${task.sop_id}`} className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[12.5px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover tap:min-h-11">Sign off the SOP</Link>
+      {canAct && !done && task.sop_id && !isAdmin && sopOpen ? (
+        <Link to={`/sops/${task.sop_id}`}><Button size="sm">Sign off the SOP</Button></Link>
       ) : null}
       {canAct && !done && (!task.sop_id || isAdmin) ? (
         <Button size="sm" disabled={busy} onClick={() => void act(() => completeTask(task.id))}>Mark complete</Button>
@@ -247,12 +249,16 @@ export default function TaskPage() {
             {done ? <Detail label="Completed">{formatDate(task.completed_at)}</Detail> : null}
             {task.sop_id ? (
               <Detail label="SOP">
-                {linkedSop.data ? (
-                  <Link to={`/sops/${task.sop_id}`} className="text-link hover:underline">{linkedSop.data.title}</Link>
+                {sopOpen ? (
+                  <>
+                    <Link to={`/sops/${task.sop_id}`} className="text-link hover:underline">{linkedSop.data!.title}</Link>
+                    <span className="text-ink-3">Finishes when it is signed off.</span>
+                  </>
+                ) : linkedSop.data === undefined && !linkedSop.error ? (
+                  <span className="text-ink-2">Loading</span>
                 ) : (
-                  <span className="text-ink-2">{linkedSop.data === null && !linkedSop.error ? "Not open to you right now" : "Loading"}</span>
+                  <span className="text-ink-2">This SOP is being revised. It opens again once it is published, and signing it off then finishes this task.</span>
                 )}
-                <span className="text-ink-3">Finishes when it is signed off.</span>
               </Detail>
             ) : null}
             {task.goal_id ? (

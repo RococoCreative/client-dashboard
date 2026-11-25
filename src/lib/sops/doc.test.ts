@@ -2,7 +2,7 @@
 // schema (and what it may never bring with it), how Markdown from older versions converts, and
 // the plain lines a version reads as when two are compared.
 import { describe, expect, it } from "vitest";
-import { docToLines, emptyDoc, htmlToDoc, markdownToHtml } from "./doc.ts";
+import { docToLines, emptyDoc, htmlToDoc, markdownPictureCount, markdownToHtml } from "./doc.ts";
 import { isSafeHref } from "./schema.ts";
 
 describe("isSafeHref", () => {
@@ -58,5 +58,12 @@ describe("docToLines", () => {
   });
   it("reads an empty document as no lines", () => {
     expect(docToLines(emptyDoc())).toEqual([]);
+  });
+});
+
+describe("markdownPictureCount", () => {
+  it("counts Markdown pictures and nothing else", () => {
+    expect(markdownPictureCount("![a](x.png) text [link](y) ![b](z.jpg)")).toBe(2);
+    expect(markdownPictureCount(null)).toBe(0);
   });
 });

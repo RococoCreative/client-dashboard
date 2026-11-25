@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { RBA } from "../fixtures.ts";
 import { setActingPerson } from "../actingPerson.ts";
-import { completeTask, createTask, getTask, setStepDone } from "./tasks.ts";
+import { completeTask, createTask, getTask, setStepDone, updateTask } from "./tasks.ts";
 import { signOffSop } from "./sopSignoffs.ts";
 import { createSop, updateSop } from "./sops.ts";
 import { emptyDoc } from "../../lib/sops/doc.ts";
@@ -62,4 +62,32 @@ describe("signing off an SOP", () => {
     await updateSop(sopId, { status: "draft" });
     await expect(createTask({ company_id: rba, title: "Read it", assignee_id: employee.id, sop_id: sopId })).rejects.toThrow("Only a published SOP can be assigned.");
   });
+
+  it("asks for a new sign-off on a recurring task's next copy", async () => {
+    const sopId = await publishedSop("Yearly harness check");
+    const task = await createTask({ company_id: rba, title: "Harness refresher", assignee_id: employee.id, sop_id: sopId, recurrence: "yearly", due_date: "2026-01-15" });
+    setActingPerson(employee);
+    await signOffSop(sopId, employee.id);
+    const next = (await getTask(task.id)).next_task_id!;
+    expect((await getTask(next)).completed_at).toBeNull();
+    await expect(completeTask(next)).rejects.toThrow("This task finishes when the SOP is signed off.");
+    await signOffSop(sopId, employee.id);
+    expect((await getTask(next)).completed_at).not.toBeNull();
+  });
+
+  it("asks someone a task is reassigned to for a sign-off of their own", async () => {
+    const sopId = await publishedSop("Rigging basics");
+    const other = RBA.profiles[2];
+    const task = await createTask({ company_id: rba, title: "Read rigging", assignee_id: other.id, sop_id: sopId });
+    setActingPerson(employee);
+    await signOffSop(sopId, employee.id);
+    setActingPerson(admin);
+    await new Promise((r) => setTimeout(r, 2));
+    await updateTask(task.id, { assignee_id: employee.id });
+    setActingPerson(employee);
+    await expect(completeTask(task.id)).rejects.toThrow("This task finishes when the SOP is signed off.");
+    await signOffSop(sopId, employee.id);
+    expect((await getTask(task.id)).completed_at).not.toBeNull();
+  });
 });
+

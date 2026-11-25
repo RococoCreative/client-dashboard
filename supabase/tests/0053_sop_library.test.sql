@@ -193,12 +193,15 @@ values (tests.company('kingdom'), 'Read ladder safety', tests.id('kingdom_employ
 reset role;
 select set_config('request.jwt.claims', '', true);
 insert into tests.fixture (name, id) select 'task_before', id from public.tasks where title = 'Read ladder safety';
--- A task assigned after the sign-off is a request for a new one.
-insert into public.tasks (company_id, title, assignee_id, sop_id, created_at)
-values (tests.company('kingdom'), 'Read ladder safety again', tests.id('kingdom_employee'), tests.id('sop_ladder'), now() + interval '1 hour');
-insert into tests.fixture (name, id) select 'task_after', id from public.tasks where title = 'Read ladder safety again';
 select tests.act_as(tests.id('kingdom_employee'));
 insert into public.sop_signoffs (sop_id, profile_id) values (tests.id('sop_ladder'), tests.id('kingdom_employee'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+-- A task assigned after the sign-off is a request for a new one, whatever date it claims.
+insert into public.tasks (company_id, title, assignee_id, sop_id, created_at, assigned_at)
+values (tests.company('kingdom'), 'Read ladder safety again', tests.id('kingdom_employee'), tests.id('sop_ladder'), now() - interval '1 day', now() - interval '1 day');
+insert into tests.fixture (name, id) select 'task_after', id from public.tasks where title = 'Read ladder safety again';
+select tests.act_as(tests.id('kingdom_employee'));
 select tests.assert(
   (select version = 1 and signer_name = 'kingdom_employee' and company_id = tests.company('kingdom')
      from public.sop_signoffs where sop_id = tests.id('sop_ladder')),
@@ -385,4 +388,73 @@ select set_config('request.jwt.claims', '', true);
 select tests.assert(
   (select category is null and category_id is null from public.sops where title = 'Legacy one'),
   'the_fixed_category_is_history_once_written: a signed-in write left the fixed category for a later paste to refile'
+);
+
+-- case: a_recurring_copy_asks_for_a_new_signoff
+select tests.act_as(tests.id('kingdom_admin'));
+insert into public.tasks (company_id, title, assignee_id, sop_id, recurrence, due_date)
+values (tests.company('kingdom'), 'Yearly crane refresher', tests.id('kingdom_employee2'), tests.id('sop_draft'), 'yearly', current_date);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('kingdom_employee2'));
+insert into public.sop_signoffs (sop_id, profile_id) values (tests.id('sop_draft'), tests.id('kingdom_employee2'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into tests.fixture (name, id)
+select 'crane_next', t.next_task_id from public.tasks t where t.title = 'Yearly crane refresher' and t.completed_at is not null;
+select tests.assert(
+  (select completed_at is null from public.tasks where id = tests.id('crane_next')),
+  'a_recurring_copy_asks_for_a_new_signoff: the sign-off did not open the next copy, or closed it too'
+);
+select tests.act_as(tests.id('kingdom_employee2'));
+select tests.assert_raises(
+  format($q$update public.tasks set completed_at = now() where id = %L$q$, tests.id('crane_next')),
+  '%finishes when the SOP is signed off%'
+);
+insert into public.sop_signoffs (sop_id, profile_id) values (tests.id('sop_draft'), tests.id('kingdom_employee2'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select completed_at is not null from public.tasks where id = tests.id('crane_next')),
+  'a_recurring_copy_asks_for_a_new_signoff: the fresh sign-off did not close the next copy'
+);
+
+-- case: reassigning_asks_for_a_new_signoff
+select tests.act_as(tests.id('kingdom_admin'));
+insert into public.tasks (company_id, title, assignee_id, sop_id)
+values (tests.company('kingdom'), 'Crane checks for the new hire', tests.id('kingdom_owner'), tests.id('sop_draft'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into tests.fixture (name, id) select 'task_reassigned', id from public.tasks where title = 'Crane checks for the new hire';
+-- employee signed the crane SOP above, before this task was theirs.
+select tests.act_as(tests.id('kingdom_admin'));
+update public.tasks set assignee_id = tests.id('kingdom_employee') where id = tests.id('task_reassigned');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('kingdom_employee'));
+select tests.assert_raises(
+  format($q$update public.tasks set completed_at = now() where id = %L$q$, tests.id('task_reassigned')),
+  '%finishes when the SOP is signed off%'
+);
+insert into public.sop_signoffs (sop_id, profile_id) values (tests.id('sop_draft'), tests.id('kingdom_employee'));
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select completed_at is not null from public.tasks where id = tests.id('task_reassigned')),
+  'reassigning_asks_for_a_new_signoff: the sign-off after reassignment did not close the task'
+);
+
+-- case: deleting_a_category_is_not_an_edit
+select tests.act_as(tests.id('kingdom_owner'));
+update public.sops set category_id = (select id from public.sop_categories where company_id = tests.company('kingdom') and name = 'Safety')
+ where id = tests.id('sop_draft');
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('kingdom_admin'));
+delete from public.sop_categories where company_id = tests.company('kingdom') and name = 'Safety';
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select category_id is null and updated_by_name = 'kingdom_owner' from public.sops where id = tests.id('sop_draft')),
+  'deleting_a_category_is_not_an_edit: the SOP kept the category or names whoever deleted it as its last editor'
 );

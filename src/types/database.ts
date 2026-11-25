@@ -853,6 +853,9 @@ export interface Task {
   goal_id: string | null;
   // The published SOP this task asks the assignee to complete (0053). Their sign-off closes it.
   sop_id: string | null;
+  // When it was given to its person: stamped by the database on insert and whenever its person or
+  // its SOP changes (0053). Only a sign-off at or after it finishes a task on an SOP.
+  assigned_at: string;
   completed_at: string | null; completed_by: string | null; next_task_id: string | null;
   notified_assignee_id: string | null; created_at: string; updated_at: string;
 }

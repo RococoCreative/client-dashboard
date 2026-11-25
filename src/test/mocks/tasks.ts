@@ -11,6 +11,7 @@ import { fromAll, personaFromLocation, personaIn } from "../fixtures.ts";
 import { isCompanyAdminRole } from "../../lib/people.ts";
 import { sopRow } from "./sops.ts";
 import { signedSince } from "./sopSignoffs.ts";
+import { clockNow } from "./clock.ts";
 import { goalLinkProblem } from "./gsr.ts";
 import { timeZoneOf } from "./companies.ts";
 import { companyOf, onPersonDeleted } from "./profiles.ts";
@@ -180,6 +181,7 @@ function recur(task: Task): void {
     goal_id: null,
     // It keeps its SOP while that SOP is still published (0053).
     sop_id: task.sop_id && sopRow(task.sop_id)?.status === "published" ? task.sop_id : null,
+    assigned_at: clockNow(),
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -201,7 +203,7 @@ function recur(task: Task): void {
 function setCompletion(task: Task, completedAt: string | null, internal = false, by?: string): void {
   const wasOpen = task.completed_at === null;
   if (wasOpen && completedAt !== null && task.sop_id !== null) {
-    const signed = task.assignee_id !== null && signedSince(task.sop_id, task.assignee_id, task.created_at);
+    const signed = task.assignee_id !== null && signedSince(task.sop_id, task.assignee_id, task.assigned_at);
     if (!signed) {
       // Ticking every step does not finish an SOP task; the sign-off does.
       if (internal) return;
@@ -249,6 +251,7 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
     campaign_id: input.campaign_id ?? null,
     goal_id: input.goal_id ?? null,
     sop_id: input.sop_id ?? null,
+    assigned_at: clockNow(),
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -275,6 +278,8 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskWith
     throw new Error("Only the person who assigned this task can change its SOP.");
   }
   checkSop(next, task.sop_id);
+  // guard_task_sop (0053): a new person or a new SOP is a new assignment.
+  if (next.assignee_id !== task.assignee_id || next.sop_id !== task.sop_id) next.assigned_at = clockNow();
   Object.assign(task, next, { updated_at: now() });
   return read(task);
 }
@@ -290,7 +295,7 @@ export async function listTasksForSop(companyId: string, sopId: string): Promise
 // close_tasks_on_signoff (0053): the person's open tasks on the SOP assigned at or before it.
 export function closeTasksOnSignoff(sopId: string, profileId: string, signedAt: string): void {
   for (const task of tasks) {
-    if (task.sop_id === sopId && task.assignee_id === profileId && task.completed_at === null && task.created_at <= signedAt) {
+    if (task.sop_id === sopId && task.assignee_id === profileId && task.completed_at === null && task.assigned_at <= signedAt) {
       setCompletion(task, signedAt, true, profileId);
     }
   }
@@ -298,7 +303,7 @@ export function closeTasksOnSignoff(sopId: string, profileId: string, signedAt: 
 
 // Whether a task on this SOP was assigned to the person after a moment and is still open.
 export function openSopTaskSince(sopId: string, profileId: string, since: string): boolean {
-  return tasks.some((t) => t.sop_id === sopId && t.assignee_id === profileId && t.completed_at === null && t.created_at > since);
+  return tasks.some((t) => t.sop_id === sopId && t.assignee_id === profileId && t.completed_at === null && t.assigned_at > since);
 }
 
 // Deleting the open copy of a series ends the series on the copy before it.

@@ -79,3 +79,9 @@ export function versionDoc(version: Pick<SopVersion, "body_json" | "body_md"> | 
   if (version?.body_json) return version.body_json;
   return htmlToDoc(markdownToHtml(version?.body_md ?? ""));
 }
+
+// Pictures in a Markdown version from before the editor. The editor holds no pictures yet, so the
+// screens say these stay in that version's history rather than drop them without a word.
+export function markdownPictureCount(md: string | null | undefined): number {
+  return md ? (md.match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length : 0;
+}

@@ -6,7 +6,7 @@ import { requireRows } from "../lib/errors.ts";
 import { invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
-const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, goal_id, sop_id, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
+const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, goal_id, sop_id, assigned_at, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
 const SELECT = `${TASK_COLUMNS}, steps:task_steps(id, task_id, company_id, title, sort_order, done_at)`;
 
 function bySortOrder(a: TaskStep, b: TaskStep): number {

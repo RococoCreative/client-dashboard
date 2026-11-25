@@ -13,7 +13,8 @@ export const IMPORT_ACCEPT = ".docx,.pdf,.txt,.md,.markdown";
 
 export type ImportedSop = { fileName: string; title: string; doc: SopDocJson | null; notes: string[]; error?: string };
 
-export type PdfReader = (data: ArrayBuffer) => Promise<{ lines: TextLine[]; pages: number }>;
+// pages: how many were read; totalPages: how many the file has, when more than were read.
+export type PdfReader = (data: ArrayBuffer) => Promise<{ lines: TextLine[]; pages: number; totalPages?: number }>;
 
 const EMPTY = "The file has no text in it.";
 const SCANNED = "No text found. It may be a scanned image. Attach it to an SOP instead.";
@@ -107,6 +108,9 @@ export async function readSopFile(file: File, deps: { pdfLines?: PdfReader } = {
       const read = await (deps.pdfLines ?? defaultPdfReader)(await bufferOf(file));
       html = linesToHtml(read.lines, read.pages);
       if (!html) return fail(SCANNED);
+      if (read.totalPages && read.totalPages > read.pages) {
+        notes.push(`Only the first ${read.pages} of ${read.totalPages} pages were read. The rest is in the attached original.`);
+      }
       notes.push("Read from a PDF: check headings and lists before publishing.");
     } else if (ext === "txt") {
       html = linesToHtml(textLines(await textOf(file)), 1);

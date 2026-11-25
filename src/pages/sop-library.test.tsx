@@ -152,6 +152,12 @@ describe("the SOP library", () => {
     await waitFor(() => expect(screen.queryByText("Jobsite safety walk")).not.toBeInTheDocument());
   });
 
+  it("opens a match with its first search word in Find, so a multi-word search still highlights", async () => {
+    renderWithHub(<ResourcesPage tab="sops" />, employee, { path: "/resources/sops?q=hazards%20superintendent", pattern: "/resources/sops" });
+    const link = await screen.findByRole("link", { name: /Jobsite safety walk/ });
+    expect(link.getAttribute("href")).toBe(`/sops/${KLASIK.sops[0].id}?q=hazards`);
+  });
+
   it("reads a tag from the address", async () => {
     renderWithHub(<ResourcesPage tab="sops" />, employee, { path: "/resources/sops?tag=Pricing", pattern: "/resources/sops" });
     expect(await screen.findByText("Client change order")).toBeInTheDocument();
@@ -248,6 +254,19 @@ describe("signing off and assigning an SOP", () => {
   });
 });
 
+describe("a task whose SOP has been taken down to revise", () => {
+  it("tells its person the SOP opens again once it is published, with no link to a page they cannot open", async () => {
+    const kingdomEmployee = makeHub("employee", KINGDOM.company);
+    const sop = await sopsService.createSop({ company_id: KINGDOM.company.id, title: "Trench boxes", category_id: null, status: "published", body: { md: "## Steps\n\nShore it." } });
+    const task = await tasksService.createTask({ company_id: KINGDOM.company.id, title: "Read trench boxes", assignee_id: kingdomEmployee.profile.id, sop_id: sop.id });
+    await sopsService.updateSop(sop.id, { status: "draft" });
+    renderWithHub(<TaskPage />, kingdomEmployee, { path: `/tasks/${task.id}`, pattern: "/tasks/:taskId" });
+    expect(await screen.findByText(/being revised/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sign off the SOP" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark complete" })).not.toBeInTheDocument();
+  });
+});
+
 describe("a task on an SOP from the task form", () => {
   it("offers the company's published SOPs and saves the one picked", async () => {
     const user = userEvent.setup();
@@ -265,5 +284,24 @@ describe("a task on an SOP from the task form", () => {
     await user.selectOptions(picker, published.title);
     await user.click(screen.getByRole("button", { name: "Add task" }));
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ sop_id: published.id })));
+  });
+});
+
+describe("an older SOP with pictures in its Markdown", () => {
+  async function legacyWithPicture() {
+    const sop = await sopsService.createSop({ company_id: KLASIK.company.id, title: "Old with photo", category_id: null, status: "published", body: { md: "## Setup\n\n![Ladder angle](https://example.com/angle.png)\n\nSet the angle." } });
+    return sop.id;
+  }
+
+  it("says on the SOP that its pictures are kept in history, not shown", async () => {
+    const id = await legacyWithPicture();
+    renderWithHub(<SopPage />, employee, { path: `/sops/${id}`, pattern: "/sops/:sopId" });
+    expect(await screen.findByText(/This version has 1 picture from before the editor/)).toBeInTheDocument();
+  });
+
+  it("warns before an edit saves without them", async () => {
+    const id = await legacyWithPicture();
+    renderWithHub(<SopEditPage />, admin, { path: `/sops/${id}/edit`, pattern: "/sops/:sopId/edit" });
+    expect(await screen.findByText(/Saving keeps 1 picture in version history only/)).toBeInTheDocument();
   });
 });

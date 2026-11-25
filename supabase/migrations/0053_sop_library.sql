@@ -28,9 +28,13 @@
 --      stamps the version, their name, the company and the time. The person and the company's
 --      admins read them; nobody signed in changes or removes one.
 --   8. Tasks on an SOP: tasks.sop_id. The SOP must be the company's own and published when linked.
---      A sign-off closes that person's open tasks on the SOP assigned at or before it. Until then
---      the assignee cannot close the task by hand or by ticking its steps; an admin can. Only an
---      admin or the task's creator moves the link. A recurring task's next copy keeps the link.
+--      When a task was assigned is tasks.assigned_at, stamped by the database from the clock on
+--      insert and whenever its person or its SOP changes, never written by the app; sign-offs are
+--      timed by the clock too. A sign-off closes that person's open tasks on the SOP assigned at or
+--      before it. Until then the assignee cannot close the task by hand or by ticking its steps;
+--      an admin can. Only an admin or the task's creator moves the link. A recurring task's next
+--      copy keeps the link and, assigned after the sign-off that closed the last one, asks for a
+--      new sign-off. A task reassigned to someone asks them for one of their own.
 --
 -- Redefines public.set_sop_version() and public.stamp_sop_updated_by() (0004) and
 -- public.recur_task() (0036, 0037). If any of 0004, 0036 or 0037 is pasted again after this one,
@@ -310,6 +314,11 @@ begin
        and not exists (select 1 from auth.users u where u.id = old.created_by) then
       return new;
     end if;
+    -- Nor is a deleted category's key clearing: its SOPs become Uncategorized, nobody edited them.
+    if new.category_id is null and old.category_id is not null
+       and not exists (select 1 from public.sop_categories c where c.id = old.category_id) then
+      return new;
+    end if;
   end if;
 
   if (select auth.uid()) is not null then
@@ -397,7 +406,8 @@ begin
         using errcode = 'check_violation';
     end if;
     new.version := v_sop.current_version;
-    new.signed_at := now();
+    -- The clock, not the transaction's start, so a sign-off and the tasks around it keep their order.
+    new.signed_at := clock_timestamp();
     -- One sign-off a version, unless a task assigned since asks for another.
     select max(o.signed_at) into v_last
       from public.sop_signoffs o
@@ -405,7 +415,7 @@ begin
     if v_last is not null and not exists (
       select 1 from public.tasks t
        where t.sop_id = new.sop_id and t.assignee_id = new.profile_id
-         and t.completed_at is null and t.created_at > v_last
+         and t.completed_at is null and t.assigned_at > v_last
     ) then
       raise exception 'You have already signed off this version.'
         using errcode = 'check_violation';
@@ -430,6 +440,20 @@ create trigger sop_signoffs_stamp
 alter table public.tasks add column if not exists sop_id uuid references public.sops (id) on delete set null;
 create index if not exists tasks_sop_idx on public.tasks (sop_id, assignee_id) where sop_id is not null;
 
+-- When each task was assigned. Tasks from before 0053 were assigned when they were created. The
+-- backfill runs with the table's triggers off, so no task's updated_at or stamps move.
+alter table public.tasks add column if not exists assigned_at timestamptz;
+do $$
+begin
+  if exists (select 1 from public.tasks where assigned_at is null) then
+    alter table public.tasks disable trigger user;
+    update public.tasks set assigned_at = created_at where assigned_at is null;
+    alter table public.tasks enable trigger user;
+  end if;
+end $$;
+alter table public.tasks alter column assigned_at set default now();
+alter table public.tasks alter column assigned_at set not null;
+
 -- A sign-off closes the person's open tasks on the SOP that were assigned at or before it.
 create or replace function public.close_tasks_on_signoff()
 returns trigger
@@ -446,7 +470,7 @@ begin
    where sop_id = new.sop_id
      and assignee_id = new.profile_id
      and completed_at is null
-     and created_at <= new.signed_at;
+     and assigned_at <= new.signed_at;
   perform set_config('hub.task_internal', coalesce(v_prev, ''), true);
   return null;
 end;
@@ -468,8 +492,17 @@ declare
   v_internal boolean := coalesce(current_setting('hub.task_internal', true), '') = '1';
   v_signed_in boolean := (select auth.uid()) is not null;
   v_sop record;
-  v_since timestamptz;
 begin
+  -- When it was assigned: the clock, on insert and whenever its person or its SOP changes. Never
+  -- what the app sent.
+  if tg_op = 'INSERT' then
+    new.assigned_at := clock_timestamp();
+  elsif new.assignee_id is distinct from old.assignee_id or new.sop_id is distinct from old.sop_id then
+    new.assigned_at := clock_timestamp();
+  else
+    new.assigned_at := coalesce(old.assigned_at, new.assigned_at);
+  end if;
+
   -- Moving the link is the assigner's: an admin, or whoever created the task.
   if tg_op = 'UPDATE' and not v_internal and v_signed_in
      and new.sop_id is distinct from old.sop_id
@@ -501,10 +534,9 @@ begin
 
   if new.sop_id is not null and new.completed_at is not null
      and (tg_op = 'INSERT' or old.completed_at is null) then
-    v_since := case when tg_op = 'INSERT' then now() else old.created_at end;
     if new.assignee_id is null or not exists (
       select 1 from public.sop_signoffs o
-       where o.sop_id = new.sop_id and o.profile_id = new.assignee_id and o.signed_at >= v_since
+       where o.sop_id = new.sop_id and o.profile_id = new.assignee_id and o.signed_at >= new.assigned_at
     ) then
       if v_internal then
         -- Ticking every step does not finish an SOP task; the sign-off does.

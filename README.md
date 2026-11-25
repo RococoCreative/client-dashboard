@@ -574,7 +574,7 @@ ships with it make it a working library rather than a list of Markdown pages.
   tag, status (admins), assigned to me and not signed off by me, sorted by recent change or A to Z.
   On an SOP, Find in this SOP highlights every match and steps through them.
 - **Import.** Admins drop in Word (.docx), PDF, text or Markdown files, up to 50 at a time and 20
-  MB each. Each is read in the browser, nothing is sent anywhere to be read: Word keeps headings,
+  MB each; a PDF's first 200 pages are read, and a longer one says so. Each is read in the browser, nothing is sent anywhere to be read: Word keeps headings,
   lists, tables, bold and links; a PDF is rebuilt from its lines (larger type is a heading,
   bullets and numbers are lists, running headers, footers and page numbers are dropped); the first
   heading becomes the title, or the file name. Each becomes a draft filed under one category and
@@ -587,10 +587,13 @@ ships with it make it a working library rather than a list of Markdown pages.
   person and the company's admins read them; nobody changes or removes one. When the SOP changes,
   an earlier sign-off reads as signed for an older version and the person may sign again.
 - **Assigning.** With the `tasks` module, an admin assigns a published SOP to people from its page;
-  each gets a task on it (`tasks.sop_id`) and the usual assignment email. Their sign-off closes
-  every open task of theirs on that SOP assigned at or before it, in the database. Until then the
-  assignee cannot close it by hand or by ticking its steps; an admin can. A recurring SOP task's next
-  copy keeps the SOP. A task form can link any published SOP too.
+  each gets a task on it (`tasks.sop_id`) and the usual assignment email. When a task was assigned
+  is `tasks.assigned_at`, stamped by the database from the clock on insert and whenever its person
+  or its SOP changes. A sign-off closes every open task of theirs on that SOP assigned at or before
+  it, in the database. Until then the assignee cannot close it by hand or by ticking its steps; an
+  admin can. A recurring SOP task's next copy keeps the SOP and asks for a fresh sign-off, and a
+  task reassigned to someone asks them for one of their own. While its SOP is unpublished to be
+  revised, the task says so and waits. A task form can link any published SOP too.
 
 ### Releasing the SOP library
 
@@ -606,9 +609,9 @@ SOP read, so until `0053` is in, the library and every SOP page fail to load.
    redeployed.
 
 Rolling the app back after `0053` keeps working for SOPs nobody has written since: they still carry
-the fixed category the previous app reads. One the new app has written (or created) has no fixed
-category and drops out of the previous app's list, though its page still opens by address. Nothing
-is lost; roll forward again to see it listed.
+the fixed category the previous app reads. Any SOP written or created after `0053`, by either app,
+has no fixed category and drops out of the previous app's list, though its page still opens by
+address. Nothing is lost; roll forward again to see it listed.
 
 ## Impact scores
 

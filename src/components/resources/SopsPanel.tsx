@@ -24,7 +24,7 @@ import { listSopCategories } from "../../services/sopCategories.ts";
 import { listMySopSignoffs } from "../../services/sopSignoffs.ts";
 import { listTasks } from "../../services/tasks.ts";
 import { formatDate } from "../../lib/format.ts";
-import { snippetFor } from "../../lib/sops/search.ts";
+import { searchTerms, snippetFor } from "../../lib/sops/search.ts";
 import { tagsInUse } from "../../lib/sops/tags.ts";
 import { UNCATEGORIZED, filterSops, readFilters, standingOn, writeFilters, type LibraryFilters, type Standing } from "../../lib/sops/library.ts";
 import { SOP_STATUS_LABELS, keysOf, type Sop, type SopCategory } from "../../types/database.ts";
@@ -38,9 +38,12 @@ function StandingBadge({ standing, assigned }: { standing: Standing; assigned: b
 function SopRow({ sop, isAdmin, query, standing, assigned }: { sop: Sop; isAdmin: boolean; query: string; standing: Standing; assigned: boolean }) {
   const snippet = query ? snippetFor(sop.body_text, query) : null;
   const line = snippet ?? sop.summary;
+  // Find on the SOP page matches a phrase, and the library matches each word on its own, so the
+  // page opens with the first word found, which is sure to be there.
+  const findTerm = query ? searchTerms(query)[0] : undefined;
   return (
     <li>
-      <Link to={`/sops/${sop.id}${query ? `?q=${encodeURIComponent(query)}` : ""}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 transition-colors duration-150 hover:bg-surface-2/60">
+      <Link to={`/sops/${sop.id}${findTerm ? `?q=${encodeURIComponent(findTerm)}` : ""}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 transition-colors duration-150 hover:bg-surface-2/60">
         <div className="min-w-0 flex-1">
           <p className={`truncate ${itemTitleClass}`} title={sop.title}>{sop.title}</p>
           {line ? <p className={`mt-0.5 line-clamp-2 ${secondaryClass}`}>{line}</p> : null}

@@ -48,6 +48,14 @@ describe("readSopFile", () => {
     expect(docToLines(read.doc!)).toEqual(["Outriggers down"]);
   });
 
+  it("says when a long PDF was only read in part", async () => {
+    const file = new File(["%PDF"], "manual.pdf", { type: "application/pdf" });
+    const read = await readSopFile(file, {
+      pdfLines: async () => ({ pages: 200, totalPages: 260, lines: [{ text: "Manual", size: 18, gapBefore: null, page: 1 }, { text: "Body text.", size: 10, gapBefore: 14, page: 1 }] }),
+    });
+    expect(read.notes).toContain("Only the first 200 of 260 pages were read. The rest is in the attached original.");
+  });
+
   it("reports a PDF with no text instead of importing it empty", async () => {
     const file = new File(["%PDF"], "scan.pdf", { type: "application/pdf" });
     const read = await readSopFile(file, { pdfLines: async () => ({ pages: 2, lines: [] }) });

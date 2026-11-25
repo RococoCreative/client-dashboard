@@ -34,7 +34,7 @@ import { hasModule } from "../../lib/modules.ts";
 import { buildObjectPath, formatBytes, getSignedUrl, removeFile, uploadFile } from "../../services/storage.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
-import { versionDoc } from "../../lib/sops/doc.ts";
+import { markdownPictureCount, versionDoc } from "../../lib/sops/doc.ts";
 import { SOP_STATUS_LABELS, type SopAttachment, type SopStatus, type SopVersion } from "../../types/database.ts";
 
 // Whether the database answered a write with a refusal (a Postgres or PostgREST error code), so
@@ -252,7 +252,14 @@ export default function SopPage() {
           >
             {shown ? (
               shown.body_json || shown.body_md?.trim() ? (
+                <>
+                {markdownPictureCount(shown.body_md) ? (
+                  <Notice tone="info" className="mb-4">
+                    This version has {pluralize(markdownPictureCount(shown.body_md), "picture")} from before the editor. Pictures do not show here yet; they stay in this version's history, and the attached files still open.
+                  </Notice>
+                ) : null}
                 <SopDocument key={shown.id} doc={versionDoc(shown)} initialQuery={params.get("q") ?? ""} />
+                </>
               ) : (
                 <p className="text-sm text-ink-3">This version has no text.</p>
               )
@@ -275,7 +282,7 @@ export default function SopPage() {
                         ...prev,
                         mine: [signoff, ...prev.mine],
                         everyone: isAdmin ? [signoff, ...prev.everyone] : prev.everyone,
-                        tasks: prev.tasks.map((t) => (t.assignee_id === profile.id && t.completed_at === null && t.created_at <= signoff.signed_at ? { ...t, completed_at: signoff.signed_at } : t)),
+                        tasks: prev.tasks.map((t) => (t.assignee_id === profile.id && t.completed_at === null && t.assigned_at <= signoff.signed_at ? { ...t, completed_at: signoff.signed_at } : t)),
                       }
                     : prev,
                 )

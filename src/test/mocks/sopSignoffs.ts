@@ -5,6 +5,7 @@ import type { SopSignoff } from "../../types/database.ts";
 import { fromAll, personaIn } from "../fixtures.ts";
 import { sopRow } from "./sops.ts";
 import { closeTasksOnSignoff, openSopTaskSince } from "./tasks.ts";
+import { clockNow } from "./clock.ts";
 
 const signoffs: SopSignoff[] = fromAll((b) => b.sopSignoffs).map((x) => ({ ...x }));
 let counter = 0;
@@ -38,7 +39,7 @@ export async function signOffSop(sopId: string, profileId: string): Promise<SopS
     profile_id: profileId,
     version: sop.current_version,
     signer_name: person.full_name,
-    signed_at: new Date().toISOString(),
+    signed_at: clockNow(),
   };
   signoffs.push(created);
   closeTasksOnSignoff(sopId, profileId, created.signed_at);

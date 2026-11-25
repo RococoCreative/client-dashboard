@@ -30,6 +30,7 @@ const TASK: TaskWithSteps = {
   campaign_id: null,
   goal_id: null,
   sop_id: null,
+  assigned_at: "2026-11-01T09:00:00.000Z",
   completed_at: null,
   completed_by: null,
   next_task_id: null,

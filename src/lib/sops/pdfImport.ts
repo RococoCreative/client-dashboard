@@ -12,7 +12,7 @@ type Item = { str: string; transform: number[]; height: number; width: number };
 
 const MAX_PAGES = 200;
 
-export async function readPdfLines(data: ArrayBuffer): Promise<{ lines: TextLine[]; pages: number }> {
+export async function readPdfLines(data: ArrayBuffer): Promise<{ lines: TextLine[]; pages: number; totalPages: number }> {
   const task = getDocument({ data: new Uint8Array(data), disableFontFace: true });
   const pdf = await task.promise;
   const pages = Math.min(pdf.numPages, MAX_PAGES);
@@ -52,5 +52,5 @@ export async function readPdfLines(data: ArrayBuffer): Promise<{ lines: TextLine
   } finally {
     await task.destroy();
   }
-  return { lines, pages };
+  return { lines, pages, totalPages: pdf.numPages };
 }

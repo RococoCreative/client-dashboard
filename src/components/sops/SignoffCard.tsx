@@ -35,7 +35,7 @@ export default function SignoffCard({
   const latest = signoffs[0] ?? null;
   const current = latest !== null && latest.version >= sop.current_version;
   // A task assigned since the last sign-off asks for a new one, even on the same version.
-  const askedAgain = openTasks.some((t) => !latest || t.created_at > latest.signed_at);
+  const askedAgain = openTasks.some((t) => !latest || t.assigned_at > latest.signed_at);
   const canSign = !current || askedAgain;
 
   async function sign() {

@@ -743,6 +743,7 @@ function build(company: Company): CompanyBundle {
         campaign_id: null,
         goal_id: null,
         sop_id: null,
+        assigned_at: fields.created_at,
         completed_at: null,
         completed_by: null,
         next_task_id: null,
