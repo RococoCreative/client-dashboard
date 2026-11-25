@@ -1,9 +1,10 @@
 // Moving SOP text between its forms: outside HTML (an import, a paste, an older Markdown version)
 // into the editor's document, and a document into plain lines for comparing two versions. Pure
 // apart from the DOM parser the editor's own schema uses.
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import Markdown from "react-markdown";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import type { Nodes as HastNodes } from "hast";
 import { generateJSON, type JSONContent } from "@tiptap/core";
 import { sopExtensions } from "./schema.ts";
 import type { SopDocJson, SopVersion } from "../../types/database.ts";
@@ -17,10 +18,32 @@ export function htmlToDoc(html: string): SopDocJson {
   return generateJSON(html, sopExtensions()) as SopDocJson;
 }
 
-// An older version was Markdown. react-markdown never renders raw HTML, so nothing unsafe gets
-// through on the way in.
+const VOID = new Set(["br", "hr", "img"]);
+const KEEP_ATTRS = new Set(["href", "start"]);
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// HTML from the Markdown syntax tree. Raw HTML in the Markdown never reaches the tree (remark-rehype
+// drops it), and only a link's address and a list's start number are kept as attributes.
+function hastToHtml(node: HastNodes): string {
+  if (node.type === "text") return escapeHtml(node.value);
+  if (node.type === "root") return node.children.map(hastToHtml).join("");
+  if (node.type !== "element") return "";
+  const attrs = Object.entries(node.properties ?? {})
+    .filter(([key, value]) => KEEP_ATTRS.has(key) && (typeof value === "string" || typeof value === "number"))
+    .map(([key, value]) => ` ${key}="${escapeHtml(String(value))}"`)
+    .join("");
+  if (VOID.has(node.tagName)) return `<${node.tagName}${attrs}>`;
+  return `<${node.tagName}${attrs}>${node.children.map(hastToHtml).join("")}</${node.tagName}>`;
+}
+
+// An older version was Markdown.
 export function markdownToHtml(md: string): string {
-  return renderToStaticMarkup(createElement(Markdown, null, md));
+  const processor = unified().use(remarkParse).use(remarkRehype);
+  const tree = processor.runSync(processor.parse(md)) as HastNodes;
+  return hastToHtml(tree);
 }
 
 function textOf(node: JSONContent): string {

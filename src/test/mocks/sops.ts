@@ -47,7 +47,8 @@ function stampWriter(sop: Sop): void {
 }
 
 function matches(sop: Sop, query: string): boolean {
-  const words = searchTerms([sop.title, sop.tags.join(" "), sop.summary ?? "", sop.body_text ?? ""].join(" "));
+  // Every word of the SOP (searchTerms caps a query at eight words; a document has many more).
+  const words = [sop.title, sop.tags.join(" "), sop.summary ?? "", sop.body_text ?? ""].join(" ").toLowerCase().split(/[^\p{L}\p{N}]+/u);
   return searchTerms(query).every((term) => words.some((w) => w.startsWith(term)));
 }
 

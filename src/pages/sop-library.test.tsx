@@ -25,6 +25,7 @@ import * as sopsService from "../services/sops.ts";
 import * as categoriesService from "../services/sopCategories.ts";
 import SopEditPage from "./sops/SopEditPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
+import ResourcesPage from "./resources/ResourcesPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -117,5 +118,55 @@ describe("the SOP page", () => {
     renderWithHub(<SopPage />, employee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
     await screen.findByRole("heading", { name: "Purpose" });
     expect(screen.queryByRole("button", { name: /Restore version/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("the SOP library", () => {
+  it("filters by the company's own category and by tag", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ResourcesPage tab="sops" />, admin, { path: "/resources/sops", pattern: "/resources/sops" });
+    expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Category"), "Client");
+    expect(screen.getByText("Client change order")).toBeInTheDocument();
+    expect(screen.queryByText("Jobsite safety walk")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Category"), "All categories");
+    await user.click(screen.getByRole("button", { name: "Daily" }));
+    expect(screen.getByText("Jobsite safety walk")).toBeInTheDocument();
+    expect(screen.queryByText("Client change order")).not.toBeInTheDocument();
+  });
+
+  it("searches inside the SOPs and shows the line that matched", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<ResourcesPage tab="sops" />, employee, { path: "/resources/sops", pattern: "/resources/sops" });
+    await screen.findByText("Jobsite safety walk");
+    await user.type(screen.getByRole("searchbox", { name: "Search SOPs" }), "hazards");
+    expect((await screen.findAllByText(/note hazards/)).length).toBeGreaterThan(0);
+    await user.clear(screen.getByRole("searchbox", { name: "Search SOPs" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search SOPs" }), "invoicing");
+    await waitFor(() => expect(screen.queryByText("Jobsite safety walk")).not.toBeInTheDocument());
+  });
+
+  it("reads a tag from the address", async () => {
+    renderWithHub(<ResourcesPage tab="sops" />, employee, { path: "/resources/sops?tag=Pricing", pattern: "/resources/sops" });
+    expect(await screen.findByText("Client change order")).toBeInTheDocument();
+    expect(screen.queryByText("Jobsite safety walk")).not.toBeInTheDocument();
+  });
+
+  it("offers status only to admins, and Import and New SOP", async () => {
+    renderWithHub(<ResourcesPage tab="sops" />, employee, { path: "/resources/sops", pattern: "/resources/sops" });
+    await screen.findByText("Jobsite safety walk");
+    expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Import/ })).not.toBeInTheDocument();
+  });
+
+  it("gives admins a Setup tab for categories", async () => {
+    const user = userEvent.setup();
+    const create = vi.spyOn(categoriesService, "createSopCategory");
+    renderWithHub(<ResourcesPage tab="setup" />, admin, { path: "/resources/setup", pattern: "/resources/setup" });
+    expect(await screen.findByRole("heading", { name: "SOP categories" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("New category"), "Equipment");
+    await user.click(screen.getByRole("button", { name: "Add category" }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(KLASIK.company.id, "Equipment", expect.any(Number)));
+    expect(await screen.findByDisplayValue("Equipment")).toBeInTheDocument();
   });
 });

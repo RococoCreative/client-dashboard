@@ -499,7 +499,8 @@ describe("library", () => {
     renderWithHub(<ResourcesPage tab="sops" />, admin);
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
     expect(await screen.findByText("Weekly invoicing")).toBeInTheDocument();
-    expect(screen.getByText("Draft")).toBeInTheDocument();
+    // The status filter offers Draft too; the badge on the row is the one that counts.
+    expect(screen.getAllByText("Draft").filter((el) => el.tagName !== "OPTION")).toHaveLength(1);
   });
 
   it("renders an SOP body from Markdown with versions and attachments", async () => {

@@ -196,9 +196,10 @@ describe("rococo portfolio", () => {
 });
 
 describe("filter chips", () => {
-  it("uses the shared chip for SOP categories", async () => {
+  // Categories are a select since 0053 (a company names its own); tags are the row of chips.
+  it("uses the shared chip for SOP tags", async () => {
     renderWithHub(<ResourcesPage tab="sops" />, admin, { path: "/resources/sops", pattern: "/resources/sops" });
-    expect(await screen.findByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("filters resources by a tag from the row of chips or from a card", async () => {
