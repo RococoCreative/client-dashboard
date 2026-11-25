@@ -134,6 +134,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
   forwards only; if one of those is ever re-pasted, paste `0041` straight after it.
 - **Seeds run live:** `supabase/seeds/rba_scorecards.sql` (2026-11-10): RBA's two divisions
   (RBA South, RBA North), the 8 named roles and 33 metrics across 6 roles. Safe to run again.
+- **Seeds written, not run:** `supabase/seeds/sandbox_company.sql`: the Sandbox, Rococo's test company
+  on the live hub (see The Sandbox company). Set its inbox line first.
 - **Seeds written, not run:** `supabase/seeds/kingdom_permissions.sql`: Kingdom's seven capability
   levels and nothing else. This is the one to run, after `0040`, `0041` and the app deploy.
 - **Seeds on hold:** `supabase/seeds/kingdom_intake.sql`: Kingdom's seven capability
@@ -626,6 +628,35 @@ Rolling the app back after `0053` keeps working for SOPs nobody has written sinc
 the fixed category the previous app reads. Any SOP written or created after `0053`, by either app,
 has no fixed category and drops out of the previous app's list, though its page still opens by
 address. Nothing is lost; roll forward again to see it listed.
+
+## The Sandbox company
+
+The Sandbox (slug `sandbox`) is Rococo's own company on the live hub, for trying new work, such as
+importing SOPs, assigning tasks, signing off or running a review, before it reaches a client's people.
+It is an ordinary company, walled off from the clients by the same row level security, on the Rococo
+theme, with every module on, Financials on and GSRs by month. It has no sign-in domain, so nobody
+joins it except by invitation. It shows in the Rococo portfolio beside the clients.
+
+`supabase/seeds/sandbox_company.sql` creates it: the company, Klasik's live review shape with neutral
+wording, deliverable categories, job roles, two SOP categories, a published SOP and a draft, a task
+on the SOP, a plain task, a win, a project and a link, and four people who have not signed in yet: an
+admin, a manager reporting to the admin, an employee reporting to the manager, and a second employee
+who is never meant to sign in.
+
+1. Set `v_inbox` on its marked line to an inbox you read. Not a rocococreative.io address: the
+   sign-in gate admits one only when it is on the Rococo admin list, so an invitation to it is
+   refused. Not a client's domain either: the script refuses both. A Gmail address works, since
+   Gmail delivers `name+anything@gmail.com` to `name@gmail.com`; the people get
+   `+sandbox-admin`, `+sandbox-manager`, `+sandbox-employee` and `+sandbox-nologin`.
+2. Run it once in the SQL editor. It ends with the four people. Running it again changes nothing.
+3. As a Rococo admin, open Sandbox from the portfolio, go to People, and Send invite on the admin,
+   manager and employee. Open each email's link in its own browser profile or private window to be
+   that person.
+
+It catches problems in what a company sees and does. It cannot catch a bad migration or a bad
+deploy before the clients do, since every company shares one database and one deploy; a staging
+Supabase project with Vercel previews pointed at it is the gate for those. To retire the Sandbox,
+delete it on Rococo, Companies.
 
 ## Impact scores
 
