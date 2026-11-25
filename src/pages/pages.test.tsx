@@ -12,6 +12,8 @@ vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
 vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
@@ -497,7 +499,8 @@ describe("library", () => {
     renderWithHub(<ResourcesPage tab="sops" />, admin);
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
     expect(await screen.findByText("Weekly invoicing")).toBeInTheDocument();
-    expect(screen.getByText("Draft")).toBeInTheDocument();
+    // The status filter offers Draft too; the badge on the row is the one that counts.
+    expect(screen.getAllByText("Draft").filter((el) => el.tagName !== "OPTION")).toHaveLength(1);
   });
 
   it("renders an SOP body from Markdown with versions and attachments", async () => {
@@ -512,7 +515,7 @@ describe("library", () => {
   it("loads the current text into the editor", async () => {
     renderWithHub(<SopEditPage />, admin, { path: `/sops/${KLASIK.sops[0].id}/edit`, pattern: "/sops/:sopId/edit" });
     expect(await screen.findByDisplayValue("Jobsite safety walk")).toBeInTheDocument();
-    expect((await screen.findByLabelText(/Body/)).textContent).toContain("Added this month");
+    expect((await screen.findByLabelText(/Body/)).textContent).toContain("client album too");
   });
 
   it("refuses to open another company's SOP in the editor", async () => {

@@ -17,6 +17,8 @@ vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
 vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
@@ -417,6 +419,8 @@ describe("the task form started from a GSR goal", () => {
       recurrence: null,
       campaign_id: null,
       goal_id: input.goal_id ?? null,
+      sop_id: null,
+      assigned_at: new Date().toISOString(),
       completed_at: null,
       completed_by: null,
       next_task_id: null,

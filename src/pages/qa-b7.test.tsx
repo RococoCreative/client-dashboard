@@ -29,6 +29,8 @@ vi.mock("../services/gsr.ts", async () => {
   return { ...mock, updatePillar: vi.fn(mock.updatePillar), deletePillar: vi.fn(mock.deletePillar), deleteCriterion: vi.fn(mock.deleteCriterion) };
 });
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", async () => {
   const mock = await import("../test/mocks/storage.ts");

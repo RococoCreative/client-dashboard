@@ -20,6 +20,8 @@ vi.mock("../services/gsr.ts", async () => {
 });
 vi.mock("../services/gsrOnDemand.ts", () => import("../test/mocks/gsrOnDemand.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));

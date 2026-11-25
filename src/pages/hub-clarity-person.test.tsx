@@ -15,6 +15,8 @@ vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
 vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
@@ -47,6 +49,10 @@ import * as profilesService from "../services/profiles.ts";
 import { setMockRococoFlag } from "../test/mocks/profiles.ts";
 import * as tasksService from "../services/tasks.ts";
 import PersonPage from "./people/PersonPage.tsx";
+import { setActingPerson } from "../test/actingPerson.ts";
+import { createSop } from "../test/mocks/sops.ts";
+import { signOffSop } from "../test/mocks/sopSignoffs.ts";
+import { emptyDoc } from "../lib/sops/doc.ts";
 import { personTabsFor } from "./people/personTabs.ts";
 
 const rbaAdmin = makeHub("admin", RBA.company);
@@ -321,5 +327,25 @@ describe("addresses through the app", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Review history" })).toBeInTheDocument();
     expect(within(await tabRow()).getByRole("link", { name: "Reviews" })).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("the SOPs a person has signed off", () => {
+  it("lists each on their Overview with its version and date, for those who lead them", async () => {
+    setActingPerson(rbaAdmin.profile);
+    const sop = await createSop({ company_id: RBA.company.id, title: "Harness inspection", category_id: null, status: "published", body: { json: emptyDoc() } });
+    setActingPerson(jamie);
+    await signOffSop(sop.id, jamie.id);
+    setActingPerson(null);
+    renderPerson(rbaAdmin, `/people/${jamie.id}`);
+    const section = (await screen.findByRole("heading", { name: "SOPs signed off" })).closest("section")!;
+    expect(await within(section).findByRole("link", { name: "Harness inspection" })).toHaveAttribute("href", `/sops/${sop.id}`);
+    expect(within(section).getByText(/v1/)).toBeInTheDocument();
+  });
+
+  it("says so when they have signed nothing off", async () => {
+    renderPerson(rbaAdmin, `/people/${noor.id}`);
+    const section = (await screen.findByRole("heading", { name: "SOPs signed off" })).closest("section")!;
+    expect(await within(section).findByText("No SOPs signed off yet.")).toBeInTheDocument();
   });
 });

@@ -14,6 +14,8 @@ vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
 vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
@@ -197,7 +199,8 @@ describe("Settings hub", () => {
 describe("Resources hub", () => {
   it("opens the SOP library on SOPs, with no Links tab for a company without the module", async () => {
     renderWithHub(<ResourcesPage tab="sops" />, admin, { path: "/resources/sops", pattern: "/resources/sops" });
-    expect(tabsOf("Resources")).toEqual({ labels: ["SOPs", "Files & media"], current: ["SOPs"], hrefs: ["/resources/sops", "/resources/files"] });
+    // Setup, where the library's categories are kept, is an admin's tab (0053).
+    expect(tabsOf("Resources")).toEqual({ labels: ["SOPs", "Files & media", "Setup"], current: ["SOPs"], hrefs: ["/resources/sops", "/resources/files", "/resources/setup"] });
     expect(await screen.findByRole("heading", { name: "SOP library" })).toBeInTheDocument();
     expect(await screen.findByText("Jobsite safety walk")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /New SOP/ })).toHaveAttribute("href", "/sops/new");
@@ -213,9 +216,9 @@ describe("Resources hub", () => {
   it("adds the Links tab once the company carries the module", async () => {
     renderWithHub(<ResourcesPage tab="links" />, klasikWithLinks, { path: "/resources/links", pattern: "/resources/links" });
     expect(tabsOf("Resources")).toEqual({
-      labels: ["SOPs", "Files & media", "Links"],
+      labels: ["SOPs", "Files & media", "Links", "Setup"],
       current: ["Links"],
-      hrefs: ["/resources/sops", "/resources/files", "/resources/links"],
+      hrefs: ["/resources/sops", "/resources/files", "/resources/links", "/resources/setup"],
     });
     // An admin manages the links here; Klasik has none yet.
     expect(await screen.findByRole("heading", { name: "Links to outside tools" })).toBeInTheDocument();

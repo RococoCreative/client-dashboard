@@ -123,8 +123,14 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    `supabase/migrations/`, applied by pasting into the Supabase SQL editor. Never edit an
    applied migration; write the next number. Keep `src/types/database.ts` in step.
 9. **SOP history is immutable.** Saving an edit appends a `sop_versions` row; versions are
-   never edited or renumbered. Files live in the private `hub-files` bucket under
-   `{company_id}/...` and are read through signed URLs only.
+   never edited or renumbered, and the database refuses a signed-in change to one (0053).
+   Restoring an old version saves its text again as the newest. A version's text, its author and
+   an SOP's "last updated by" are stamped by the database, never sent by the app. Every SOP body
+   goes through the one editor schema (`src/lib/sops/schema.ts`), whether typed, pasted or
+   imported. Pictures and video are links, never stored in the hub. A sign-off is the person's own,
+   a record on them read by the 0038 rule (0054: the person, their managers up the chain, the admins
+   over them), and closes their open tasks on that SOP in the database; an import is read in the browser and never sent anywhere to be read. Files live in
+   the private `hub-files` bucket under `{company_id}/...` and are read through signed URLs only.
 10. **Copy voice.** Calm, plain, confident. No em dashes anywhere in copy. No AI model
    identifiers in code, comments, or client-facing text (standard tooling attribution
    trailers in commit messages are fine). Client-facing copy is industry neutral unless a
@@ -143,7 +149,7 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
     deliverable categories, people and roles, job roles (with the dashboard modules and the
     role goals each one carries), KPIs, a person's own financial figures, compensation, goals,
     how many goals a month requires (on a Monthly GSRs pillar, if the company scores its GSRs at
-    all), SOPs, resources, financial snapshots, marketing, email domains, connections to outside
+    all), SOPs and their categories and tags, resources, financial snapshots, marketing, email domains, connections to outside
     systems, and the GSR format (`gsr_mode`, 0047: by month or on demand, changed only by hand in
     the database, never from a screen or by a signed-in account).
     Shared in code, so a change to any of it changes all three: the deliverable rule (two points a

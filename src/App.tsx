@@ -6,7 +6,8 @@
 //      gives their name; someone nobody has placed yet gets a calm holding screen; then the
 //      company sets the theme and the pages mount. Rococo admins start with no company on
 //      the portfolio (Rococo theme) and step into a company for this session only.
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import SkeletonRows from "./components/ui/SkeletonRows.tsx";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "./services/supabase.ts";
@@ -42,8 +43,6 @@ import PeoplePage from "./pages/people/PeoplePage.tsx";
 import PersonPage from "./pages/people/PersonPage.tsx";
 import DivisionsPage from "./pages/people/DivisionsPage.tsx";
 import RolesPage from "./pages/people/RolesPage.tsx";
-import SopPage from "./pages/sops/SopPage.tsx";
-import SopEditPage from "./pages/sops/SopEditPage.tsx";
 import ResourcesPage from "./pages/resources/ResourcesPage.tsx";
 import FinancialsPage from "./pages/FinancialsPage.tsx";
 import MarketingPage from "./pages/MarketingPage.tsx";
@@ -125,6 +124,16 @@ function RedirectTo({ path }: { path: string }) {
 }
 
 // Company pages need an active company. A Rococo admin without one belongs on the portfolio.
+// The SOP document pages carry the editor, which most visits never need, so they load on demand
+// in a chunk of their own.
+const SopPage = lazy(() => import("./pages/sops/SopPage.tsx"));
+const SopEditPage = lazy(() => import("./pages/sops/SopEditPage.tsx"));
+const SopImportPage = lazy(() => import("./pages/sops/SopImportPage.tsx"));
+
+function SopLoad({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<SkeletonRows rows={8} />}>{children}</Suspense>;
+}
+
 function WithCompany({ children }: { children: ReactNode }) {
   const { company } = useHub();
   return company ? <>{children}</> : <RedirectTo path="/rococo" />;
@@ -541,10 +550,12 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="resources/sops" element={<WithCompany><ResourcesPage tab="sops" /></WithCompany>} />
             <Route path="resources/files" element={<WithCompany><ResourcesPage tab="files" /></WithCompany>} />
             <Route path="resources/links" element={<WithCompany><ResourcesPage tab="links" /></WithCompany>} />
+            <Route path="resources/setup" element={<AdminOnly><ResourcesPage tab="setup" /></AdminOnly>} />
             <Route path="sops" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
-            <Route path="sops/new" element={<AdminOnly><SopEditPage /></AdminOnly>} />
-            <Route path="sops/:sopId" element={<WithCompany><SopPage /></WithCompany>} />
-            <Route path="sops/:sopId/edit" element={<AdminOnly><SopEditPage /></AdminOnly>} />
+            <Route path="sops/new" element={<AdminOnly><SopLoad><SopEditPage /></SopLoad></AdminOnly>} />
+            <Route path="sops/import" element={<AdminOnly><SopLoad><SopImportPage /></SopLoad></AdminOnly>} />
+            <Route path="sops/:sopId" element={<WithCompany><SopLoad><SopPage /></SopLoad></WithCompany>} />
+            <Route path="sops/:sopId/edit" element={<AdminOnly><SopLoad><SopEditPage /></SopLoad></AdminOnly>} />
             <Route path="financials" element={<AdminOnly><SettingOnly setting="manual_financials"><FinancialsPage /></SettingOnly></AdminOnly>} />
             <Route path="marketing" element={<AdminOnly><MarketingPage /></AdminOnly>} />
             <Route path="sales-finance" element={<AdminOnly><ModuleOnly module="data_sources"><SalesFinancePage /></ModuleOnly></AdminOnly>} />

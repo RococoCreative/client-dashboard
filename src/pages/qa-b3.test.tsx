@@ -13,6 +13,8 @@ vi.mock("../services/companies.ts", () => import("../test/mocks/companies.ts"));
 vi.mock("../services/invitations.ts", () => import("../test/mocks/invitations.ts"));
 vi.mock("../services/gsr.ts", () => import("../test/mocks/gsr.ts"));
 vi.mock("../services/sops.ts", () => import("../test/mocks/sops.ts"));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", () => import("../test/mocks/resources.ts"));
 vi.mock("../services/storage.ts", () => import("../test/mocks/storage.ts"));
 vi.mock("../services/financials.ts", () => import("../test/mocks/financials.ts"));
@@ -194,9 +196,10 @@ describe("rococo portfolio", () => {
 });
 
 describe("filter chips", () => {
-  it("uses the shared chip for SOP categories", async () => {
+  // Categories are a select since 0053 (a company names its own); tags are the row of chips.
+  it("uses the shared chip for SOP tags", async () => {
     renderWithHub(<ResourcesPage tab="sops" />, admin, { path: "/resources/sops", pattern: "/resources/sops" });
-    expect(await screen.findByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("filters resources by a tag from the row of chips or from a card", async () => {

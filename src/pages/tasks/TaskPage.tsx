@@ -50,6 +50,7 @@ import { listCycles, listEmployeeReviews, listGoals } from "../../services/gsr.t
 import { listCampaigns } from "../../services/marketing.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { completeTask, deleteTask, getTask, reopenTask } from "../../services/tasks.ts";
+import { getSop } from "../../services/sops.ts";
 import type { MarketingCampaign, TaskWithSteps } from "../../types/database.ts";
 
 // Where the back link goes: the screen the task was opened from, when it said, else Tasks.
@@ -114,6 +115,18 @@ export default function TaskPage() {
     }
   }, [companyId, goalId, goalPerson]);
 
+  // The SOP a task asks the assignee to complete (0053), read as the viewer may read it. Best
+  // effort: an SOP since unpublished reads as hidden to an employee, and the line says so.
+  const sopId = state.data?.task.sop_id ?? null;
+  const linkedSop = useAsync(async () => {
+    if (!sopId) return null;
+    try {
+      return await getSop(sopId);
+    } catch {
+      return null;
+    }
+  }, [sopId]);
+
   if (state.error && !state.data) return <Notice tone="error">{state.error}</Notice>;
   if (!state.data) return <SkeletonRows rows={8} />;
 
@@ -138,6 +151,8 @@ export default function TaskPage() {
   const lockAssigneeTo = isAdmin || leadsSomeone ? undefined : profileId;
   const formPeople = isAdmin ? people : people.filter((p) => p.id === profileId || led.some((l) => l.id === p.id));
   const assigneeName = task.assignee_id ? nameFromDirectory(names, task.assignee_id, "Not on the roster") : null;
+  // Whether the task's SOP can be opened and signed now: published, or any state for an admin.
+  const sopOpen = Boolean(linkedSop.data && (isAdmin || linkedSop.data.status === "published"));
   const goalOwner = task.assignee_id === profileId ? "your" : assigneeName ? `${assigneeName}'s` : "a";
 
   const setTask = (next: TaskWithSteps) => state.setData((prev) => (prev ? { ...prev, task: next } : prev));
@@ -177,7 +192,11 @@ export default function TaskPage() {
 
   const actions = (
     <>
-      {canAct && !done ? (
+      {/* A task on an SOP finishes when its person signs the SOP off; only an admin closes it by hand. */}
+      {canAct && !done && task.sop_id && !isAdmin && sopOpen ? (
+        <Link to={`/sops/${task.sop_id}`}><Button size="sm">Sign off the SOP</Button></Link>
+      ) : null}
+      {canAct && !done && (!task.sop_id || isAdmin) ? (
         <Button size="sm" disabled={busy} onClick={() => void act(() => completeTask(task.id))}>Mark complete</Button>
       ) : null}
       {canAct && done && !locked ? (
@@ -228,6 +247,20 @@ export default function TaskPage() {
             <Detail label="Repeat">{task.recurrence ? RECURRENCE_LABELS[task.recurrence] : "Does not repeat"}</Detail>
             {isAdmin ? <Detail label="Campaign">{campaign ? campaign.name : "None"}</Detail> : null}
             {done ? <Detail label="Completed">{formatDate(task.completed_at)}</Detail> : null}
+            {task.sop_id ? (
+              <Detail label="SOP">
+                {sopOpen ? (
+                  <>
+                    <Link to={`/sops/${task.sop_id}`} className="text-link hover:underline">{linkedSop.data!.title}</Link>
+                    <span className="text-ink-3">Finishes when it is signed off.</span>
+                  </>
+                ) : linkedSop.data === undefined && !linkedSop.error ? (
+                  <span className="text-ink-2">Loading</span>
+                ) : (
+                  <span className="text-ink-2">This SOP is being revised. It opens again once it is published, and signing it off then finishes this task.</span>
+                )}
+              </Detail>
+            ) : null}
             {task.goal_id ? (
               <Detail label="GSR goal">
                 {linked.data ? (

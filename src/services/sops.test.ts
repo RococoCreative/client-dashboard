@@ -44,7 +44,7 @@ vi.mock("./supabase.ts", () => ({
 
 import { createSop, deleteSop, removeSopAttachment } from "./sops.ts";
 
-const input = { company_id: "co-1", title: "Site cleanup", category: "process" as const, body_md: "## Steps", change_note: null };
+const input = { company_id: "co-1", title: "Site cleanup", category_id: null, body: { md: "## Steps" }, change_note: null };
 
 beforeEach(() => {
   fake.calls = [];

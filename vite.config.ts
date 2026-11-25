@@ -17,6 +17,9 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             { name: "react", test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/ },
+            // The SOP editor and its file readers, loaded only by the SOP document pages.
+            { name: "editor", test: /node_modules[\\/](@tiptap|prosemirror-[a-z-]+|orderedmap|rope-sequence|w3c-keyname|linkifyjs)[\\/]/ },
+            { name: "import", test: /node_modules[\\/](mammoth|pdfjs-dist|jszip|lop|bluebird|underscore|dingbat-to-unicode|xmlbuilder|@xmldom|base64-js|pako|setimmediate|lie|immediate|readable-stream|safe-buffer|string_decoder|core-util-is|inherits|isarray|process-nextick-args|util-deprecate|argparse|sprintf-js|option|duck)[\\/]/ },
             { name: "vendor", test: /node_modules[\\/]/ },
           ],
         },

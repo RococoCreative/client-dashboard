@@ -2,12 +2,14 @@
 // tabs, each its own route: SOPs (the SOP library), Files & media (templates, documents, videos),
 // and Links (the programs the team works in), which shows when the company carries the external
 // links module (rule 12: the module decides, never the company's name). Everyone reads every tab;
-// admins add and edit, and on Links an admin gets the editor in place of the list.
+// admins add and edit, and on Links an admin gets the editor in place of the list. Admins also get
+// Setup, where the SOP library's categories are kept.
 import { Navigate, useLocation } from "react-router-dom";
 import ExternalLinksPanel from "../../components/links/ExternalLinksPanel.tsx";
 import LinkGroups from "../../components/links/LinkGroups.tsx";
 import FilesPanel from "../../components/resources/FilesPanel.tsx";
 import SopsPanel from "../../components/resources/SopsPanel.tsx";
+import SopCategoriesPanel from "../../components/resources/SopCategoriesPanel.tsx";
 import EmptyState from "../../components/ui/EmptyState.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PageHeader from "../../components/ui/PageHeader.tsx";
@@ -59,9 +61,10 @@ export default function ResourcesPage({ tab }: { tab: ResourcesTab }) {
             : "How the company works: the SOP library, and the files and media the team reaches for."
         }
       />
-      <Tabs items={resourcesTabsFor(current)} label="Resources" />
+      <Tabs items={resourcesTabsFor(current, isAdmin)} label="Resources" />
       {tab === "sops" ? <SopsPanel /> : null}
       {tab === "files" ? <FilesPanel /> : null}
+      {tab === "setup" ? isAdmin ? <SopCategoriesPanel /> : <Navigate to="/resources/sops" replace /> : null}
       {tab === "links" ? isAdmin ? <ExternalLinksPanel companyId={current.id} /> : <LinksDirectory companyId={current.id} /> : null}
     </>
   );
