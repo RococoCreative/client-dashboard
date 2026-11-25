@@ -119,8 +119,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-  So `0001` to `0052` are not all live; `0032` is the gap. `0053` is written and not applied
-  yet (see The SOP library). The next free number is `0054`.
+  So `0001` to `0053` are not all live; `0032` is the gap. `0054` is written and not applied
+  yet (see The SOP library). The next free number is `0055`.
 - **Applied 2026-11-24 (pasted in the SQL editor, checked live):** `0051_rococo_admins` and
   `0052_connection_secrets` (see Applying security hardening). The one Rococo admin is on the
   list and active; `connection_pending` is not readable by signed-in users; no provider
@@ -223,10 +223,18 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
   stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
   request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
   Nothing visible changes when it goes in. Apply it before merging the app that reads it.
-- **Written, not applied:** `0053_sop_library` (see The SOP library, and its release order there).
-  It redefines `set_sop_version` and `stamp_sop_updated_by` (`0004`) and `recur_task` (`0036`,
-  `0037`). If any of `0004`, `0036` or `0037` is pasted again after it, paste `0053` straight after.
-- **Next free number:** `0054`.
+- **Applied 2026-11-25 (pasted in the SQL editor, checked live):** `0053_sop_library`, the copy in
+  this repo (see The SOP library). Checked through the Supabase connection: `tasks.sop_id` and
+  `tasks.assigned_at` are in with no task missing its date, the triggers carry the review fixes, and
+  both release checks read 0 (no SOP left unfiled, none without search); the live library held 2
+  SOPs and 2 categories. It redefines `set_sop_version` and `stamp_sop_updated_by` (`0004`) and
+  `recur_task` (`0036`, `0037`). If any of `0004`, `0036` or `0037` is pasted again after it, paste
+  `0053` and then `0054` straight after.
+- **Written, not applied:** `0054_sop_signoff_readers`. It widens who reads a person's SOP
+  sign-offs from the person and admins to the 0038 rule (the person, the managers they report to up
+  the chain, the admins over them, Rococo), which the person's Overview relies on. It only replaces
+  one policy and depends on `0053`.
+- **Next free number:** `0055`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -586,7 +594,7 @@ ships with it make it a working library rather than a list of Markdown pages.
 - **Sign-off.** A member ticks "I have read this SOP and completed it" and signs off a published SOP
   for themselves. The database stamps the version, their name and the time (`sop_signoffs`), a
   record on the person: it shows on their Overview under SOPs signed off, read as every person's
-  records are (0038): the person, the managers they report to up the chain, the admins over them,
+  records are (0038, from `0054`): the person, the managers they report to up the chain, the admins over them,
   and Rococo. Nobody changes or removes one. When the SOP changes,
   an earlier sign-off reads as signed for an older version and the person may sign again.
 - **Assigning.** With the `tasks` module, an admin assigns a published SOP to people from its page;
@@ -600,15 +608,18 @@ ships with it make it a working library rather than a list of Markdown pages.
 
 ### Releasing the SOP library
 
-`0053` goes in before the app that reads it is deployed. The app selects the new columns on every
-SOP read, so until `0053` is in, the library and every SOP page fail to load.
+`0053` and `0054` go in before the app that reads them is deployed. The app selects the new columns
+on every SOP read, so until `0053` is in, the library and every SOP page fail to load; until `0054`
+is in, a manager sees no sign-offs on the Overview of the people they lead.
 
-1. Paste `0053` once in the SQL editor, as `postgres`. It backfills: each company's categories
-   from the fixed ones its SOPs use, every version's text and its author's name, and each SOP's
-   current text, search and who created and last updated it. It is idempotent; go forwards only.
+1. Paste `0053` once in the SQL editor, as `postgres` (done 2026-11-25). It backfills: each
+   company's categories from the fixed ones its SOPs use, every version's text and its author's
+   name, each SOP's current text, search and who created and last updated it, and each task's
+   `assigned_at` from when it was created. It is idempotent; go forwards only.
 2. Check it: `select count(*) from public.sops where category is not null and category_id is null;`
-   is 0, and `select count(*) from public.sops where search is null;` is 0.
-3. Merge and deploy the app. Nothing in `connections` or `notify` changes, so neither is
+   is 0, and `select count(*) from public.sops where search is null;` is 0 (both 0 live).
+3. Paste `0054` once.
+4. Merge and deploy the app. Nothing in `connections` or `notify` changes, so neither is
    redeployed.
 
 Rolling the app back after `0053` keeps working for SOPs nobody has written since: they still carry

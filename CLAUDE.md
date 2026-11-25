@@ -128,8 +128,8 @@ is the domain model), then src/lib/gsr/scoring.ts (the ported Klasik scoring eng
    an SOP's "last updated by" are stamped by the database, never sent by the app. Every SOP body
    goes through the one editor schema (`src/lib/sops/schema.ts`), whether typed, pasted or
    imported. Pictures and video are links, never stored in the hub. A sign-off is the person's own,
-   a record on them read by the 0038 rule (the person, their managers up the chain, the admins over
-   them), and closes their open tasks on that SOP in the database; an import is read in the browser and never sent anywhere to be read. Files live in
+   a record on them read by the 0038 rule (0054: the person, their managers up the chain, the admins
+   over them), and closes their open tasks on that SOP in the database; an import is read in the browser and never sent anywhere to be read. Files live in
    the private `hub-files` bucket under `{company_id}/...` and are read through signed URLs only.
 10. **Copy voice.** Calm, plain, confident. No em dashes anywhere in copy. No AI model
    identifiers in code, comments, or client-facing text (standard tooling attribution
