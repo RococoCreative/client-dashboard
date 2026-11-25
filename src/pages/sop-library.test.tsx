@@ -26,6 +26,7 @@ import * as categoriesService from "../services/sopCategories.ts";
 import SopEditPage from "./sops/SopEditPage.tsx";
 import SopPage from "./sops/SopPage.tsx";
 import ResourcesPage from "./resources/ResourcesPage.tsx";
+import SopImportPage from "./sops/SopImportPage.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
@@ -168,5 +169,38 @@ describe("the SOP library", () => {
     await user.click(screen.getByRole("button", { name: "Add category" }));
     await waitFor(() => expect(create).toHaveBeenCalledWith(KLASIK.company.id, "Equipment", expect.any(Number)));
     expect(await screen.findByDisplayValue("Equipment")).toBeInTheDocument();
+  });
+});
+
+describe("importing SOPs", () => {
+  it("reads each file, says what it cannot read, and creates drafts with the original attached", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const create = vi.spyOn(sopsService, "createSop");
+    const attach = vi.spyOn(sopsService, "addSopAttachment");
+    create.mockClear();
+    attach.mockClear();
+    renderWithHub(<SopImportPage />, admin, { path: "/sops/import", pattern: "/sops/import" });
+    const text = new File(["Site walk\n\n1. Check the gate\n2. Check the fence\n"], "site-walk.txt", { type: "text/plain" });
+    const old = new File(["x"], "old.doc", { type: "application/msword" });
+    await user.upload(await screen.findByLabelText("Choose files"), [text, old]);
+    expect(await screen.findByDisplayValue("Site walk")).toBeInTheDocument();
+    expect(screen.getByText(/save it as .docx or PDF/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create 1 draft" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    const input = create.mock.calls[0][0];
+    expect(input).toMatchObject({ title: "Site walk", status: "draft", change_note: "Imported from site-walk.txt" });
+    await waitFor(() => expect(attach).toHaveBeenCalledWith(expect.objectContaining({ file_name: "site-walk.txt" })));
+    expect(await screen.findByRole("link", { name: "Open Site walk" })).toBeInTheDocument();
+  });
+
+  it("lets a file be left out of the batch", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    renderWithHub(<SopImportPage />, admin, { path: "/sops/import", pattern: "/sops/import" });
+    const a = new File(["Gate\n\nLock it."], "gate.txt", { type: "text/plain" });
+    const b = new File(["Fence\n\nWalk it."], "fence.txt", { type: "text/plain" });
+    await user.upload(await screen.findByLabelText("Choose files"), [a, b]);
+    expect(await screen.findByRole("button", { name: "Create 2 drafts" })).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Include fence.txt" }));
+    expect(screen.getByRole("button", { name: "Create 1 draft" })).toBeInTheDocument();
   });
 });

@@ -128,6 +128,7 @@ function RedirectTo({ path }: { path: string }) {
 // in a chunk of their own.
 const SopPage = lazy(() => import("./pages/sops/SopPage.tsx"));
 const SopEditPage = lazy(() => import("./pages/sops/SopEditPage.tsx"));
+const SopImportPage = lazy(() => import("./pages/sops/SopImportPage.tsx"));
 
 function SopLoad({ children }: { children: ReactNode }) {
   return <Suspense fallback={<SkeletonRows rows={8} />}>{children}</Suspense>;
@@ -552,6 +553,7 @@ function SignedIn({ session }: { session: Session }) {
             <Route path="resources/setup" element={<AdminOnly><ResourcesPage tab="setup" /></AdminOnly>} />
             <Route path="sops" element={<WithCompany><RedirectTo path="/resources/sops" /></WithCompany>} />
             <Route path="sops/new" element={<AdminOnly><SopLoad><SopEditPage /></SopLoad></AdminOnly>} />
+            <Route path="sops/import" element={<AdminOnly><SopLoad><SopImportPage /></SopLoad></AdminOnly>} />
             <Route path="sops/:sopId" element={<WithCompany><SopLoad><SopPage /></SopLoad></WithCompany>} />
             <Route path="sops/:sopId/edit" element={<AdminOnly><SopLoad><SopEditPage /></SopLoad></AdminOnly>} />
             <Route path="financials" element={<AdminOnly><SettingOnly setting="manual_financials"><FinancialsPage /></SettingOnly></AdminOnly>} />
