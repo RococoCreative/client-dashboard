@@ -223,6 +223,16 @@ describe("function hygiene", () => {
     expect(fromUrl).toEqual([]);
   });
 
+  it("no function imports a type definitions file, which the live runtime would run as code", async () => {
+    // On 2026-11-24 a pinned edge-runtime .d.ts import deployed cleanly and then crashed every
+    // request at boot, because the runtime loaded the types file as JavaScript.
+    const files = await readFunctions();
+    const typeFiles = files.flatMap((file) =>
+      [...file.text.matchAll(/\bimport\b[^;]*?["'`]([^"'`]+\.d\.ts)["'`]/g)].map((m) => `${file.path}: ${m[1]}`),
+    );
+    expect(typeFiles).toEqual([]);
+  });
+
   it("every log line carries only fixed text, ids, codes, names, counts and statuses", async () => {
     const files = await readFunctions();
     const calls = files.flatMap((file) => consoleCalls(file.text));

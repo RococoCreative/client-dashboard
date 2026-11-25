@@ -27,7 +27,6 @@
 // Environment (Supabase secrets): RESEND_API_KEY, TASKS_FROM_EMAIL (the sending address), and
 // APP_URL (the app's own address, which every link in either email starts from; an https or http
 // URL). SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
-import "npm:@supabase/functions-js@2.116.0/src/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { NO_STORE } from "../_shared/headers.ts";
 import { isRococoAdmin } from "../_shared/rococoAdmin.ts";
