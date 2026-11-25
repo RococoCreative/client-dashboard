@@ -105,7 +105,7 @@ export default function EditorToolbar({ editor }: { editor: Editor }) {
             if (value === "paragraph") chain().setParagraph().run();
             else chain().setHeading({ level: Number(value) as 1 | 2 | 3 }).run();
           }}
-          className={`${compactSelectClass} mr-1 w-auto`}
+          className={`${compactSelectClass.replace("w-full", "w-36")} mr-1`}
         >
           <option value="paragraph">Paragraph</option>
           <option value="1">Title</option>

@@ -24,7 +24,7 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Home | State of every module at a glance | Own score, goals, recent SOPs |
 | Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback; goals with action steps and progress notes that stay private to them |
 | People | Add staff before inviting them, invite when ready, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
-| Resources: SOPs | Create, edit (versioned), publish, attach files | Read published documents |
+| Resources: SOPs | Write in a rich editor, import Word, PDF, text and Markdown files, file under the company's own categories and tags, version history with who saved each version, compare and restore, publish, attach files, assign as tasks and see who signed off; categories on Resources > Setup | Read, search inside, find in a page, and sign off published documents; see which are assigned to them |
 | Resources: Files & media | Add files, templates, videos and saved links with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
@@ -104,7 +104,7 @@ what the modules add. Nothing is written anywhere; a reload resets the data.
 ### What is applied live
 
 Kept current by whoever pastes a migration, so the next session knows where it stands. Live
-project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
+project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
 
 - **Applied, in the order they went in:** `0001` to `0023`, `0024_company_modules`,
   `0025_audit_log`, `0028_claim_and_wall_hardening`, `0029_integrity_guards`,
@@ -119,7 +119,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-  So `0001` to `0052` are not all live; `0032` is the gap. The next free number is `0053`.
+  So `0001` to `0052` are not all live; `0032` is the gap. `0053` is written and not applied
+  yet (see The SOP library). The next free number is `0054`.
 - **Applied 2026-11-24 (pasted in the SQL editor, checked live):** `0051_rococo_admins` and
   `0052_connection_secrets` (see Applying security hardening). The one Rococo admin is on the
   list and active; `connection_pending` is not readable by signed-in users; no provider
@@ -140,8 +141,9 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   levels, eight job roles and ten people (see Applying capabilities and the Kingdom roster). Runs
   after `0040`, `0041` and the app deploy, and refuses to run without both migrations. Safe to run
   again.
-- **The `connections` Edge Function** live is version 9 (deployed 2026-11-24 through the
-  Supabase connection, JWT check off, checked byte for byte against this repo): owners and
+- **The `connections` Edge Function** live is version 11 (version 9 was deployed 2026-11-24 through
+  the Supabase connection, JWT check off, checked byte for byte against this repo; 11 is reported live and
+  checked as of 2026-11-25, with QuickBooks on production keys and connected for Klasik): owners and
   admins manage connections, Google Sheets and the sync routes, the Phase 2 multi-day schedule
   (`sync_weekdays`), the catalog's `POST /status` route, and the security hardening (sealed
   tokens, connect then confirm, no-store). `TOKEN_ENCRYPTION_KEY` and `CONNECTIONS_STATE_SECRET`
@@ -149,8 +151,8 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   `GOOGLE_CLIENT_SECRET` and `SYNC_CRON_SECRET` are set and `0032` is applied.
 - **The `notify` Edge Function** is deployed with the gateway's JWT check on. It reads the
   secrets `RESEND_API_KEY`, `TASKS_FROM_EMAIL` and `APP_URL`, and answers "Task emails are not
-  set up yet." until all three are set. Live is version 8 (deployed 2026-11-24 with
-  `connections`, checked byte for byte): the task email, sent only for the task's creator, an
+  set up yet." until all three are set. Live is version 10 (version 8 was deployed 2026-11-24 with
+  `connections`, checked byte for byte; 10 is live and checked as of 2026-11-25): the task email, sent only for the task's creator, an
   owner or admin, or Rococo (the same confirmed-email list rule as the database), and the
   invitation email.
 - **Configuration set live:** Kingdom has five of the six modules on (every one but `tasks`);
@@ -221,7 +223,10 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-20:
   stamps who asked, and every ask and withdrawal is audited. Deleting a person who asked keeps the
   request and clears who asked. It redefines nothing earlier and depends on nothing after `0049`.
   Nothing visible changes when it goes in. Apply it before merging the app that reads it.
-- **Next free number:** `0053`.
+- **Written, not applied:** `0053_sop_library` (see The SOP library, and its release order there).
+  It redefines `set_sop_version` and `stamp_sop_updated_by` (`0004`) and `recur_task` (`0036`,
+  `0037`). If any of `0004`, `0036` or `0037` is pasted again after it, paste `0053` straight after.
+- **Next free number:** `0054`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
 list and the open branches, take the next free number, and add it here in the same change.
@@ -537,6 +542,74 @@ access key, so Rococo will have nothing to set up for it. Links tools such as Mo
 from Rococo today.
 
 
+## The SOP library
+
+Every company has the same SOP library; what differs is its rows (rule 12). `0053` and the app that
+ships with it make it a working library rather than a list of Markdown pages.
+
+- **The editor.** An SOP is written in a word-processor style editor with a toolbar (paragraph
+  style, bold, italic, underline, strike, bulleted and numbered lists, quote, divider, link, table
+  with rows and columns, undo, redo, clear formatting). A version stores the editor's document
+  (`sop_versions.body_json`); a version from before `0053` keeps its Markdown (`body_md`) and opens
+  converted. The schema is `src/lib/sops/schema.ts`, shared by the editor, the read-only view and
+  the import, so a script, a picture or an unknown tag can never enter a document, and links are
+  web, mail and phone only. Pictures and video inside an SOP are not built yet.
+- **Versions.** Saving appends a version and never edits one (rule 9, now held by the database too:
+  a signed-in writer cannot change a saved version). Each version names who saved it, when and why.
+  Any version can be read, compared line by line with the current one, and restored by an admin,
+  which saves its text again as the newest version.
+- **Who and when.** The database stamps who created an SOP and who last changed it, and each
+  version's author (`created_by_name`, `updated_by_name`, `author_name`), by name, because an
+  employee reads an SOP but not every profile (0038). Deleting a person clears their name with
+  their id, as elsewhere (0049).
+- **Organization.** Categories are each company's own rows (`sop_categories`): admins add, rename,
+  reorder, retire and delete them on Resources > Setup, starting from five starters (Safety,
+  Process, Client, Admin, Field) that become rows the first time an SOP is filed under one. The five
+  fixed categories SOPs had before become each company's own rows when `0053` goes in; the old
+  fixed value stays on an SOP until someone writes it, for the previous app's sake. Tags cut
+  across categories (`sops.tags`, tidied by the database: trimmed, no repeats, up to 20 of 40
+  characters).
+- **Search.** The library searches titles, tags, summaries and the full text of the current version
+  (`sops.search`, english, prefix terms), shows the line that matched, and filters by category,
+  tag, status (admins), assigned to me and not signed off by me, sorted by recent change or A to Z.
+  On an SOP, Find in this SOP highlights every match and steps through them.
+- **Import.** Admins drop in Word (.docx), PDF, text or Markdown files, up to 50 at a time and 20
+  MB each. Each is read in the browser, nothing is sent anywhere to be read: Word keeps headings,
+  lists, tables, bold and links; a PDF is rebuilt from its lines (larger type is a heading,
+  bullets and numbers are lists, running headers, footers and page numbers are dropped); the first
+  heading becomes the title, or the file name. Each becomes a draft filed under one category and
+  set of tags for the batch, its first version noting the file it came from, with the original
+  attached so pictures and anything else are kept. A scanned PDF has no text to read and is
+  reported, not imported. Old Word (.doc) files are refused with how to save them as .docx; from
+  Google Docs, download as Microsoft Word.
+- **Sign-off.** A member signs off a published SOP for themselves ("I have read this SOP and
+  completed it"). The database stamps the version, their name and the time (`sop_signoffs`). The
+  person and the company's admins read them; nobody changes or removes one. When the SOP changes,
+  an earlier sign-off reads as signed for an older version and the person may sign again.
+- **Assigning.** With the `tasks` module, an admin assigns a published SOP to people from its page;
+  each gets a task on it (`tasks.sop_id`) and the usual assignment email. Their sign-off closes
+  every open task of theirs on that SOP assigned at or before it, in the database. Until then the
+  assignee cannot close it by hand or by ticking its steps; an admin can. A recurring SOP task's next
+  copy keeps the SOP. A task form can link any published SOP too.
+
+### Releasing the SOP library
+
+`0053` goes in before the app that reads it is deployed. The app selects the new columns on every
+SOP read, so until `0053` is in, the library and every SOP page fail to load.
+
+1. Paste `0053` once in the SQL editor, as `postgres`. It backfills: each company's categories
+   from the fixed ones its SOPs use, every version's text and its author's name, and each SOP's
+   current text, search and who created and last updated it. It is idempotent; go forwards only.
+2. Check it: `select count(*) from public.sops where category is not null and category_id is null;`
+   is 0, and `select count(*) from public.sops where search is null;` is 0.
+3. Merge and deploy the app. Nothing in `connections` or `notify` changes, so neither is
+   redeployed.
+
+Rolling the app back after `0053` keeps working for SOPs nobody has written since: they still carry
+the fixed category the previous app reads. One the new app has written (or created) has no fixed
+category and drops out of the previous app's list, though its page still opens by address. Nothing
+is lost; roll forward again to see it listed.
+
 ## Impact scores
 
 The ratings under the rating pillars (Klasik: Brand Impact, Character and Values) live on the
@@ -589,7 +662,9 @@ one. Setup sits on a Setup tab beside what it shapes, never in Settings:
   GSRs rule and deliverable categories. A cycle opens at `/gsr/cycles/:id` or `/reviews/cycles/:id`
   and a review at `/gsr/reviews/:id` or `/reviews/:id`, under the section that owns its cadence.
 - **Resources** (`/resources`, lands on SOPs): `/resources/sops`, `/resources/files`,
-  `/resources/links`. An SOP keeps its own address at `/sops/:id`.
+  `/resources/links`, and `/resources/setup` for admins (SOP categories). An SOP keeps its own
+  address at `/sops/:id`; `/sops/new` writes one and `/sops/import` brings in files (admins). The
+  library's filters live in its address (`?q=&cat=&tag=&status=&show=&sort=`).
 - **Settings** (`/settings`, lands on the first tab the person may open): `/settings/company` name,
   logo, theme, time zone and sign-in domains, with a card at its foot linking to the setup that
   moved out; `/settings/connections` connections and data sources, each source past three at

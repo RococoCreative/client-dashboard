@@ -367,3 +367,22 @@ select tests.assert(
      from public.sops where id = tests.id('sop_ladder')),
   'deleting_a_person_clears_their_name: the SOP names the deleted person or whoever deleted them'
 );
+
+-- case: the_fixed_category_is_history_once_written
+-- A row from before 0053, as the backfill leaves it: filed under its company's category and still
+-- carrying the fixed one for the previous app.
+insert into public.sops (company_id, title, category, category_id)
+values (tests.company('kingdom'), 'Legacy one', 'safety',
+        (select id from public.sop_categories where company_id = tests.company('kingdom') and name = 'Safety'));
+select tests.assert(
+  (select category = 'safety' from public.sops where title = 'Legacy one'),
+  'the_fixed_category_is_history_once_written: a system insert lost the fixed category'
+);
+select tests.act_as(tests.id('kingdom_admin'));
+update public.sops set category_id = null where title = 'Legacy one';
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.assert(
+  (select category is null and category_id is null from public.sops where title = 'Legacy one'),
+  'the_fixed_category_is_history_once_written: a signed-in write left the fixed category for a later paste to refile'
+);

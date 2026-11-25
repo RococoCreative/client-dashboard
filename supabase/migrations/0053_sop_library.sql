@@ -16,8 +16,10 @@
 --   3. A saved version is permanent (rule 9), now in the database too: a signed-in writer cannot
 --      change one. Only a deleted person's or account's keys clearing gets through.
 --   4. Categories are each company's own rows (rule 12): sop_categories. Every SOP filed under one
---      of the five fixed categories moves to its company's row of that name, and the fixed column
---      is cleared so a later paste never refiles anything. Members read, admins write.
+--      of the five fixed categories moves to its company's row of that name. The fixed column is
+--      kept as it was, so the previous app still lists them if it is rolled back, and cleared the
+--      first time anyone signed in writes the SOP, so a later paste never refiles an SOP someone
+--      has since moved. Members read, admins write.
 --   5. Tags: sops.tags, trimmed and deduplicated by the database, up to 20 of 40 characters.
 --   6. Search: sops.body_text holds the current version's text; sops.search, kept by trigger,
 --      weighs the title first, then tags and summary, then the body. The app queries it through
@@ -235,9 +237,11 @@ as $$
 declare
   v_internal boolean := coalesce(current_setting('hub.sop_internal', true), '') = '1';
 begin
-  -- The SOP's text is the current version's, set only by set_sop_version.
+  -- The SOP's text is the current version's, set only by set_sop_version. The fixed category of
+  -- before 0053 is history once anyone writes the SOP (4).
   if not v_internal and (select auth.uid()) is not null then
     new.body_text := case when tg_op = 'INSERT' then null else old.body_text end;
+    new.category := null;
   end if;
 
   if new.category_id is not null
@@ -603,7 +607,7 @@ select distinct s.company_id, initcap(s.category),
 on conflict (company_id, lower(btrim(name))) do nothing;
 
 update public.sops s
-   set category_id = c.id, category = null
+   set category_id = c.id
   from public.sop_categories c
  where s.category is not null
    and s.category_id is null
