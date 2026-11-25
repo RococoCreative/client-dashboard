@@ -119,8 +119,7 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
   were written before `0028` existed.
 - **Not applied yet:** `0032_sync_schedule`, which waits on its two Vault entries
   (`sync_cron_secret` and `sync_function_url`) and the Google keys. It does not depend on `0035`.
-  So `0001` to `0053` are not all live; `0032` is the gap. `0054` is written and not applied
-  yet (see The SOP library). The next free number is `0055`.
+  So `0001` to `0054` are not all live; `0032` is the gap. The next free number is `0055`.
 - **Applied 2026-11-24 (pasted in the SQL editor, checked live):** `0051_rococo_admins` and
   `0052_connection_secrets` (see Applying security hardening). The one Rococo admin is on the
   list and active; `connection_pending` is not readable by signed-in users; no provider
@@ -230,10 +229,11 @@ project `jjdcejevdqpwuastsmpq`, as of 2026-11-25:
   SOPs and 2 categories. It redefines `set_sop_version` and `stamp_sop_updated_by` (`0004`) and
   `recur_task` (`0036`, `0037`). If any of `0004`, `0036` or `0037` is pasted again after it, paste
   `0053` and then `0054` straight after.
-- **Written, not applied:** `0054_sop_signoff_readers`. It widens who reads a person's SOP
-  sign-offs from the person and admins to the 0038 rule (the person, the managers they report to up
-  the chain, the admins over them, Rococo), which the person's Overview relies on. It only replaces
-  one policy and depends on `0053`.
+- **Applied 2026-11-25 (pasted in the SQL editor, checked live):** `0054_sop_signoff_readers`. It
+  widens who reads a person's SOP sign-offs from the person and admins to the 0038 rule (the person,
+  the managers they report to up the chain, the admins over them, Rococo), which the person's
+  Overview relies on. Live, `sop_signoffs` carries exactly its read policy and the self sign-off
+  insert policy. It only replaces one policy and depends on `0053`.
 - **Next free number:** `0055`.
 
 Two sessions working at once is how numbers collide. Before writing a migration, check this
@@ -618,7 +618,7 @@ is in, a manager sees no sign-offs on the Overview of the people they lead.
    `assigned_at` from when it was created. It is idempotent; go forwards only.
 2. Check it: `select count(*) from public.sops where category is not null and category_id is null;`
    is 0, and `select count(*) from public.sops where search is null;` is 0 (both 0 live).
-3. Paste `0054` once.
+3. Paste `0054` once (done 2026-11-25).
 4. Merge and deploy the app. Nothing in `connections` or `notify` changes, so neither is
    redeployed.
 
