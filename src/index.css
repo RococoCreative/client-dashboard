@@ -304,3 +304,40 @@
   --tw-prose-th-borders: var(--t-line-strong);
   --tw-prose-td-borders: var(--t-line);
 }
+
+/* SOP documents (0053), in the editor and read-only: tables with hairlines, the editor's
+ * placeholder caret room, and find-in-page matches. Tokens only. */
+.sop-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 1em 0;
+}
+.sop-doc th,
+.sop-doc td {
+  border: 1px solid var(--t-line);
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+}
+.sop-doc th {
+  background: var(--t-surface-2);
+  font-weight: 600;
+}
+.sop-doc th > p,
+.sop-doc td > p {
+  margin: 0;
+}
+.sop-doc .selectedCell {
+  background: color-mix(in srgb, var(--t-accent) 10%, transparent);
+}
+.sop-doc .sop-find-match {
+  background: color-mix(in srgb, var(--t-highlight) 45%, transparent);
+  border-radius: 2px;
+}
+.sop-doc .sop-find-match.is-current {
+  background: var(--t-accent);
+  color: var(--t-on-accent);
+}
+.sop-doc a {
+  overflow-wrap: anywhere;
+}

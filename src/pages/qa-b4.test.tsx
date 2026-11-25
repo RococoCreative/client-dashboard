@@ -53,6 +53,8 @@ vi.mock("../services/gsr.ts", async () =>
   ctl.wrap(await import("../test/mocks/gsr.ts"), ["updateGoal", "deleteGoal", "updateCompanyGoal", "deleteCompanyGoal"]),
 );
 vi.mock("../services/sops.ts", async () => ctl.wrap(await import("../test/mocks/sops.ts"), ["deleteSop"]));
+vi.mock("../services/sopCategories.ts", () => import("../test/mocks/sopCategories.ts"));
+vi.mock("../services/sopSignoffs.ts", () => import("../test/mocks/sopSignoffs.ts"));
 vi.mock("../services/resources.ts", async () => ctl.wrap(await import("../test/mocks/resources.ts"), ["updateResource", "createResource"]));
 vi.mock("../services/storage.ts", async () => {
   const mock = await import("../test/mocks/storage.ts");

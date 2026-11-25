@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import Markdown from "react-markdown";
 import { generateJSON, type JSONContent } from "@tiptap/core";
 import { sopExtensions } from "./schema.ts";
-import type { SopDocJson } from "../../types/database.ts";
+import type { SopDocJson, SopVersion } from "../../types/database.ts";
 
 export function emptyDoc(): SopDocJson {
   return { type: "doc", content: [{ type: "paragraph" }] };
@@ -49,4 +49,10 @@ export function docToLines(doc: SopDocJson): string[] {
   };
   walk(doc as JSONContent);
   return lines;
+}
+
+// A version's body as an editor document, converting Markdown from before the editor.
+export function versionDoc(version: Pick<SopVersion, "body_json" | "body_md"> | null): SopDocJson {
+  if (version?.body_json) return version.body_json;
+  return htmlToDoc(markdownToHtml(version?.body_md ?? ""));
 }
