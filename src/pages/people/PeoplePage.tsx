@@ -524,8 +524,10 @@ export default function PeoplePage() {
                     <th role="columnheader" className={thClass}>Reports to</th>
                     <th role="columnheader" className={thClass}>Role</th>
                     <th role="columnheader" className={thClass}>Status</th>
-                    {/* The actions stay pinned at the right edge, so a row that has to scroll never hides them. */}
-                    {teamView ? null : <th role="columnheader" className={`${thClass} lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface`}><span className="sr-only">Actions</span></th>}
+                    {/* The actions stay pinned at the right edge, so a row that has to scroll never hides them. The
+                        column is only as wide as its widest row of buttons (w-px): left to share out the slack, a
+                        table hands it to the column whose buttons are widest laid end to end, and squeezes the facts. */}
+                    {teamView ? null : <th role="columnheader" className={`${thClass} lg:w-px lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface`}><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
                 <tbody role="rowgroup" className="max-lg:block">
@@ -593,7 +595,9 @@ export default function PeoplePage() {
                           <td role="cell" className={`${tdClass} py-2 text-right lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
                             <span className="flex flex-wrap items-center justify-end gap-1.5 max-lg:justify-start max-lg:not-empty:mb-1">
                               {!account && invitation ? (
-                                <>
+                                // Two buttons a line on a wide screen, Cancel invitation beneath them, so a waiting
+                                // invitation never sets the column at three buttons wide. On a stacked row they flow.
+                                <span className="contents lg:inline-grid lg:grid-cols-[auto_auto] lg:justify-items-end lg:gap-1.5">
                                   {person.is_active ? (
                                     <>
                                       <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
@@ -610,10 +614,10 @@ export default function PeoplePage() {
                                       </Button>
                                     </>
                                   ) : null}
-                                  <Button variant="danger" size="sm" aria-label={`Cancel invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
+                                  <Button variant="danger" size="sm" className="lg:col-span-2" aria-label={`Cancel invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
                                     Cancel invitation
                                   </Button>
-                                </>
+                                </span>
                               ) : null}
                               {!account && !invitation && canChange && person.is_active ? (
                                 <Button
