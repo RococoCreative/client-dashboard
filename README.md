@@ -1322,6 +1322,16 @@ After the deploy, check by hand:
 - In the Supabase logs, the callback's request URL does not expose `code`, `state` or `realmId`.
   If it does, note the risk.
 
+2026-11-25: `connections` v11 and `notify` v10 replaced v9 and v8, which crashed at boot on an
+edge-runtime types import (see step 3). QuickBooks went live on production keys, and Klasik passed
+connect, confirm, disconnect (QuickBooks accepted the revoke) and reconnect. The stored tokens and
+account id read back sealed (`v1:`), with no plain id on any browser-readable row. Known and
+accepted: Supabase's own request log (`function_edge_logs`) records the callback URL, including
+the single-use `code` and the `realmId`, because Intuit sends both in the query string. The code
+expires in minutes and is redeemed at once; the logs are readable only from the Supabase
+dashboard, which stays limited to Rococo, and they expire on the plan's retention. The
+`Cache-Control` check is still to do by hand.
+
 Go forwards only. Re-pasting `0013`, `0049` or `0025` undoes parts of `0051` and `0052`, so paste
 `0051` and `0052` again straight after. Re-pasting `0025` in particular restores
 `external_account_id` on the audit trigger.
