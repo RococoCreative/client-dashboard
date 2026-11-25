@@ -24,8 +24,10 @@ import { KLASIK, makeHub } from "../test/fixtures.ts";
 import * as sopsService from "../services/sops.ts";
 import * as categoriesService from "../services/sopCategories.ts";
 import SopEditPage from "./sops/SopEditPage.tsx";
+import SopPage from "./sops/SopPage.tsx";
 
 const admin = makeHub("admin");
+const employee = makeHub("employee");
 
 describe("the SOP editor", () => {
   it("opens a Markdown version as an editable document", async () => {
@@ -65,5 +67,55 @@ describe("the SOP editor", () => {
     expect(input.category_id).toBe((await createCategory.mock.results[0].value).id);
     expect(input.tags).toEqual(["Equipment", "yard"]);
     expect("json" in input.body).toBe(true);
+  });
+});
+
+describe("the SOP page", () => {
+  it("says who created it and who last updated it", async () => {
+    const sop = KLASIK.sops[0];
+    renderWithHub(<SopPage />, employee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    expect(await screen.findByText(`Last updated by ${sop.updated_by_name}`, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(`Created by ${sop.created_by_name}`, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("Safety")).toBeInTheDocument();
+  });
+
+  it("finds a word inside the SOP and counts the matches", async () => {
+    const user = userEvent.setup();
+    const sop = KLASIK.sops[0];
+    renderWithHub(<SopPage />, employee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    await screen.findByRole("heading", { name: "Purpose" });
+    await user.type(screen.getByRole("searchbox", { name: "Find in this SOP" }), "superintendent");
+    expect(await screen.findByText("1 of 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next match" }));
+    expect(await screen.findByText("2 of 2")).toBeInTheDocument();
+    expect(document.querySelectorAll(".sop-find-match")).toHaveLength(2);
+  });
+
+  it("compares an older version with the current one", async () => {
+    const user = userEvent.setup();
+    const sop = KLASIK.sops[0];
+    renderWithHub(<SopPage />, admin, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    await user.click(await screen.findByRole("button", { name: "Compare version 1 with current" }));
+    const dialog = await screen.findByRole("dialog", { name: "Version 1 against version 2" });
+    expect(within(dialog).getByText("Post the checklist photo to the client album too.").closest("[data-diff]")).toHaveAttribute("data-diff", "added");
+  });
+
+  it("restores an older version as a new one, keeping history", async () => {
+    const user = userEvent.setup();
+    const sop = KLASIK.sops[0];
+    const restore = vi.spyOn(sopsService, "restoreSopVersion");
+    renderWithHub(<SopPage />, admin, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    await user.click(await screen.findByRole("button", { name: "Restore version 1" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Restore as version 3" }));
+    await waitFor(() => expect(restore).toHaveBeenCalled());
+    expect(await screen.findByText("Restored from v1")).toBeInTheDocument();
+    expect(screen.getByText("3 versions")).toBeInTheDocument();
+  });
+
+  it("offers no restore to an employee", async () => {
+    const sop = KLASIK.sops[0];
+    renderWithHub(<SopPage />, employee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    await screen.findByRole("heading", { name: "Purpose" });
+    expect(screen.queryByRole("button", { name: /Restore version/ })).not.toBeInTheDocument();
   });
 });
