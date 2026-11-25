@@ -1,13 +1,14 @@
-// Sign-offs on SOPs (0053). A person signs off a published SOP for themselves; the database
-// stamps the version, their name and the time, and closes their open tasks on that SOP. The
-// person reads their own, admins read everyone's. Nobody changes or removes one.
+// Sign-offs on SOPs (0053), a record on the person. A person signs off a published SOP for
+// themselves; the database stamps the version, their name and the time, and closes their open tasks
+// on that SOP. The person reads their own, and whoever sees them (their managers up the chain and
+// the admins over them) reads theirs, the 0038 rule. Nobody changes or removes one.
 import { db } from "./supabase.ts";
 import type { SopSignoff } from "../types/database.ts";
 
 const COLUMNS = "id, company_id, sop_id, profile_id, version, signer_name, signed_at";
 
-// Everything this person has signed off in the company, newest first.
-export async function listMySopSignoffs(companyId: string, profileId: string): Promise<SopSignoff[]> {
+// Everything a person has signed off in the company, newest first, as far as the reader may see.
+export async function listPersonSopSignoffs(companyId: string, profileId: string): Promise<SopSignoff[]> {
   const { data, error } = await db()
     .from("sop_signoffs")
     .select(COLUMNS)

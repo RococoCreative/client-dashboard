@@ -10,7 +10,7 @@ import { clockNow } from "./clock.ts";
 const signoffs: SopSignoff[] = fromAll((b) => b.sopSignoffs).map((x) => ({ ...x }));
 let counter = 0;
 
-export async function listMySopSignoffs(companyId: string, profileId: string): Promise<SopSignoff[]> {
+export async function listPersonSopSignoffs(companyId: string, profileId: string): Promise<SopSignoff[]> {
   return signoffs
     .filter((s) => s.company_id === companyId && s.profile_id === profileId)
     .sort((a, b) => (a.signed_at < b.signed_at ? 1 : -1))

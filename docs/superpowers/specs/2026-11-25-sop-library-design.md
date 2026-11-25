@@ -30,8 +30,9 @@ global change: every company gets it, no module switch.
 
 ## Non-goals
 
-- Pictures and video inside the body. Austin will decide how they work later. Attachments stay
-  as they are, and an import keeps the original file as an attachment so nothing in it is lost.
+- Pictures and video stored in the hub. Austin's call (2026-11-25): keep them as links, so nothing
+  bloats the database. Links work in the editor; a picture in an older Markdown version becomes a
+  link to it. An import still attaches the original file to storage so nothing in it is lost.
 - An AI pass on imports (approach B). Not built; the import is shaped so it could be added later.
 - Text recognition for scanned PDFs. A PDF with no text is reported, not imported.
 - Old binary Word (.doc), Pages, or Google Docs links. The import says to save as .docx or PDF.
@@ -133,7 +134,9 @@ with a comment saying why it exists; mocks mirror services.
 ### Decisions made without Austin **(my call)**
 
 - Sign-off is a checkbox ("I have read this SOP and completed it") and a button, stamped with the
-  person's name. No typed signature.
+  person's name. No typed signature. Confirmed by Austin on 2026-11-25, who added: it saves to the
+  person's profile so managers and above see it. Built as a record on the person, on their
+  Overview, read by the 0038 rule (the person, their managers up the chain, the admins over them).
 - A sign-off is for the version signed. When the SOP changes, the person's earlier sign-off reads
   "Signed v2, now v4" and they may sign again; nothing is forced. Assigning again is how an admin
   asks for a fresh sign-off: a task only closes on a sign-off made after it was assigned.

@@ -27,14 +27,14 @@ import { assertInCompany } from "../../lib/tenancy.ts";
 import { openSignedUrl } from "../../lib/newTab.ts";
 import { addSopAttachment, deleteSop, getSop, listSopAttachments, listSopVersions, removeSopAttachment, restoreSopVersion, updateSop } from "../../services/sops.ts";
 import { listSopCategories } from "../../services/sopCategories.ts";
-import { listMySopSignoffs, listSopSignoffs } from "../../services/sopSignoffs.ts";
+import { listPersonSopSignoffs, listSopSignoffs } from "../../services/sopSignoffs.ts";
 import { listTasks, listTasksForSop } from "../../services/tasks.ts";
 import { listCompanyProfiles } from "../../services/profiles.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { buildObjectPath, formatBytes, getSignedUrl, removeFile, uploadFile } from "../../services/storage.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { formatDate, pluralize } from "../../lib/format.ts";
-import { markdownPictureCount, versionDoc } from "../../lib/sops/doc.ts";
+import { versionDoc } from "../../lib/sops/doc.ts";
 import { SOP_STATUS_LABELS, type SopAttachment, type SopStatus, type SopVersion } from "../../types/database.ts";
 
 // Whether the database answered a write with a refusal (a Postgres or PostgREST error code), so
@@ -76,7 +76,7 @@ export default function SopPage() {
   const withTasks = hasModule(company!, "tasks");
   const standing = useAsync(async () => {
     const [mine, everyone, tasks, people] = await Promise.all([
-      member ? listMySopSignoffs(companyId, profile.id) : Promise.resolve([]),
+      member ? listPersonSopSignoffs(companyId, profile.id) : Promise.resolve([]),
       isAdmin ? listSopSignoffs(sopId) : Promise.resolve([]),
       withTasks ? (isAdmin ? listTasksForSop(companyId, sopId) : listTasks(companyId, { assigneeId: profile.id })) : Promise.resolve([]),
       isAdmin ? listCompanyProfiles(companyId) : Promise.resolve([]),
@@ -252,14 +252,7 @@ export default function SopPage() {
           >
             {shown ? (
               shown.body_json || shown.body_md?.trim() ? (
-                <>
-                {markdownPictureCount(shown.body_md) ? (
-                  <Notice tone="info" className="mb-4">
-                    This version has {pluralize(markdownPictureCount(shown.body_md), "picture")} from before the editor. Pictures do not show here yet; they stay in this version's history, and the attached files still open.
-                  </Notice>
-                ) : null}
                 <SopDocument key={shown.id} doc={versionDoc(shown)} initialQuery={params.get("q") ?? ""} />
-                </>
               ) : (
                 <p className="text-sm text-ink-3">This version has no text.</p>
               )

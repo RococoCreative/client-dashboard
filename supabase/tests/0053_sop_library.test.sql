@@ -458,3 +458,31 @@ select tests.assert(
   (select category_id is null and updated_by_name = 'kingdom_owner' from public.sops where id = tests.id('sop_draft')),
   'deleting_a_category_is_not_an_edit: the SOP kept the category or names whoever deleted it as its last editor'
 );
+
+-- case: those who lead a person read their sign-offs
+-- kingdom_employee signed sop_ladder above. A manager they report to reads it; a manager they do
+-- not report to, and a fellow employee, do not.
+select tests.create_person('kingdom_lead', tests.company('kingdom'), 'manager');
+select tests.create_person('kingdom_other_lead', tests.company('kingdom'), 'manager');
+update public.profiles set reports_to = tests.id('kingdom_lead') where id = tests.id('kingdom_employee');
+select tests.act_as(tests.id('kingdom_lead'));
+select tests.assert(
+  (select count(*) from public.sop_signoffs where profile_id = tests.id('kingdom_employee')) > 0,
+  'those_who_lead_read_signoffs: the manager the person reports to does not read their sign-offs'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('kingdom_other_lead'));
+select tests.assert(
+  (select count(*) from public.sop_signoffs where profile_id = tests.id('kingdom_employee')) = 0,
+  'those_who_lead_read_signoffs: a manager the person does not report to reads their sign-offs'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);
+select tests.act_as(tests.id('kingdom_employee2'));
+select tests.assert(
+  (select count(*) from public.sop_signoffs where profile_id = tests.id('kingdom_employee')) = 0,
+  'those_who_lead_read_signoffs: a fellow employee reads someone else''s sign-offs'
+);
+reset role;
+select set_config('request.jwt.claims', '', true);

@@ -1,6 +1,6 @@
 // A person's Overview tab, the one their page opens on: who they are at a glance (a read-only strip
 // of their details, with a way into Setup for an admin), this month's GSR, their next open tasks,
-// who reports to them, and their latest score and average. Everything here is read; changing a
+// the SOPs they have signed off (0053), who reports to them, and their latest score and average. Everything here is read; changing a
 // detail is a deliberate step on Setup. A Rococo admin's row has no GSR, tasks or team block, as
 // their page never had.
 import type { ReactNode } from "react";
@@ -12,6 +12,7 @@ import { labelClass } from "../../ui/forms.ts";
 import { tapTargetClass } from "../../ui/tap.ts";
 import PersonTasks from "../../tasks/PersonTasks.tsx";
 import PersonTeam from "../PersonTeam.tsx";
+import PersonSops from "./PersonSops.tsx";
 import { ThisMonthGsr } from "./PersonGsrGoals.tsx";
 import { useHub } from "../../../context/HubContext.tsx";
 import { useAsync } from "../../../hooks/useAsync.ts";
@@ -89,6 +90,7 @@ export default function PersonOverview({ companyId, data, person }: PersonTabPro
           {hasModule(company, "tasks") && !rococo ? (
             <PersonTasks companyId={companyId} person={person} canAdd={isLeader} viewerProfileId={me.id} goalLabel={goalLabel} limit={3} moreHref={`/people/${person.id}/tasks`} />
           ) : null}
+          {rococo ? null : <PersonSops companyId={companyId} person={person} />}
           {rococo ? null : <PersonTeam companyId={companyId} person={person} people={people} self={self} isAdmin={isAdmin} />}
         </div>
         <div className="grid grid-cols-2 content-start gap-3 sm:gap-4 lg:grid-cols-1">

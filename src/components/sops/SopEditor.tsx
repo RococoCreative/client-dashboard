@@ -27,6 +27,9 @@ export default function SopEditor({ initial, onChange, label = "Body" }: { initi
     <div className="rounded-md border border-line bg-surface focus-within:border-line-strong">
       {editor ? <EditorToolbar editor={editor} /> : null}
       <EditorContent editor={editor} />
+      <p className="border-t border-line px-4 py-2 text-[12px] text-ink-3 sm:px-6">
+        Add pictures and videos as links (a shared drive, YouTube, Loom): select the words, then Add link. Nothing is stored in the hub.
+      </p>
     </div>
   );
 }

@@ -24,7 +24,7 @@ rulings and the inputs still open, is `docs/kingdom-revamp-plan.md`.
 | Home | State of every module at a glance | Own score, goals, recent SOPs |
 | Goal Setting and Review | Configurable pillars and weights, review cycles, scoring, feedback, team scores; monthly cycles run as Goal Setting Reviews | Own reviews, scores, feedback; goals with action steps and progress notes that stay private to them |
 | People | Add staff before inviting them, invite when ready, roles, deactivate; hire date, department, reports to; compensation and yearly KPIs (the person and admins only) | (not visible) |
-| Resources: SOPs | Write in a rich editor, import Word, PDF, text and Markdown files, file under the company's own categories and tags, version history with who saved each version, compare and restore, publish, attach files, assign as tasks and see who signed off; categories on Resources > Setup | Read, search inside, find in a page, and sign off published documents; see which are assigned to them |
+| Resources: SOPs | Write in a rich editor, import Word, PDF, text and Markdown files, file under the company's own categories and tags, version history with who saved each version, compare and restore, publish, attach files, assign as tasks and see who signed off; categories on Resources > Setup | Read, search inside, find in a page, and sign off published documents; see which are assigned to them. Managers see the sign-offs of the people they lead on each person's Overview |
 | Resources: Files & media | Add files, templates, videos and saved links with tags | Browse and open |
 | Financial snapshots | Revenue, direct costs, overhead, margins, net, cash by month, quarter, or year; manual entry or CSV import | (not visible) |
 | Marketing tracker | Board of planned, active, paused, and complete campaigns with budget vs spend and the key result | (not visible) |
@@ -553,7 +553,8 @@ ships with it make it a working library rather than a list of Markdown pages.
   (`sop_versions.body_json`); a version from before `0053` keeps its Markdown (`body_md`) and opens
   converted. The schema is `src/lib/sops/schema.ts`, shared by the editor, the read-only view and
   the import, so a script, a picture or an unknown tag can never enter a document, and links are
-  web, mail and phone only. Pictures and video inside an SOP are not built yet.
+  web, mail and phone only. Pictures and video are links (a shared drive, YouTube, Loom), never
+  stored in the hub; a picture in an older Markdown version reads as a link to it.
 - **Versions.** Saving appends a version and never edits one (rule 9, now held by the database too:
   a signed-in writer cannot change a saved version). Each version names who saved it, when and why.
   Any version can be read, compared line by line with the current one, and restored by an admin,
@@ -582,9 +583,11 @@ ships with it make it a working library rather than a list of Markdown pages.
   attached so pictures and anything else are kept. A scanned PDF has no text to read and is
   reported, not imported. Old Word (.doc) files are refused with how to save them as .docx; from
   Google Docs, download as Microsoft Word.
-- **Sign-off.** A member signs off a published SOP for themselves ("I have read this SOP and
-  completed it"). The database stamps the version, their name and the time (`sop_signoffs`). The
-  person and the company's admins read them; nobody changes or removes one. When the SOP changes,
+- **Sign-off.** A member ticks "I have read this SOP and completed it" and signs off a published SOP
+  for themselves. The database stamps the version, their name and the time (`sop_signoffs`), a
+  record on the person: it shows on their Overview under SOPs signed off, read as every person's
+  records are (0038): the person, the managers they report to up the chain, the admins over them,
+  and Rococo. Nobody changes or removes one. When the SOP changes,
   an earlier sign-off reads as signed for an older version and the person may sign again.
 - **Assigning.** With the `tasks` module, an admin assigns a published SOP to people from its page;
   each gets a task on it (`tasks.sop_id`) and the usual assignment email. When a task was assigned

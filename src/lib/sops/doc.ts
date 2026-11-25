@@ -18,7 +18,7 @@ export function htmlToDoc(html: string): SopDocJson {
   return generateJSON(html, sopExtensions()) as SopDocJson;
 }
 
-const VOID = new Set(["br", "hr", "img"]);
+const VOID = new Set(["br", "hr"]);
 const KEEP_ATTRS = new Set(["href", "start"]);
 
 function escapeHtml(text: string): string {
@@ -31,6 +31,13 @@ function hastToHtml(node: HastNodes): string {
   if (node.type === "text") return escapeHtml(node.value);
   if (node.type === "root") return node.children.map(hastToHtml).join("");
   if (node.type !== "element") return "";
+  // SOPs keep pictures and video as links, never stored in the hub (0053), so a picture in an older
+  // Markdown version reads as a link to it, named for it.
+  if (node.tagName === "img") {
+    const src = typeof node.properties?.src === "string" ? node.properties.src : "";
+    const alt = typeof node.properties?.alt === "string" && node.properties.alt.trim() ? node.properties.alt.trim() : "Picture";
+    return src ? `<a href="${escapeHtml(src)}">${escapeHtml(alt)}</a>` : "";
+  }
   const attrs = Object.entries(node.properties ?? {})
     .filter(([key, value]) => KEEP_ATTRS.has(key) && (typeof value === "string" || typeof value === "number"))
     .map(([key, value]) => ` ${key}="${escapeHtml(String(value))}"`)
@@ -78,10 +85,4 @@ export function docToLines(doc: SopDocJson): string[] {
 export function versionDoc(version: Pick<SopVersion, "body_json" | "body_md"> | null): SopDocJson {
   if (version?.body_json) return version.body_json;
   return htmlToDoc(markdownToHtml(version?.body_md ?? ""));
-}
-
-// Pictures in a Markdown version from before the editor. The editor holds no pictures yet, so the
-// screens say these stay in that version's history rather than drop them without a word.
-export function markdownPictureCount(md: string | null | undefined): number {
-  return md ? (md.match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length : 0;
 }

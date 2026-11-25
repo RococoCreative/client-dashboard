@@ -21,7 +21,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { hasModule } from "../../lib/modules.ts";
 import { listSops } from "../../services/sops.ts";
 import { listSopCategories } from "../../services/sopCategories.ts";
-import { listMySopSignoffs } from "../../services/sopSignoffs.ts";
+import { listPersonSopSignoffs } from "../../services/sopSignoffs.ts";
 import { listTasks } from "../../services/tasks.ts";
 import { formatDate } from "../../lib/format.ts";
 import { searchTerms, snippetFor } from "../../lib/sops/search.ts";
@@ -103,7 +103,7 @@ export default function SopsPanel() {
   const base = useAsync(async () => {
     const [categories, signoffs, tasks] = await Promise.all([
       listSopCategories(companyId),
-      member ? listMySopSignoffs(companyId, profile.id) : Promise.resolve([]),
+      member ? listPersonSopSignoffs(companyId, profile.id) : Promise.resolve([]),
       withTasks ? listTasks(companyId, { assigneeId: profile.id }) : Promise.resolve([]),
     ]);
     return { categories, signoffs, assigned: new Set(tasks.map((t) => t.sop_id).filter((id): id is string => id !== null)) };

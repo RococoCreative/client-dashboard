@@ -24,9 +24,11 @@
 --   6. Search: sops.body_text holds the current version's text; sops.search, kept by trigger,
 --      weighs the title first, then tags and summary, then the body. The app queries it through
 --      PostgREST; no public function is added (rule 4).
---   7. Sign-offs: sop_signoffs. A person signs off a published SOP for themselves; the database
---      stamps the version, their name, the company and the time. The person and the company's
---      admins read them; nobody signed in changes or removes one.
+--   7. Sign-offs: sop_signoffs, a record on the person. A person signs off a published SOP for
+--      themselves; the database stamps the version, their name, the company and the time. They are
+--      read the way 0038 reads every record of a person's: the person, Rococo, and whoever in the
+--      company sees them (an owner, a full-scope admin, an admin over their divisions, and the
+--      managers they report to up the chain). Nobody signed in changes or removes one.
 --   8. Tasks on an SOP: tasks.sop_id. The SOP must be the company's own and published when linked.
 --      When a task was assigned is tasks.assigned_at, stamped by the database from the clock on
 --      insert and whenever its person or its SOP changes, never written by the app; sign-offs are
@@ -367,9 +369,16 @@ alter table public.sop_signoffs enable row level security;
 grant select, insert on public.sop_signoffs to authenticated;
 
 drop policy if exists "People read their own sign-offs, admins read all" on public.sop_signoffs;
-create policy "People read their own sign-offs, admins read all"
+drop policy if exists "The person and those who see them read sign-offs" on public.sop_signoffs;
+create policy "The person and those who see them read sign-offs"
   on public.sop_signoffs for select to authenticated
-  using (profile_id = private.auth_profile_id() or private.can_manage_company(company_id));
+  using (
+    private.is_rococo_admin()
+    or profile_id = private.auth_profile_id()
+    or (company_id = private.auth_company_id()
+        and (private.has_full_scope()
+             or profile_id in (select private.viewable_person_ids())))
+  );
 drop policy if exists "People sign off for themselves" on public.sop_signoffs;
 create policy "People sign off for themselves"
   on public.sop_signoffs for insert to authenticated

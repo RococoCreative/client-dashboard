@@ -288,20 +288,9 @@ describe("a task on an SOP from the task form", () => {
 });
 
 describe("an older SOP with pictures in its Markdown", () => {
-  async function legacyWithPicture() {
+  it("shows each picture as a link to it, and keeps it a link when edited", async () => {
     const sop = await sopsService.createSop({ company_id: KLASIK.company.id, title: "Old with photo", category_id: null, status: "published", body: { md: "## Setup\n\n![Ladder angle](https://example.com/angle.png)\n\nSet the angle." } });
-    return sop.id;
-  }
-
-  it("says on the SOP that its pictures are kept in history, not shown", async () => {
-    const id = await legacyWithPicture();
-    renderWithHub(<SopPage />, employee, { path: `/sops/${id}`, pattern: "/sops/:sopId" });
-    expect(await screen.findByText(/This version has 1 picture from before the editor/)).toBeInTheDocument();
-  });
-
-  it("warns before an edit saves without them", async () => {
-    const id = await legacyWithPicture();
-    renderWithHub(<SopEditPage />, admin, { path: `/sops/${id}/edit`, pattern: "/sops/:sopId/edit" });
-    expect(await screen.findByText(/Saving keeps 1 picture in version history only/)).toBeInTheDocument();
+    renderWithHub(<SopPage />, employee, { path: `/sops/${sop.id}`, pattern: "/sops/:sopId" });
+    expect(await screen.findByRole("link", { name: "Ladder angle" })).toHaveAttribute("href", "https://example.com/angle.png");
   });
 });

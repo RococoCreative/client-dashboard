@@ -22,8 +22,7 @@ import { createSopCategory, listSopCategories } from "../../services/sopCategori
 import { errorMessage } from "../../lib/errors.ts";
 import { assertInCompany } from "../../lib/tenancy.ts";
 import { findCategoryByName, nextSortOrder, type CategoryChoice } from "../../lib/sops/categories.ts";
-import { htmlToDoc, markdownPictureCount, versionDoc } from "../../lib/sops/doc.ts";
-import { pluralize } from "../../lib/format.ts";
+import { htmlToDoc, versionDoc } from "../../lib/sops/doc.ts";
 import { tagsInUse } from "../../lib/sops/tags.ts";
 import { SOP_STATUS_LABELS, keysOf, type Sop, type SopCategory, type SopDocJson, type SopStatus, type SopVersion } from "../../types/database.ts";
 
@@ -109,11 +108,6 @@ function SopForm({ loaded }: { loaded: Loaded }) {
         }
       />
       {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {markdownPictureCount(loaded.version?.body_md) ? (
-        <Notice tone="warning" className="mb-4">
-          This SOP has {pluralize(markdownPictureCount(loaded.version?.body_md), "picture")} from before the editor, which the editor cannot hold yet. Saving keeps {pluralize(markdownPictureCount(loaded.version?.body_md), "picture")} in version history only; attach them as files to keep them in view.
-        </Notice>
-      ) : null}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <Section eyebrow="Content" title="Procedure">
