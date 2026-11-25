@@ -3,7 +3,7 @@
 // ids are stable across a run.
 import type { Session } from "@supabase/supabase-js";
 import type { HubValue } from "../context/HubContext.tsx";
-import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, Gsr, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
+import type { AuditEvent, Company, CompanyConnection, CompanyDivision, CompanyDomain, CompanyGoal, CompensationItem, CycleOmission, DeliverableCategory, DeliverableTask, EmployeeDeliverable, EmployeeFinancial, EmployeeKpi, ExternalLink, FinancialSnapshot, FocusTopic, Goal, GoalNote, GoalPrivate, Gsr, GsrCriterion, GsrPillar, ImpactScore, Invitation, JobRole, JobRoleGoal, MarketingCampaign, MetricEntry, MilestoneKind, MilestoneStatus, Profile, Project, ProjectAssignment, ProjectMilestone, Resource, ResourceKind, Review, ReviewCycle, ReviewProjectNote, ReviewScore, Role, RoleMetric, ScoringType, Sop, SopAttachment, SopCategory, SopDocJson, SopSignoff, SopStatus, SopVersion, SyncRecord, SyncRun, SyncSource, Task, TaskStep, Win } from "../types/database.ts";
 import type { FieldMapEntry, ParsedValue, SyncProvider, TargetModule } from "../../supabase/functions/_shared/sync/types.ts";
 import { buildRecordKey } from "../../supabase/functions/_shared/sync/keys.ts";
 import { MODULE_KEYS } from "../lib/modules.ts";
@@ -35,7 +35,7 @@ export const DOMAINS: CompanyDomain[] = [
 
 interface PersonSpec { name: string; title: string; role: Role }
 interface PillarSpec { name: string; weight: number; type: ScoringType; description: string; criteria: string[] }
-interface SopSpec { title: string; category: SopCategory; summary: string; status: SopStatus }
+interface SopSpec { title: string; category: string; summary: string; status: SopStatus; tags?: string[] }
 interface ResourceSpec { title: string; kind: ResourceKind; tags: string[]; url: string | null }
 interface CompanySpec {
   domain: string;
@@ -86,9 +86,9 @@ const SPECS: Record<string, CompanySpec> = {
       { name: "Character & Values", weight: 25, type: "rating", description: "How fully the person lives the core values, rated 1 to 5.", criteria: ["Curiosity", "Integrity", "Competency", "Tenacity", "Community & Entrepreneurship"] },
     ],
     sops: [
-      { title: "Jobsite safety walk", category: "safety", summary: "Daily walk before crews start, with the checklist and photo log.", status: "published" },
+      { title: "Jobsite safety walk", category: "safety", summary: "Daily walk before crews start, with the checklist and photo log.", status: "published", tags: ["Daily", "Site"] },
       { title: "Pre-construction handoff", category: "process", summary: "What sales hands to production and how the kickoff meeting runs.", status: "published" },
-      { title: "Client change order", category: "client", summary: "Pricing, approval, and documentation for any scope change.", status: "published" },
+      { title: "Client change order", category: "client", summary: "Pricing, approval, and documentation for any scope change.", status: "published", tags: ["Pricing"] },
       { title: "Weekly invoicing", category: "admin", summary: "Draws, lien waivers, and the Friday send.", status: "draft" },
     ],
     resources: [
@@ -309,6 +309,10 @@ export interface CompanyBundle {
   deliverableTasks: DeliverableTask[];
   compensation: CompensationItem[];
   sops: Sop[];
+  // The company's own SOP categories (0053), one per name its sample SOPs are filed under.
+  sopCategories: SopCategory[];
+  // Sign-offs on SOPs (0053). Empty to start: nobody has signed anything off.
+  sopSignoffs: SopSignoff[];
   versions: SopVersion[];
   attachments: SopAttachment[];
   resources: Resource[];
@@ -358,6 +362,45 @@ Keep every crew and client on the same page before work starts.
 - Checklist signed by the superintendent
 - Photos posted to the project album
 `;
+
+// The newest version of each company's first SOP, as the editor saves it (0053).
+const SOP_DOC_V2: SopDocJson = {
+  type: "doc",
+  content: [
+    { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Purpose" }] },
+    { type: "paragraph", content: [{ type: "text", text: "Keep every crew and client on the same page before work starts." }] },
+    { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Steps" }] },
+    {
+      type: "orderedList",
+      attrs: { start: 1 },
+      content: [
+        "Walk the site with the superintendent and note hazards.",
+        "Confirm the day's scope against the schedule.",
+        "Photograph anything that does not match the plan.",
+        "Post the checklist photo to the client album too.",
+      ].map((text) => ({ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text }] }] })),
+    },
+    { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Checks" }] },
+    {
+      type: "bulletList",
+      content: ["Checklist signed by the superintendent", "Photos posted to the project album"].map((text) => ({
+        type: "listItem",
+        content: [{ type: "paragraph", content: [{ type: "text", marks: [{ type: "bold" }], text }] }],
+      })),
+    },
+  ],
+};
+
+// The text the database derives from a document: every text node, joined with spaces.
+function docText(doc: SopDocJson): string {
+  const out: string[] = [];
+  const walk = (node: SopDocJson) => {
+    if (typeof node.text === "string") out.push(node.text);
+    (node.content ?? []).forEach(walk);
+  };
+  walk(doc);
+  return out.join(" ");
+}
 
 function build(company: Company): CompanyBundle {
   const spec = SPECS[company.id];
@@ -699,6 +742,7 @@ function build(company: Company): CompanyBundle {
         recurrence: null,
         campaign_id: null,
         goal_id: null,
+        sop_id: null,
         completed_at: null,
         completed_by: null,
         next_task_id: null,
@@ -1116,29 +1160,47 @@ function build(company: Company): CompanyBundle {
     updated_at: NOW,
   }));
 
+  const categoryNames = [...new Set(spec.sops.map((sop) => sop.category))];
+  const sopCategories: SopCategory[] = categoryNames.map((name, i) => ({
+    id: p(`sop-category-${i + 1}`),
+    company_id: company.id,
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    sort_order: i + 1,
+    retired_at: null,
+    created_at: EARLIER,
+  }));
+  const author = profiles[0];
   const sops: Sop[] = spec.sops.map((sop, i) => ({
     id: p(`sop-${i + 1}`),
     company_id: company.id,
     title: sop.title,
-    category: sop.category,
+    category_id: sopCategories[categoryNames.indexOf(sop.category)].id,
     summary: sop.summary,
     status: sop.status,
+    tags: sop.tags ?? [],
     current_version: i === 0 ? 2 : 1,
-    created_by: profiles[0].id,
-    updated_by: profiles[0].id,
+    created_by: author.user_id,
+    updated_by: author.user_id,
+    created_by_profile_id: author.id,
+    created_by_name: author.full_name,
+    updated_by_profile_id: author.id,
+    updated_by_name: author.full_name,
     created_at: EARLIER,
     updated_at: i === 0 ? NOW : EARLIER,
   }));
 
+  // The first SOP's newest version was written in the editor; every other version is Markdown
+  // from before it, as live data is.
   const versions: SopVersion[] = sops.flatMap((sop) => {
     const list: SopVersion[] = [
-      { id: `${sop.id}-v1`, sop_id: sop.id, company_id: company.id, version: 1, body_md: SOP_BODY, change_note: "First version", created_by: profiles[0].id, created_at: EARLIER },
+      { id: `${sop.id}-v1`, sop_id: sop.id, company_id: company.id, version: 1, body_md: SOP_BODY, body_json: null, body_text: SOP_BODY, change_note: "First version", created_by: author.user_id, author_profile_id: author.id, author_name: author.full_name, created_at: EARLIER },
     ];
     if (sop.current_version === 2) {
-      list.push({ id: `${sop.id}-v2`, sop_id: sop.id, company_id: company.id, version: 2, body_md: `${SOP_BODY}\n## Added this month\n\nThe superintendent now posts the checklist photo to the client album too.\n`, change_note: "Added the client album step", created_by: profiles[0].id, created_at: NOW });
+      list.push({ id: `${sop.id}-v2`, sop_id: sop.id, company_id: company.id, version: 2, body_md: null, body_json: SOP_DOC_V2, body_text: docText(SOP_DOC_V2), change_note: "Added the client album step", created_by: author.user_id, author_profile_id: author.id, author_name: author.full_name, created_at: NOW });
     }
     return list;
   });
+  for (const sop of sops) sop.body_text = versions.find((v) => v.sop_id === sop.id && v.version === sop.current_version)?.body_text ?? null;
 
   const attachments: SopAttachment[] = sops.length
     ? [{ id: p("attachment-1"), sop_id: sops[0].id, company_id: company.id, file_name: "Safety-walk-checklist.pdf", file_path: `${company.id}/sops/${sops[0].id}/abc-Safety-walk-checklist.pdf`, content_type: "application/pdf", size_bytes: 184320, created_by: profiles[0].id, created_at: NOW }]
@@ -1459,7 +1521,7 @@ function build(company: Company): CompanyBundle {
     reviewProjectNotes.push({ id: p("review-note-noor-1"), company_id: company.id, review_id: p("review-current-2"), project_id: p("project-1"), note: "Framing closed out on schedule; the client walk went well.", created_at: NOW, updated_at: NOW });
   }
 
-  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, gsrs: [], scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
+  return { company, profiles: [...profiles, ...pendingStaff, ...team], pillars, criteria, cycles, reviews, gsrs: [], scores, impactScores, jobRoles, jobRoleGoals, financials, connections, projects, milestones, wins, tasks, taskSteps, goals, goalNotes, goalPrivate, cycleOmissions: [], companyGoals, kpis, deliverableCategories, deliverables, deliverableTasks, compensation, sops, sopCategories, sopSignoffs: [], versions, attachments, resources, invitations, snapshots, campaigns, syncSources, syncRuns, syncRecords, externalLinks, focusTopics, divisions, roleMetrics, metricEntries, projectAssignments, reviewProjectNotes };
 }
 
 const BUNDLES: CompanyBundle[] = COMPANIES.map(build);

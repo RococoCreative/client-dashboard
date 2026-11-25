@@ -6,7 +6,7 @@ import { requireRows } from "../lib/errors.ts";
 import { invokeFunction } from "./invoke.ts";
 import { db } from "./supabase.ts";
 
-const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, goal_id, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
+const TASK_COLUMNS = "id, company_id, title, description, assignee_id, created_by, due_date, priority, recurrence, campaign_id, goal_id, sop_id, completed_at, completed_by, next_task_id, notified_assignee_id, created_at, updated_at";
 const SELECT = `${TASK_COLUMNS}, steps:task_steps(id, task_id, company_id, title, sort_order, done_at)`;
 
 function bySortOrder(a: TaskStep, b: TaskStep): number {
@@ -27,9 +27,11 @@ export type TaskInput = {
   campaign_id?: string | null;
   // A monthly GSR goal of the assignee's own (0039). The database refuses any other goal.
   goal_id?: string | null;
+  // A published SOP of the company's (0053). The assignee's sign-off closes the task.
+  sop_id?: string | null;
   steps?: string[];
 };
-export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id">>;
+export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id" | "sop_id">>;
 
 // Earliest due date first, undated last, then oldest created. Open only unless asked.
 export async function listTasks(companyId: string, opts?: { assigneeId?: string; campaignId?: string; status?: "open" | "done" | "all" }): Promise<TaskWithSteps[]> {
@@ -55,6 +57,18 @@ export async function listTasksForGoals(companyId: string, goalIds: readonly str
     .in("goal_id", [...goalIds])
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
+  if (error) throw error;
+  return ((data as unknown as TaskWithSteps[]) ?? []).map(withOrderedSteps);
+}
+
+// Every task on one SOP, open and done, newest first, as the SOP page lists its assignments.
+export async function listTasksForSop(companyId: string, sopId: string): Promise<TaskWithSteps[]> {
+  const { data, error } = await db()
+    .from("tasks")
+    .select(SELECT)
+    .eq("company_id", companyId)
+    .eq("sop_id", sopId)
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return ((data as unknown as TaskWithSteps[]) ?? []).map(withOrderedSteps);
 }

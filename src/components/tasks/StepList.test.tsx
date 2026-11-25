@@ -29,6 +29,7 @@ const TASK: TaskWithSteps = {
   recurrence: null,
   campaign_id: null,
   goal_id: null,
+  sop_id: null,
   completed_at: null,
   completed_by: null,
   next_task_id: null,

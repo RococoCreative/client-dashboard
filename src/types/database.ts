@@ -637,32 +637,69 @@ export interface SopDocJson {
   [key: string]: unknown;
 }
 
-export type SopCategory = "safety" | "process" | "client" | "admin" | "field";
 export type SopStatus = "draft" | "published" | "archived";
 
+// A company's own SOP category (0053). Retired ones are kept for the SOPs already filed under
+// them and are no longer offered for new ones.
+export interface SopCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  sort_order: number;
+  retired_at: string | null;
+  created_at: string;
+}
+
+// An SOP. Who created and last updated it are stamped by the database, with their names kept on
+// the row because an employee reads the SOP but not every profile (0053). body_text, the current
+// version's plain text, is only read when searching.
 export interface Sop {
   id: string;
   company_id: string;
   title: string;
-  category: SopCategory;
+  category_id: string | null;
   summary: string | null;
   status: SopStatus;
+  tags: string[];
   current_version: number;
   created_by: string | null;
   updated_by: string | null;
+  created_by_profile_id: string | null;
+  created_by_name: string | null;
+  updated_by_profile_id: string | null;
+  updated_by_name: string | null;
   created_at: string;
   updated_at: string;
+  body_text?: string | null;
 }
 
+// A saved version, permanent once written. A version from before 0053 has Markdown (body_md);
+// every later one has an editor document (body_json). body_text is the database's own.
 export interface SopVersion {
   id: string;
   sop_id: string;
   company_id: string;
   version: number;
-  body_md: string;
+  body_md: string | null;
+  body_json: SopDocJson | null;
+  body_text: string | null;
   change_note: string | null;
   created_by: string | null;
+  author_profile_id: string | null;
+  author_name: string | null;
   created_at: string;
+}
+
+// A person's sign-off on an SOP (0053): the version they signed, their name and the time, all
+// stamped by the database. Read by the person and their company's admins.
+export interface SopSignoff {
+  id: string;
+  company_id: string;
+  sop_id: string;
+  profile_id: string;
+  version: number;
+  signer_name: string | null;
+  signed_at: string;
 }
 
 export interface SopAttachment {
@@ -735,14 +772,6 @@ export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
   on_track: "On track",
   achieved: "Achieved",
   missed: "Missed",
-};
-
-export const SOP_CATEGORY_LABELS: Record<SopCategory, string> = {
-  safety: "Safety",
-  process: "Process",
-  client: "Client",
-  admin: "Admin",
-  field: "Field",
 };
 
 export const SOP_STATUS_LABELS: Record<SopStatus, string> = {
@@ -822,6 +851,8 @@ export interface Task {
   // The monthly GSR goal (goals, scope 'cycle') this task serves, which must be the assignee's own
   // (0039). Informational: it never moves the goal's completion or any score.
   goal_id: string | null;
+  // The published SOP this task asks the assignee to complete (0053). Their sign-off closes it.
+  sop_id: string | null;
   completed_at: string | null; completed_by: string | null; next_task_id: string | null;
   notified_assignee_id: string | null; created_at: string; updated_at: string;
 }

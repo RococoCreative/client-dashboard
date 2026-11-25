@@ -3,10 +3,14 @@
 // decide: ticking the last step completes a task and unticking one reopens it, completing a
 // repeating task opens one next copy dated forward from its due date past today in the company's
 // own time zone (0037), a completed copy whose next one is open is locked, and deleting the open
-// copy ends the series. tasks.test.ts pins all of it.
+// copy ends the series. tasks.test.ts pins all of it. It plays 0053 too: a task on an SOP needs a
+// published SOP of its own company, and only the assignee's sign-off (or an admin) closes it.
 import type { Task, TaskPriority, TaskRecurrence, TaskStep, TaskWithSteps } from "../../types/database.ts";
 import { NOT_CHANGED_MESSAGE } from "../../lib/errors.ts";
-import { fromAll, personaFromLocation } from "../fixtures.ts";
+import { fromAll, personaFromLocation, personaIn } from "../fixtures.ts";
+import { isCompanyAdminRole } from "../../lib/people.ts";
+import { sopRow } from "./sops.ts";
+import { signedSince } from "./sopSignoffs.ts";
 import { goalLinkProblem } from "./gsr.ts";
 import { timeZoneOf } from "./companies.ts";
 import { companyOf, onPersonDeleted } from "./profiles.ts";
@@ -38,9 +42,10 @@ export type TaskInput = {
   recurrence?: TaskRecurrence | null;
   campaign_id?: string | null;
   goal_id?: string | null;
+  sop_id?: string | null;
   steps?: string[];
 };
-export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id">>;
+export type TaskPatch = Partial<Pick<Task, "title" | "description" | "assignee_id" | "due_date" | "priority" | "recurrence" | "campaign_id" | "goal_id" | "sop_id">>;
 
 const LOCKED = "The next one is already open.";
 const DAYS: Partial<Record<TaskRecurrence, number>> = { daily: 1, weekly: 7, biweekly: 14 };
@@ -74,6 +79,21 @@ function findStep(id: string): TaskStep {
 }
 function read(task: Task): TaskWithSteps {
   return { ...task, steps: steps.filter((s) => s.task_id === task.id).sort(bySortOrder).map((s) => ({ ...s })) };
+}
+
+// Whether the acting person manages the company, as private.can_manage_company decides.
+function canManage(companyId: string): boolean {
+  const person = personaIn(companyId);
+  return person.is_rococo_admin || isCompanyAdminRole(person.role);
+}
+
+// guard_task_sop (0053): the SOP must be here, the company's own, and published.
+function checkSop(task: Pick<Task, "company_id" | "sop_id">, prevSopId: string | null): void {
+  if (task.sop_id === null || task.sop_id === prevSopId) return;
+  const sop = sopRow(task.sop_id);
+  if (!sop) throw new Error("That SOP is not here any more.");
+  if (sop.company_id !== task.company_id) throw new Error("That SOP belongs to another company.");
+  if (sop.status !== "published") throw new Error("Only a published SOP can be assigned.");
 }
 
 // The checks the table constraints and guard_task make on any write.
@@ -158,6 +178,8 @@ function recur(task: Task): void {
     campaign_id: task.campaign_id,
     // A new copy belongs to a later month, so it does not carry the goal link (0039).
     goal_id: null,
+    // It keeps its SOP while that SOP is still published (0053).
+    sop_id: task.sop_id && sopRow(task.sop_id)?.status === "published" ? task.sop_id : null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -175,12 +197,21 @@ function recur(task: Task): void {
 
 // What an update of completed_at does: the guard refuses to reopen a locked copy and stamps who
 // completed it; completing a repeating task that has no next copy yet opens one.
-function setCompletion(task: Task, completedAt: string | null): void {
+// internal: a write the database makes itself (a step ticked, a sign-off), not a person's.
+function setCompletion(task: Task, completedAt: string | null, internal = false, by?: string): void {
   const wasOpen = task.completed_at === null;
+  if (wasOpen && completedAt !== null && task.sop_id !== null) {
+    const signed = task.assignee_id !== null && signedSince(task.sop_id, task.assignee_id, task.created_at);
+    if (!signed) {
+      // Ticking every step does not finish an SOP task; the sign-off does.
+      if (internal) return;
+      if (!canManage(task.company_id)) throw new Error("This task finishes when the SOP is signed off.");
+    }
+  }
   if (!wasOpen && completedAt === null) assertUnlocked(task);
   task.completed_at = completedAt;
   if (completedAt === null) task.completed_by = null;
-  else if (wasOpen) task.completed_by = me();
+  else if (wasOpen) task.completed_by = by ?? me();
   task.updated_at = now();
   if (wasOpen && completedAt !== null && task.recurrence !== null && task.next_task_id === null) recur(task);
 }
@@ -217,6 +248,7 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
     recurrence: input.recurrence ?? null,
     campaign_id: input.campaign_id ?? null,
     goal_id: input.goal_id ?? null,
+    sop_id: input.sop_id ?? null,
     completed_at: null,
     completed_by: null,
     next_task_id: null,
@@ -225,6 +257,7 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
     updated_at: now(),
   };
   check(created);
+  checkSop(created, null);
   tasks.push(created);
   (input.steps ?? [])
     .map((t) => t.trim())
@@ -235,11 +268,37 @@ export async function createTask(input: TaskInput): Promise<TaskWithSteps> {
 
 export async function updateTask(id: string, patch: TaskPatch): Promise<TaskWithSteps> {
   const task = findTask(id);
-  const { title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id } = { ...task, ...patch };
-  const next = { ...task, title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id };
+  const { title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id, sop_id } = { ...task, ...patch };
+  const next = { ...task, title, description, assignee_id, due_date, priority, recurrence, campaign_id, goal_id, sop_id };
   check(next, task.goal_id);
+  if (sop_id !== task.sop_id && !canManage(task.company_id) && task.created_by !== me()) {
+    throw new Error("Only the person who assigned this task can change its SOP.");
+  }
+  checkSop(next, task.sop_id);
   Object.assign(task, next, { updated_at: now() });
   return read(task);
+}
+
+// Every task on one SOP, newest first.
+export async function listTasksForSop(companyId: string, sopId: string): Promise<TaskWithSteps[]> {
+  return tasks
+    .filter((t) => t.company_id === companyId && t.sop_id === sopId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .map(read);
+}
+
+// close_tasks_on_signoff (0053): the person's open tasks on the SOP assigned at or before it.
+export function closeTasksOnSignoff(sopId: string, profileId: string, signedAt: string): void {
+  for (const task of tasks) {
+    if (task.sop_id === sopId && task.assignee_id === profileId && task.completed_at === null && task.created_at <= signedAt) {
+      setCompletion(task, signedAt, true, profileId);
+    }
+  }
+}
+
+// Whether a task on this SOP was assigned to the person after a moment and is still open.
+export function openSopTaskSince(sopId: string, profileId: string, since: string): boolean {
+  return tasks.some((t) => t.sop_id === sopId && t.assignee_id === profileId && t.completed_at === null && t.created_at > since);
 }
 
 // Deleting the open copy of a series ends the series on the copy before it.
@@ -303,7 +362,7 @@ export async function setStepDone(stepId: string, done: boolean): Promise<TaskWi
   step.done_at = done ? now() : null;
   if (!wasDone && done) {
     const allDone = steps.every((s) => s.task_id !== task.id || s.done_at !== null);
-    if (allDone && task.completed_at === null) setCompletion(task, now());
+    if (allDone && task.completed_at === null) setCompletion(task, now(), true);
   } else if (wasDone && !done && task.completed_at !== null) {
     setCompletion(task, null);
   }

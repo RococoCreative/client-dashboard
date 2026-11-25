@@ -417,6 +417,7 @@ describe("the task form started from a GSR goal", () => {
       recurrence: null,
       campaign_id: null,
       goal_id: input.goal_id ?? null,
+      sop_id: null,
       completed_at: null,
       completed_by: null,
       next_task_id: null,

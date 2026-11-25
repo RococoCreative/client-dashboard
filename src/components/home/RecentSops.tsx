@@ -1,10 +1,10 @@
-// The SOP library's most recent changes, a line each with its category, version and date, for both
+// The SOP library's most recent changes, a line each with its version, date and who changed it, for both
 // Home layouts. Each title opens the SOP; under a finger the whole row is its target.
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { tapStretchClass } from "../ui/tap.ts";
 import { formatDate } from "../../lib/format.ts";
-import { SOP_CATEGORY_LABELS, type Sop } from "../../types/database.ts";
+import type { Sop } from "../../types/database.ts";
 
 export default function RecentSops({ sops }: { sops: Sop[] }) {
   if (sops.length === 0) {
@@ -19,7 +19,7 @@ export default function RecentSops({ sops }: { sops: Sop[] }) {
               {sop.title}
             </Link>
             <p className="text-[12px] text-ink-3">
-              {SOP_CATEGORY_LABELS[sop.category]} · v{sop.current_version} · {formatDate(sop.updated_at)}
+              v{sop.current_version} · {formatDate(sop.updated_at)}{sop.updated_by_name ? ` · ${sop.updated_by_name}` : ""}
             </p>
           </div>
           <ArrowRight size={14} className="shrink-0 text-ink-3" aria-hidden />
