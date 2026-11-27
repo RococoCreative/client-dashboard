@@ -76,12 +76,12 @@ describe("People tabs", () => {
 });
 
 describe("the roster", () => {
-  it("reads each person's hub role as text, with the invite actions still there", async () => {
+  it("reads each person's hub role as text, with the row's Access button still there", async () => {
     renderWithHub(<PeoplePage />, rbaAdmin, { path: "/people", pattern: "/people" });
     const row = (await screen.findByText("Kai Bennett", { selector: "span" })).closest("tr") as HTMLElement;
     expect(within(row).getByText(ROLE_LABELS[kai.role])).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /^Role for / })).not.toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Send the invitation to Kai Bennett" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Access for Kai Bennett" })).toBeInTheDocument();
   });
 });
 

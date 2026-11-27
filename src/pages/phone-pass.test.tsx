@@ -70,7 +70,7 @@ describe("the roster at phone width", () => {
     expect(within(row).getByRole("link", { name: /Kai Bennett/ })).toHaveAttribute("href", `/people/${kai.id}`);
     expect(within(row).getByText(ROLE_LABELS[kai.role])).toBeInTheDocument();
     expect(within(row).getByText("Not invited")).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Send the invitation to Kai Bennett" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Access for Kai Bennett" })).toBeInTheDocument();
   });
 
   it("gives a manager the same labelled rows and still no row actions", async () => {
@@ -83,12 +83,13 @@ describe("the roster at phone width", () => {
 });
 
 describe("the roster's row actions", () => {
-  it("draws Send invite in the secondary style, leaving Add staff the page's one primary", async () => {
+  it("draws Access in the secondary style, leaving Add staff the page's one primary", async () => {
     renderWithHub(<PeoplePage />, rbaAdmin, { path: "/people", pattern: "/people" });
     const row = await rowOf("Kai Bennett");
-    const send = within(row).getByRole("button", { name: "Send the invitation to Kai Bennett" });
-    expect(send.className).toContain("border-line");
-    expect(send.className).not.toContain("bg-accent");
+    const access = within(row).getByRole("button", { name: "Access for Kai Bennett" });
+    expect(access).toHaveTextContent(/^Access$/);
+    expect(access.className).toContain("border-line");
+    expect(access.className).not.toContain("bg-accent");
     expect(screen.getByRole("button", { name: "Add staff" }).className).toContain("bg-accent");
   });
 });

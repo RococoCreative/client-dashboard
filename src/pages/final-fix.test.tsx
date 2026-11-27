@@ -101,8 +101,9 @@ async function expectWorded(name: string | RegExp, word: string) {
 }
 
 describe("destructive controls keep their words", () => {
-  it("cancels an invitation with words on the roster", async () => {
+  it("cancels an invitation with words in the roster's Access dialog", async () => {
     renderWithHub(<PeoplePage />, admin);
+    await userEvent.click(await screen.findByRole("button", { name: "Access for Avery Cole" }));
     // The visible words lead the accessible name, contiguous.
     await expectWorded("Cancel invitation for Avery Cole", "Cancel invitation");
   });

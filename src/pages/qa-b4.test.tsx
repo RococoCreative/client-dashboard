@@ -114,6 +114,14 @@ function dialog(): HTMLElement {
   return screen.getByRole("dialog");
 }
 
+// The roster's one Access button on a person's row, and the dialog it opens.
+async function openAccess(user: ReturnType<typeof userEvent.setup>, name: string): Promise<HTMLElement> {
+  await user.click(await screen.findByRole("button", { name: `Access for ${name}` }));
+  return screen.getByRole("dialog", { name: `Access for ${name}` });
+}
+// The confirm a Cancel invitation opens over the Access dialog.
+const cancelConfirm = (name: string) => screen.getByRole("dialog", { name: `Cancel the invitation for ${name}?` });
+
 describe("holding screen for an account with no company", () => {
   it("says a Rococo admin places the account, not that an invitation will", async () => {
     // Invitations are read only when an account is created. Someone whose company was deleted, or
@@ -154,7 +162,9 @@ describe("people", () => {
     const row = screen.getByText("Taylor Reed", { selector: "span" }).closest("tr") as HTMLElement;
     expect(within(row).getByText("Inactive")).toBeInTheDocument();
     // Inviting someone who is switched off would only land them on the inactive screen.
-    expect(within(row).queryByRole("button", { name: /Send the invitation/ })).not.toBeInTheDocument();
+    const inactive = await openAccess(user, "Taylor Reed");
+    expect(within(inactive).queryByRole("button", { name: /Send the invitation/ })).not.toBeInTheDocument();
+    expect(within(inactive).getByRole("button", { name: "Reactivate Taylor Reed" })).toBeInTheDocument();
     roster.unmount();
 
     const again = renderSetup(taylor.id);
@@ -162,7 +172,8 @@ describe("people", () => {
     expect(await screen.findByRole("button", { name: "Deactivate Taylor Reed" })).toBeInTheDocument();
     again.unmount();
     renderWithHub(<PeoplePage />, admin);
-    expect(await screen.findByRole("button", { name: "Send the invitation to Taylor Reed" })).toBeInTheDocument();
+    const active = await openAccess(user, "Taylor Reed");
+    expect(within(active).getByRole("button", { name: "Send the invitation to Taylor Reed" })).toBeInTheDocument();
   });
 
   it("leaves a Rococo admin's role and access alone", async () => {
@@ -182,6 +193,8 @@ describe("people", () => {
       const row = name.closest("tr") as HTMLElement;
       expect(within(row).queryByRole("combobox")).not.toBeInTheDocument();
       expect(within(row).getByText("Rococo Creative")).toBeInTheDocument();
+      // Their access is Rococo's, so the row offers no Access to open.
+      expect(within(row).queryByRole("button")).not.toBeInTheDocument();
       roster.unmount();
       // Their page has no Setup, so no account actions; everyone else keeps their controls.
       const rococoSetup = renderSetup("rococo-on-klasik");
@@ -198,12 +211,14 @@ describe("people", () => {
   it("says what cancelling an invitation and removing someone really do", async () => {
     const user = userEvent.setup();
     renderWithHub(<PeoplePage />, admin);
-    await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
+    const access = await openAccess(user, "Avery Cole");
+    await user.click(within(access).getByRole("button", { name: "Cancel invitation for Avery Cole" }));
     // The address is on a company domain, so the domain still lets them in after a cancel.
-    expect(dialog()).toHaveTextContent(/sign-in domains/);
-    expect(dialog()).toHaveTextContent(/deactivate/i);
-    expect(dialog()).not.toHaveTextContent(/link stops working/);
-    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    const confirm = cancelConfirm("Avery Cole");
+    expect(confirm).toHaveTextContent(/sign-in domains/);
+    expect(confirm).toHaveTextContent(/deactivate/i);
+    expect(confirm).not.toHaveTextContent(/link stops working/);
+    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
   });
 
   it("says on Setup what removing someone really does", async () => {
@@ -229,15 +244,16 @@ describe("people", () => {
     setup.unmount();
 
     renderWithHub(<PeoplePage />, admin);
-    await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
+    const access = await openAccess(user, "Avery Cole");
+    await user.click(within(access).getByRole("button", { name: "Cancel invitation for Avery Cole" }));
     ctl.failures.set("deleteInvitation", new Error("The invitation could not be cancelled."));
-    await user.click(within(dialog()).getByRole("button", { name: "Cancel invitation" }));
-    expect(await within(dialog()).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
-    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    await user.click(within(cancelConfirm("Avery Cole")).getByRole("button", { name: "Cancel invitation" }));
+    expect(await within(cancelConfirm("Avery Cole")).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
+    await user.click(within(cancelConfirm("Avery Cole")).getByRole("button", { name: "Cancel" }));
 
-    await user.click(screen.getByRole("button", { name: "Cancel invitation for Avery Cole" }));
-    expect(within(dialog()).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
-    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    await user.click(within(access).getByRole("button", { name: "Cancel invitation for Avery Cole" }));
+    expect(within(cancelConfirm("Avery Cole")).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
+    await user.click(within(cancelConfirm("Avery Cole")).getByRole("button", { name: "Cancel" }));
   });
 });
 

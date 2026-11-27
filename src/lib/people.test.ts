@@ -1,7 +1,7 @@
 // Tenure wording, the compensation total, the role ranking the selects offer, and the app's reading
 // of who leads whom and which divisions a viewer sees.
 import { describe, expect, it } from "vitest";
-import type { Profile, Role } from "../types/database.ts";
+import type { Goal, Profile, Review, ReviewCycle, Role } from "../types/database.ts";
 import {
   canGrantRole,
   canSeeDivisions,
@@ -12,6 +12,7 @@ import {
   divisionLabel,
   formatTenure,
   grantableRoles,
+  historyCounts,
   hasFullScope,
   inEveryDivision,
   isCompanyAdminRole,
@@ -305,5 +306,18 @@ describe("nameFromDirectory", () => {
   it("falls back for someone not in it, or no one", () => {
     expect(nameFromDirectory(directory, "z", "Hub admin")).toBe("Hub admin");
     expect(nameFromDirectory(directory, null, "Unassigned")).toBe("Unassigned");
+  });
+});
+
+describe("historyCounts", () => {
+  it("counts reviews in a GSR cycle as the months' GSRs, apart from the other reviews", () => {
+    const cycles = [{ id: "c-gsr", kind: "gsr" }, { id: "c-review", kind: "review" }] as ReviewCycle[];
+    const reviews = [{ cycle_id: "c-gsr" }, { cycle_id: "c-gsr" }, { cycle_id: "c-review" }, { cycle_id: null }] as Review[];
+    const goals = [{ id: "g1" }, { id: "g2" }, { id: "g3" }] as Goal[];
+    expect(historyCounts(reviews, cycles, goals)).toEqual({ reviews: 2, gsrs: 2, goals: 3 });
+  });
+
+  it("is all zero for someone with nothing set up", () => {
+    expect(historyCounts([], [], [])).toEqual({ reviews: 0, gsrs: 0, goals: 0 });
   });
 });

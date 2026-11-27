@@ -38,11 +38,14 @@ vi.mock("../services/tasks.ts", () => import("../test/mocks/tasks.ts"));
 vi.mock("../services/capabilities.ts", () => import("../test/mocks/capabilities.ts"));
 
 import { renderWithHub } from "../test/renderWithHub.tsx";
-import type { HubValue } from "../context/HubContext.tsx";
+import { HubContext, type HubValue } from "../context/HubContext.tsx";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { Invitation } from "../types/database.ts";
 import { addBackToCycle, createGoal, createPillar, ensureReview, listPillars, omitFromCycle, updatePillar, updateReview } from "../services/gsr.ts";
 import * as auditService from "../services/audit.ts";
 import * as companiesService from "../services/companies.ts";
 import * as profilesService from "../services/profiles.ts";
+import * as invitationsService from "../services/invitations.ts";
 import * as connectionsService from "../services/connections.ts";
 import * as winsService from "../services/wins.ts";
 import * as syncService from "../services/sync.ts";
@@ -82,6 +85,14 @@ import MappedTable from "../components/sync/MappedTable.tsx";
 
 const admin = makeHub("admin");
 const employee = makeHub("employee");
+
+// A roster row, found by the name in its Person column (the same name can also show as someone's
+// Reports to), and the Access dialog its one button opens.
+const rosterRowOf = (name: string) => screen.getByText(name, { selector: "span" }).closest("tr") as HTMLElement;
+async function openAccess(user: ReturnType<typeof userEvent.setup>, name: string): Promise<HTMLElement> {
+  await user.click(await screen.findByRole("button", { name: `Access for ${name}` }));
+  return screen.getByRole("dialog", { name: `Access for ${name}` });
+}
 const rococo = makeHub("rococo", null);
 const currentCycle = KLASIK.cycles[0];
 // Klasik's second open cycle, overlapping the first: the quarterly that its monthly Goal
@@ -471,17 +482,138 @@ describe("people", () => {
     await user.type(screen.getByLabelText("Title (optional)"), "Foreman");
     await user.click(screen.getByRole("button", { name: "Add to team" }));
     expect(await screen.findByText("Morgan Reyes")).toBeInTheDocument();
-    // On the roster, with no way in until somebody invites them.
-    expect(screen.getByRole("button", { name: "Send the invitation to Morgan Reyes" })).toBeInTheDocument();
+    // On the roster, with no way in until somebody invites them from Access.
+    expect(rosterRowOf("Morgan Reyes")).toHaveTextContent("Not invited");
+    const access = await openAccess(user, "Morgan Reyes");
+    expect(within(access).getByRole("button", { name: "Send the invitation to Morgan Reyes" })).toBeInTheDocument();
   });
 
   it("sends the invitation when the company is ready", async () => {
     const user = userEvent.setup();
     renderWithHub(<PeoplePage />, admin);
-    const send = await screen.findByRole("button", { name: "Send the invitation to Taylor Reed" });
-    await user.click(send);
-    expect(await screen.findByRole("button", { name: "Copy sign-in link for Taylor Reed" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send the invitation to Taylor Reed" })).not.toBeInTheDocument();
+    const access = await openAccess(user, "Taylor Reed");
+    await user.click(within(access).getByRole("button", { name: "Send the invitation to Taylor Reed" }));
+    expect(await within(access).findByRole("button", { name: "Copy sign-in link for Taylor Reed" })).toBeInTheDocument();
+    expect(within(access).queryByRole("button", { name: "Send the invitation to Taylor Reed" })).not.toBeInTheDocument();
+    // The row behind the dialog reads the new invitation at once.
+    expect(rosterRowOf("Taylor Reed")).toHaveTextContent("Invited");
+  });
+
+  it("gives every row the viewer may change one Access button", async () => {
+    renderWithHub(<PeoplePage />, admin);
+    expect(await screen.findByText("Jordan Vale (you)")).toBeInTheDocument();
+    // Signed in, invited and waiting, and set up but never invited: one button each, the same word.
+    for (const name of ["Sam Ortega", "Avery Cole", "Taylor Reed"]) {
+      const buttons = within(rosterRowOf(name)).getAllByRole("button");
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]).toHaveAccessibleName(`Access for ${name}`);
+      expect(buttons[0]).toHaveTextContent(/^Access$/);
+    }
+    // Nothing on the viewer's own row, and no row carries more than its one Access button.
+    expect(within(rosterRowOf("Jordan Vale (you)")).queryByRole("button")).not.toBeInTheDocument();
+    for (const row of screen.getAllByRole("row").slice(1)) {
+      const buttons = within(row).queryAllByRole("button");
+      expect(buttons.length).toBeLessThanOrEqual(1);
+      for (const button of buttons) expect(button).toHaveAccessibleName(/^Access for /);
+    }
+  });
+
+  it("deletes from the Access dialog and stays on the roster", async () => {
+    const riley = KLASIK.profiles.find((p) => p.full_name === "Riley Park")!;
+    expect(riley.user_id).not.toBeNull();
+    // The delete itself is the service's; the page's part is what it does once the person is gone.
+    const spy = vi.spyOn(profilesService, "deletePerson").mockResolvedValueOnce(undefined);
+    onTestFinished(() => spy.mockRestore());
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin, { path: "/people", pattern: "/people" });
+    const access = await openAccess(user, "Riley Park");
+    await user.click(await within(access).findByRole("button", { name: "Delete person" }));
+    const confirm = screen.getByRole("dialog", { name: "Delete Riley Park?" });
+    await user.type(within(confirm).getByLabelText("Type Riley Park to confirm"), "Riley Park");
+    await user.click(within(confirm).getByRole("button", { name: "Delete Riley for good" }));
+    expect(await screen.findByText("Riley Park was deleted.")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(KLASIK.company.id, riley.id);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("Riley Park", { selector: "span" })).not.toBeInTheDocument();
+    // The row and its Access button are gone, so focus lands on the line that says who went.
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Riley Park was deleted."));
+    // Still the roster: nothing navigated away.
+    expect(screen.queryByText("elsewhere")).not.toBeInTheDocument();
+    expect(screen.getByText("Jordan Vale (you)")).toBeInTheDocument();
+  });
+
+  it("removes from the Access dialog and puts focus on the line that says so", async () => {
+    // Set up here, never invited and with no history, so Remove is one click and the mock removes them.
+    await profilesService.createStaffProfile({ company_id: KLASIK.company.id, email: "drew.lennox@beklasik.com", full_name: "Drew Lennox" });
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin, { path: "/people", pattern: "/people" });
+    const access = await openAccess(user, "Drew Lennox");
+    await user.click(await within(access).findByRole("button", { name: "Remove Drew Lennox" }));
+    const confirm = screen.getByRole("dialog", { name: "Remove Drew Lennox from the team?" });
+    await user.click(within(confirm).getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Drew Lennox was removed.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("Drew Lennox", { selector: "span" })).not.toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Drew Lennox was removed."));
+  });
+
+  it("returns focus to the row's Access button when the dialog closes on a row still shown", async () => {
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin);
+    await openAccess(user, "Sam Ortega");
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(within(rosterRowOf("Sam Ortega")).getByRole("button", { name: "Access for Sam Ortega" })).toHaveFocus();
+  });
+
+  it("clears who went when a Rococo admin switches company", async () => {
+    const riley = KLASIK.profiles.find((p) => p.full_name === "Riley Park")!;
+    const spy = vi.spyOn(profilesService, "deletePerson").mockResolvedValueOnce(undefined);
+    onTestFinished(() => spy.mockRestore());
+    // The sidebar switcher changes the hub's company without navigating, so the page stays mounted.
+    const page = (hub: HubValue) => (
+      <HubContext value={hub}>
+        <MemoryRouter initialEntries={["/people"]}>
+          <Routes>
+            <Route path="/people" element={<PeoplePage />} />
+          </Routes>
+        </MemoryRouter>
+      </HubContext>
+    );
+    const user = userEvent.setup();
+    const view = render(page(makeHub("rococo", KLASIK.company)));
+    const access = await openAccess(user, "Riley Park");
+    await user.click(await within(access).findByRole("button", { name: "Delete person" }));
+    const confirm = screen.getByRole("dialog", { name: "Delete Riley Park?" });
+    await user.type(within(confirm).getByLabelText("Type Riley Park to confirm"), "Riley Park");
+    await user.click(within(confirm).getByRole("button", { name: "Delete Riley for good" }));
+    expect(await screen.findByText("Riley Park was deleted.")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(KLASIK.company.id, riley.id);
+    view.rerender(page(makeHub("rococo", RBA.company)));
+    expect(screen.queryByText("Riley Park was deleted.")).not.toBeInTheDocument();
+    expect(await screen.findByText("Kai Bennett", { selector: "span" })).toBeInTheDocument();
+    expect(screen.queryByText("Riley Park was deleted.")).not.toBeInTheDocument();
+  });
+
+  it("deactivates from the Access dialog", async () => {
+    const casey = KLASIK.profiles.find((p) => p.full_name === "Casey Nguyen")!;
+    onTestFinished(async () => {
+      await profilesService.updateProfile(casey.id, { is_active: true });
+    });
+    const user = userEvent.setup();
+    renderWithHub(<PeoplePage />, admin);
+    const access = await openAccess(user, "Casey Nguyen");
+    await user.click(await within(access).findByRole("button", { name: "Deactivate Casey Nguyen" }));
+    // The dialog follows the live row, and the roster hides them until Show inactive is on.
+    expect(await within(access).findByText("Inactive. They cannot sign in, and their record is kept.")).toBeInTheDocument();
+    expect(within(access).getByRole("button", { name: "Reactivate Casey Nguyen" })).toBeInTheDocument();
+    expect(screen.queryByText("Casey Nguyen", { selector: "span" })).not.toBeInTheDocument();
+    await user.click(within(access).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Their row is hidden, Access button and all, so focus goes to the search box, not the page.
+    expect(screen.getByRole("searchbox", { name: "Search people" })).toHaveFocus();
+    await user.click(screen.getByRole("checkbox", { name: /Show inactive/ }));
+    expect(within(rosterRowOf("Casey Nguyen")).getByText("Inactive")).toBeInTheDocument();
   });
 
   it("shows one person's history and goals", async () => {
@@ -2203,13 +2335,21 @@ describe("roles", () => {
       email: "sample.owner@kingdomcustomconstruction.com",
       full_name: "Sample Roster Owner",
     };
+    // A Rococo admin placed with the company: their access is Rococo's, so no viewer gets Access on them.
+    const rococoOnKingdom = {
+      ...KINGDOM.profiles[1],
+      id: "kingdom-rococo-placed",
+      user_id: "kingdom-rococo-placed-auth",
+      email: "am@rocococreative.io",
+      full_name: "Robin Account",
+      is_rococo_admin: true,
+    };
     const original = profilesService.listCompanyProfiles;
     const spy = vi
       .spyOn(profilesService, "listCompanyProfiles")
-      .mockImplementation(async (id) => [...(await original(id)), ...(id === KINGDOM.company.id ? [rosterOwner] : [])]);
+      .mockImplementation(async (id) => [...(await original(id)), ...(id === KINGDOM.company.id ? [rosterOwner, rococoOnKingdom] : [])]);
     onTestFinished(() => spy.mockRestore());
-    // The name in the Person column; the same name also shows as someone's Reports to.
-    const rowOf = (name: string) => screen.getByText(name, { selector: "span" }).closest("tr")!;
+    const user = userEvent.setup();
 
     // Deactivate and Remove are on the person's Setup tab.
     const setupOf = (hub: HubValue, id: string) => renderWithHub(<PersonPage />, hub, { path: `/people/${id}/setup`, pattern: "/people/:profileId/:tab?" });
@@ -2218,8 +2358,10 @@ describe("roles", () => {
 
     const first = renderWithHub(<PeoplePage />, kingdomAdmin);
     expect(await screen.findByText("Sample Roster Owner")).toBeInTheDocument();
-    expect(rowOf("Sample Roster Owner")).toHaveTextContent("Not invited");
-    expect(screen.queryByRole("button", { name: "Send the invitation to Sample Roster Owner" })).not.toBeInTheDocument();
+    expect(rosterRowOf("Sample Roster Owner")).toHaveTextContent("Not invited");
+    // Access would open to nothing an admin may do, so the owner's row has none.
+    expect(within(rosterRowOf("Sample Roster Owner")).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(rosterRowOf("Robin Account")).queryByRole("button")).not.toBeInTheDocument();
     first.unmount();
     const ownerSetup = setupOf(kingdomAdmin, rosterOwner.id);
     expect(await screen.findByText("Only an owner or Rococo can deactivate or remove this person.")).toBeInTheDocument();
@@ -2236,7 +2378,10 @@ describe("roles", () => {
 
     for (const hub of [kingdomOwner, makeHub("rococo", KINGDOM.company)]) {
       const view = renderWithHub(<PeoplePage />, hub);
-      expect(await screen.findByRole("button", { name: "Send the invitation to Sample Roster Owner" })).toBeInTheDocument();
+      const access = await openAccess(user, "Sample Roster Owner");
+      expect(within(access).getByRole("button", { name: "Send the invitation to Sample Roster Owner" })).toBeInTheDocument();
+      // Not even Rococo gets Access on a Rococo admin's row: their access is managed on Rococo Permissions.
+      expect(within(rosterRowOf("Robin Account")).queryByRole("button")).not.toBeInTheDocument();
       view.unmount();
       const setup = setupOf(hub, rosterOwner.id);
       expect(await screen.findByRole("button", { name: "Remove Sample Roster Owner" })).toBeInTheDocument();
@@ -2245,6 +2390,34 @@ describe("roles", () => {
     const rococoSetup = setupOf(makeHub("rococo", KINGDOM.company), marcus.id);
     expect(await screen.findByRole("button", { name: "Deactivate Marcus Lee" })).toBeInTheDocument();
     rococoSetup.unmount();
+  });
+
+  it("offers no Access on someone signed in and ranked above the viewer, whatever invitation they still carry", async () => {
+    const marcus = KINGDOM.profiles.find((p) => p.full_name === "Marcus Lee")!;
+    expect(marcus.user_id).not.toBeNull();
+    // An invitation left waiting after they signed in some other way: nothing in it for an admin to act on.
+    const stale: Invitation = {
+      id: "kingdom-stale-owner-invite",
+      company_id: KINGDOM.company.id,
+      email: marcus.email,
+      role: "owner",
+      title: null,
+      profile_id: marcus.id,
+      invited_by: null,
+      created_at: "2026-01-05T00:00:00Z",
+      accepted_at: null,
+      last_emailed_at: null,
+    };
+    const original = invitationsService.listInvitations;
+    const spy = vi
+      .spyOn(invitationsService, "listInvitations")
+      .mockImplementation(async (id) => [...(await original(id)), ...(id === KINGDOM.company.id ? [stale] : [])]);
+    onTestFinished(() => spy.mockRestore());
+    renderWithHub(<PeoplePage />, kingdomAdmin);
+    expect(await screen.findByText("Marcus Lee", { selector: "span" })).toBeInTheDocument();
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(KINGDOM.company.id));
+    expect(within(rosterRowOf("Marcus Lee")).getByText("Active")).toBeInTheDocument();
+    expect(within(rosterRowOf("Marcus Lee")).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("explains each role when adding staff", async () => {

@@ -1,11 +1,10 @@
 // The company's roster, and a manager's team. A person here is a person on staff, which is not the
 // same thing as an account: an admin adds someone, fills in their profile, and sends the invite
 // whenever the company is ready for them. Each row says where the person works, who they report
-// to, their role and which state they are in, and carries the one action that moves them along.
-// Send invite creates the invitation row, which lets that address past the signup gate, and then
-// asks the notify function to email it; the hub itself holds no mail-sending key. The invitation
-// never depends on the email: when the email does not go out, the row still reads Invited, the link
-// is copied so the admin can pass it on, and Email again tries once more.
+// to, their role and which state they are in, and carries one Access button that opens everything
+// about that person's hub access in one dialog (PersonAccessDialog): Send invite, or Copy link, Email
+// again and Cancel invitation, then Deactivate or Reactivate, and Remove or Delete person. The
+// button reads the same on every row, so the column stays one button wide.
 //
 // The list is whatever the database shows the viewer (0038): the whole company for an owner, a
 // full-scope admin or Rococo; their divisions, their chain and everyone unplaced for any other
@@ -14,32 +13,43 @@
 // no adding, no invitations (those are admin-only in the database too), no row actions, and the
 // role as plain text.
 //
-// A row carries the invitation actions only: Send invite, then Copy link, Email again and cancelling
-// an invitation.
-// Deactivate, Reactivate, Remove and Delete person live on the person's Setup tab, with the same
-// rules. A delete lands back here with a line saying who was deleted, read once from the address's
-// state and cleared from it, so a reload does not say it again. A Rococo
-// admin placed with the company shows on the roster too, but their role and access are Rococo's to
-// manage. Inviting someone ranked above you is refused by the database (0033), so those rows offer
-// no invite.
+// Access is offered only where it opens to something the viewer may do: never on their own row,
+// never on a Rococo admin's (their access is Rococo's to manage), and on anyone else only when the
+// viewer may change them or they have not signed in and have a pending invitation to act on. An
+// invitation left waiting on someone who has signed in offers nothing, so it opens no Access either.
+// Inviting someone ranked above you is refused by the database (0033), so the owner's row has no
+// Access for an admin.
+//
+// The roster owns the rows and the dialog owns the actions. The dialog is keyed by the person's id
+// and reads the live row and invitation from the loaded state on every render, so a send, a cancel or
+// a Deactivate shows in the dialog and on the row at once. A remove or delete closes the dialog, drops
+// the row and says who went, in the same line a delete on the Setup tab lands back here with (read once
+// from the address's state and cleared from it, so a reload does not say it again).
+//
+// Focus never drops to the page. The dialog hands focus back to the Access button that opened it,
+// and when that button has gone with its row, focus goes somewhere that says why: after a remove or
+// delete to the line that says who went, and after a close that leaves the row hidden (Deactivate
+// with Show inactive off) to the search box. A Rococo admin switches company from the sidebar without
+// leaving this page, so the switch closes the dialog and clears that line: one company's news never
+// shows on another's roster.
 //
 // Below lg the table stacks into compact, even rows: the name and title with the status badge on
 // the same line, then division, reports to (labelled) and role on one quiet line that wraps, then
-// the invitation actions for a person who has them. It is the same table underneath, with explicit
-// table roles and each cell's column name (data-label) so a screen reader still reads rows and
-// columns.
-import { useEffect, useState, type FormEvent } from "react";
+// the Access button on its own line. It is the same table underneath, with explicit table roles and
+// each cell's column name (data-label) so a screen reader still reads rows and columns.
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Check, Copy, Search, Send, UserPlus } from "lucide-react";
+import { KeyRound, Search, UserPlus } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
 import Badge from "../../components/ui/Badge.tsx";
 import Button from "../../components/ui/Button.tsx";
 import Chip from "../../components/ui/Chip.tsx";
-import ConfirmDialog from "../../components/ui/ConfirmDialog.tsx";
 import Field from "../../components/ui/Field.tsx";
 import Modal from "../../components/ui/Modal.tsx";
 import Notice from "../../components/ui/Notice.tsx";
 import PeopleHeader from "../../components/people/PeopleHeader.tsx";
+import PersonAccessDialog from "../../components/people/PersonAccessDialog.tsx";
+import type { AccessGone } from "../../components/people/person/PersonAccountActions.tsx";
 import Section from "../../components/ui/Section.tsx";
 import SkeletonRows from "../../components/ui/SkeletonRows.tsx";
 import { cellTextClass, checkboxClass, edgeCellsWideClass, helpClass, inputClass, labelClass, selectClass, tableClass, tdClass, thClass } from "../../components/ui/forms.ts";
@@ -49,7 +59,7 @@ import { useAsync } from "../../hooks/useAsync.ts";
 import { listDirectory } from "../../services/directory.ts";
 import { listDivisions } from "../../services/divisions.ts";
 import { createStaffProfile, listCompanyProfiles } from "../../services/profiles.ts";
-import { createInvitation, deleteInvitation, emailInvitation, inviteLink, listInvitations } from "../../services/invitations.ts";
+import { listInvitations } from "../../services/invitations.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { isValidEmail, normalizeEmail } from "../../lib/email.ts";
 import { displayName, pluralize } from "../../lib/format.ts";
@@ -227,33 +237,41 @@ export default function PeoplePage() {
   // A lead who is not an admin: a manager, reading their team.
   const teamView = !isAdmin;
   const [adding, setAdding] = useState(false);
-  const [cancelling, setCancelling] = useState<{ person: Profile; invitation: Invitation } | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  // The person whose invitation is being created, and the invitation whose email is on its way, so
-  // a second press does nothing and the row can say Sending.
-  const [inviting, setInviting] = useState<string | null>(null);
-  const [emailing, setEmailing] = useState<string | null>(null);
-  // One invitation action at a time, so two sends never race for the line below the header.
-  const inviteBusy = inviting !== null || emailing !== null;
-  // What the last invitation email came to: emailed, or ready with its link copied instead.
-  const [emailLine, setEmailLine] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  // The cancel dialog reports only its own failure. Sharing `error` with the row actions meant it
-  // could open already showing a failure from a minute earlier, reading as though the cancel had
-  // gone wrong before it was confirmed.
-  const [dialogError, setDialogError] = useState("");
+  // Whose Access dialog is open, by id, so the dialog always reads the live row.
+  const [accessFor, setAccessFor] = useState<string | null>(null);
   const [division, setDivision] = useState(ALL);
   const [query, setQuery] = useState("");
   const [showInactive, setShowInactive] = useState(false);
-  // Who a delete on the Setup tab just removed, carried here in the address's state.
+  // Who just went: a delete on the Setup tab, carried here in the address's state, or a remove or
+  // delete from the Access dialog.
   const location = useLocation();
   const navigate = useNavigate();
   const arrivedDeleted = (location.state as { deleted?: unknown } | null)?.deleted;
-  const [deletedLine] = useState(typeof arrivedDeleted === "string" ? `${arrivedDeleted} was deleted.` : null);
+  const [goneLine, setGoneLine] = useState(typeof arrivedDeleted === "string" ? `${arrivedDeleted} was deleted.` : null);
   useEffect(() => {
     if (typeof arrivedDeleted === "string") navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, [arrivedDeleted, location.pathname, location.search, navigate]);
+  // A company switch closes the dialog and clears who went, during render so the old line never
+  // shows on the new company's roster, not even for a frame.
+  const [seenCompanyId, setSeenCompanyId] = useState(companyId);
+  if (seenCompanyId !== companyId) {
+    setSeenCompanyId(companyId);
+    setAccessFor(null);
+    setGoneLine(null);
+  }
+  // Where focus goes when the Access button it came from has gone: the gone line, or the search box.
+  // Each is a count, bumped when the dialog closes that way, and the effects below move focus once
+  // the dialog has unmounted (and the Modal has found its opener gone, so it leaves focus alone).
+  const goneRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [focusGone, setFocusGone] = useState(0);
+  const [focusSearch, setFocusSearch] = useState(0);
+  useEffect(() => {
+    if (focusGone > 0) goneRef.current?.focus();
+  }, [focusGone]);
+  useEffect(() => {
+    if (focusSearch > 0) searchRef.current?.focus();
+  }, [focusSearch]);
 
   const state = useAsync(async () => {
     const [people, invitations, divisions, directory] = await Promise.all([
@@ -268,7 +286,7 @@ export default function PeoplePage() {
 
   // Sorted the way listCompanyProfiles sorts, names first and the nameless last, so somebody
   // added from the dialog appears where they will still be after the next load instead of at
-  // the bottom and then jumping to the top, taking the Send invite button with them. A manager's
+  // the bottom and then jumping to the top, taking their Access button with them. A manager's
   // own row is not part of their team.
   const people = [...(state.data?.people ?? [])]
     .filter((p) => !teamView || p.id !== profile.id)
@@ -348,93 +366,23 @@ export default function PeoplePage() {
     return "Everyone here is inactive.";
   }
 
-  function linkFor(invitation: Invitation): string {
-    return `${inviteLink(invitation.email)}&company=${encodeURIComponent(company!.slug)}`;
+  // The person whose Access dialog is open, from the loaded rows, or null once they are gone.
+  const accessPerson = accessFor ? (state.data?.people.find((p) => p.id === accessFor) ?? null) : null;
+
+  function handleGone(gone: AccessGone) {
+    const id = accessFor;
+    setAccessFor(null);
+    state.setData((prev) => (prev ? { ...prev, people: prev.people.filter((p) => p.id !== id) } : prev));
+    setGoneLine(`${gone.name} was ${gone.kind}.`);
+    setFocusGone((n) => n + 1);
   }
 
-  async function copyLink(invitation: Invitation) {
-    try {
-      await navigator.clipboard.writeText(linkFor(invitation));
-      setCopied(invitation.id);
-      setTimeout(() => setCopied(null), 1600);
-    } catch {
-      setError("Could not copy. The link is: " + linkFor(invitation));
-    }
-  }
-
-  // Emails a waiting invitation through the notify function. The invitation stands whatever the
-  // email does: when it does not go out, the link is copied instead and the line says why.
-  async function emailIt(invitation: Invitation) {
-    if (inviteBusy) return;
-    setEmailing(invitation.id);
-    setEmailLine(null);
-    let reason: string | null = null;
-    try {
-      const result = await emailInvitation(invitation.id);
-      if (result?.sent !== true) reason = result?.reason || "the email service did not send it";
-    } catch (err) {
-      reason = errorMessage(err);
-    }
-    if (reason === null) {
-      setEmailLine({ tone: "success", text: `Invitation emailed to ${invitation.email}.` });
-    } else {
-      const why = reason.trim().replace(/\.+$/, "");
-      let copiedIt = true;
-      try {
-        await navigator.clipboard.writeText(linkFor(invitation));
-        setCopied(invitation.id);
-        setTimeout(() => setCopied(null), 1600);
-      } catch {
-        copiedIt = false;
-      }
-      setEmailLine({
-        tone: "warning",
-        text: copiedIt
-          ? `The invitation is ready but the email did not go out: ${why}. Its link is copied, so you can send it yourself.`
-          : `The invitation is ready but the email did not go out: ${why}. Send them this link yourself: ${linkFor(invitation)}`,
-      });
-    }
-    setEmailing(null);
-  }
-
-  async function sendInvite(person: Profile) {
-    if (inviteBusy) return;
-    setError("");
-    setEmailLine(null);
-    setInviting(person.id);
-    let created: Invitation;
-    try {
-      created = await createInvitation({
-        company_id: companyId,
-        email: person.email,
-        role: person.role,
-        title: person.title,
-        profile_id: person.id,
-      });
-    } catch (err) {
-      setError(errorMessage(err));
-      setInviting(null);
-      return;
-    }
-    state.setData((prev) => (prev ? { ...prev, invitations: [created, ...prev.invitations] } : prev));
-    setInviting(null);
-    await emailIt(created);
-  }
-
-  async function handleCancelInvite() {
-    if (!cancelling) return;
-    setBusy(true);
-    setDialogError("");
-    try {
-      await deleteInvitation(cancelling.invitation.id);
-      const id = cancelling.invitation.id;
-      state.setData((prev) => (prev ? { ...prev, invitations: prev.invitations.filter((i) => i.id !== id) } : prev));
-      setCancelling(null);
-    } catch (err) {
-      setDialogError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+  // Done, Escape or the backdrop. The Modal hands focus back to the row's Access button; when the
+  // row is no longer shown (Deactivate with Show inactive off), the search box takes it instead.
+  function closeAccess() {
+    const rowShown = shown.some((p) => p.id === accessFor);
+    setAccessFor(null);
+    if (!rowShown) setFocusSearch((n) => n + 1);
   }
 
   const filters = state.data ? (
@@ -459,6 +407,7 @@ export default function PeoplePage() {
         <div className="relative min-w-[200px] max-w-xs flex-1">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -490,9 +439,11 @@ export default function PeoplePage() {
           )
         }
       />
-      {deletedLine ? <Notice tone="success" className="mb-4">{deletedLine}</Notice> : null}
-      {error ? <Notice tone="error" className="mb-4">{error}</Notice> : null}
-      {emailLine ? <Notice tone={emailLine.tone} className="mb-4">{emailLine.text}</Notice> : null}
+      {goneLine ? (
+        <div ref={goneRef} tabIndex={-1} className="mb-4 rounded-md outline-none">
+          <Notice tone="success">{goneLine}</Notice>
+        </div>
+      ) : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
 
       {!state.data && !state.error ? (
@@ -524,9 +475,8 @@ export default function PeoplePage() {
                     <th role="columnheader" className={thClass}>Reports to</th>
                     <th role="columnheader" className={thClass}>Role</th>
                     <th role="columnheader" className={thClass}>Status</th>
-                    {/* The actions stay pinned at the right edge, so a row that has to scroll never hides them. The
-                        column is only as wide as its widest row of buttons (w-px): left to share out the slack, a
-                        table hands it to the column whose buttons are widest laid end to end, and squeezes the facts. */}
+                    {/* Access stays pinned at the right edge, so a row that has to scroll never hides it. The column
+                        is only as wide as the button (w-px), so the slack goes to the facts. */}
                     {teamView ? null : <th role="columnheader" className={`${thClass} lg:w-px lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface`}><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
@@ -537,6 +487,8 @@ export default function PeoplePage() {
                     const canChange = !teamView && canGrantRole(profile, person.role);
                     const invitation = pendingFor(person);
                     const account = hasAccount(person);
+                    // Only where the dialog opens to something this viewer may do.
+                    const offerAccess = !teamView && !self && !rococo && (canChange || (invitation !== null && !account));
                     const placed = divisionLabel(person.division_ids, divisions);
                     const manager = person.reports_to ? byId.get(person.reports_to) : undefined;
                     return (
@@ -563,7 +515,7 @@ export default function PeoplePage() {
                         <td
                           role="cell"
                           data-label="Reports to"
-                          className={`${tdClass} py-2 text-[13px] text-ink-2 ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
+                          className={`${tdClass} py-2 text-[13px] text-ink-2 ${cellTextClass} ${STACKED_FACT} max-lg:gap-1 max-lg:before:text-ink-3 max-lg:before:content-[attr(data-label)] tap:min-h-11`}
                         >
                           {manager ? (
                             <Link to={`/people/${manager.id}`} className={`hover:text-link ${tapTargetClass}`}>{displayName(manager)}</Link>
@@ -593,44 +545,17 @@ export default function PeoplePage() {
                         </td>
                         {teamView ? null : (
                           <td role="cell" className={`${tdClass} py-2 text-right lg:sticky lg:right-0 lg:border-l lg:border-line lg:bg-surface ${STACKED_RESET} max-lg:order-5 max-lg:basis-full max-lg:text-left`}>
-                            <span className="flex flex-wrap items-center justify-end gap-1.5 max-lg:justify-start max-lg:not-empty:mb-1">
-                              {!account && invitation ? (
-                                // Two buttons a line on a wide screen, Cancel invitation beneath them, so a waiting
-                                // invitation never sets the column at three buttons wide. On a stacked row they flow.
-                                <span className="contents lg:inline-grid lg:grid-cols-[auto_auto] lg:justify-items-end lg:gap-1.5">
-                                  {person.is_active ? (
-                                    <>
-                                      <Button variant="secondary" size="sm" aria-label={`Copy sign-in link for ${displayName(person)}`} onClick={() => void copyLink(invitation)}>
-                                        {copied === invitation.id ? <><Check size={13} aria-hidden /> Copied</> : <><Copy size={13} aria-hidden /> Copy link</>}
-                                      </Button>
-                                      <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        aria-label={`Email the invitation to ${displayName(person)} again`}
-                                        disabled={inviteBusy}
-                                        onClick={() => void emailIt(invitation)}
-                                      >
-                                        <Send size={13} aria-hidden /> {emailing === invitation.id ? "Sending..." : "Email again"}
-                                      </Button>
-                                    </>
-                                  ) : null}
-                                  <Button variant="danger" size="sm" className="lg:col-span-2" aria-label={`Cancel invitation for ${displayName(person)}`} onClick={() => setCancelling({ person, invitation })}>
-                                    Cancel invitation
-                                  </Button>
-                                </span>
-                              ) : null}
-                              {!account && !invitation && canChange && person.is_active ? (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  aria-label={`Send the invitation to ${displayName(person)}`}
-                                  disabled={inviteBusy}
-                                  onClick={() => void sendInvite(person)}
-                                >
-                                  <Send size={13} aria-hidden /> {inviting === person.id ? "Sending..." : "Send invite"}
-                                </Button>
-                              ) : null}
-                            </span>
+                            {offerAccess ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="max-lg:mb-1.5"
+                                aria-label={`Access for ${displayName(person)}`}
+                                onClick={() => setAccessFor(person.id)}
+                              >
+                                <KeyRound size={13} aria-hidden /> Access
+                              </Button>
+                            ) : null}
                           </td>
                         )}
                       </tr>
@@ -650,9 +575,9 @@ export default function PeoplePage() {
               Somebody on this list is part of the company whether or not they have signed in: put them in a review cycle,
               set their {can("pay") ? "goals, KPIs and compensation" : "goals and KPIs"}, and it is all waiting on their profile when they arrive. Sending an
               invitation emails them a link to the sign-in screen. If the email does not go out, the link is copied for you to
-              pass on, and Copy link and Email again stay on their row until they sign in. Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
-              either way they take over the profile set up here rather than starting a second one. To deactivate or remove
-              someone, open them and go to Setup.
+              pass on, and Copy link and Email again stay under Access until they sign in. Anyone whose address is on one of this company's sign-in domains can also sign in without an invitation, and
+              either way they take over the profile set up here rather than starting a second one. Access on each row sends
+              or cancels an invitation, pauses someone, or removes them.
             </p>
           )}
         </Section>
@@ -671,15 +596,25 @@ export default function PeoplePage() {
           }}
         />
       ) : null}
-      {cancelling ? (
-        <ConfirmDialog
-          title={`Cancel the invitation for ${displayName(cancelling.person)}?`}
-          body="They stay on the team here, and the invitation no longer lets them sign up. An address on one of this company's sign-in domains can still sign in without one, so deactivate them as well if they should not get in. Send a new invitation whenever you are ready."
-          confirmLabel="Cancel invitation"
-          busy={busy}
-          error={dialogError}
-          onConfirm={() => void handleCancelInvite()}
-          onCancel={() => { setCancelling(null); setDialogError(""); }}
+      {accessPerson ? (
+        <PersonAccessDialog
+          key={accessPerson.id}
+          companyId={companyId}
+          companySlug={company!.slug}
+          person={accessPerson}
+          invitation={pendingFor(accessPerson)}
+          canInvite={canGrantRole(profile, accessPerson.role) && accessPerson.is_active}
+          onInvitationCreated={(created) =>
+            state.setData((prev) => (prev ? { ...prev, invitations: [created, ...prev.invitations] } : prev))
+          }
+          onInvitationCancelled={(id) =>
+            state.setData((prev) => (prev ? { ...prev, invitations: prev.invitations.filter((i) => i.id !== id) } : prev))
+          }
+          onPatched={(next) =>
+            state.setData((prev) => (prev ? { ...prev, people: prev.people.map((p) => (p.id === next.id ? next : p)) } : prev))
+          }
+          onGone={handleGone}
+          onClose={closeAccess}
         />
       ) : null}
     </>
