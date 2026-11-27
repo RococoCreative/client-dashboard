@@ -3,9 +3,10 @@
 // person's own financial figure is from its target, which roles a person may hand out, who sees
 // the division split, and the app's reading of who leads whom and which divisions a viewer may
 // see (0038). The database is the wall for all of it; these decide what a screen offers and how
-// it labels what came back.
+// it labels what came back. Also what a person's history comes to for the confirms that delete it
+// (historyCounts), shared by the Setup tab and the roster's Access dialog.
 import { formatDate, parseDate } from "./format.ts";
-import { ROLE_LABELS, keysOf, type CompanyDivision, type DirectoryEntry, type EmployeeFinancial, type Profile, type Role } from "../types/database.ts";
+import { ROLE_LABELS, keysOf, type CompanyDivision, type DirectoryEntry, type EmployeeFinancial, type Goal, type Profile, type Review, type ReviewCycle, type Role } from "../types/database.ts";
 
 // Progress against target as a fraction, or null when either side is missing or the target
 // is zero, so a blank never reads as zero percent.
@@ -205,4 +206,20 @@ export function canSeeDivisions(viewer: Pick<Profile, "role" | "is_rococo_admin"
 
 export function canSetDivisionAccess(viewer: Pick<Profile, "role" | "is_rococo_admin">): boolean {
   return viewer.is_rococo_admin || viewer.role === "owner";
+}
+
+// What a page has already loaded for a person, said in the Remove and Delete person confirms. The
+// GSRs are the months'; a company on demand adds its GSRs with no cycle, read when the dialog opens.
+export interface ProfileCounts {
+  reviews: number;
+  gsrs: number;
+  goals: number;
+}
+
+// The counts from what a page loaded for the person: their reviews, with the months' GSRs (reviews
+// in a GSR cycle) counted apart, and their goals. The Setup tab and the Access dialog both use it.
+export function historyCounts(reviews: readonly Review[], cycles: readonly ReviewCycle[], goals: readonly Goal[]): ProfileCounts {
+  const gsrCycleIds = new Set(cycles.filter((c) => c.kind === "gsr").map((c) => c.id));
+  const monthGsrs = reviews.filter((r) => r.cycle_id !== null && gsrCycleIds.has(r.cycle_id)).length;
+  return { reviews: reviews.length - monthGsrs, gsrs: monthGsrs, goals: goals.length };
 }

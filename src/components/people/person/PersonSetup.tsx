@@ -31,7 +31,7 @@ import { useAsync } from "../../../hooks/useAsync.ts";
 import { listDivisions } from "../../../services/divisions.ts";
 import type { ProfilePatch } from "../../../services/profiles.ts";
 import { displayName, formatDate, formatMoney } from "../../../lib/format.ts";
-import { canGrantRole, divisionLabel, formatTenure, grantableRoles, totalAnnual } from "../../../lib/people.ts";
+import { canGrantRole, divisionLabel, formatTenure, grantableRoles, historyCounts, totalAnnual } from "../../../lib/people.ts";
 import { ROLE_LABELS, type Profile, type Role } from "../../../types/database.ts";
 import { reportsTo, type PersonTabProps } from "../../../pages/people/personTabs.ts";
 
@@ -94,9 +94,7 @@ export default function PersonSetup({ companyId, data, person, update, onError, 
   const canChangeRole = canGrantRole(me, person.role);
   const tenure = formatTenure(person.hire_date);
   // What Delete person says goes: their reviews, their months' GSRs and their goals, as loaded.
-  const gsrCycleIds = new Set(data.cycles.filter((c) => c.kind === "gsr").map((c) => c.id));
-  const monthGsrs = data.reviews.filter((r) => r.cycle_id !== null && gsrCycleIds.has(r.cycle_id)).length;
-  const counts = { reviews: data.reviews.length - monthGsrs, gsrs: monthGsrs, goals: data.goals.length };
+  const counts = historyCounts(data.reviews, data.cycles, data.goals);
   const manager = reportsTo(data, person);
   const managerChoices = people.filter((p) => p.id !== person.id && p.is_active);
   const keepCurrentManager = person.reports_to !== null && !managerChoices.some((p) => p.id === person.reports_to);

@@ -15,7 +15,11 @@
 //
 // Remove deletes everything set up for someone who never signed in, and since 0049 that includes
 // goals and notes in a closed or locked month. So when the page has loaded any reviews, GSRs or
-// goals for them, Remove asks for their name typed the same way; with none it stays one click.
+// goals for them, Remove asks for their name typed the same way; with none it stays one click. A
+// caller that could not learn their history (counts left out, as when the roster's Access dialog
+// failed to read it) gets the safe reading: history unknown counts as history, so Remove still asks
+// for the typed name, without the counts line. The Setup tab always passes counts, so it reads as
+// it did.
 //
 // AccountControls is the body without its Section, so the People roster's access lightbox can show
 // the same controls. Given onGone it reports a finished remove or delete instead of navigating away,
@@ -33,19 +37,11 @@ import { listPersonGsrs } from "../../../services/gsrOnDemand.ts";
 import { deletePerson, deleteStaffProfile, type ProfilePatch } from "../../../services/profiles.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { displayName, pluralize } from "../../../lib/format.ts";
-import { ROLE_RANK, canGrantRole, hasAccount, hasFullScope, isCompanyAdminRole } from "../../../lib/people.ts";
+import { ROLE_RANK, canGrantRole, hasAccount, hasFullScope, isCompanyAdminRole, type ProfileCounts } from "../../../lib/people.ts";
 import { inputClass } from "../../ui/forms.ts";
 import type { Gsr, Invitation, Profile } from "../../../types/database.ts";
 
 type Patch = (patch: ProfilePatch) => Promise<boolean>;
-
-// What the page has already loaded for this person, said in the delete dialog. The GSRs are the
-// months'; a company on demand adds its GSRs with no cycle, read when the dialog opens.
-export interface ProfileCounts {
-  reviews: number;
-  gsrs: number;
-  goals: number;
-}
 
 function countsLine(counts: ProfileCounts): string {
   const parts = [pluralize(counts.reviews, "review"), pluralize(counts.gsrs, "GSR"), pluralize(counts.goals, "goal")];
@@ -64,6 +60,9 @@ function TypedName({ id, name, value, disabled, onChange }: { id: string; name: 
     </div>
   );
 }
+
+// The counts type lives with historyCounts in lib/people.ts; callers of this file may still name it here.
+export type { ProfileCounts };
 
 // What a finished remove or delete reports to a caller that stays on its own screen.
 export type AccessGone = { kind: "removed" | "deleted"; name: string };
@@ -108,7 +107,8 @@ export function AccountControls({
     (!person.is_rococo_admin || me.is_rococo_admin);
   const fullName = name.trim();
   const nameMatches = typed.trim() === fullName;
-  const hasHistory = counts !== undefined && counts.reviews + counts.gsrs + counts.goals > 0;
+  // Unknown history (no counts given) is treated as history, so Remove never goes in one click blind.
+  const hasHistory = counts === undefined || counts.reviews + counts.gsrs + counts.goals > 0;
   // Invitations are read only when Remove could be offered; every other case resolves empty.
   // A caller that already holds the pending invitation passes it, and nothing is read here.
   const given = pendingInvitation !== undefined;
@@ -246,9 +246,9 @@ export function AccountControls({
           onConfirm={() => void remove()}
           onCancel={() => { setRemoving(false); setTyped(""); setDialogError(""); }}
         >
-          {hasHistory && counts ? (
+          {hasHistory ? (
             <>
-              <p className="text-sm text-ink">{countsLine(counts)} This cannot be undone.</p>
+              <p className="text-sm text-ink">{counts ? `${countsLine(counts)} This cannot be undone.` : "This cannot be undone."}</p>
               <TypedName id="remove-person-name" name={fullName} value={typed} disabled={busy} onChange={setTyped} />
             </>
           ) : null}

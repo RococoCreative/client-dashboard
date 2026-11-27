@@ -3,7 +3,9 @@
 // invitation) with the same words and outcomes, and the Account controls under them. The Send
 // invite and Email again cases mirror invite-emails.test.tsx against the dialog itself, and a small
 // stateful harness stands in for the roster, so a created or cancelled invitation comes back into
-// the dialog the way the page will hand it back. Nothing here touches the network.
+// the dialog the way the page will hand it back. The person's history (reviews, GSRs, goals) is read
+// by the dialog itself, so Remove keeps its typed-name safeguard here as on Setup, and keeps it when
+// that read fails. Nothing here touches the network.
 import { useState } from "react";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -24,6 +26,8 @@ import { renderWithHub } from "../../test/renderWithHub.tsx";
 import { deleteInvitation, invitationEmailCalls, listInvitations, setMockInvitationEmail } from "../../test/mocks/invitations.ts";
 import * as invitationsService from "../../services/invitations.ts";
 import * as profilesService from "../../services/profiles.ts";
+import * as gsrService from "../../services/gsr.ts";
+import { createGoal, deleteGoal } from "../../test/mocks/gsr.ts";
 import type { Invitation, Profile } from "../../types/database.ts";
 import type { AccessGone } from "./person/PersonAccountActions.tsx";
 import PersonAccessDialog from "./PersonAccessDialog.tsx";
@@ -145,13 +149,95 @@ describe("PersonAccessDialog", () => {
 
   it("shows a Deactivate that did not save in the dialog", async () => {
     const spy = vi.spyOn(profilesService, "updateProfile").mockRejectedValueOnce(new Error("The change did not save."));
-    const onPatched = vi.fn();
+    try {
+      const onPatched = vi.fn();
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={jamie} onPatched={onPatched} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Deactivate Jamie Fox" }));
+      expect(await within(accessDialog()).findByText("The change did not save.")).toBeInTheDocument();
+      expect(onPatched).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("gives a Rococo admin no Account controls and reads none of their history", async () => {
+    const reviews = vi.spyOn(gsrService, "listEmployeeReviews");
+    const goals = vi.spyOn(gsrService, "listGoals");
+    try {
+      renderWithHub(<Harness person={{ ...jamie, is_rococo_admin: true }} />, rbaAdmin);
+      expect(await screen.findByText(`Active. They sign in as ${jamie.email}.`)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open profile" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^(Deactivate|Reactivate) / })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Delete person" })).not.toBeInTheDocument();
+      expect(reviews).not.toHaveBeenCalled();
+      expect(goals).not.toHaveBeenCalled();
+    } finally {
+      reviews.mockRestore();
+      goals.mockRestore();
+    }
+  });
+});
+
+describe("History and Remove", () => {
+  it("asks for the typed name to remove someone with history", async () => {
+    const goal = await createGoal({ company_id: RBA.company.id, employee_id: kai.id, title: "Learn the estimating tool", kind: "professional" });
+    try {
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={kai} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Remove Kai Bennett" }));
+      const confirm = screen.getByRole("dialog", { name: "Remove Kai Bennett from the team?" });
+      expect(confirm).toHaveTextContent(/On their profile now: .*1 goal\. This cannot be undone\./);
+      const go = within(confirm).getByRole("button", { name: "Remove Kai for good" });
+      expect(go).toBeDisabled();
+      await user.type(within(confirm).getByLabelText("Type Kai Bennett to confirm"), "Kai Bennett");
+      expect(go).toBeEnabled();
+    } finally {
+      await deleteGoal(goal.id);
+    }
+  });
+
+  it("removes someone with no history in one click", async () => {
+    const remove = vi.spyOn(profilesService, "deleteStaffProfile").mockResolvedValueOnce(undefined);
+    try {
+      const onGone = vi.fn();
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={kai} onGone={onGone} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Remove Kai Bennett" }));
+      const confirm = screen.getByRole("dialog", { name: "Remove Kai Bennett from the team?" });
+      expect(within(confirm).queryByRole("textbox")).not.toBeInTheDocument();
+      await user.click(within(confirm).getByRole("button", { name: "Remove" }));
+      await vi.waitFor(() => expect(onGone).toHaveBeenCalledWith({ kind: "removed", name: "Kai Bennett" }));
+      expect(remove).toHaveBeenCalledWith(kai.id);
+    } finally {
+      remove.mockRestore();
+    }
+  });
+
+  it("asks for the typed name when their history did not load", async () => {
+    const goals = vi.spyOn(gsrService, "listGoals").mockRejectedValueOnce(new Error("Goals did not load."));
+    try {
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={kai} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Remove Kai Bennett" }));
+      const confirm = screen.getByRole("dialog", { name: "Remove Kai Bennett from the team?" });
+      expect(confirm).not.toHaveTextContent(/On their profile now/);
+      expect(confirm).toHaveTextContent(/This cannot be undone\./);
+      const go = within(confirm).getByRole("button", { name: "Remove Kai for good" });
+      expect(go).toBeDisabled();
+      await user.type(within(confirm).getByLabelText("Type Kai Bennett to confirm"), "Kai Bennett");
+      expect(go).toBeEnabled();
+    } finally {
+      goals.mockRestore();
+    }
+  });
+
+  it("says what is on their profile in the Delete person confirm", async () => {
     const user = userEvent.setup();
-    renderWithHub(<Harness person={jamie} onPatched={onPatched} />, rbaAdmin);
-    await user.click(await screen.findByRole("button", { name: "Deactivate Jamie Fox" }));
-    expect(await within(accessDialog()).findByText("The change did not save.")).toBeInTheDocument();
-    expect(onPatched).not.toHaveBeenCalled();
-    spy.mockRestore();
+    renderWithHub(<Harness person={jamie} />, rbaAdmin);
+    await user.click(await screen.findByRole("button", { name: "Delete person" }));
+    const confirm = screen.getByRole("dialog", { name: "Delete Jamie Fox?" });
+    expect(await within(confirm).findByText(/^On their profile now: /)).toBeInTheDocument();
   });
 });
 
@@ -196,6 +282,39 @@ describe("Send invite", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Invited. Waiting for them to sign in.")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe(kaiLink);
+  });
+});
+
+describe("While sending", () => {
+  it("holds still: Escape does nothing, and Open profile and the Account controls are inert", async () => {
+    let release: (value: { sent: boolean }) => void = () => undefined;
+    const email = vi.spyOn(invitationsService, "emailInvitation").mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    try {
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} onClose={onClose} />, rbaAdmin);
+      await screen.findByRole("button", { name: "Deactivate Avery Cole" });
+      await user.click(screen.getByRole("button", { name: "Email the invitation to Avery Cole again" }));
+      expect(await screen.findByText("Sending...")).toBeInTheDocument();
+      await user.keyboard("{Escape}");
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
+      expect(screen.getByText("Open profile").closest("[inert]")).not.toBeNull();
+      expect(screen.getByText("Deactivating keeps them out of the hub and keeps everything set up for them on record.").closest("[inert]")).not.toBeNull();
+      release({ sent: true });
+      expect(await screen.findByText(`Invitation emailed to ${averyInvitation.email}.`)).toBeInTheDocument();
+      expect(screen.getByText("Open profile").closest("[inert]")).toBeNull();
+      await user.keyboard("{Escape}");
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      email.mockRestore();
+    }
+  });
+
+  it("moves focus to the title once Send invite has made the invitation", async () => {
+    await sendKaiInvite();
+    expect(await screen.findByText(`Invitation emailed to ${kai.email}.`)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Access for Kai Bennett" })).toHaveFocus();
   });
 });
 
@@ -278,6 +397,21 @@ describe("Cancel invitation", () => {
     await user.click(screen.getByRole("button", { name: "Cancel invitation for Avery Cole" }));
     expect(within(screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" })).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
     spy.mockRestore();
+  });
+
+  it("moves focus to the title after a cancel, not out of the dialog", async () => {
+    // The delete is answered without touching the fixture row, so later tests still find it waiting.
+    const cancel = vi.spyOn(invitationsService, "deleteInvitation").mockResolvedValueOnce(undefined);
+    try {
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
+      await user.click(within(screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" })).getByRole("button", { name: "Cancel invitation" }));
+      await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Cancel the invitation for Avery Cole?" })).not.toBeInTheDocument());
+      expect(screen.getByRole("heading", { name: "Access for Avery Cole" })).toHaveFocus();
+    } finally {
+      cancel.mockRestore();
+    }
   });
 
   it("Escape on the cancel confirm closes only the confirm", async () => {
