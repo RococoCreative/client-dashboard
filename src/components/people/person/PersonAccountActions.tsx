@@ -16,6 +16,10 @@
 // Remove deletes everything set up for someone who never signed in, and since 0049 that includes
 // goals and notes in a closed or locked month. So when the page has loaded any reviews, GSRs or
 // goals for them, Remove asks for their name typed the same way; with none it stays one click.
+//
+// AccountControls is the body without its Section, so the People roster's access lightbox can show
+// the same controls. Given onGone it reports a finished remove or delete instead of navigating away,
+// and given pendingInvitation (the roster already holds it) it reads no invitations itself.
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../ui/Button.tsx";
@@ -61,7 +65,26 @@ function TypedName({ id, name, value, disabled, onChange }: { id: string; name: 
   );
 }
 
-export default function AccountActions({ companyId, person, counts, onPatch }: { companyId: string; person: Profile; counts?: ProfileCounts; onPatch: Patch }) {
+// What a finished remove or delete reports to a caller that stays on its own screen.
+export type AccessGone = { kind: "removed" | "deleted"; name: string };
+
+export function AccountControls({
+  companyId,
+  person,
+  counts,
+  onPatch,
+  onGone,
+  pendingInvitation,
+}: {
+  companyId: string;
+  person: Profile;
+  counts?: ProfileCounts;
+  onPatch: Patch;
+  // Omitted: navigate to /people as the Setup tab does. Given: called instead of navigating.
+  onGone?: (gone: AccessGone) => void;
+  // undefined: read the invitations here. Given (null or one): use it and read nothing.
+  pendingInvitation?: Invitation | null;
+}) {
   const { profile: me, can, company } = useHub();
   const navigate = useNavigate();
   const [switching, setSwitching] = useState(false);
@@ -87,8 +110,10 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
   const nameMatches = typed.trim() === fullName;
   const hasHistory = counts !== undefined && counts.reviews + counts.gsrs + counts.goals > 0;
   // Invitations are read only when Remove could be offered; every other case resolves empty.
-  const invitations = useAsync(() => (mayRemove ? listInvitations(companyId) : Promise.resolve([] as Invitation[])), [companyId, mayRemove]);
-  const invitation = invitations.data?.find((i) => !i.accepted_at && (i.profile_id === person.id || i.email === person.email)) ?? null;
+  // A caller that already holds the pending invitation passes it, and nothing is read here.
+  const given = pendingInvitation !== undefined;
+  const invitations = useAsync(() => (mayRemove && !given ? listInvitations(companyId) : Promise.resolve([] as Invitation[])), [companyId, mayRemove, given]);
+  const invitation = given ? pendingInvitation : (invitations.data?.find((i) => !i.accepted_at && (i.profile_id === person.id || i.email === person.email)) ?? null);
   // A company on demand keeps GSRs outside the months the page loaded; read only once the delete
   // dialog is open. If the read fails the dialog goes without the counts.
   const onDemand = company?.gsr_mode === "on_demand";
@@ -115,7 +140,8 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
     setDialogError("");
     try {
       await deleteStaffProfile(person.id);
-      navigate("/people");
+      if (onGone) onGone({ kind: "removed", name: fullName });
+      else navigate("/people");
     } catch (err) {
       setDialogError(errorMessage(err, "They were not removed. Try again."));
       setBusy(false);
@@ -130,7 +156,8 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
     setDialogError("");
     try {
       await deletePerson(companyId, person.id);
-      navigate("/people", { state: { deleted: fullName } });
+      if (onGone) onGone({ kind: "deleted", name: fullName });
+      else navigate("/people", { state: { deleted: fullName } });
     } catch (err) {
       setDialogError(errorMessage(err, "They were not deleted. Try again."));
       setBusy(false);
@@ -155,9 +182,15 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
 
   let removeLine: ReactNode = null;
   if (mayRemove) {
-    if (invitations.error && !invitations.data) removeLine = <p className={secondaryClass}>Invitations did not load, so Remove is not offered. {invitations.error}</p>;
-    else if (!invitations.data) removeLine = null;
-    else if (invitation) removeLine = <p className={secondaryClass}>{first} has a pending invitation. Cancel their invitation on the roster first, then remove them here.</p>;
+    if (!given && invitations.error && !invitations.data) removeLine = <p className={secondaryClass}>Invitations did not load, so Remove is not offered. {invitations.error}</p>;
+    else if (!given && !invitations.data) removeLine = null;
+    else if (invitation) {
+      removeLine = (
+        <p className={secondaryClass}>
+          {given ? `${first} has a pending invitation. Cancel their invitation above first, then remove them.` : `${first} has a pending invitation. Cancel their invitation on the roster first, then remove them here.`}
+        </p>
+      );
+    }
     else {
       removeLine = (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -182,7 +215,7 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
   }
 
   return (
-    <Section eyebrow="Hub access" title="Account">
+    <>
       {self ? (
         <p className={secondaryClass}>This is you. Another admin deactivates your account if it comes to that.</p>
       ) : !canChange ? (
@@ -246,6 +279,14 @@ export default function AccountActions({ companyId, person, counts, onPatch }: {
           <TypedName id="delete-person-name" name={fullName} value={typed} disabled={busy} onChange={setTyped} />
         </ConfirmDialog>
       ) : null}
+    </>
+  );
+}
+
+export default function AccountActions({ companyId, person, counts, onPatch }: { companyId: string; person: Profile; counts?: ProfileCounts; onPatch: Patch }) {
+  return (
+    <Section eyebrow="Hub access" title="Account">
+      <AccountControls companyId={companyId} person={person} counts={counts} onPatch={onPatch} />
     </Section>
   );
 }
