@@ -7,8 +7,10 @@
 // history to keep Remove's safeguard (a typed name for someone with reviews, GSRs or goals), so the
 // dialog reads it when it opens, as the person page does, and holds a skeleton in their place until
 // it is in. A read that fails leaves the counts out, which the controls take as history unknown and
-// so still ask for the typed name. A Rococo admin's access is Rococo's (0029): as on Setup, they get
-// no Account controls here, and nothing is read for them.
+// so still ask for the typed name. The read happens only when the controls will offer Remove or
+// Delete person (removalFor, the controls' own rule), since the counts are for those confirms alone:
+// on yourself, or on someone the viewer may not change, nothing is read. A Rococo admin's access is
+// Rococo's (0029): as on Setup, they get no Account controls here, and nothing is read for them.
 //
 // The roster owns the rows. The dialog never reloads anything: a created or cancelled invitation, a
 // saved profile and a finished remove or delete go back through the callbacks, and the roster hands
@@ -21,7 +23,7 @@
 // are inert), so the line that carries the outcome, and the link when the clipboard refused it, is
 // not closed away unseen. When a send or a cancel takes away the button that had focus, focus goes
 // to the title rather than dropping out of the dialog.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Send } from "lucide-react";
 import Button from "../ui/Button.tsx";
@@ -32,13 +34,14 @@ import Skeleton from "../ui/Skeleton.tsx";
 import { tapTargetClass } from "../ui/tap.ts";
 import { secondaryClass } from "../ui/type.ts";
 import { AccountControls, type AccessGone } from "./person/PersonAccountActions.tsx";
+import { useHub } from "../../context/HubContext.tsx";
 import { useAsync } from "../../hooks/useAsync.ts";
 import { listCycles, listEmployeeReviews, listGoals } from "../../services/gsr.ts";
 import { createInvitation, deleteInvitation, emailInvitation, inviteLink } from "../../services/invitations.ts";
 import { updateProfile, type ProfilePatch } from "../../services/profiles.ts";
 import { errorMessage } from "../../lib/errors.ts";
 import { displayName } from "../../lib/format.ts";
-import { hasAccount, historyCounts } from "../../lib/people.ts";
+import { hasAccount, historyCounts, removalFor } from "../../lib/people.ts";
 import type { Invitation, Profile } from "../../types/database.ts";
 
 // Where the person stands, in one line under the title.
@@ -74,20 +77,31 @@ export default function PersonAccessDialog({
   onGone: (gone: AccessGone) => void;
   onClose: () => void;
 }) {
+  const { profile: me } = useHub();
   const name = displayName(person);
   const account = hasAccount(person);
   // A Rococo admin's access is Rococo's to manage, so they get no Account controls (as on Setup).
   const showAccount = !person.is_rococo_admin;
   const headingRef = useRef<HTMLHeadingElement>(null);
-  // The person's history, for Remove's and Delete's confirms: read only when the controls show.
+  // The person's history, for Remove's and Delete's confirms: read only when the controls will
+  // offer one of them.
+  const needsHistory = showAccount && removalFor(me, person) !== null;
   const history = useAsync(
-    () => (showAccount ? Promise.all([listEmployeeReviews(companyId, person.id), listCycles(companyId), listGoals(companyId, person.id)]) : Promise.resolve(null)),
-    [companyId, person.id, showAccount],
+    () => (needsHistory ? Promise.all([listEmployeeReviews(companyId, person.id), listCycles(companyId), listGoals(companyId, person.id)]) : Promise.resolve(null)),
+    [companyId, person.id, needsHistory],
   );
   const counts = history.data ? historyCounts(...history.data) : undefined;
-  const historyPending = showAccount && !history.data && !history.error;
+  const historyPending = needsHistory && !history.data && !history.error;
   const [cancelling, setCancelling] = useState<Invitation | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // The timer that turns Copied back into Copy link: one at a time, and gone with the dialog.
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
   // The invitation being created, and the invitation whose email is on its way, so a second press
   // does nothing and the button can say Sending.
   const [inviting, setInviting] = useState(false);
@@ -107,15 +121,24 @@ export default function PersonAccessDialog({
     if (!inviteBusy) onClose();
   }
 
+  function showCopied(invite: Invitation) {
+    if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+    setCopied(invite.id);
+    copiedTimer.current = setTimeout(() => {
+      copiedTimer.current = null;
+      setCopied(null);
+    }, 1600);
+  }
+
   function linkFor(invite: Invitation): string {
     return `${inviteLink(invite.email)}&company=${encodeURIComponent(companySlug)}`;
   }
 
   async function copyLink(invite: Invitation) {
+    setError("");
     try {
       await navigator.clipboard.writeText(linkFor(invite));
-      setCopied(invite.id);
-      setTimeout(() => setCopied(null), 1600);
+      showCopied(invite);
     } catch {
       setError("Could not copy. The link is: " + linkFor(invite));
     }
@@ -126,6 +149,7 @@ export default function PersonAccessDialog({
   async function emailIt(invite: Invitation) {
     if (inviteBusy) return;
     setEmailing(invite.id);
+    setError("");
     setEmailLine(null);
     let reason: string | null = null;
     try {
@@ -141,8 +165,7 @@ export default function PersonAccessDialog({
       let copiedIt = true;
       try {
         await navigator.clipboard.writeText(linkFor(invite));
-        setCopied(invite.id);
-        setTimeout(() => setCopied(null), 1600);
+        showCopied(invite);
       } catch {
         copiedIt = false;
       }

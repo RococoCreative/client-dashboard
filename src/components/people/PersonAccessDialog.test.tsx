@@ -7,7 +7,7 @@
 // by the dialog itself, so Remove keeps its typed-name safeguard here as on Setup, and keeps it when
 // that read fails. Nothing here touches the network.
 import { useState } from "react";
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -180,6 +180,25 @@ describe("PersonAccessDialog", () => {
 });
 
 describe("History and Remove", () => {
+  it("reads no history for someone the viewer may not change, or for themselves", async () => {
+    // An owner set up on the roster, ranked above the admin viewing: no Remove or Delete for them.
+    const owner: Profile = { ...kai, id: "rba-roster-owner", email: "pat.owner@rbaconstruction.com", full_name: "Pat Owner", role: "owner" };
+    const reviews = vi.spyOn(gsrService, "listEmployeeReviews");
+    const goals = vi.spyOn(gsrService, "listGoals");
+    try {
+      const first = renderWithHub(<Harness person={owner} />, rbaAdmin);
+      expect(await screen.findByText("Only an owner or Rococo can deactivate or remove this person.")).toBeInTheDocument();
+      first.unmount();
+      renderWithHub(<Harness person={rbaAdmin.profile} />, rbaAdmin);
+      expect(await screen.findByText("This is you. Another admin deactivates your account if it comes to that.")).toBeInTheDocument();
+      expect(reviews).not.toHaveBeenCalled();
+      expect(goals).not.toHaveBeenCalled();
+    } finally {
+      reviews.mockRestore();
+      goals.mockRestore();
+    }
+  });
+
   it("asks for the typed name to remove someone with history", async () => {
     const goal = await createGoal({ company_id: RBA.company.id, employee_id: kai.id, title: "Learn the estimating tool", kind: "professional" });
     try {
@@ -385,18 +404,21 @@ describe("Cancel invitation", () => {
 
   it("keeps the confirm open on a cancel that failed, with its own reason", async () => {
     const spy = vi.spyOn(invitationsService, "deleteInvitation").mockRejectedValueOnce(new Error("The invitation could not be cancelled."));
-    const onInvitationCancelled = vi.fn();
-    const user = userEvent.setup();
-    renderWithHub(<Harness person={avery} invitation={averyInvitation} onInvitationCancelled={onInvitationCancelled} />, rbaAdmin);
-    await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
-    const confirm = screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" });
-    await user.click(within(confirm).getByRole("button", { name: "Cancel invitation" }));
-    expect(await within(confirm).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
-    expect(onInvitationCancelled).not.toHaveBeenCalled();
-    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Cancel invitation for Avery Cole" }));
-    expect(within(screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" })).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
-    spy.mockRestore();
+    try {
+      const onInvitationCancelled = vi.fn();
+      const user = userEvent.setup();
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} onInvitationCancelled={onInvitationCancelled} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Cancel invitation for Avery Cole" }));
+      const confirm = screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" });
+      await user.click(within(confirm).getByRole("button", { name: "Cancel invitation" }));
+      expect(await within(confirm).findByText("The invitation could not be cancelled.")).toBeInTheDocument();
+      expect(onInvitationCancelled).not.toHaveBeenCalled();
+      await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+      await user.click(screen.getByRole("button", { name: "Cancel invitation for Avery Cole" }));
+      expect(within(screen.getByRole("dialog", { name: "Cancel the invitation for Avery Cole?" })).queryByText("The invitation could not be cancelled.")).not.toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("moves focus to the title after a cancel, not out of the dialog", async () => {
@@ -411,6 +433,58 @@ describe("Cancel invitation", () => {
       expect(screen.getByRole("heading", { name: "Access for Avery Cole" })).toHaveFocus();
     } finally {
       cancel.mockRestore();
+    }
+  });
+
+  it("clears a copy that failed once Copy link works", async () => {
+    const user = userEvent.setup();
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("Blocked."));
+    try {
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} />, rbaAdmin);
+      const copy = await screen.findByRole("button", { name: "Copy sign-in link for Avery Cole" });
+      await user.click(copy);
+      expect(await screen.findByText(/^Could not copy\. The link is: /)).toBeInTheDocument();
+      await user.click(copy);
+      await vi.waitFor(() => expect(copy).toHaveTextContent("Copied"));
+      expect(screen.queryByText(/^Could not copy/)).not.toBeInTheDocument();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("clears a copy that failed once Email again runs", async () => {
+    const user = userEvent.setup();
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(new Error("Blocked."));
+    try {
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} />, rbaAdmin);
+      await user.click(await screen.findByRole("button", { name: "Copy sign-in link for Avery Cole" }));
+      expect(await screen.findByText(/^Could not copy\. The link is: /)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Email the invitation to Avery Cole again" }));
+      // Emailed, or paced and copied instead: either way the old copy failure is not left beside it.
+      expect(await screen.findByText(/^(Invitation emailed to|The invitation is ready but)/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Could not copy/)).not.toBeInTheDocument();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("keeps Copied up for its full beat after a second copy", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithHub(<Harness person={avery} invitation={averyInvitation} />, rbaAdmin);
+      const copy = await screen.findByRole("button", { name: "Copy sign-in link for Avery Cole" });
+      await user.click(copy);
+      await vi.waitFor(() => expect(copy).toHaveTextContent("Copied"));
+      act(() => void vi.advanceTimersByTime(1000));
+      await user.click(copy);
+      // Past the first copy's beat: its timer is cleared, so the second one's still holds.
+      act(() => void vi.advanceTimersByTime(1000));
+      expect(copy).toHaveTextContent("Copied");
+      act(() => void vi.advanceTimersByTime(700));
+      expect(copy).toHaveTextContent("Copy link");
+    } finally {
+      vi.useRealTimers();
     }
   });
 

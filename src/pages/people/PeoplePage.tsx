@@ -15,8 +15,10 @@
 //
 // Access is offered only where it opens to something the viewer may do: never on their own row,
 // never on a Rococo admin's (their access is Rococo's to manage), and on anyone else only when the
-// viewer may change them or there is a pending invitation to act on. Inviting someone ranked above
-// you is refused by the database (0033), so the owner's row has no Access for an admin.
+// viewer may change them or they have not signed in and have a pending invitation to act on. An
+// invitation left waiting on someone who has signed in offers nothing, so it opens no Access either.
+// Inviting someone ranked above you is refused by the database (0033), so the owner's row has no
+// Access for an admin.
 //
 // The roster owns the rows and the dialog owns the actions. The dialog is keyed by the person's id
 // and reads the live row and invitation from the loaded state on every render, so a send, a cancel or
@@ -24,11 +26,18 @@
 // the row and says who went, in the same line a delete on the Setup tab lands back here with (read once
 // from the address's state and cleared from it, so a reload does not say it again).
 //
+// Focus never drops to the page. The dialog hands focus back to the Access button that opened it,
+// and when that button has gone with its row, focus goes somewhere that says why: after a remove or
+// delete to the line that says who went, and after a close that leaves the row hidden (Deactivate
+// with Show inactive off) to the search box. A Rococo admin switches company from the sidebar without
+// leaving this page, so the switch closes the dialog and clears that line: one company's news never
+// shows on another's roster.
+//
 // Below lg the table stacks into compact, even rows: the name and title with the status badge on
 // the same line, then division, reports to (labelled) and role on one quiet line that wraps, then
 // the Access button on its own line. It is the same table underneath, with explicit table roles and
 // each cell's column name (data-label) so a screen reader still reads rows and columns.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { KeyRound, Search, UserPlus } from "lucide-react";
 import Avatar from "../../components/ui/Avatar.tsx";
@@ -242,6 +251,27 @@ export default function PeoplePage() {
   useEffect(() => {
     if (typeof arrivedDeleted === "string") navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, [arrivedDeleted, location.pathname, location.search, navigate]);
+  // A company switch closes the dialog and clears who went, during render so the old line never
+  // shows on the new company's roster, not even for a frame.
+  const [seenCompanyId, setSeenCompanyId] = useState(companyId);
+  if (seenCompanyId !== companyId) {
+    setSeenCompanyId(companyId);
+    setAccessFor(null);
+    setGoneLine(null);
+  }
+  // Where focus goes when the Access button it came from has gone: the gone line, or the search box.
+  // Each is a count, bumped when the dialog closes that way, and the effects below move focus once
+  // the dialog has unmounted (and the Modal has found its opener gone, so it leaves focus alone).
+  const goneRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [focusGone, setFocusGone] = useState(0);
+  const [focusSearch, setFocusSearch] = useState(0);
+  useEffect(() => {
+    if (focusGone > 0) goneRef.current?.focus();
+  }, [focusGone]);
+  useEffect(() => {
+    if (focusSearch > 0) searchRef.current?.focus();
+  }, [focusSearch]);
 
   const state = useAsync(async () => {
     const [people, invitations, divisions, directory] = await Promise.all([
@@ -344,6 +374,15 @@ export default function PeoplePage() {
     setAccessFor(null);
     state.setData((prev) => (prev ? { ...prev, people: prev.people.filter((p) => p.id !== id) } : prev));
     setGoneLine(`${gone.name} was ${gone.kind}.`);
+    setFocusGone((n) => n + 1);
+  }
+
+  // Done, Escape or the backdrop. The Modal hands focus back to the row's Access button; when the
+  // row is no longer shown (Deactivate with Show inactive off), the search box takes it instead.
+  function closeAccess() {
+    const rowShown = shown.some((p) => p.id === accessFor);
+    setAccessFor(null);
+    if (!rowShown) setFocusSearch((n) => n + 1);
   }
 
   const filters = state.data ? (
@@ -368,6 +407,7 @@ export default function PeoplePage() {
         <div className="relative min-w-[200px] max-w-xs flex-1">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden />
           <input
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -399,7 +439,11 @@ export default function PeoplePage() {
           )
         }
       />
-      {goneLine ? <Notice tone="success" className="mb-4">{goneLine}</Notice> : null}
+      {goneLine ? (
+        <div ref={goneRef} tabIndex={-1} className="mb-4 rounded-md outline-none">
+          <Notice tone="success">{goneLine}</Notice>
+        </div>
+      ) : null}
       {state.error ? <Notice tone="error" className="mb-4">{state.error}</Notice> : null}
 
       {!state.data && !state.error ? (
@@ -444,7 +488,7 @@ export default function PeoplePage() {
                     const invitation = pendingFor(person);
                     const account = hasAccount(person);
                     // Only where the dialog opens to something this viewer may do.
-                    const offerAccess = !teamView && !self && !rococo && (canChange || invitation !== null);
+                    const offerAccess = !teamView && !self && !rococo && (canChange || (invitation !== null && !account));
                     const placed = divisionLabel(person.division_ids, divisions);
                     const manager = person.reports_to ? byId.get(person.reports_to) : undefined;
                     return (
@@ -570,7 +614,7 @@ export default function PeoplePage() {
             state.setData((prev) => (prev ? { ...prev, people: prev.people.map((p) => (p.id === next.id ? next : p)) } : prev))
           }
           onGone={handleGone}
-          onClose={() => setAccessFor(null)}
+          onClose={closeAccess}
         />
       ) : null}
     </>

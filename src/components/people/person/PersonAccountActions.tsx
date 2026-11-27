@@ -12,6 +12,8 @@
 // profile unless you are Rococo; the database holds all of that, and the last owner, as well. An
 // admin who sees only some divisions manages only the people ranked below them (0038), so a peer
 // admin is not offered to them; everyone the page shows them below their rank is in their reach.
+// Who gets Remove or Delete person is removalFor (lib/people.ts), the same rule the Access dialog
+// reads the person's history on.
 //
 // Remove deletes everything set up for someone who never signed in, and since 0049 that includes
 // goals and notes in a closed or locked month. So when the page has loaded any reviews, GSRs or
@@ -37,7 +39,7 @@ import { listPersonGsrs } from "../../../services/gsrOnDemand.ts";
 import { deletePerson, deleteStaffProfile, type ProfilePatch } from "../../../services/profiles.ts";
 import { errorMessage } from "../../../lib/errors.ts";
 import { displayName, pluralize } from "../../../lib/format.ts";
-import { ROLE_RANK, canGrantRole, hasAccount, hasFullScope, isCompanyAdminRole, type ProfileCounts } from "../../../lib/people.ts";
+import { canGrantRole, hasAccount, removalFor, type ProfileCounts } from "../../../lib/people.ts";
 import { inputClass } from "../../ui/forms.ts";
 import type { Gsr, Invitation, Profile } from "../../../types/database.ts";
 
@@ -97,14 +99,9 @@ export function AccountControls({
   const self = person.id === me.id;
   const canChange = canGrantRole(me, person.role);
   const account = hasAccount(person);
-  const mayRemove = !account && canChange && !self;
-  const mayDelete =
-    account &&
-    canChange &&
-    !self &&
-    (me.is_rococo_admin || isCompanyAdminRole(me.role)) &&
-    (hasFullScope(me) || ROLE_RANK[person.role] < ROLE_RANK[me.role]) &&
-    (!person.is_rococo_admin || me.is_rococo_admin);
+  const removal = removalFor(me, person);
+  const mayRemove = removal === "remove";
+  const mayDelete = removal === "delete";
   const fullName = name.trim();
   const nameMatches = typed.trim() === fullName;
   // Unknown history (no counts given) is treated as history, so Remove never goes in one click blind.

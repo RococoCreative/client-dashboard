@@ -4,7 +4,8 @@
 // the division split, and the app's reading of who leads whom and which divisions a viewer may
 // see (0038). The database is the wall for all of it; these decide what a screen offers and how
 // it labels what came back. Also what a person's history comes to for the confirms that delete it
-// (historyCounts), shared by the Setup tab and the roster's Access dialog.
+// (historyCounts), and who may Remove or Delete them (removalFor), shared by the Setup tab and the
+// roster's Access dialog.
 import { formatDate, parseDate } from "./format.ts";
 import { ROLE_LABELS, keysOf, type CompanyDivision, type DirectoryEntry, type EmployeeFinancial, type Goal, type Profile, type Review, type ReviewCycle, type Role } from "../types/database.ts";
 
@@ -189,6 +190,23 @@ export function canGrantRole(granter: Pick<Profile, "role" | "is_rococo_admin">,
   if (granter.is_rococo_admin) return true;
   if (role === "owner") return granter.role === "owner";
   return ROLE_RANK[role] <= ROLE_RANK[granter.role];
+}
+
+// Which way a viewer may take someone off the team, if any: Remove for a person set up and never
+// signed in, Delete person (0049) for one who has, or neither. The Account controls offer exactly
+// this, and the Access dialog reads the person's history only when it is not null, since the counts
+// are for those two confirms alone. The database holds the same rules; this only decides what shows.
+export function removalFor(
+  viewer: Pick<Profile, "id" | "role" | "is_rococo_admin" | "view_all_divisions">,
+  person: Pick<Profile, "id" | "role" | "is_rococo_admin" | "user_id">,
+): "remove" | "delete" | null {
+  if (person.id === viewer.id || !canGrantRole(viewer, person.role)) return null;
+  if (!hasAccount(person)) return "remove";
+  const mayDelete =
+    (viewer.is_rococo_admin || isCompanyAdminRole(viewer.role)) &&
+    (hasFullScope(viewer) || ROLE_RANK[person.role] < ROLE_RANK[viewer.role]) &&
+    (!person.is_rococo_admin || viewer.is_rococo_admin);
+  return mayDelete ? "delete" : null;
 }
 
 // The roles a select offers this granter, in ROLE_LABELS order.
